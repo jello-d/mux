@@ -25,6 +25,7 @@ work/personal boundary in the status bar).
 ## Status
 
 Being extracted from a personal provisioning repo (tackup), where it is
-currently staged under `repos/mux/`. The remaining steps before it stands alone:
-route the tmux fragment's calls through the `mux` entry point (retiring the
-`@mux-lib` path seam), install under `~/.local`, then split to its own repo.
+currently staged under `repos/mux/`. Done: the layout above, a single `mux`
+entry point that self-locates its `libexec` (every helper is a `mux <verb>`,
+so callers carry no path), and path-free tmux/agent integration. Remaining:
+install under `~/.local`, then split to its own repo.

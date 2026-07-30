@@ -792,16 +792,18 @@ if [ "$cmd" = ls ]; then
 fi
 
 # --- next-blocked: jump to the session that has needed you longest ----------
-# The CLI twin of the `prefix b` binding; both run ~/lib/mux/mux-next-blocked.
-# Must run inside a session, so the client (its tty) is known.
+# The CLI twin of the `prefix b` binding; both run mux-next-blocked. Must run
+# inside a session, so the client (its tty) is known. The `b` binding passes the
+# acting client explicitly (#{client_name}) since a key-triggered run-shell has
+# no unambiguous "current" client to resolve; the bare CLI form resolves it.
 if [ "$cmd" = next-blocked ]; then
         [ -n "${TMUX:-}" ] || {
                 echo "mux: next-blocked must run in a session" >&2; exit 1; }
         _nb=$LIBEXEC/mux-next-blocked
         [ -x "$_nb" ] || { echo "mux: $_nb missing (incomplete install)" >&2
                 exit 1; }
-        _cl=$(tm display-message -p '#{client_name}' 2>/dev/null || true)
-        _cs=$(tm display-message -p '#{client_session}' 2>/dev/null || true)
+        _cl=${2:-$(tm display-message -p '#{client_name}' 2>/dev/null || true)}
+        _cs=${3:-$(tm display-message -p '#{client_session}' 2>/dev/null||true)}
         "$_nb" "$_cl" "$_cs"
         exit 0
 fi
