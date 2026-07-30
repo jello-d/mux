@@ -100,6 +100,11 @@ case $_self in
 esac
 _self=$(readlink -f -- "$_self" 2>/dev/null || echo "$_self")
 LIBEXEC=${_self%/*}/../libexec/mux
+# Package DATA -- the shipped defaults (themes, agents, shapes, the default
+# layout) -- lives in share, a sibling of bin/ and libexec/ under the prefix.
+# User layouts and the integrator OVERLAY (context, hosts) live in $MUX_DIR.
+MUX_SHARE=${MUX_SHARE:-${_self%/*}/../share/mux}
+export MUX_DIR MUX_SHARE   # the helper verbs (mux themes ...) inherit both
 
 # Fast path: the helper verbs ARE standalone executables in libexec, and the
 # tmux fragment + agent hooks reach them as `mux <verb>` (one entry point, on
@@ -151,6 +156,15 @@ fi
 
 # Space-joined basenames (sans extension) of $1/*$2, or empty. Feeds the help so
 # `mux --help` lists the layouts and colors actually present on this box.
+# Resolve a layout REFERENCE (a launch target or an `include`): a user layout in
+# $MUX_DIR wins over a shipped one in $MUX_SHARE (a shape like shapes/code, or
+# the default). Echo the first that exists, else nothing.
+_find_layout() {   # <ref, no .layout>
+  if [ -f "$MUX_DIR/$1.layout" ]; then printf '%s' "$MUX_DIR/$1.layout"
+  elif [ -f "$MUX_SHARE/$1.layout" ]; then printf '%s' "$MUX_SHARE/$1.layout"
+  fi
+}
+
 _list_stems() {   # <dir> <ext>
         [ -d "$1" ] || return 0
         for _f in "$1"/*"$2"; do
@@ -236,9 +250,9 @@ EOF
         echo >&2
         _wrap_list "  layouts (go/resume NAME):  " "$(_list_layouts)"
         _wrap_list "  colors  (new NAME COLOR):  " \
-                "$(_list_stems "$MUX_DIR/themes" .theme)"
+                "$(_list_stems "$MUX_SHARE/themes" .theme)"
         _wrap_list "  agents  (agent NAME):      " \
-                "$(_list_stems "$MUX_DIR/agents" .agent)"
+                "$(_list_stems "$MUX_SHARE/agents" .agent)"
         exit "${1:-2}"
 }
 
@@ -330,9 +344,9 @@ if [ "$cmd" = new ]; then
         [ "$nw_color" = - ] && nw_color=          # '-' = default theme
         [ "$nw_root" = - ] && nw_root=            # '-' = no root line
         if [ -n "$nw_color" ] \
-           && [ ! -f "$MUX_DIR/themes/$nw_color.theme" ]; then
+           && [ ! -f "$MUX_SHARE/themes/$nw_color.theme" ]; then
                 echo "mux: unknown theme: $nw_color" \
-                        "(no $MUX_DIR/themes/$nw_color.theme)" >&2
+                        "(no $MUX_SHARE/themes/$nw_color.theme)" >&2
                 exit 1
         fi
         case $nw_root in                          # expand input to absolute
@@ -440,7 +454,7 @@ help_colors() {
                 printf ' %s sel %s   %-12s %s\n' \
                         "$(_sgr_style "$_sel")" "$_RST" "$_bg" "$_fg"
         done
-        _d=$MUX_DIR/themes/defaults
+        _d=$MUX_SHARE/themes/defaults
         [ -f "$_d" ] || return 0
         # The global default (themes/defaults); a context may override it via
         # the context hook (tackup's work theme), not probed by this summary.
@@ -457,8 +471,8 @@ _flat_layout() {        # <file> <depth>
         mux_conf_clean < "$1" | while read -r _v _r; do
                 case $_v in
                 include)
-                        _i=$MUX_DIR/$_r.layout
-                        [ -f "$_i" ] && _flat_layout "$_i" "$((${2:-0}+1))" ;;
+                        _i=$(_find_layout "$_r")
+                        [ -n "$_i" ] && _flat_layout "$_i" "$((${2:-0}+1))" ;;
                 *) printf '%s %s\n' "$_v" "$_r" ;;
                 esac
         done
@@ -514,7 +528,7 @@ help_layouts() {
                 printf '  %s' "$_n"
                 if [ -n "$_th" ]; then          # theme name in its own colour
                         _tb=$(mux_conf_clean \
-                            < "$MUX_DIR/themes/$_th.theme" 2>/dev/null \
+                            < "$MUX_SHARE/themes/$_th.theme" 2>/dev/null \
                             | awk '$1=="bar"{sub(/^bar[ \t]+/,"");print;exit}')
                         printf '  theme %s %s %s' \
                                 "$(_sgr_style "$_tb")" "$_th" "$_RST"
@@ -615,7 +629,7 @@ help_agents() {
                 printf '    go      %s\n' "${_go:-<none>}"
                 printf '    resume  %s\n' "${_rs:-<none>}"
         done
-        printf '\n  profiles: %s/agents/<name>.agent' "$MUX_DIR"
+        printf '\n  profiles: %s/agents/<name>.agent' "$MUX_SHARE"
         printf ' (a `go` and a `resume` line).\n'
         printf '  add a CLI by dropping in a profile; strip state also needs'
         printf '\n  a hook producer (claude: plugin; gemini: modules/gemini).\n'
@@ -842,7 +856,7 @@ _theme_cycle() {        # next|prev CURRENT "space list" -> neighbour stem
         done
 }
 if [ "$cmd" = theme ]; then
-        _themes=$(_list_stems "$MUX_DIR/themes" .theme)
+        _themes=$(_list_stems "$MUX_SHARE/themes" .theme)
         if [ -z "$name_arg" ]; then
                 if [ -n "${TMUX:-}" ]; then
                         _s=$(tm display-message -p '#{session_name}')
@@ -861,7 +875,7 @@ if [ "$cmd" = theme ]; then
                 next|prev) _t=$(_theme_cycle "$name_arg" "$_c" "$_themes") ;;
                 *)         _t=$name_arg ;;
         esac
-        { [ -n "$_t" ] && [ -f "$MUX_DIR/themes/$_t.theme" ]; } || {
+        { [ -n "$_t" ] && [ -f "$MUX_SHARE/themes/$_t.theme" ]; } || {
                 echo "mux: unknown theme: ${_t:-$name_arg}" >&2; exit 1; }
         tm set-option -t "$_s" @mux-theme "$_t"
         [ -x "$LIBEXEC/mux-style" ] \
@@ -1078,11 +1092,11 @@ expand_tilde() {
 # Agent PROFILES make the "agent pane" pluggable, and are the ONE Claude
 # coupling in the front end -- now behind a file, so another CLI (gemini, codex)
 # is just a profile and mux can run with no Claude at all. A profile is data in
-# $MUX_DIR/agents/<name>.agent: a `go` line and a `resume` line, each a shell
+# $MUX_SHARE/agents/<name>.agent: a `go` line and a `resume` line, each a shell
 # command. `mux go` runs the agent's `go` (continue the recent conversation),
 # `mux resume` its `resume` (pick one), --bare runs neither (a plain shell).
 # Claude is the default; a layout selects another with `agent <name>`.
-AGENTS_DIR=$MUX_DIR/agents
+AGENTS_DIR=$MUX_SHARE/agents
 
 # agent_launch NAME -> the command NAME's pane runs for THIS verb (go/resume),
 # empty under --bare. An unknown agent (no profile) fails loud.
@@ -1144,8 +1158,8 @@ expand_layout() {       # PATH DEPTH VISITED
         while read -r _verb _rest; do
                 case $_verb in
                 include)
-                        _inc=$MUX_DIR/$_rest.layout
-                        [ -f "$_inc" ] || {
+                        _inc=$(_find_layout "$_rest")
+                        [ -n "$_inc" ] || {
                                 echo "mux: no layout to include: $_rest" >&2
                                 rm -f "$_cl"; exit 1
                         }
@@ -1238,15 +1252,17 @@ if tm has-session -t "=$name" 2>/dev/null; then
 fi
 
 # Building a new session: resolve the blueprint. An explicit LAYOUT positional
-# wins, then a per-project <name>.layout, then the shared default.
+# wins, then a per-project <name>.layout, then the shared default -- each a user
+# layout in $MUX_DIR over a shipped one in $MUX_SHARE (see _find_layout).
 if [ -n "$layout_arg" ]; then
-        layout=$MUX_DIR/$layout_arg.layout
-elif [ -f "$MUX_DIR/$name.layout" ]; then
-        layout=$MUX_DIR/$name.layout
+        _want=$layout_arg
+elif [ -n "$(_find_layout "$name")" ]; then
+        _want=$name
 else
-        layout=$MUX_DIR/default.layout
+        _want=default
 fi
-[ -f "$layout" ] || { echo "mux: no layout: $layout" >&2; exit 1; }
+layout=$(_find_layout "$_want")
+[ -n "$layout" ] || { echo "mux: no layout: $_want" >&2; exit 1; }
 
 # Flatten includes into one directive stream, then parse it TWICE: first to
 # resolve the session-wide root/theme and validate the whole shape (touching
@@ -1338,9 +1354,9 @@ done <"$flat"
 # after boot/kill-all. The file is the source of truth, and its presence
 # guarantees mux-themes load will push @theme-<name>-* at server start.
 if [ -n "$want_theme" ]; then
-	[ -f "$MUX_DIR/themes/$want_theme.theme" ] || {
+	[ -f "$MUX_SHARE/themes/$want_theme.theme" ] || {
 		echo "mux: unknown theme: $want_theme" \
-			"(no $MUX_DIR/themes/$want_theme.theme)" >&2
+			"(no $MUX_SHARE/themes/$want_theme.theme)" >&2
 		exit 1
 	}
 fi

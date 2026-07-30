@@ -1,5 +1,5 @@
 #!/bin/sh
-# mux-themes: compile the mux colour palette from $MUX_DIR/themes/*.theme into
+# mux-themes: compile the mux colour palette from $MUX_SHARE/themes/*.theme into
 # tmux @theme-* options, so the palette is authored as data beside the layouts
 # instead of inline in tmux.conf. mux-style reads those options live every
 # status tick; it neither knows nor cares that they came from files.
@@ -27,7 +27,11 @@
 set -eu
 
 MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
-THEMES=$MUX_DIR/themes
+# Themes are package DATA (shipped defaults), so they live in share, not the
+# $MUX_DIR overlay. Inherited from the mux entry point; self-located as a
+# fallback (share is a sibling of this libexec dir under the prefix).
+MUX_SHARE=${MUX_SHARE:-$(dirname "$0")/../share/mux}
+THEMES=$MUX_SHARE/themes
 STAMPDIR=${MUX_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/mux}
 
 # The shared comment/normalize rule (see bin/mux); a fallback strips only
