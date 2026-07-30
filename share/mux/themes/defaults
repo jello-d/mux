@@ -1,6 +1,5 @@
 # The global default theme, used by mux-style when a session sets no @mux-theme
 # and its context supplies no theme of its own. The colour is cosmetic; a
-# context's banner/title marker (e.g. tackup's work reminder) shows regardless.
-# Per-context overrides live in the context hook, not here (tackup's work theme
-# is set in $MUX_DIR/context).
+# context's banner/title marker shows regardless of the theme. Per-context theme
+# overrides live in the context hook ($MUX_DIR/context), not here.
 default         purple

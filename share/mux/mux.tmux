@@ -82,16 +82,15 @@ set -g message-command-style       'bg=colour54 fg=colour189'
 
 # --- the context reminder (the SIGNAL; the colour is not) ------------------
 # When a pane's process is in a MARKED context (via the optional $MUX_DIR/
-# context hook -- tackup uses it for its work/personal ZDR split), mux-style
-# paints a loud banner in the status bar and a context prefix on the terminal
-# title. It is TEXT, not colour, so the reminder does not depend on registering
-# a hue -- the bar colour can be anything. The banner's own loud, theme-neutral
-# style is a property of the context, so the context hook defines it (`banner
-# <style>`), not this file.
+# context hook -- e.g. a work/personal split), mux-style paints a loud banner in
+# the status bar and a context prefix on the terminal title. It is TEXT, not
+# colour, so the reminder does not depend on registering a hue -- the bar colour
+# can be anything. The banner's own loud, theme-neutral style is a property of
+# the context, so the context hook defines it (`banner <style>`), not this file.
 #
 # A REMINDER, NOT ENFORCEMENT: mux only REFLECTS the context in the UI. Whatever
-# actually enforces it (for tackup, a kernel ACL on the work tree) lives in the
-# integrator, not here. Never read the banner or the colour as permission.
+# actually enforces it, if anything, lives in the integrator, not here. Never
+# read the banner or the colour as permission.
 
 # Terminal/window title: set-titles emits an OSC title to the outer terminal;
 # @mux-prefix (set by mux-style, empty in an unmarked context) carries the

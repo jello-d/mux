@@ -41,14 +41,13 @@
 #
 # Idempotent: `go`/`resume` on a live session just attaches, never clobbers.
 #
-# Work sessions are a separate namespace. When mux holds the work group -- it
-# was launched from a `work` context -- it drives a tmux socket named for the
-# work GROUP and sees only work sessions; otherwise the default socket and only
-# personal ones. The same name can live in both, mutually invisible. Because the
-# work server inherits mux's group, its panes can enter the 2770 work tree that
-# a personal server cannot, so claude there resolves to the work account. work
-# owns the group test (work check); mux never acquires the group itself. `ls`
-# lists only the context you are in; `reload` freshens BOTH servers (the config
+# A non-default CONTEXT is a separate namespace. When the context hook reports a
+# socket (see mux-context.sh), mux drives a tmux server on that socket and sees
+# only that context's sessions; otherwise the default socket. The same name can
+# live in both, mutually invisible. mux never establishes a context itself -- it
+# runs in whatever the hook observes -- so an integrator can back a context with
+# real isolation (a Unix group, a namespace) and mux just reflects it. `ls`
+# lists only the context you are in; `reload` freshens EVERY server (the config
 # is shared), so a single reload from any pane updates everything.
 #
 # Layouts live in $MUX_DIR (default ~/.config/mux) as <name>.layout files.
@@ -140,11 +139,11 @@ _have_astate=0
 _astate_lib=$LIBEXEC/mux-agent-state.sh
 if [ -r "$_astate_lib" ]; then . "$_astate_lib"; _have_astate=1; fi
 
-# The CONTEXT seam: mux core knows no particular notion of "context" (tackup's
-# work/personal ZDR split, a namespace, ...). mux-context.sh asks an optional
-# $MUX_DIR/context hook and falls back to a single default context. Core, so
-# sourced unconditionally; a stub keeps every consumer working if the lib is
-# missing (default socket, side `default`, all layouts shared, no extra socks).
+# The CONTEXT seam: mux core knows no particular notion of "context" (a
+# work/personal split, a namespace, a git host, ...). mux-context.sh asks an
+# optional $MUX_DIR/context hook and falls back to a single default context.
+# Core, so sourced unconditionally; a stub keeps every consumer working if the
+# lib is missing (default socket, side `default`, all layouts shared, no socks).
 _ctx_lib=$LIBEXEC/mux-context.sh
 if [ -r "$_ctx_lib" ]; then . "$_ctx_lib"
 else
@@ -457,7 +456,7 @@ help_colors() {
         _d=$MUX_SHARE/themes/defaults
         [ -f "$_d" ] || return 0
         # The global default (themes/defaults); a context may override it via
-        # the context hook (tackup's work theme), not probed by this summary.
+        # the context hook (a per-context theme), not probed by this summary.
         printf '\n  default theme:  %s\n' \
                 "$(awk '$1=="default"{print $2}' "$_d")"
 }
@@ -656,8 +655,8 @@ name=${name_arg:-$(basename "$base")}
 name=$(printf '%s' "$name" | tr ':.' '--')
 
 # Which tmux namespace. The context hook names the socket: an isolated context
-# (tackup's work group) gets a socket of its own, everything else the default
-# server. Degrades cleanly to the default socket when no hook is installed, or
+# gets a socket of its own, everything else the default server. Degrades cleanly
+# to the default socket when no hook is installed, or
 # when the caller is in no special context. Prime _cur_side here too, so the
 # common path resolves the hook once.
 mux_ctx_env
@@ -773,8 +772,8 @@ if [ "$cmd" = reload ]; then
         if tmux list-sessions >/dev/null 2>&1; then
                 tmux source-file "$TMUX_CONF" && did="$did default"
         fi
-        # Plus every non-default context server the hook knows (tackup: the work
-        # group's), so a reload reaches them regardless of the caller's side.
+        # Plus every non-default context server the hook knows, so a reload
+        # reaches them regardless of the caller's side.
         for _s in $(mux_ctx_sockets); do
                 if tmux -L "$_s" list-sessions >/dev/null 2>&1; then
                         tmux -L "$_s" source-file "$TMUX_CONF" && did="$did $_s"
@@ -885,7 +884,7 @@ if [ "$cmd" = theme ]; then
         # terminals (the old line is not cleared under the new). Perturb the mux
         # bottom pane and restore its height: that forces tmux to recompute and
         # fully redraw the column geometry, which a plain refresh cannot. Via tm
-        # (socket-aware), so it works in a work session too.
+        # (socket-aware), so it works in a non-default context too.
         _bp=$(tm list-panes -t "$_s" -F '#{pane_id} #{@mux-bottom}' \
                 2>/dev/null | awk 'NF > 1 { print $1; exit }')
         if [ -n "$_bp" ]; then

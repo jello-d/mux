@@ -23,7 +23,7 @@
 # session nor its context picks one. Unknown keys fail loud.
 # The per-socket stamp lives under mux's own cache dir; a content hash gates the
 # push so an unchanged palette is free. $MUX_CACHE overrides it so an integrator
-# (tackup) can point it wherever it keeps runtime stamps.
+# can point it wherever it keeps runtime stamps.
 set -eu
 
 MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
@@ -125,10 +125,10 @@ load)
 sync)
 	_h=$(themes_hash)
 	# The default socket is addressed as -L default (unambiguous -- never
-	# the ambient $TMUX server, which may be a work one).
+	# the ambient $TMUX server, which may be a non-default context's).
 	heal default "-L default" "$_h"
-	# Plus every non-default context server the hook names (tackup: the work
-	# group's), each healed only if it is up.
+	# Plus every non-default context server the hook names, each healed only
+	# if it is up.
 	for _s in $(mux_ctx_sockets); do
 		heal "$_s" "-L $_s" "$_h"
 	done
