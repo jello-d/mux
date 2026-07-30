@@ -91,8 +91,8 @@ TMUX_CONF=${XDG_CONFIG_HOME:-$HOME/.config}/tmux/tmux.conf
 # computed from this script's RESOLVED location -- no hardcoded path, no env
 # seam. $0 may be a bare name (a PATH lookup: how tmux run-shell and the agent
 # hooks invoke us), relative, or absolute, and may arrive through symlinks
-# (tackup bridges ~/bin/mux into the repo); resolve all of it. bin/ and libexec/
-# are siblings under one prefix, as in a standard package install.
+# (~/.local/bin/mux is a symlink to the install); resolve all of it. bin/,
+# libexec/ and share/ are siblings under one prefix, as in a package install.
 _self=$0
 case $_self in
 */*) ;;
