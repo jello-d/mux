@@ -86,18 +86,44 @@ set -eu
 
 MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
 TMUX_CONF=${XDG_CONFIG_HOME:-$HOME/.config}/tmux/tmux.conf
-# Where the sibling lib scripts live. mux (in ~/bin) is NOT colocated with them,
-# so it cannot self-resolve like the libs do; it carries the default and exports
-# it, so every child (a lib script, a run-shell) inherits the same answer. An
-# integrator with a different layout overrides MUX_LIB in the environment.
-MUX_LIB=${MUX_LIB:-$HOME/lib/mux}
-export MUX_LIB
+
+# Find our own libexec (the helper executables + the sourced *.sh libs),
+# computed from this script's RESOLVED location -- no hardcoded path, no env
+# seam. $0 may be a bare name (a PATH lookup: how tmux run-shell and the agent
+# hooks invoke us), relative, or absolute, and may arrive through symlinks
+# (tackup bridges ~/bin/mux into the repo); resolve all of it. bin/ and libexec/
+# are siblings under one prefix, as in a standard package install.
+_self=$0
+case $_self in
+*/*) ;;
+*) _self=$(command -v -- "$_self" 2>/dev/null || echo "$_self") ;;
+esac
+_self=$(readlink -f -- "$_self" 2>/dev/null || echo "$_self")
+LIBEXEC=${_self%/*}/../libexec/mux
+
+# Fast path: the helper verbs ARE standalone executables in libexec, and the
+# tmux fragment + agent hooks reach them as `mux <verb>` (one entry point, on
+# PATH -- no path knowledge in the caller). exec straight through, so this
+# script is never parsed past here on a hot path: the status bar runs `mux
+# style` / `mux agent-render` every tick and the agent hooks fire `mux
+# agent-emit` on every state change. Each helper self-locates its own siblings.
+case ${1:-} in
+cycle)         shift; exec "$LIBEXEC/mux-cycle" "$@" ;;
+click)         shift; exec "$LIBEXEC/mux-click" "$@" ;;
+refresh)       shift; exec "$LIBEXEC/mux-refresh" "$@" ;;
+pin)           shift; exec "$LIBEXEC/mux-pin" "$@" ;;
+style)         shift; exec "$LIBEXEC/mux-style" "$@" ;;
+status-banner) shift; exec "$LIBEXEC/mux-status-banner" "$@" ;;
+agent-render)  shift; exec "$LIBEXEC/agent-state-render" "$@" ;;
+agent-emit)    shift; exec "$LIBEXEC/agent-state-emit" "$@" ;;
+themes)        shift; exec "$LIBEXEC/mux-themes" "$@" ;;
+esac
 
 # The ONE comment/normalize rule (mux_conf_clean) for every config parse below
 # -- layouts, themes, agents. Core, so sourced unconditionally (it deploys with
 # mux); a fallback keeps mux alive if the lib is somehow missing, stripping only
 # whole-line comments (the pre-normalizer behaviour) so nothing hard-breaks.
-_conf_lib=$MUX_LIB/mux-conf.sh
+_conf_lib=$LIBEXEC/mux-conf.sh
 if [ -r "$_conf_lib" ]; then . "$_conf_lib"
 else mux_conf_clean() { grep -vE '^[[:space:]]*(#|$)'; }
 fi
@@ -106,7 +132,7 @@ fi
 # picker and `mux ls` show each session's agent glyph. Cosmetic, so a missing
 # lib degrades to plain names rather than taking down core verbs (kill, reload).
 _have_astate=0
-_astate_lib=$MUX_LIB/mux-agent-state.sh
+_astate_lib=$LIBEXEC/mux-agent-state.sh
 if [ -r "$_astate_lib" ]; then . "$_astate_lib"; _have_astate=1; fi
 
 # The CONTEXT seam: mux core knows no particular notion of "context" (tackup's
@@ -114,7 +140,7 @@ if [ -r "$_astate_lib" ]; then . "$_astate_lib"; _have_astate=1; fi
 # $MUX_DIR/context hook and falls back to a single default context. Core, so
 # sourced unconditionally; a stub keeps every consumer working if the lib is
 # missing (default socket, side `default`, all layouts shared, no extra socks).
-_ctx_lib=$MUX_LIB/mux-context.sh
+_ctx_lib=$LIBEXEC/mux-context.sh
 if [ -r "$_ctx_lib" ]; then . "$_ctx_lib"
 else
 	mux_ctx_env() { MUX_CTX_SOCKET=''; MUX_CTX_SIDE=default
@@ -667,8 +693,8 @@ emit_window() {
 # Heal any theme-fragment drift on the running servers before we draw anything:
 # a cheap no-op unless a themes/*.theme changed since a server was last synced,
 # so an edited palette needs no manual reload. Best-effort; never a gate.
-if [ -x "$MUX_LIB/mux-themes" ]; then
-        "$MUX_LIB/mux-themes" sync || true
+if [ -x "$LIBEXEC/mux-themes" ]; then
+        "$LIBEXEC/mux-themes" sync || true
 fi
 
 # --- (no verb): pick a session to attach -----------------------------------
@@ -771,7 +797,7 @@ fi
 if [ "$cmd" = next-blocked ]; then
         [ -n "${TMUX:-}" ] || {
                 echo "mux: next-blocked must run in a session" >&2; exit 1; }
-        _nb=$MUX_LIB/mux-next-blocked
+        _nb=$LIBEXEC/mux-next-blocked
         [ -x "$_nb" ] || { echo "mux: $_nb missing (incomplete install)" >&2
                 exit 1; }
         _cl=$(tm display-message -p '#{client_name}' 2>/dev/null || true)
@@ -836,8 +862,8 @@ if [ "$cmd" = theme ]; then
         { [ -n "$_t" ] && [ -f "$MUX_DIR/themes/$_t.theme" ]; } || {
                 echo "mux: unknown theme: ${_t:-$name_arg}" >&2; exit 1; }
         tm set-option -t "$_s" @mux-theme "$_t"
-        [ -x "$MUX_LIB/mux-style" ] \
-                && "$MUX_LIB/mux-style" -q "$_s" "$_pp" >/dev/null 2>&1 \
+        [ -x "$LIBEXEC/mux-style" ] \
+                && "$LIBEXEC/mux-style" -q "$_s" "$_pp" >/dev/null 2>&1 \
                 || true
         # A border-style repaint can leave a DOUBLED border row in some
         # terminals (the old line is not cleared under the new). Perturb the mux
@@ -968,13 +994,13 @@ case $cmd in
 hide|show|show-all)
         [ -n "${TMUX:-}" ] || {
                 echo "mux: $cmd must run inside a session" >&2; exit 1; }
-        [ -r "$MUX_LIB/mux-exclude.sh" ] || {
+        [ -r "$LIBEXEC/mux-exclude.sh" ] || {
                 echo "mux: mux-exclude.sh missing (incomplete install)" >&2
                 exit 1; }
         _client=$(tm display-message -p '#{client_name}' 2>/dev/null || true)
         [ -n "$_client" ] || {
                 echo "mux: could not identify the client" >&2; exit 1; }
-        . "$MUX_LIB/mux-exclude.sh"
+        . "$LIBEXEC/mux-exclude.sh"
         _f=$(mux_exclude_file "$_client")
         mkdir -p "$(dirname "$_f")"
         if [ "$cmd" = show-all ]; then
