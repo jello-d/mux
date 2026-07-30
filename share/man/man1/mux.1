@@ -1,0 +1,327 @@
+.TH MUX 1 "2026-07-30" "mux 0.1" "User Commands"
+.SH NAME
+mux \- a tmux session manager for agent-heavy, many-session work
+.SH SYNOPSIS
+.B mux
+.RI [ verb "] [" --bare "] [" NAME "] [" LAYOUT ]
+.SH DESCRIPTION
+.B mux
+builds and drives tmux sessions from declarative
+.B layouts
+and puts a live status bar on top: each session's coding-agent state at a
+glance (idle, working, blocked), a per-host colour chip, and \(em through an
+optional
+.B context
+hook \(em a marker for whichever side of a work / personal boundary a pane
+sits on.
+.PP
+A session is created from a layout of the same name (or an explicit one), its
+panes opened at a shared root, one running an
+.BR agent .
+Sessions are picked, cycled, and jumped-to by how much attention each agent
+needs, so "who is waiting on me" is always visible.
+.PP
+mux ships a tmux fragment (see
+.BR "TMUX INTEGRATION" )
+that wires the status bar, key bindings, and hooks; the
+.B mux
+command manages sessions, layouts, themes, and the palette.
+.SH COMMANDS
+.TP
+.B mux
+With no verb, pick a session to attach (an fzf picker, else a numbered menu).
+.TP
+.B mux go " [" \fINAME\fR "] [" \fILAYOUT\fR ]
+Create, attach, or switch to session
+.I NAME
+(default: derived from the current directory), building it from
+.I LAYOUT
+if it is not up. The agent
+.B continues
+its most recent conversation.
+.TP
+.B mux resume " [" \fINAME\fR "] [" \fILAYOUT\fR ]
+As
+.BR go ,
+but the agent
+.B resumes
+\(em it prompts to choose a conversation. Only meaningful when the session is
+being built.
+.TP
+.B mux \-\-bare " ..."
+Build the session but run neither the agent's
+.I go
+nor
+.I resume
+command \(em a plain shell in the agent pane.
+.TP
+.B mux ls
+List sessions in the current context, each tagged with its agent-state glyph.
+.TP
+.B mux new " [" \fINAME\fR "] [" \fICOLOR\fR "] [" \fIROOT\fR ]
+Write a new layout.
+.RB ' \- '
+means the default colour / no root.
+.TP
+.B mux save " [" \fINAME\fR ]
+Snapshot the current session's shape (windows, panes, root, theme) to
+.IR NAME .layout.
+.TP
+.B mux edit " [" \fINAME\fR ]
+Open a layout in
+.BR $EDITOR .
+.TP
+.B mux rename " [" \fIOLD\fR "] " \fINEW\fR
+Rename a session and its matching layout.
+.TP
+.B mux theme " [" \fINAME\fR " | next | prev]"
+Show, set, or cycle the current session's colour theme. With
+.B \-p
+(or
+.BR \-\-persist ),
+also write the choice into the session's layout.
+.TP
+.B mux next-blocked
+Jump to the session whose agent has needed you longest \(em the loudest chip on
+the strip. Repeat to walk down the urgency order.
+.TP
+.B mux hide " " \fISESSION\fR ", " mux show " " \fISESSION\fR
+Hide or unhide
+.I SESSION
+for this client only \(em it drops off this attachment's status strip and out of
+its
+.RB ( "/" )
+cycling. Per client, so monitors can differ.
+.TP
+.B mux show-all
+Clear this client's hidden sessions.
+.TP
+.B mux reload
+Re-source
+.I tmux.conf
+on every running mux server (recompiling the palette), so a config or theme edit
+takes effect without a restart.
+.TP
+.B mux kill " " \fINAME\fR ", " mux kill-all
+Tear down the named session, or (with a prompt) every session on this socket.
+.SH LAYOUTS
+A layout is a small declarative file,
+.IR "$MUX_DIR/<name>" .layout,
+read and validated in full before any tmux call. Directives are either
+.B session-wide
+(last-wins, order-independent) or
+.B shape
+(build the windows and panes in order):
+.TP
+.B root \fIDIR\fR
+Working directory for every pane (a leading
+.B ~
+expands).
+.TP
+.B theme \fINAME\fR
+The colour theme (see
+.BR THEMES ).
+.TP
+.B agent \fINAME\fR
+Which agent profile a
+.B pane agent
+runs (see
+.BR AGENTS ).
+.TP
+.B notify \fIalways\fR | \fIaway\fR
+Whether the agent notification fires always, or only while you are away.
+.TP
+.B window \fINAME\fR
+Start a new window.
+.TP
+.B pane \fICMD\fR
+A pane running
+.IR CMD .
+.B pane agent
+runs the session's agent;
+.B pane \fINAME\fR
+runs a specific agent profile.
+.TP
+.B bottom \fIN\fR | \fIMIN\-MAX\fR
+A full-width bottom shell pane, with a fixed or bounded height in lines.
+.TP
+.B include \fIREF\fR
+Splice in
+.IR REF .layout.
+A user layout in
+.B $MUX_DIR
+wins over a shipped one (a
+.B shape
+in
+.BR $MUX_SHARE ),
+so
+.RB ' "include shapes/code" '
+pulls the shared vim | agent | shell shape from the package.
+.PP
+Shapes are reusable fragments under
+.IR $MUX_SHARE/shapes .
+.SH THEMES
+The palette is data:
+.IR $MUX_SHARE/themes/<name> .theme,
+each naming up to six styles (bar, current-window chip, active/inactive borders,
+copy-mode selection, prompt; only bar/window/accent are required). It is
+compiled into tmux
+.B @theme-*
+options by
+.RB ' "mux themes" ',
+run from the tmux fragment at server start and re-pushed on drift, so a theme
+edit needs no manual step.
+.I $MUX_SHARE/themes/defaults
+names the global default. A user override in
+.I $MUX_DIR/themes
+wins.
+.SH AGENTS
+An agent profile,
+.IR $MUX_SHARE/agents/<name> .agent,
+is two lines: a
+.B go
+command and a
+.B resume
+command, each a shell command mux runs as the agent pane's process. Claude is
+the default; add a CLI by dropping in a profile.
+.SH KEY BINDINGS
+Provided by the tmux fragment (prefix table unless noted):
+.TP
+.BR ( ", " )
+Cycle to the previous / next visible session (skipping hidden ones).
+.TP
+.B b
+Jump to the longest-blocked session (\c
+.BR next-blocked );
+repeat to walk the urgency order.
+.TP
+.B B
+Toggle back to the last session.
+.TP
+.BR r ", " R
+Refresh a wedged pane layout; \fBR\fR rebuilds a stuck-render pane.
+.TP
+.B Space
+The explorer (\c
+.BR choose-tree ).
+.TP
+.B click " (status)"
+Click a session chip in the strip to jump straight to it.
+.SH THE CONTEXT SEAM
+mux core knows no particular notion of "context" (a work / personal split, a
+namespace, a git host). An optional executable hook,
+.IR $MUX_DIR/context ,
+supplies one; with none installed, mux runs a single default context. Verbs:
+.TP
+.B context env " [" \fIPID\fR ]
+Emit
+.IR PID 's
+context as whitelisted
+.RI < key >
+.RI < value >
+lines:
+.B socket
+(tmux
+.B \-L
+suffix for isolation),
+.B side
+(an opaque token driving layout filtering and the marker),
+.B label
+and
+.B banner
+(the reminder text and its style),
+.B theme
+(the context's default theme).
+.TP
+.B context side \fIROOT\fR
+The side a layout rooted at
+.I ROOT
+belongs to, or
+.B shared
+(visible in every context).
+.TP
+.B context sockets
+Every non-default context server the hook can address (for
+.B reload
+and palette sync).
+.PP
+Output is parsed against the key whitelist, never eval'd. mux only
+.B reflects
+a context; whatever enforces a boundary lives in the integrator.
+.SH TMUX INTEGRATION
+Source the shipped fragments from your
+.IR tmux.conf :
+.PP
+.nf
+.RS
+source-file ~/.local/share/mux/mux.tmux
+source-file ~/.local/share/mux/mux-opinions.tmux   # optional
+.RE
+.fi
+.PP
+.I mux.tmux
+is required \(em the status bar, feature bindings, and resize hooks; it reaches
+mux's helpers only as
+.RB ' "mux <verb>" ',
+so it carries no paths.
+.I mux-opinions.tmux
+is optional ergonomics (mouse, scroll routing, navigation).
+.SH ENVIRONMENT
+.TP
+.B MUX_DIR
+User config / overrides (layouts, themes overrides, the
+.I context
+hook). Default
+.IR $XDG_CONFIG_HOME/mux ,
+else
+.IR ~/.config/mux .
+.TP
+.B MUX_SHARE
+Shipped package data (themes, shapes, agents, the tmux fragments). Default the
+.I share/mux
+sibling of the
+.B mux
+binary's prefix.
+.TP
+.B MUX_CACHE
+Per-socket palette stamp directory. Default
+.IR $XDG_CACHE_HOME/mux .
+.SH FILES
+.TP
+.I $MUX_DIR/<name>.layout
+User session layouts (\c
+.BR "mux new" ", " save " write here)."
+.TP
+.I $MUX_DIR/context
+The optional context hook.
+.TP
+.I $MUX_SHARE/{themes,shapes,agents}
+Shipped palette, shape fragments, and agent profiles.
+.TP
+.I $MUX_SHARE/mux.tmux
+The tmux integration fragment.
+.SH EXAMPLES
+Open (or attach) a session for the current project, agent continuing:
+.PP
+.RS
+.B mux go
+.RE
+.PP
+Write a layout rooted at a repo, then bring it up resuming a conversation:
+.PP
+.nf
+.RS
+mux new api - ~/src/api
+mux resume api
+.RE
+.fi
+.PP
+Jump to whoever has been blocked longest, then back:
+.PP
+.RS
+prefix
+.BR b " \(em ... \(em prefix " B
+.RE
+.SH SEE ALSO
+.BR tmux (1),
+.BR valet (1)
