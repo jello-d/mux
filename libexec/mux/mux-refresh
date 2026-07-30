@@ -1,0 +1,54 @@
+#!/bin/sh
+# mux-refresh: unstick the layout.
+#
+#   (no arg)  perturb the mux bottom pane and re-pin -- the CLI equivalent of
+#             dragging the bottom border and letting it snap back. Clears the
+#             classic "half-height pane" wedge, a proportional-resize GEOMETRY
+#             glitch that mux-pin alone will not fix when it thinks the size is
+#             already right. Bound to prefix+r.
+#   --force   REBUILD the bottom pane: break it out and rejoin it full-width,
+#             forcing tmux to re-lay-out and re-emit that border's cells from
+#             SCRATCH. This clears a stuck RENDER state that a repaint or a
+#             perturb cannot -- e.g. tmux 3.5a drawing a full-width horizontal
+#             border in reverse video (bg/fg swapped) with no reverse anywhere
+#             in the config. Pane content is preserved; focus is restored. The
+#             bigger hammer for when prefix+r is not enough. Bound to prefix+R.
+#
+# The home for refresh-style fixes. Silent by design (tmux run-shell pops any
+# stdout into a view-mode buffer over the active pane). Safe to run by hand.
+set -eu
+
+# Sibling lib: MUX_LIB from bin/mux, else this script's own (colocated) dir.
+_lib=${MUX_LIB:-$(dirname "$0")}
+
+force=0
+case "${1:-}" in --force|-f) force=1 ;; esac
+
+# The mux bottom pane in the CURRENT window (mux tags it @mux-bottom). Target it
+# explicitly, not the active pane, so a refresh works from any focused pane.
+bottom=$(tmux list-panes -F '#{pane_id} #{@mux-bottom}' \
+        | awk 'NF > 1 { print $1; exit }')
+
+if [ "$force" -eq 1 ]; then
+        [ -n "${bottom:-}" ] || exit 0          # nothing to rebuild
+        win=$(tmux display-message -p '#{window_id}')
+        act=$(tmux display-message -p '#{pane_id}')     # restore focus after
+        max=$(tmux display-message -t "$bottom" -p '#{@mux-bottom}')
+        max=${max##*-}          # MIN-MAX or N -> the height cap
+        # Break the pane out (content preserved) then rejoin it full-width: that
+        # re-lays-out the border and re-emits its cells clean, which a redraw of
+        # the existing layout does not. mux-pin restores the canonical height.
+        tmux break-pane -d -s "$bottom" -n _muxrefresh 2>/dev/null || exit 0
+        tmux join-pane -v -f -l "$max" -s "$bottom" -t "$win" 2>/dev/null || :
+        "$_lib/mux-pin" 2>/dev/null || true
+        tmux select-pane -t "$act" 2>/dev/null || true
+        exit 0
+fi
+
+# Perturb ("the drag"): grow the bottom pane a few rows so its height differs
+# from the pinned target, breaking the stuck proportional state.
+[ -n "${bottom:-}" ] && tmux resize-pane -t "$bottom" -U 5 2>/dev/null || true
+
+# Re-pin ("the snap back"): mux-pin resizes every mux bottom pane to its
+# canonical height, cascading the siblings to fill correctly.
+exec "$_lib/mux-pin"

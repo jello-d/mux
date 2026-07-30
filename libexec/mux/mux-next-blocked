@@ -1,0 +1,52 @@
+#!/bin/sh
+# mux-next-blocked: switch this client to the session whose agent has been
+# BLOCKED (needs-you) the LONGEST -- the loudest, most-escalated chip on the
+# strip (see agent-state-render). "Jump to whoever needs me most." Skips this
+# client's hidden sessions (mux hide) and the session you are already on, so a
+# repeat press walks to the next-most-urgent. Silent by contract: it runs from a
+# key binding, whose stdout tmux would pop in a view-mode buffer over the pane.
+#
+#   mux-next-blocked CLIENT [CURRENT]
+#
+# CURRENT (the session to skip) defaults to CLIENT's own session, so the key
+# binding need only pass the client. Longest-blocked == earliest epoch:
+# mux_agent_state returns "STATE EPOCH" where EPOCH is when the state began, so
+# the smallest epoch is the oldest wait.
+set -eu
+
+# Sibling libs: inherit MUX_LIB when spawned by bin/mux, else self-resolve to
+# this script's own dir (the lib scripts are colocated).
+_lib=${MUX_LIB:-$(dirname "$0")}
+
+client=${1:-}
+current=${2:-}
+if [ -z "$current" ] && [ -n "$client" ]; then
+	current=$(tmux display-message -c "$client" -p '#{client_session}' \
+		2>/dev/null || true)
+fi
+
+. "$_lib/mux-agent-state.sh"
+excluded=
+if [ -r "$_lib/mux-exclude.sh" ]; then
+	. "$_lib/mux-exclude.sh"
+	excluded=$(mux_excluded "$client")
+fi
+dir=$(mux_agent_dir)
+
+best= bestep=
+for s in $(tmux list-sessions -F '#{session_name}' 2>/dev/null); do
+	case " $excluded " in *" $s "*) continue ;; esac    # mux hide
+	[ "$s" = "$current" ] && continue
+	pair=$(mux_agent_state "$dir" "$s")
+	[ "${pair%% *}" = blocked ] || continue
+	ep=${pair##* }
+	[ -n "$ep" ] || ep=9999999999
+	if [ -z "$best" ] || [ "$ep" -lt "$bestep" ]; then best=$s; bestep=$ep; fi
+done
+
+[ -n "$best" ] || exit 0            # nothing blocked; nowhere to jump
+if [ -n "$client" ]; then
+	tmux switch-client -c "$client" -t "=$best"
+else
+	tmux switch-client -t "=$best"
+fi

@@ -1,0 +1,1415 @@
+#!/bin/sh
+# mux: the single front end to tmux -- bring up, tear down, list, and reload
+# sessions without ever touching tmux directly. A session is an identity (its
+# name, used to resume) and a shape (a layout, used only to build it the first
+# time); the two are separate, so naming a session needs no layout and resuming
+# a live one reads none.
+#
+#   mux                    with no verb: pick a session to attach (fzf, else a
+#                          numbered menu); one session attaches straight away.
+#   mux go [NAME] [LAYOUT]
+#       create if missing, then attach (switch if already inside tmux). The
+#       claude pane runs `claude --continue || claude`: pick up where you left
+#       off, or start fresh when there is nothing to continue.
+#   mux resume [NAME] [LAYOUT]
+#       same, but `claude --resume` (choose a conversation).
+#   mux kill NAME          tear the named session down.
+#   mux kill-all           tear down EVERY session on this socket (prompts).
+#   mux reload             re-source tmux.conf on every running mux server.
+#   mux ls                 list sessions in the current context.
+#   mux new [NAME] [COLOR] [ROOT]
+#                          write a <NAME>.layout of the shared code shape. NAME
+#                          defaults to this dir's basename, ROOT to $PWD (or '-'
+#                          to omit it), COLOR to the per-mode default. --force
+#                          to overwrite.
+#                          It lands in the (dir-linked) mux dir, so it shows as
+#                          git drift: commit to keep, or delete.
+#   mux save [NAME]        snapshot the CURRENT session's shape into a
+#                          <NAME>.layout (windows, panes, bottom, root, theme);
+#                          pane commands are best-effort. --force to overwrite.
+#   mux hide SESSION       hide SESSION from THIS client's status strip and
+#                          ( / ) cycling; mux show SESSION restores it, mux
+#                          show-all clears this client's hides. Per client
+#                          (per attachment); must run inside a session.
+#     --bare (-b)          with go/resume: bring up WITHOUT launching claude
+#                          (the claude pane is a plain shell).
+#
+# A verb, or none for the session picker. For go/resume, NAME defaults to the
+# project (git toplevel basename, else cwd basename); kill requires it
+# explicitly. LAYOUT is the third token; with none, a per-project <NAME>.layout
+# is used if one exists, else default.layout.
+#
+# Idempotent: `go`/`resume` on a live session just attaches, never clobbers.
+#
+# Work sessions are a separate namespace. When mux holds the work group -- it
+# was launched from a `work` context -- it drives a tmux socket named for the
+# work GROUP and sees only work sessions; otherwise the default socket and only
+# personal ones. The same name can live in both, mutually invisible. Because the
+# work server inherits mux's group, its panes can enter the 2770 work tree that
+# a personal server cannot, so claude there resolves to the work account. work
+# owns the group test (work check); mux never acquires the group itself. `ls`
+# lists only the context you are in; `reload` freshens BOTH servers (the config
+# is shared), so a single reload from any pane updates everything.
+#
+# Layouts live in $MUX_DIR (default ~/.config/mux) as <name>.layout files.
+# Directives, one per line:
+#   root   DIR           working dir for the session (a leading ~ expands);
+#                        defaults to the project mux was invoked in
+#   theme  NAME          colour theme for the session (a themes/NAME.theme
+#                        fragment: purple, orange, cyan, green, slate, red),
+#                        overriding the per-mode default. Cosmetic only --
+#                        work mode still shows its banner + title regardless.
+#   agent  NAME          the agent a `pane agent` runs (an agents/NAME.agent
+#                        profile: claude, gemini, ...), default claude. go and
+#                        resume use that agent's own continue/resume command.
+#   notify always|away   whether the agent notification (see agent-state-emit)
+#                        fires while you are LOOKING at the pane: `away` (the
+#                        default) suppresses it then, `always` fires anyway.
+#   window NAME          start a new window; the first opens the session
+#   pane   CMD [ARG...]  add a pane running CMD; `pane agent` runs the session's
+#                        agent (shaped by go/resume), `pane <name>` a specific
+#                        agent profile, anything else runs literally
+#   bottom SIZE [CMD]    add a pane spanning the full width below the panes of
+#                        the current window; must come after them. SIZE is N to
+#                        pin the height, or MIN-MAX to track the window between
+#                        those bounds. Held there by mux-pin on every resize.
+#   include NAME         splice in NAME.layout here, resolved from $MUX_DIR like
+#                        any layout -- e.g. a shared shape fragment. Nests; a
+#                        cycle fails loud. Its window/pane/bottom accumulate.
+# Blank lines and lines beginning with # are ignored.
+#
+# The whole layout, includes expanded, is parsed and VALIDATED before any tmux
+# call, so a malformed layout builds nothing. root and theme are resolved for
+# the session as a whole -- last one wins, position irrelevant; window/pane/
+# bottom build the shape in the order they appear.
+set -eu
+
+MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
+TMUX_CONF=${XDG_CONFIG_HOME:-$HOME/.config}/tmux/tmux.conf
+# Where the sibling lib scripts live. mux (in ~/bin) is NOT colocated with them,
+# so it cannot self-resolve like the libs do; it carries the default and exports
+# it, so every child (a lib script, a run-shell) inherits the same answer. An
+# integrator with a different layout overrides MUX_LIB in the environment.
+MUX_LIB=${MUX_LIB:-$HOME/lib/mux}
+export MUX_LIB
+
+# The ONE comment/normalize rule (mux_conf_clean) for every config parse below
+# -- layouts, themes, agents. Core, so sourced unconditionally (it deploys with
+# mux); a fallback keeps mux alive if the lib is somehow missing, stripping only
+# whole-line comments (the pre-normalizer behaviour) so nothing hard-breaks.
+_conf_lib=$MUX_LIB/mux-conf.sh
+if [ -r "$_conf_lib" ]; then . "$_conf_lib"
+else mux_conf_clean() { grep -vE '^[[:space:]]*(#|$)'; }
+fi
+
+# The shared agent-state reader (also used by the status strip) lets the session
+# picker and `mux ls` show each session's agent glyph. Cosmetic, so a missing
+# lib degrades to plain names rather than taking down core verbs (kill, reload).
+_have_astate=0
+_astate_lib=$MUX_LIB/mux-agent-state.sh
+if [ -r "$_astate_lib" ]; then . "$_astate_lib"; _have_astate=1; fi
+
+# The CONTEXT seam: mux core knows no particular notion of "context" (tackup's
+# work/personal ZDR split, a namespace, ...). mux-context.sh asks an optional
+# $MUX_DIR/context hook and falls back to a single default context. Core, so
+# sourced unconditionally; a stub keeps every consumer working if the lib is
+# missing (default socket, side `default`, all layouts shared, no extra socks).
+_ctx_lib=$MUX_LIB/mux-context.sh
+if [ -r "$_ctx_lib" ]; then . "$_ctx_lib"
+else
+	mux_ctx_env() { MUX_CTX_SOCKET=''; MUX_CTX_SIDE=default
+		MUX_CTX_LABEL=''; MUX_CTX_BANNER=''; MUX_CTX_THEME=''; }
+	mux_ctx_side() { echo shared; }
+	mux_ctx_sockets() { :; }
+fi
+
+# Space-joined basenames (sans extension) of $1/*$2, or empty. Feeds the help so
+# `mux --help` lists the layouts and colors actually present on this box.
+_list_stems() {   # <dir> <ext>
+        [ -d "$1" ] || return 0
+        for _f in "$1"/*"$2"; do
+                [ -e "$_f" ] || continue
+                _b=${_f##*/}; printf '%s ' "${_b%"$2"}"
+        done
+}
+
+# Work/personal (or any) filtering. A layout's SIDE is a property of its ROOT,
+# and which side the caller is on both come from the context hook (see
+# mux-context.sh); mux core just compares tokens. A layout shows when its side
+# is `shared` (rootless / any context) or equals the caller's side. Resolved
+# once,
+# lazily -- usage() lists layouts before the socket block below runs.
+_cur_side=''
+_ensure_side() {
+        [ -n "$_cur_side" ] && return 0
+        mux_ctx_env
+        _cur_side=$MUX_CTX_SIDE
+}
+
+# Layout stems for the caller's side plus the shared (rootless) ones -- the same
+# one-side-or-the-other view `mux ls` gives for sessions.
+_list_layouts() {
+        _ensure_side
+        [ -d "$MUX_DIR" ] || return 0
+        for _f in "$MUX_DIR"/*.layout; do
+                [ -e "$_f" ] || continue
+                _rt=$(awk '$1=="root"{print $2; exit}' "$_f")
+                case "$(mux_ctx_side "$_rt")" in
+                        shared|"$_cur_side") ;;
+                        *) continue ;;
+                esac
+                _b=${_f##*/}; printf '%s ' "${_b%.layout}"
+        done
+}
+
+# Print "<label><items...>" to stderr, space-separated, wrapping so no line runs
+# past 78 columns; continuation lines are indented to the label's width, so a
+# long list stays in its column instead of wrapping back to the margin.
+_wrap_list() {   # <label> <space-separated items>
+        _lbl=$1; _items=$2
+        _ind=$(printf "%${#_lbl}s" '')
+        _line=$_lbl _first=1
+        for _it in $_items; do
+                if [ "$_first" = 1 ]; then
+                        _line=$_lbl$_it; _first=0
+                elif [ "$(( ${#_line} + 1 + ${#_it} ))" -le 78 ]; then
+                        _line="$_line $_it"
+                else
+                        printf '%s\n' "$_line" >&2
+                        _line=$_ind$_it
+                fi
+        done
+        printf '%s\n' "$_line" >&2
+}
+
+# usage [RC]: print help to stderr and exit RC (default 2; `mux --help` passes
+# 0). Ends with the live layouts (go/resume/kill NAME) and colors (new COLOR).
+usage() {
+        cat >&2 <<'EOF'
+usage: mux [VERB] [--bare] [NAME] [LAYOUT]
+  (no verb)                  pick a session to attach (fzf or numbered menu)
+  go [NAME] [LAYOUT]         create/attach/switch; agent continues in the pane
+  resume [NAME] [LAYOUT]     same, but the agent resumes (choose a conversation)
+  kill NAME                  tear the named session down
+  kill-all                   tear down every session on this socket (prompts)
+  reload                     re-source tmux.conf on every running mux server
+  ls                         list sessions in the current context
+  new [NAME] [COLOR] [ROOT]  write a layout; '-' = COLOR default / ROOT off
+  save [NAME]                snapshot the current session's shape to NAME.layout
+  hide/show SESSION          hide/unhide SESSION for this client (strip/cycle)
+  show-all                   clear this client's hidden sessions
+  next-blocked               jump to the session that has needed you longest
+  theme [NAME|next|prev]     set/cycle/show the session theme (-p to persist)
+  rename [OLD] NEW           rename a session (and its matching layout)
+  edit [NAME]                open a layout in $EDITOR
+  --bare                     go/resume without the agent (pane is a plain shell)
+  --force                    overwrite an existing layout (save/new)
+  help [TOPIC]               this help; TOPIC = agents|colors|layouts|palette
+  -h, --help                 alias for bare `help`
+EOF
+        echo >&2
+        _wrap_list "  layouts (go/resume NAME):  " "$(_list_layouts)"
+        _wrap_list "  colors  (new NAME COLOR):  " \
+                "$(_list_stems "$MUX_DIR/themes" .theme)"
+        _wrap_list "  agents  (agent NAME):      " \
+                "$(_list_stems "$MUX_DIR/agents" .agent)"
+        exit "${1:-2}"
+}
+
+# --- verb (required), then options, then positionals ----------------------
+# No verb at all -> the session picker: pick=1, then flow as an attach (cmd=go).
+cmd=${1:-}
+pick=0
+if [ -z "$cmd" ]; then
+        pick=1
+        cmd=go
+else
+        shift
+fi
+case $cmd in
+        -h|--help) usage 0 ;;
+        go|resume|kill|kill-all|reload|ls|hide|show|show-all) ;;
+        save|new|help|next-blocked|theme|rename|edit) ;;
+        *) echo "mux: unknown verb: $cmd" >&2; usage ;;
+esac
+
+bare=0
+force=0
+persist=0
+while [ "$#" -gt 0 ]; do
+        case $1 in
+                --bare|-b)    bare=1; shift ;;
+                --force)      force=1; shift ;;
+                --persist|-p) persist=1; shift ;;
+                --) shift; break ;;
+                -*) echo "mux: unknown option: $1" >&2; usage ;;
+                *) break ;;
+        esac
+done
+
+# Arity per verb. --bare is meaningful only where claude is launched. kill
+# requires an explicit NAME -- it is too destructive to run against an inferred
+# session; kill-all takes none (it hits the whole socket, behind a prompt).
+case $cmd in
+        reload|ls|kill-all|show-all|next-blocked) [ "$#" -eq 0 ] || {
+                echo "mux: $cmd takes no arguments" >&2; usage; } ;;
+        kill|hide|show) [ "$#" -eq 1 ] || {
+                echo "mux: $cmd needs a session NAME (see: mux ls)" >&2
+                usage; } ;;
+        go|resume) [ "$#" -le 2 ] || {
+                echo "mux: too many arguments" >&2; usage; } ;;
+        save|theme|edit) [ "$#" -le 1 ] || {
+                echo "mux: $cmd takes at most a NAME" >&2; usage; } ;;
+        rename) { [ "$#" -ge 1 ] && [ "$#" -le 2 ]; } || {
+                echo "mux: rename [OLD] NEW" >&2; usage; } ;;
+        new) [ "$#" -le 3 ] || {
+                echo "mux: new takes NAME [COLOR] [ROOT]" >&2; usage; } ;;
+        help) [ "$#" -le 6 ] || {
+                echo "mux: help [agents|colors|layouts|palette [FG|test]]" >&2
+                usage; } ;;
+esac
+case $cmd in
+        go|resume) ;;
+        *) [ "$bare" -eq 0 ] || {
+                echo "mux: --bare is only for go/resume" >&2; usage; } ;;
+esac
+case $cmd in
+        save|new) ;;
+        *) [ "$force" -eq 0 ] || {
+                echo "mux: --force is only for save/new" >&2
+                usage; } ;;
+esac
+case $cmd in
+        theme) ;;
+        *) [ "$persist" -eq 0 ] || {
+                echo "mux: --persist is only for theme" >&2; usage; } ;;
+esac
+
+name_arg=${1:-}
+layout_arg=${2:-}
+
+# --- new: write a layout from [NAME] [COLOR] [ROOT] --------------------------
+# Create a session blueprint from args -- no live session, no cd required. NAME
+# defaults to the current dir's basename, so a bare `mux new` in a project makes
+# <project>.layout rooted here. COLOR is a theme fragment name ('-' or omitted =
+# the per-mode default, no theme line); ROOT defaults to $PWD, or '-' to write
+# NO root line (portable -- the session then roots at the launch dir). A given
+# ROOT expands a leading ~, is made absolute, and folds $HOME back to ~ so it
+# travels. --force to clobber. Needs no tmux; runs before any socket work.
+if [ "$cmd" = new ]; then
+        nw_name=${1:-$(basename "$(pwd)")}
+        nw_name=$(printf '%s' "$nw_name" | tr ':.' '--')
+        nw_color=${2:-}
+        nw_root=${3:-$(pwd)}
+        [ "$nw_color" = - ] && nw_color=          # '-' = default theme
+        [ "$nw_root" = - ] && nw_root=            # '-' = no root line
+        if [ -n "$nw_color" ] \
+           && [ ! -f "$MUX_DIR/themes/$nw_color.theme" ]; then
+                echo "mux: unknown theme: $nw_color" \
+                        "(no $MUX_DIR/themes/$nw_color.theme)" >&2
+                exit 1
+        fi
+        case $nw_root in                          # expand input to absolute
+                "")    ;;                          # '-' sentinel: leave unset
+                "~")   nw_root=$HOME ;;
+                "~/"*) nw_root=$HOME/${nw_root#"~/"} ;;
+                /*)    ;;
+                *)     nw_root=$(pwd)/$nw_root ;;
+        esac
+        case $nw_root in                          # fold $HOME back to ~
+                "")        ;;
+                "$HOME")   nw_root='~' ;;
+                "$HOME"/*) nw_root="~/${nw_root#"$HOME"/}" ;;
+        esac
+        nw_file=$MUX_DIR/$nw_name.layout
+        [ "$force" -eq 1 ] || [ ! -e "$nw_file" ] || {
+                echo "mux: layout exists: $nw_file (use --force)" >&2
+                exit 1
+        }
+        mkdir -p "$MUX_DIR"
+        {
+                printf '# %s: made by `mux new`; the shared code shape.\n' \
+                        "$nw_name"
+                printf '# Edit the theme line to recolour; commit to keep.\n'
+                [ -n "$nw_color" ] && printf 'theme   %s\n' "$nw_color"
+                [ -n "$nw_root" ] && printf 'root    %s\n' "$nw_root"
+                printf 'include shapes/code\n'
+        } >"$nw_file"
+        echo "mux: wrote $nw_file"
+        echo "mux: launch it with  mux go $nw_name"
+        exit 0
+fi
+
+# --- help: `mux help [agents|colors|layouts|palette]` -----------------------
+# A proper verb. Bare (and the -h/--help flags) prints the plain usage; `colors`
+# renders each theme in its OWN palette so you see it; `layouts` diagrams each
+# session shape in ASCII. All read-only file work -- runs here, before any git
+# or socket touch.
+# Colour only when stdout is a terminal; an empty _RST doubles as the "no
+# colour" flag for _sgr_* below, so `mux help colors | less` stays plain text.
+if [ -t 1 ]; then _RST=$(printf '\033[0m'); else _RST=; fi
+
+# ANSI SGR for one tmux colour spec (colourN or #rrggbb), as fg(38) or bg(48).
+# Colour spec -> SGR parameter fragment. A "0x" or "#" prefix means TRUECOLOR
+# (rrggbb -> R;G;B); anything else is a 256-palette index (a bare number, or
+# colourN). <role> is 38 (fg) or 48 (bg). Empty on an unrecognised spec.
+_sgr_frag() {           # <spec> <38|48>
+        case $1 in
+        '#'*|0x*)
+                _h=${1#\#}; _h=${_h#0x}
+                case $_h in ??????) ;; *) return 0 ;; esac   # need 6 hex digits
+                _r=${_h%????}; _gb=${_h#??}; _g=${_gb%??}; _b=${_h#????}
+                printf '%s;2;%d;%d;%d' "$2" \
+                        "$((0x$_r))" "$((0x$_g))" "$((0x$_b))" ;;
+        colour[0-9]*) printf '%s;5;%s' "$2" "${1#colour}" ;;
+        [0-9]*)       printf '%s;5;%s' "$2" "$1" ;;
+        esac
+}
+# Full SGR escape for a colour spec (empty when not a tty or spec unrecognised).
+_sgr_color() {          # <spec> <38|48>
+        [ -n "$_RST" ] || return 0
+        _f=$(_sgr_frag "$1" "$2"); [ -n "$_f" ] && printf '\033[%sm' "$_f"
+}
+# ANSI SGR for a tmux style string ("bg=X fg=Y bold"): fg, then bg, then bold.
+_sgr_style() {          # <style>
+        [ -n "$_RST" ] || return 0
+        for _t in $1; do
+                case $_t in
+                fg=*) _sgr_color "${_t#fg=}" 38 ;;
+                bg=*) _sgr_color "${_t#bg=}" 48 ;;
+                bold) printf '\033[1m' ;;
+                esac
+        done
+}
+help_colors() {
+        echo 'colors -- `mux new NAME COLOR`, or a `theme` line in a layout:'
+        echo
+        for _f in "$MUX_DIR"/themes/*.theme; do
+                [ -e "$_f" ] || continue
+                _n=${_f##*/}; _n=${_n%.theme}
+                _cf=$(mktemp); mux_conf_clean < "$_f" > "$_cf"
+                _bar=$(awk '$1=="bar"{sub(/^bar[ \t]+/,"");print;exit}' "$_cf")
+                _win=$(awk \
+                    '$1=="window"{sub(/^window[ \t]+/,"");print;exit}' "$_cf")
+                _acc=$(awk \
+                    '$1=="accent"{sub(/^accent[ \t]+/,"");print;exit}' "$_cf")
+                _sel=$(awk \
+                    '$1=="select"{sub(/^select[ \t]+/,"");print;exit}' "$_cf")
+                rm -f "$_cf"
+                # select falls back to the window chip (as mux-style does);
+                # accent is fg-only, so show it as a solid bg swatch.
+                [ -n "$_sel" ] || _sel=$_win
+                # Split the bar into its bg/fg tokens so they print in fixed
+                # columns (bg=colour166 is the widest at 12), not a ragged
+                # trailing string where fg never lines up.
+                _bg= _fg=
+                for _t in $_bar; do
+                        case $_t in bg=*) _bg=$_t ;; fg=*) _fg=$_t ;; esac
+                done
+                printf '  %-11s %s bar %s %s active %s %s   %s' \
+                        "$_n" \
+                        "$(_sgr_style "$_bar")" "$_RST" \
+                        "$(_sgr_style "$_win")" "$_RST" \
+                        "$(_sgr_color "${_acc#fg=}" 48)" "$_RST"
+                printf ' %s sel %s   %-12s %s\n' \
+                        "$(_sgr_style "$_sel")" "$_RST" "$_bg" "$_fg"
+        done
+        _d=$MUX_DIR/themes/defaults
+        [ -f "$_d" ] || return 0
+        # The global default (themes/defaults); a context may override it via
+        # the context hook (tackup's work theme), not probed by this summary.
+        printf '\n  default theme:  %s\n' \
+                "$(awk '$1=="default"{print $2}' "$_d")"
+}
+# Flatten a layout for display: resolve `include NAME` recursively; emit the
+# window/pane/bottom/theme/root directives. Depth-capped; a real cycle is
+# caught by `mux go`.
+_flat_layout() {        # <file> <depth>
+        [ "${2:-0}" -lt 16 ] || return 0
+        # Display-only, so a pipe is fine (no exit-on-error to preserve); the
+        # cleaner drops comments/blanks, so no comment case is needed.
+        mux_conf_clean < "$1" | while read -r _v _r; do
+                case $_v in
+                include)
+                        _i=$MUX_DIR/$_r.layout
+                        [ -f "$_i" ] && _flat_layout "$_i" "$((${2:-0}+1))" ;;
+                *) printf '%s %s\n' "$_v" "$_r" ;;
+                esac
+        done
+}
+# Draw the window/pane/bottom directives (on stdin) as ASCII boxes: top panes
+# side by side, a full-width bottom strip below when present; one per window.
+_draw_shape() {
+        awk '
+        function rep(c,n,  s){s="";while(n-->0)s=s c;return s}
+        function cell(s,w){return sprintf(" %-" (w-1) "s", substr(s,1,w-1))}
+        # l + (dashes j)*(N-1) + dashes r : a border row with pane junctions.
+        function edge(l,j,r,  i,s){
+                s=l
+                for(i=1;i<=np;i++)s=s rep("─",cw) (i<np?j:r)
+                return s
+        }
+        function flush(  i,m,fw){
+                if(np==0)return
+                print "    " edge("┌","┬","┐")
+                m="    │"; for(i=1;i<=np;i++)m=m cell(p[i],cw)"│"; print m
+                if(bot!=""){                       # merged full-width bottom
+                        print "    " edge("├","┴","┤")
+                        fw=np*(cw+1)-1
+                        print "    │" cell(bl,fw) "│"
+                        print "    └" rep("─",fw) "┘"
+                } else print "    " edge("└","┴","┘")
+                np=0; bot=""
+        }
+        BEGIN{cw=11}
+        $1=="window"{flush(); print "    [" $2 "]"}
+        $1=="pane"{$1="";sub(/^ /,"");np++;p[np]=$0}
+        $1=="bottom"{bot=$2; bl="shell " $2}
+        END{flush()}'
+}
+help_layouts() {
+        _ensure_side
+        # Tag the heading with the side only when there is more than one (a hook
+        # is active); the default single-context case stays untagged.
+        _tag=''
+        [ "$_cur_side" = default ] || _tag=" [$_cur_side]"
+        printf 'layouts%s -- `mux go NAME`:\n' "$_tag"
+        echo
+        for _f in "$MUX_DIR"/*.layout; do
+                [ -e "$_f" ] || continue
+                _n=${_f##*/}; _n=${_n%.layout}
+                _flat=$(_flat_layout "$_f" 0)
+                _th=$(printf '%s\n' "$_flat" | awk '$1=="theme"{print $2;exit}')
+                _rt=$(printf '%s\n' "$_flat" | awk '$1=="root"{print $2;exit}')
+                case "$(mux_ctx_side "$_rt")" in
+                        shared|"$_cur_side") ;;
+                        *) continue ;;
+                esac
+                printf '  %s' "$_n"
+                if [ -n "$_th" ]; then          # theme name in its own colour
+                        _tb=$(mux_conf_clean \
+                            < "$MUX_DIR/themes/$_th.theme" 2>/dev/null \
+                            | awk '$1=="bar"{sub(/^bar[ \t]+/,"");print;exit}')
+                        printf '  theme %s %s %s' \
+                                "$(_sgr_style "$_tb")" "$_th" "$_RST"
+                fi
+                printf '  root %s\n' "${_rt:-<the dir you run it in>}"
+                printf '%s\n' "$_flat" | _draw_shape
+                echo
+        done
+}
+# The xterm 256-colour palette as swatches (bg=colourN, contrast fg) so a
+# theme's bg=/fg= number can be picked by eye. Meaningless without colour.
+help_palette() {        # [FG] | test BAR_FG BAR_BG ACT_FG ACT_BG
+        [ -n "$_RST" ] || { echo 'mux: palette needs a terminal' >&2
+                return 0; }
+        # test: a mock status bar in the given bar + active-chip colours, so a
+        # whole theme's clarity is judged in context. Colours: bar fg, bar bg,
+        # active-window fg, active-window bg.
+        if [ "${1:-}" = test ]; then
+                shift
+                [ "$#" -eq 4 ] || { echo \
+                        "mux: palette test BAR_FG BAR_BG ACT_FG ACT_BG" >&2
+                        exit 2; }
+                for _c in "$@"; do
+                        [ -n "$(_sgr_frag "$_c" 48)" ] || {
+                                echo "mux: bad colour: $_c" >&2; exit 2; }
+                done
+                _b=$(_sgr_color "$2" 48)$(_sgr_color "$1" 38)   # bar bg + fg
+                _a=$(_sgr_color "$4" 48)$(_sgr_color "$3" 38)$(printf '\033[1m')
+                printf 'status bar preview -- '
+                printf 'bar fg=%s bg=%s, active fg=%s bg=%s:\n\n' \
+                        "$1" "$2" "$3" "$4"
+                printf '  %s edit │ %s code %s logs   ⏳ · host 09:41 %s\n' \
+                        "$_b" "$_a" "$_b" "$_RST"
+                exit 0
+        fi
+        _fg=                            # empty => B&W contrast per cell
+        if [ -n "${1:-}" ]; then
+                _fg=$(_sgr_frag "$1" 38)
+                [ -n "$_fg" ] || { echo \
+                        "mux: palette fg: 0-255, colourN, #rrggbb, or 0x..." >&2
+                        exit 2; }
+        fi
+        if [ -n "$_fg" ]; then
+                printf 'palette -- fg %s over every bg:\n\n' "$1"
+        else
+                echo 'palette -- the 256 colours; any works as fg OR bg:'
+                echo
+        fi
+        awk -v fg="$_fg" '
+        function fgof(n,  i,r,g,b,l){
+                if(n<16) l=(n==0)?0:(n==7||n>=9)?200:90
+                else if(n<232){
+                        i=n-16; b=i%6; i=int(i/6); g=i%6; r=int(i/6)
+                        r=r?r*40+55:0; g=g?g*40+55:0; b=b?b*40+55:0
+                        l=0.3*r+0.59*g+0.11*b
+                } else l=8+(n-232)*10
+                return l>140?16:231
+        }
+        function cell(n){
+                if(fg!="")
+                        return sprintf("\033[48;5;%dm\033[%sm%4d\033[0m",n,fg,n)
+                return sprintf("\033[48;5;%dm\033[38;5;%dm%4d\033[0m",
+                        n, fgof(n), n)
+        }
+        function grid(lo,hi,per,  i,c,s){
+                s=""; c=0
+                for(i=lo;i<=hi;i++){
+                        s=s cell(i)
+                        if(++c==per){print "  " s; s=""; c=0}
+                }
+                if(c>0)print "  " s
+        }
+        BEGIN{
+                print "  system 0-15:";       grid(0,15,16);   print ""
+                print "  cube 16-231:";       grid(16,231,18);  print ""
+                print "  grayscale 232-255:"; grid(232,255,12)
+        }'
+        [ -n "$_fg" ] || { printf \
+                '\n  tip: `palette N` renders colour N as fg here;\n'
+                printf '       `palette test FG BG FG BG` mocks a bar.\n'; }
+}
+# The agent profiles and how to select one -- the mux peer of help_colors, so
+# `pane agent`'s target (and how to add another CLI) is discoverable.
+help_agents() {
+        echo 'agents -- the CLI a `pane agent` runs; choose per session with an'
+        echo '`agent <name>` line in a layout (or `pane <name>` for one pane):'
+        echo
+        for _f in "$MUX_DIR"/agents/*.agent; do
+                [ -e "$_f" ] || continue
+                _n=${_f##*/}; _n=${_n%.agent}
+                _cf=$(mktemp); mux_conf_clean < "$_f" > "$_cf"
+                _go=$(awk '$1=="go"{sub(/^go[ \t]+/,"");print;exit}' "$_cf")
+                _rs=$(awk \
+                    '$1=="resume"{sub(/^resume[ \t]+/,"");print;exit}' "$_cf")
+                rm -f "$_cf"
+                [ "$_n" = claude ] && _n="$_n (default)"
+                printf '  %s\n' "$_n"
+                printf '    go      %s\n' "${_go:-<none>}"
+                printf '    resume  %s\n' "${_rs:-<none>}"
+        done
+        printf '\n  profiles: %s/agents/<name>.agent' "$MUX_DIR"
+        printf ' (a `go` and a `resume` line).\n'
+        printf '  add a CLI by dropping in a profile; strip state also needs'
+        printf '\n  a hook producer (claude: plugin; gemini: modules/gemini).\n'
+}
+if [ "$cmd" = help ]; then
+        case ${1:-} in
+        '')      usage 0 ;;
+        agents)  help_agents ;;
+        colors)  help_colors ;;
+        layouts) help_layouts ;;
+        palette) shift; help_palette "$@" ;;
+        *) echo "mux: unknown help topic: $1" \
+                "(agents, colors, layouts, palette)" >&2
+           exit 2 ;;
+        esac
+        exit 0
+fi
+
+# Root and identity both derive from the project: the git toplevel if we are in
+# a repo, else the current directory. tmux forbids ':' and '.' in a session
+# name, so fold them to '-' in a derived name.
+base=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+name=${name_arg:-$(basename "$base")}
+name=$(printf '%s' "$name" | tr ':.' '--')
+
+# Which tmux namespace. The context hook names the socket: an isolated context
+# (tackup's work group) gets a socket of its own, everything else the default
+# server. Degrades cleanly to the default socket when no hook is installed, or
+# when the caller is in no special context. Prime _cur_side here too, so the
+# common path resolves the hook once.
+mux_ctx_env
+sock=$MUX_CTX_SOCKET
+_cur_side=$MUX_CTX_SIDE
+
+# Single chokepoint for the socket choice: every session-scoped tmux call goes
+# through here. reload deliberately bypasses it to reach BOTH servers.
+tm() {
+        if [ -n "$sock" ]; then
+                tmux -L "$sock" "$@"
+        else
+                tmux "$@"
+        fi
+}
+
+# True when a pane's current command is just a shell (so it maps to a bare
+# directive, no command). tmux re-quotes pane_start_command, so the clean signal
+# is pane_current_command -- a single word.
+is_shell() {
+        case $1 in
+        sh|-sh|bash|-bash|ksh|-ksh|zsh|-zsh|dash|fish|login) return 0 ;;
+        *) return 1 ;;
+        esac
+}
+
+# Emit `pane`/`bottom` directives for one window ("=SESSION:INDEX"): top panes
+# in index order first, then the full-width bottom if the window has one (marked
+# by @mux-bottom, carrying its SPEC). The command is the pane's CURRENT command
+# (best-effort); a shell pane emits a bare directive.
+emit_window() {
+        tm list-panes -t "$1" \
+                -F '#{pane_index}|#{@mux-bottom}|#{pane_current_command}' \
+        | sort -t'|' -k1,1n | while IFS='|' read -r _pi _pb _pc; do
+                [ -z "$_pb" ] || continue
+                if is_shell "$_pc"; then printf 'pane\n'
+                else printf 'pane    %s\n' "$_pc"; fi
+        done
+        tm list-panes -t "$1" -F '#{@mux-bottom}|#{pane_current_command}' \
+        | while IFS='|' read -r _pb _pc; do
+                [ -n "$_pb" ] || continue
+                if is_shell "$_pc"; then printf 'bottom  %s\n' "$_pb"
+                else printf 'bottom  %s %s\n' "$_pb" "$_pc"; fi
+        done
+}
+
+# Heal any theme-fragment drift on the running servers before we draw anything:
+# a cheap no-op unless a themes/*.theme changed since a server was last synced,
+# so an edited palette needs no manual reload. Best-effort; never a gate.
+if [ -x "$MUX_LIB/mux-themes" ]; then
+        "$MUX_LIB/mux-themes" sync || true
+fi
+
+# --- (no verb): pick a session to attach -----------------------------------
+# `mux` with no arguments lists the sessions in this context and lets you choose
+# one -- fzf if present, else a numbered menu. One session attaches straight
+# away; none points you at `mux go`. Sets `name`, then falls through to the
+# attach path below.
+if [ "$pick" = 1 ]; then
+        _sessions=$(tm list-sessions -F '#{session_name}' 2>/dev/null || true)
+        if [ -z "$_sessions" ]; then
+                echo "mux: no sessions in this context (start one: mux go)"
+                exit 0
+        fi
+        _count=$(printf '%s\n' "$_sessions" | grep -c .)
+        if [ "$_count" -eq 1 ]; then
+                name=$_sessions
+        else
+                # Decorate each session with its agent-state glyph, so a blocked
+                # or working agent is visible while you choose (⚫ = no agent).
+                # The menu line is "GLYPH NAME"; NAME is the last field (mux
+                # names hold no spaces), so the pick maps straight back. Skipped
+                # when the shared state lib is absent -- then it is plain names.
+                _menu=$_sessions
+                if [ "$_have_astate" -eq 1 ]; then
+                        _adir=$(mux_agent_dir "${sock:-default}")
+                        _menu=$(printf '%s\n' "$_sessions" \
+                          | while IFS= read -r _s; do
+                                [ -n "$_s" ] || continue
+                                printf '%s %s\n' \
+                                    "$(mux_agent_state_glyph "$_adir" "$_s")" \
+                                    "$_s"
+                          done)
+                fi
+                if command -v fzf >/dev/null 2>&1; then
+                        _sel=$(printf '%s\n' "$_menu" \
+                          | fzf --prompt='mux> ' --height=40% --reverse) \
+                          || exit 0
+                        name=${_sel##* }
+                else
+                        printf '%s\n' "$_menu" | nl -w2 -s') ' >&2
+                        printf 'mux: session #? ' >&2
+                        read -r _n || exit 0
+                        case $_n in
+                        ''|*[!0-9]*) echo "mux: not a number" >&2; exit 1 ;;
+                        esac
+                        _sel=$(printf '%s\n' "$_menu" | sed -n "${_n}p")
+                        name=${_sel##* }
+                fi
+        fi
+        [ -n "$name" ] || { echo "mux: nothing selected" >&2; exit 0; }
+fi
+
+# --- reload: re-source tmux.conf on every running mux server ---------------
+# The config is machine-wide, so one reload from any pane freshens everything:
+# the default (personal) socket and the work-group socket if its server is up.
+# Both are the same uid, so a personal process can source the work server too.
+# Guard on list-sessions so source-file never STARTS a server that was not up.
+if [ "$cmd" = reload ]; then
+        [ -f "$TMUX_CONF" ] || {
+                echo "mux: no tmux.conf at $TMUX_CONF" >&2; exit 1; }
+        did=
+        if tmux list-sessions >/dev/null 2>&1; then
+                tmux source-file "$TMUX_CONF" && did="$did default"
+        fi
+        # Plus every non-default context server the hook knows (tackup: the work
+        # group's), so a reload reaches them regardless of the caller's side.
+        for _s in $(mux_ctx_sockets); do
+                if tmux -L "$_s" list-sessions >/dev/null 2>&1; then
+                        tmux -L "$_s" source-file "$TMUX_CONF" && did="$did $_s"
+                fi
+        done
+        echo "mux: reloaded${did:- (no running servers)}"
+        exit 0
+fi
+
+# --- ls: sessions in the current context only ------------------------------
+# Prefix each line with the session's agent-state glyph (⚫ = no agent), so `mux
+# ls` reads like the status strip. Falls back to bare `tmux list-sessions` when
+# the shared state lib is absent, or when a session line has no name to key on.
+if [ "$cmd" = ls ]; then
+        _ls=$(tm list-sessions 2>/dev/null || true)
+        [ -n "$_ls" ] || { echo "mux: no sessions in this context"; exit 0; }
+        if [ "$_have_astate" -eq 1 ]; then
+                _adir=$(mux_agent_dir "${sock:-default}")
+                printf '%s\n' "$_ls" | while IFS= read -r _line; do
+                        _s=${_line%%:*}
+                        printf '%s %s\n' \
+                                "$(mux_agent_state_glyph "$_adir" "$_s")" \
+                                "$_line"
+                done
+        else
+                printf '%s\n' "$_ls"
+        fi
+        exit 0
+fi
+
+# --- next-blocked: jump to the session that has needed you longest ----------
+# The CLI twin of the `prefix b` binding; both run ~/lib/mux/mux-next-blocked.
+# Must run inside a session, so the client (its tty) is known.
+if [ "$cmd" = next-blocked ]; then
+        [ -n "${TMUX:-}" ] || {
+                echo "mux: next-blocked must run in a session" >&2; exit 1; }
+        _nb=$MUX_LIB/mux-next-blocked
+        [ -x "$_nb" ] || { echo "mux: $_nb missing (incomplete install)" >&2
+                exit 1; }
+        _cl=$(tm display-message -p '#{client_name}' 2>/dev/null || true)
+        _cs=$(tm display-message -p '#{client_session}' 2>/dev/null || true)
+        "$_nb" "$_cl" "$_cs"
+        exit 0
+fi
+
+# --- theme: set / cycle / show the current session's colour theme -----------
+# `mux theme`             show the current theme and the available ones
+# `mux theme NAME`        apply NAME to the current session, live
+# `mux theme next|prev`   cycle to the neighbouring theme (preview)
+# `-p`/`--persist`        also write `theme NAME` into $MUX_DIR/<session>.layout
+# Applying sets @mux-theme (which mux-style reads every tick) and repaints now.
+_persist_theme() {      # LAYOUT_FILE THEME -> write/replace the `theme` line
+        if grep -qE '^[[:space:]]*theme[[:space:]]' "$1"; then
+                sed -E "s|^[[:space:]]*theme[[:space:]].*|theme   $2|" \
+                        "$1" > "$1.tmp" && mv "$1.tmp" "$1"
+        else
+                printf 'theme   %s\n' "$2" >> "$1"
+        fi
+}
+_theme_cycle() {        # next|prev CURRENT "space list" -> neighbour stem
+        _d=$1 _c=$2
+        # shellcheck disable=SC2086
+        set -- $3
+        _n=$#; [ "$_n" -gt 0 ] || return 1
+        _idx=0 _i=0
+        for _t in "$@"; do _i=$((_i + 1))
+                [ "$_t" = "$_c" ] && { _idx=$_i; break; }
+        done
+        if [ "$_d" = next ]; then
+                [ "$_idx" -eq 0 ] && _j=1 || _j=$((_idx % _n + 1))
+        else
+                [ "$_idx" -eq 0 ] && _j=$_n || _j=$(((_idx - 2 + _n) % _n + 1))
+        fi
+        _i=0
+        for _t in "$@"; do _i=$((_i + 1))
+                [ "$_i" -eq "$_j" ] && { printf '%s' "$_t"; return 0; }
+        done
+}
+if [ "$cmd" = theme ]; then
+        _themes=$(_list_stems "$MUX_DIR/themes" .theme)
+        if [ -z "$name_arg" ]; then
+                if [ -n "${TMUX:-}" ]; then
+                        _s=$(tm display-message -p '#{session_name}')
+                        _c=$(tm show-options -t "$_s" -qv @mux-theme || true)
+                        printf 'current: %s\n' "${_c:-<mode default>}"
+                fi
+                printf 'available: %s\n' "$_themes"
+                exit 0
+        fi
+        [ -n "${TMUX:-}" ] || {
+                echo "mux: theme must run in a session" >&2; exit 1; }
+        _s=$(tm display-message -p '#{session_name}')
+        _pp=$(tm display-message -p '#{pane_pid}')
+        _c=$(tm show-options -t "$_s" -qv @mux-theme || true)
+        case $name_arg in
+                next|prev) _t=$(_theme_cycle "$name_arg" "$_c" "$_themes") ;;
+                *)         _t=$name_arg ;;
+        esac
+        { [ -n "$_t" ] && [ -f "$MUX_DIR/themes/$_t.theme" ]; } || {
+                echo "mux: unknown theme: ${_t:-$name_arg}" >&2; exit 1; }
+        tm set-option -t "$_s" @mux-theme "$_t"
+        [ -x "$MUX_LIB/mux-style" ] \
+                && "$MUX_LIB/mux-style" -q "$_s" "$_pp" >/dev/null 2>&1 \
+                || true
+        # A border-style repaint can leave a DOUBLED border row in some
+        # terminals (the old line is not cleared under the new). Perturb the mux
+        # bottom pane and restore its height: that forces tmux to recompute and
+        # fully redraw the column geometry, which a plain refresh cannot. Via tm
+        # (socket-aware), so it works in a work session too.
+        _bp=$(tm list-panes -t "$_s" -F '#{pane_id} #{@mux-bottom}' \
+                2>/dev/null | awk 'NF > 1 { print $1; exit }')
+        if [ -n "$_bp" ]; then
+                _bh=$(tm display-message -t "$_bp" -p '#{pane_height}' \
+                        2>/dev/null || echo 0)
+                if [ "$_bh" -ge 4 ]; then
+                        _bs=$((_bh - 2))
+                        tm resize-pane -t "$_bp" -y "$_bs" 2>/dev/null || :
+                        tm resize-pane -t "$_bp" -y "$_bh" 2>/dev/null || :
+                fi
+        fi
+        tm refresh-client 2>/dev/null || true
+        echo "mux: theme $_t"
+        if [ "$persist" -eq 1 ]; then
+                _lf=$MUX_DIR/$_s.layout
+                [ -f "$_lf" ] || {
+                        echo "mux: no layout $_lf to persist to" >&2; exit 1; }
+                _persist_theme "$_lf" "$_t"
+                echo "mux: persisted theme into $_lf"
+        fi
+        exit 0
+fi
+
+# --- rename: rename a live session (and its matching layout) ----------------
+# `mux rename NEW`       rename the CURRENT session (needs to run in one)
+# `mux rename OLD NEW`   rename OLD to NEW from anywhere. tmux forbids ':' and
+# '.' in names, so they fold to '-'. A matching <OLD>.layout is renamed too if
+# <NEW>.layout is free, so the per-project layout keeps matching the session.
+if [ "$cmd" = rename ]; then
+        if [ -z "$layout_arg" ]; then
+                [ -n "${TMUX:-}" ] || {
+                        echo "mux: rename NEW needs a session (or: OLD NEW)" >&2
+                        exit 1; }
+                _old=$(tm display-message -p '#{session_name}'); _new=$name_arg
+        else
+                _old=$name_arg; _new=$layout_arg
+        fi
+        _new=$(printf '%s' "$_new" | tr ':.' '--')
+        tm has-session -t "=$_old" 2>/dev/null || {
+                echo "mux: no such session: $_old" >&2; exit 1; }
+        tm rename-session -t "=$_old" "$_new"
+        echo "mux: renamed session $_old -> $_new"
+        if [ -f "$MUX_DIR/$_old.layout" ] \
+           && [ ! -e "$MUX_DIR/$_new.layout" ]; then
+                mv "$MUX_DIR/$_old.layout" "$MUX_DIR/$_new.layout"
+                echo "mux: renamed layout $_old.layout -> $_new.layout"
+        fi
+        exit 0
+fi
+
+# --- edit: open a layout in $EDITOR -----------------------------------------
+# `mux edit [NAME]` -- NAME defaults to the current session's layout.
+if [ "$cmd" = edit ]; then
+        _en=$name_arg
+        if [ -z "$_en" ]; then
+                [ -n "${TMUX:-}" ] || {
+                        echo "mux: edit NAME (or run inside a session)" >&2
+                        exit 1; }
+                _en=$(tm display-message -p '#{session_name}')
+        fi
+        _ef=$MUX_DIR/$_en.layout
+        [ -f "$_ef" ] || { echo "mux: no layout: $_ef" >&2; exit 1; }
+        exec "${EDITOR:-vi}" "$_ef"
+fi
+
+# --- save: snapshot the CURRENT live session into a reusable layout ---------
+# Reads the session's windows and panes and writes $MUX_DIR/<name>.layout that
+# rebuilds them: window names, each pane's current command (a shell -> a bare
+# pane), any full-width bottom (from @mux-bottom), plus the session root and
+# theme. Pane commands are best-effort -- review them. Runs inside a session;
+# NAME is the layout file, defaulting to the session name.
+if [ "$cmd" = save ]; then
+        [ -n "${TMUX:-}" ] || {
+                echo "mux: save must run inside a session" >&2; exit 1; }
+        sv_sess=$(tm display-message -p '#{session_name}' 2>/dev/null || true)
+        [ -n "$sv_sess" ] || {
+                echo "mux: could not identify the session" >&2; exit 1; }
+        sv_name=${name_arg:-$sv_sess}
+        sv_name=$(printf '%s' "$sv_name" | tr ':.' '--')
+        sv_file=$MUX_DIR/$sv_name.layout
+        [ "$force" -eq 1 ] || [ ! -e "$sv_file" ] || {
+                echo "mux: layout exists: $sv_file (use --force)" >&2
+                exit 1
+        }
+        # Root: the first window's first pane path (the primary; for a mux-built
+        # session every pane shares it anyway), folded to ~.
+        sv_fw=$(tm list-windows -t "$sv_sess" -F '#{window_index}' \
+                2>/dev/null | head -1)
+        sv_root=$(tm list-panes -t "$sv_sess:$sv_fw" \
+                -F '#{pane_current_path}' 2>/dev/null | head -1)
+        case $sv_root in
+                "$HOME") sv_root='~' ;;
+                "$HOME"/*) sv_root="~/${sv_root#"$HOME"/}" ;;
+        esac
+        sv_theme=$(tm show-options -t "$sv_sess" -qv @mux-theme \
+                2>/dev/null || true)
+        mkdir -p "$MUX_DIR"
+        {
+                printf '# %s: captured from session %s by `mux save` on %s.\n' \
+                        "$sv_name" "$sv_sess" "$(date '+%Y-%m-%d')"
+                printf '# Pane commands are best-effort; review them.\n'
+                [ -n "$sv_theme" ] && printf 'theme   %s\n' "$sv_theme"
+                [ -n "$sv_root" ] && printf 'root    %s\n' "$sv_root"
+                tm list-windows -t "=$sv_sess" \
+                        -F '#{window_index} #{window_name}' \
+                | while read -r _wi _wn; do
+                        printf 'window  %s\n' "$_wn"
+                        emit_window "=$sv_sess:$_wi"
+                done
+        } >"$sv_file"
+        echo "mux: wrote $sv_file"
+        echo "mux: launch it with  mux go $sv_name"
+        exit 0
+fi
+
+# --- hide / show / show-all: per-client session hiding ---------------------
+# Context-sensitive: must run INSIDE a session, so the client (its tty) can be
+# identified; the hidden set is per client. hide drops SESSION from THIS
+# client's status strip and ( / ) cycling; show restores it; show-all clears
+# the set. Persists until shown or reboot. hide/show need SESSION to exist.
+case $cmd in
+hide|show|show-all)
+        [ -n "${TMUX:-}" ] || {
+                echo "mux: $cmd must run inside a session" >&2; exit 1; }
+        [ -r "$MUX_LIB/mux-exclude.sh" ] || {
+                echo "mux: mux-exclude.sh missing (incomplete install)" >&2
+                exit 1; }
+        _client=$(tm display-message -p '#{client_name}' 2>/dev/null || true)
+        [ -n "$_client" ] || {
+                echo "mux: could not identify the client" >&2; exit 1; }
+        . "$MUX_LIB/mux-exclude.sh"
+        _f=$(mux_exclude_file "$_client")
+        mkdir -p "$(dirname "$_f")"
+        if [ "$cmd" = show-all ]; then
+                rm -f "$_f"
+                echo "mux: cleared this client's hidden sessions"
+        else
+                tm has-session -t "=$name" 2>/dev/null || {
+                        echo "mux: no such session: $name" >&2; exit 1; }
+                if [ "$cmd" = hide ]; then
+                        grep -qxF "$name" "$_f" 2>/dev/null \
+                                || printf '%s\n' "$name" >> "$_f"
+                        echo "mux: hid $name for this client"
+                else
+                        if [ -f "$_f" ]; then
+                                grep -vxF "$name" "$_f" > "$_f.new" || true
+                                mv -f "$_f.new" "$_f"
+                        fi
+                        echo "mux: showing $name for this client"
+                fi
+        fi
+        tm refresh-client 2>/dev/null || true
+        exit 0
+        ;;
+esac
+
+# Attach a fresh client, or switch THIS client's view if we are genuinely inside
+# a live client on the same socket. $TMUX alone is NOT a safe test: it (and
+# TMUX_PANE) LEAK into any terminal spawned from within a pane -- a kitty opened
+# from a tmux pane inherits them though it is not a tmux client. Acting on
+# that stale value made `mux go X` run switch-client and HIJACK a different
+# window instead of attaching this one (the same trap the session watcher dodges
+# by scrubbing $TMUX before it launches a restored window). The reliable signal:
+# a real in-pane shell's controlling tty IS that pane's tty; a leaked one's is
+# not. Across sockets switch-client cannot reach either, so we attach there too.
+mux_attach() {
+        _switch=0
+        cur=${TMUX:-}                   # our client, if any: socket,pid,session
+        cur=${cur%%,*}                  # -> just the socket path
+        if [ -n "$cur" ] && [ "${cur##*/}" = "${sock:-default}" ] \
+           && [ -n "${TMUX_PANE:-}" ]; then
+                _mytty=$(tty 2>/dev/null || true)
+                _panetty=$(tmux display-message -pt "$TMUX_PANE" \
+                        '#{pane_tty}' 2>/dev/null || true)
+                [ -n "$_mytty" ] && [ "$_mytty" = "$_panetty" ] && _switch=1
+        fi
+        # exec the real tmux, not the tm() function (exec needs a binary), so
+        # mux is replaced by the client rather than lingering as its parent.
+        if [ "$_switch" = 1 ]; then
+                if [ -n "$sock" ]; then
+                        exec tmux -L "$sock" switch-client -t "=$name"
+                fi
+                exec tmux switch-client -t "=$name"
+        fi
+        # Fresh attach. Clear any inherited $TMUX first, or tmux refuses
+        # ("sessions should be nested with care") -- exactly why the watcher
+        # scrubs it. exec replaces mux, so the unset only affects the client.
+        unset TMUX
+        if [ -n "$sock" ]; then
+                exec tmux -L "$sock" attach-session -t "=$name"
+        fi
+        exec tmux attach-session -t "=$name"
+}
+
+# Expand a leading tilde without eval.
+expand_tilde() {
+        case $1 in
+                "~") printf '%s' "$HOME" ;;
+                "~/"*) printf '%s' "$HOME/${1#\~/}" ;;
+                *) printf '%s' "$1" ;;
+        esac
+}
+
+# Agent PROFILES make the "agent pane" pluggable, and are the ONE Claude
+# coupling in the front end -- now behind a file, so another CLI (gemini, codex)
+# is just a profile and mux can run with no Claude at all. A profile is data in
+# $MUX_DIR/agents/<name>.agent: a `go` line and a `resume` line, each a shell
+# command. `mux go` runs the agent's `go` (continue the recent conversation),
+# `mux resume` its `resume` (pick one), --bare runs neither (a plain shell).
+# Claude is the default; a layout selects another with `agent <name>`.
+AGENTS_DIR=$MUX_DIR/agents
+
+# agent_launch NAME -> the command NAME's pane runs for THIS verb (go/resume),
+# empty under --bare. An unknown agent (no profile) fails loud.
+agent_launch() {
+        _af=$AGENTS_DIR/$1.agent
+        [ -f "$_af" ] || {
+                echo "mux: unknown agent: $1 (no $_af)" >&2; exit 1; }
+        [ "$bare" -eq 1 ] && return 0
+        mux_conf_clean < "$_af" \
+                | awk -v v="$cmd" '$1==v{sub("^"v"[ \t]+","");print;exit}'
+}
+
+# shape_cmd TOKEN -> a pane's actual command. `agent` is the session's agent
+# (active_agent, resolved from the layout); a token that names a profile is that
+# agent (so `pane claude` still shapes to its go cmd); else run literally.
+shape_cmd() {
+        case $1 in
+        agent) agent_launch "$active_agent" ;;
+        *)     if [ -f "$AGENTS_DIR/$1.agent" ]; then agent_launch "$1"
+               else printf '%s' "$1"; fi ;;
+        esac
+}
+
+# The process a pane runs: the (reshaped) command, then an interactive shell so
+# the pane drops back to a prompt when the command exits -- the behaviour
+# send-keys gave, but run AS the pane's own process, so nothing is typed into a
+# starting shell and it cannot race the rc. An empty command (--bare claude) is
+# just the shell.
+pane_process() {
+        _c=$(shape_cmd "$1")
+        if [ -n "$_c" ]; then
+                printf '%s; exec "${SHELL:-/bin/sh}"' "$_c"
+        else
+                printf 'exec "${SHELL:-/bin/sh}"'
+        fi
+}
+
+# Flatten a layout to stdout: emit every directive line verbatim, but resolve
+# `include NAME` by splicing NAME.layout in its place, recursively. A depth cap
+# and a visited-path set (space-wrapped so a substring match is exact) make a
+# cycle or runaway nesting fail loud rather than spin. Blank and comment lines
+# are dropped, so the flattened stream downstream is pure directives.
+expand_layout() {       # PATH DEPTH VISITED
+        _path=$1
+        _depth=$2
+        [ "$_depth" -le 16 ] || {
+                echo "mux: include nested too deep at $_path" >&2; exit 1; }
+        case " $3 " in
+                *" $_path "*)
+                        echo "mux: include cycle at $_path" >&2; exit 1 ;;
+        esac
+        _seen="$3 $_path"
+        # Normalize once via mux_conf_clean (the single comment/whitespace/CRLF
+        # rule), then read from a FILE -- an include error must exit the whole
+        # run, which a pipe's subshell would swallow. Every surviving line is a
+        # directive, so no comment/blank case is needed here any more.
+        _cl=$(mktemp) || { echo "mux: mktemp failed" >&2; exit 1; }
+        mux_conf_clean < "$_path" > "$_cl"
+        while read -r _verb _rest; do
+                case $_verb in
+                include)
+                        _inc=$MUX_DIR/$_rest.layout
+                        [ -f "$_inc" ] || {
+                                echo "mux: no layout to include: $_rest" >&2
+                                rm -f "$_cl"; exit 1
+                        }
+                        expand_layout "$_inc" $((_depth + 1)) "$_seen"
+                        ;;
+                *)
+                        printf '%s\n' "$_verb${_rest:+ $_rest}"
+                        ;;
+                esac
+        done <"$_cl"
+        rm -f "$_cl"
+}
+
+# Split a `bottom` argument into b_min/b_max (the size bounds) and b_cmd (the
+# optional command), or print a message and return 1 on a malformed spec. Used
+# by both the validate and the build pass, so the parse lives in one place.
+bottom_spec() {         # ARG
+        b_min=; b_max=; b_cmd=
+        _spec=${1%% *}
+        case $_spec in
+        *-*)
+                b_min=${_spec%%-*}
+                b_max=${_spec##*-}
+                [ "$_spec" = "$b_min-$b_max" ] || {
+                        echo "mux: 'bottom' wants N or MIN-MAX: $1" >&2
+                        return 1
+                }
+                ;;
+        *)
+                b_min=$_spec
+                b_max=$_spec
+                ;;
+        esac
+        case $b_min in ''|*[!0-9]*)
+                echo "mux: 'bottom' wants N or MIN-MAX: $1" >&2; return 1 ;;
+        esac
+        case $b_max in ''|*[!0-9]*)
+                echo "mux: 'bottom' wants N or MIN-MAX: $1" >&2; return 1 ;;
+        esac
+        [ "$b_min" -le "$b_max" ] || {
+                echo "mux: 'bottom' min above max: $_spec" >&2; return 1; }
+        b_cmd=${1#"$_spec"}
+        b_cmd=${b_cmd# }
+        return 0
+}
+
+# --- kill-all: tear down every session on the current socket ---------------
+# No name, and it hits the whole context (personal OR work -- whichever socket
+# you are on, never both), so it is guarded behind a typed confirmation and
+# lists what it will kill first. It must never fire by accident.
+if [ "$cmd" = kill-all ]; then
+        _all=$(tm list-sessions -F '#{session_name}' 2>/dev/null || true)
+        if [ -z "$_all" ]; then
+                echo "mux: no sessions in this context"
+                exit 0
+        fi
+        _n=$(printf '%s\n' "$_all" | wc -l | tr -d ' ')
+        printf 'mux: kill ALL %s session(s) on socket "%s":\n' \
+                "$_n" "${sock:-default}"
+        printf '%s\n' "$_all" | sed 's/^/  /'
+        printf 'This cannot be undone. Type yes to confirm: '
+        read -r _ans || _ans=
+        case $_ans in
+                yes|YES|y|Y) ;;
+                *) echo "mux: aborted"; exit 0 ;;
+        esac
+        tm kill-server 2>/dev/null || true
+        echo "mux: killed all sessions on \"${sock:-default}\""
+        exit 0
+fi
+
+# --- kill: tear down on whichever socket we resolved -----------------------
+if [ "$cmd" = kill ]; then
+        if tm has-session -t "=$name" 2>/dev/null; then
+                tm kill-session -t "=$name"
+                echo "mux: killed $name"
+                exit 0
+        fi
+        echo "mux: no such session: $name" >&2
+        exit 1
+fi
+
+# Already running: attach. A live session needs no layout, so this comes before
+# any layout resolution. The claude flag shapes a session only as it is built,
+# so say so on a resume rather than pretending to honour it on an attach.
+if tm has-session -t "=$name" 2>/dev/null; then
+        [ "$cmd" = resume ] && \
+                echo "mux: $name already up; resume applies only at build" >&2
+        mux_attach
+fi
+
+# Building a new session: resolve the blueprint. An explicit LAYOUT positional
+# wins, then a per-project <name>.layout, then the shared default.
+if [ -n "$layout_arg" ]; then
+        layout=$MUX_DIR/$layout_arg.layout
+elif [ -f "$MUX_DIR/$name.layout" ]; then
+        layout=$MUX_DIR/$name.layout
+else
+        layout=$MUX_DIR/default.layout
+fi
+[ -f "$layout" ] || { echo "mux: no layout: $layout" >&2; exit 1; }
+
+# Flatten includes into one directive stream, then parse it TWICE: first to
+# resolve the session-wide root/theme and validate the whole shape (touching
+# no tmux state), then to build. A malformed layout -- or a missing or cyclic
+# include -- fails before any session exists, never leaving a half-built one,
+# and root/theme are position-independent (last one wins).
+flat=$(mktemp) || { echo "mux: mktemp failed" >&2; exit 1; }
+trap 'rm -f "$flat"' EXIT
+expand_layout "$layout" 0 "" >"$flat"
+
+# Pass 1: resolve root (default the project; a leading ~ expands) and theme,
+# each last-wins across the whole layout, and validate structure. window/
+# pane/bottom are checked only here; the build pass trusts what got through.
+root=$base
+want_theme=
+want_notify=
+want_agent=
+v_win=0
+v_panes=0
+v_bottom=0
+while read -r verb rest; do
+	case $verb in
+	root)
+		root=$(expand_tilde "$rest")
+		[ -d "$root" ] || {
+			echo "mux: root not a dir: $root" >&2
+			exit 1
+		}
+		;;
+	theme)
+		want_theme=$rest
+		;;
+	agent)
+		want_agent=$rest
+		;;
+	notify)
+		case $rest in
+		always|away) want_notify=$rest ;;
+		*)
+			echo "mux: 'notify' wants always|away: $rest" >&2
+			exit 1 ;;
+		esac
+		;;
+	window)
+		v_win=1
+		v_panes=0
+		v_bottom=0
+		;;
+	pane)
+		[ "$v_win" -eq 1 ] || {
+			echo "mux: 'pane' before 'window' in $layout" >&2
+			exit 1
+		}
+		# even-horizontal at build would flatten a bottom pane back
+		# into the row, so refuse the order that would wreck it.
+		[ "$v_bottom" -eq 0 ] || {
+			echo "mux: 'pane' after 'bottom' in $layout" >&2
+			exit 1
+		}
+		v_panes=$((v_panes + 1))
+		;;
+	bottom)
+		[ "$v_panes" -gt 0 ] || {
+			echo "mux: 'bottom' with no pane in $layout" >&2
+			exit 1
+		}
+		[ "$v_bottom" -eq 0 ] || {
+			echo "mux: two 'bottom' in one window in $layout" >&2
+			exit 1
+		}
+		bottom_spec "$rest" || exit 1
+		v_bottom=1
+		;;
+	*)
+		echo "mux: unknown directive: $verb in $layout" >&2
+		exit 1
+		;;
+	esac
+done <"$flat"
+
+[ "$v_win" -eq 1 ] || { echo "mux: empty layout: $layout" >&2; exit 1; }
+
+# An explicit `theme` overrides the per-mode default (cosmetic; mux-style
+# resolves the default otherwise). Validate before building, so a typo fails
+# with a clear message rather than mux-style erroring on every status tick.
+# Validate against the FRAGMENT FILE, not the loaded @theme-* option: on a cold
+# socket the server (and its options) does not exist until pass 2 builds it, so
+# an option check would spuriously reject every theme on the first `mux go`
+# after boot/kill-all. The file is the source of truth, and its presence
+# guarantees mux-themes load will push @theme-<name>-* at server start.
+if [ -n "$want_theme" ]; then
+	[ -f "$MUX_DIR/themes/$want_theme.theme" ] || {
+		echo "mux: unknown theme: $want_theme" \
+			"(no $MUX_DIR/themes/$want_theme.theme)" >&2
+		exit 1
+	}
+fi
+
+# The session's agent (for `pane agent`): the layout's `agent` directive, else
+# claude. Validate the profile exists here so a typo fails at build with a clear
+# message, not later as an empty pane command.
+if [ -n "$want_agent" ]; then
+	[ -f "$AGENTS_DIR/$want_agent.agent" ] || {
+		echo "mux: unknown agent: $want_agent" \
+			"(no $AGENTS_DIR/$want_agent.agent)" >&2
+		exit 1
+	}
+fi
+active_agent=${want_agent:-claude}
+
+# Pass 2: build. Everything is validated, so this only executes -- using the
+# now-final root for every pane's -c, wherever root sat in the source.
+have_session=0
+firstwin=
+firstpane=
+win=
+paneseen=0
+while read -r verb rest; do
+	case $verb in
+	window)
+		if [ "$have_session" -eq 0 ]; then
+			tm new-session -d -s "$name" -n "$rest" -c "$root"
+			have_session=1
+			win=$(tm display-message -p -t "$name:" \
+				'#{window_index}')
+			firstwin=$win
+			firstpane=$(tm display-message -p -t "$name:" \
+				'#{pane_id}')
+		else
+			tm new-window -a -t "$name:" -n "$rest" -c "$root"
+			win=$(tm display-message -p -t "$name:" \
+				'#{window_index}')
+		fi
+		paneseen=0
+		;;
+	pane)
+		# Run the command AS the pane's process, never typed in, so it
+		# cannot race shell startup. The first pane reuses the shell the
+		# window opened with (respawn); the rest are fresh splits.
+		proc=$(pane_process "$rest")
+		if [ "$paneseen" -gt 0 ]; then
+			tm split-window -h -t "$name:$win" -c "$root" "$proc"
+			tm select-layout -t "$name:$win" even-horizontal
+		else
+			tm respawn-pane -k -t "$name:$win" -c "$root" "$proc"
+		fi
+		paneseen=$((paneseen + 1))
+		;;
+	bottom)
+		# N pins the height; MIN-MAX tracks the window between those
+		# bounds. Either way the size is recorded on the pane and
+		# re-applied by mux-pin, because tmux rescales panes
+		# proportionally on resize and would otherwise inflate this one
+		# well past its split height.
+		bottom_spec "$rest" || exit 1
+		# -f spans the full window width, so the new pane sits under
+		# every pane above rather than splitting only the active one. A
+		# command runs as the pane's process; with none it is a shell.
+		bproc=
+		[ -n "$b_cmd" ] && bproc=$(pane_process "$b_cmd")
+		if [ -n "$bproc" ]; then
+			tm split-window -v -f -l "$b_max" \
+				-t "$name:$win" -c "$root" "$bproc"
+		else
+			tm split-window -v -f -l "$b_max" \
+				-t "$name:$win" -c "$root"
+		fi
+		bpane=$(tm display-message -p -t "$name:$win" '#{pane_id}')
+		tm set-option -p -t "$bpane" @mux-bottom "$b_min-$b_max"
+		;;
+	esac
+done <"$flat"
+
+rm -f "$flat"
+trap - EXIT
+
+# Apply the validated theme now that the session exists.
+[ -n "$want_theme" ] && tm set-option -t "$name" @mux-theme "$want_theme"
+
+# `notify always` fires the agent notification even while you are looking at the
+# pane; `away` (also the default when unset) suppresses it then. Read by
+# agent-state-emit as @mux-notify-always.
+if [ "$want_notify" = always ]; then
+	tm set-option -t "$name" @mux-notify-always 1
+elif [ "$want_notify" = away ]; then
+	tm set-option -t "$name" @mux-notify-always 0
+fi
+
+# Land on the first window and its first pane (by id, so base-index is
+# irrelevant).
+tm select-window -t "$name:$firstwin"
+tm select-pane -t "$firstpane"
+
+mux_attach

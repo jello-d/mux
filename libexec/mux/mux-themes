@@ -1,0 +1,135 @@
+#!/bin/sh
+# mux-themes: compile the mux colour palette from $MUX_DIR/themes/*.theme into
+# tmux @theme-* options, so the palette is authored as data beside the layouts
+# instead of inline in tmux.conf. mux-style reads those options live every
+# status tick; it neither knows nor cares that they came from files.
+#
+#   mux-themes load   push the palette to the AMBIENT tmux server ($TMUX) and
+#                     stamp it. Run from tmux.conf `run-shell` at server start,
+#                     and again whenever `mux reload` re-sources tmux.conf.
+#   mux-themes sync   drift-heal: for each running mux server (the default
+#                     socket, and the work-group socket if up), push the palette
+#                     IFF the fragments changed since that server was last
+#                     stamped. Run by the mux front end on every invocation -- a
+#                     cheap no-op when nothing changed, so edits need no reload.
+#
+# A theme fragment themes/<name>.theme has up to six keys: `bar` (the status-bar
+# style), `window` (the current-window chip), `accent` (the ACTIVE pane border),
+# `border` (INACTIVE pane borders), `select` (copy-mode selection / mode-style),
+# and `prompt` (the command prompt, message-command-style). Only bar/window/
+# accent are required; mux-style derives border/select/prompt when a theme omits
+# them (dim border, select = the window chip, prompt = the bar). themes/defaults
+# names the global default theme (`default <name>`), used when neither the
+# session nor its context picks one. Unknown keys fail loud.
+# The per-socket stamp lives under mux's own cache dir; a content hash gates the
+# push so an unchanged palette is free. $MUX_CACHE overrides it so an integrator
+# (tackup) can point it wherever it keeps runtime stamps.
+set -eu
+
+MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
+THEMES=$MUX_DIR/themes
+STAMPDIR=${MUX_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/mux}
+
+# The shared comment/normalize rule (see bin/mux); a fallback strips only
+# whole-line comments so a missing lib never breaks a palette push.
+_conf=$(dirname "$0")/mux-conf.sh
+if [ -r "$_conf" ]; then . "$_conf"
+else mux_conf_clean() { grep -vE '^[[:space:]]*(#|$)'; }
+fi
+# The context seam (see mux-context.sh): `sync` heals every non-default context
+# server the hook names. A stub yields none (only the default server) if absent.
+_ctx=$(dirname "$0")/mux-context.sh
+if [ -r "$_ctx" ]; then . "$_ctx"
+else mux_ctx_sockets() { :; }
+fi
+
+# Content hash over every fragment (name and bytes), so a rename or an edit both
+# move it. Absent dir hashes to a constant -- pushing nothing, which is safe.
+themes_hash() {
+	[ -d "$THEMES" ] || { echo none; return 0; }
+	find "$THEMES" -type f | LC_ALL=C sort | xargs -r sha256sum \
+		| sha256sum | cut -d' ' -f1
+}
+
+# Push every fragment's styles as @theme-<name>-bar/-window, plus the per-mode
+# defaults, to the server addressed by "$@" (tmux args: none for the ambient
+# server, or -L <sock> for a named one). An unknown key fails loud.
+push_palette() {
+	# Normalize each fragment via mux_conf_clean into a temp (comments, inline
+	# ` #`, trailing space, CRLF), then read from the FILE so a bad-key exit
+	# aborts. #rrggbb survives (only WHITESPACE-hash begins a comment). A bad-key
+	# exit leaks the temp, but it aborts the whole run, so that is moot.
+	_ct=$(mktemp)
+	for _f in "$THEMES"/*.theme; do
+		[ -e "$_f" ] || continue
+		_name=${_f##*/}
+		_name=${_name%.theme}
+		mux_conf_clean < "$_f" > "$_ct"
+		while read -r _k _v; do
+			case $_k in
+			bar) tmux "$@" set -g "@theme-$_name-bar" "$_v" ;;
+			window) tmux "$@" set -g "@theme-$_name-window" "$_v" ;;
+			accent) tmux "$@" set -g "@theme-$_name-accent" "$_v" ;;
+			border) tmux "$@" set -g "@theme-$_name-border" "$_v" ;;
+			select) tmux "$@" set -g "@theme-$_name-select" "$_v" ;;
+			prompt) tmux "$@" set -g "@theme-$_name-prompt" "$_v" ;;
+			*)
+				echo "mux-themes: $_f: bad key: $_k" >&2
+				exit 1 ;;
+			esac
+		done <"$_ct"
+	done
+	if [ -f "$THEMES/defaults" ]; then
+		mux_conf_clean < "$THEMES/defaults" > "$_ct"
+		while read -r _k _v; do
+			case $_k in
+			default) tmux "$@" set -g @theme-default "$_v" ;;
+			*)
+				echo "mux-themes: defaults: bad key: $_k" >&2
+				exit 1 ;;
+			esac
+		done <"$_ct"
+	fi
+	rm -f "$_ct"
+}
+
+# Record socket KEY as synced to HASH.
+stamp_write() {         # KEY HASH
+	mkdir -p "$STAMPDIR"
+	printf '%s\n' "$2" >"$STAMPDIR/mux-themes.$1.sha"
+}
+
+# Heal one server: KEY names it (for the stamp), ARGS addresses it. Skip when
+# its stamp already matches, or when no server is up on that socket.
+heal() {                # KEY ARGS HASH
+	_stamp="$STAMPDIR/mux-themes.$1.sha"
+	[ "$(cat "$_stamp" 2>/dev/null || true)" = "$3" ] && return 0
+	tmux $2 list-sessions >/dev/null 2>&1 || return 0
+	push_palette $2
+	stamp_write "$1" "$3"
+}
+
+case "${1:-}" in
+load)
+	# Ambient server: push honouring $TMUX, stamp under its socket name.
+	_key=$(tmux display-message -p '#{socket_path}' 2>/dev/null || true)
+	_key=${_key##*/}
+	[ -n "$_key" ] || _key=default
+	push_palette
+	stamp_write "$_key" "$(themes_hash)"
+	;;
+sync)
+	_h=$(themes_hash)
+	# The default socket is addressed as -L default (unambiguous -- never
+	# the ambient $TMUX server, which may be a work one).
+	heal default "-L default" "$_h"
+	# Plus every non-default context server the hook names (tackup: the work
+	# group's), each healed only if it is up.
+	for _s in $(mux_ctx_sockets); do
+		heal "$_s" "-L $_s" "$_h"
+	done
+	;;
+*)
+	echo "usage: mux-themes load|sync" >&2
+	exit 2 ;;
+esac
