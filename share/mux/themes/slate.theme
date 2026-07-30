@@ -1,0 +1,6 @@
+# slate. The accent is a steel blue-gray, not the theme gray: a gray pane
+# border barely reads against the terminal, so this one hue is tinged blue.
+# Close to the gray family, but discernible as the active pane.
+bar     bg=colour238 fg=colour253
+window  fg=colour232 bg=colour250 bold
+accent  fg=colour110

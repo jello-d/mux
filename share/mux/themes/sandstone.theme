@@ -1,0 +1,7 @@
+# sandstone: warm desert tans and terracotta. Truecolor hex.
+bar     bg=#2a2016 fg=#e8d4b0
+window  fg=#1c140c bg=#d89a5a bold
+accent  fg=#d89a5a
+border  fg=#645236
+select  fg=#1c140c bg=#e8b878
+prompt  bg=#3e301c fg=#e8d4b0

@@ -1,0 +1,7 @@
+# orchid: deep aubergine with bright orchid magenta. Truecolor hex.
+bar     bg=#260e2c fg=#e8c0f0
+window  fg=#1a081e bg=#d060e0 bold
+accent  fg=#d060e0
+border  fg=#5e3466
+select  fg=#1a081e bg=#e88ff0
+prompt  bg=#381544 fg=#e8c0f0

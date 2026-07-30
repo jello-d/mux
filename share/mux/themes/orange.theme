@@ -1,0 +1,4 @@
+# orange: the work default. A hue, not a boundary -- WORK text is the signal.
+bar     bg=colour166 fg=colour232
+window  fg=colour232 bg=colour214 bold
+accent  fg=colour214

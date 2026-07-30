@@ -1,0 +1,8 @@
+# ember: warm charcoal with glowing ember-orange. Truecolor hex (bypasses the
+# palette; see green.theme).
+bar     bg=#241610 fg=#f0c8a0
+window  fg=#1a0e08 bg=#ff7a2f bold
+accent  fg=#ff7a2f
+border  fg=#5e3f2c
+select  fg=#1a0e08 bg=#ffab5e
+prompt  bg=#3a2216 fg=#ffd0a0

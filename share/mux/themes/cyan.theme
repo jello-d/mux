@@ -1,0 +1,4 @@
+# cyan.
+bar     bg=colour23 fg=colour159
+window  fg=colour232 bg=colour44 bold
+accent  fg=colour44

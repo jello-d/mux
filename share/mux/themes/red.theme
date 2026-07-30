@@ -1,0 +1,7 @@
+# red: a deep maroon bar (not the bright work-banner red), light-rose text. Free
+# for any session -- the boundary is the WORK text, never the hue. The work
+# banner (bright red) can wash out against this; the planned mux-style tweak
+# flips the banner to yellow when the bar reads red.
+bar     bg=colour52 fg=colour224
+window  fg=colour232 bg=colour160 bold
+accent  fg=colour160
