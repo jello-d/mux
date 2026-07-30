@@ -1,0 +1,182 @@
+#!/bin/sh
+# mux-style: reflect the context the active pane is ACTUALLY in, rather than the
+# one its layout claimed -- a "[WORK: ...]" banner and title prefix when
+# the pane holds the work group, plus a colour theme.
+#
+# THE TEXT IS THE SIGNAL; THE COLOUR IS NOT. The boundary is the kernel:
+# work_dir is owned root:<work group>, mode 2770, with a default ACL, and that
+# is what stops a personal process touching work files. The banner in the status
+# bar and the prefix on the terminal title are the human reminder -- text, so it
+# does not depend on registering a hue. The colour is cosmetic: a default per
+# mode (personal purple, work orange) that any session may override with a
+# `theme` directive. Never read either the banner or the colour as permission.
+#
+# The context is observed, not asserted: `work check` is asked about the pane's
+# foreground process. It has to be the foreground process and not the pane's own
+# shell, because `work` acquires the group by re-exec'ing under sudo, so the
+# group lives in a child and the pane's shell never holds it.
+#
+# Wired to status-left, so it re-checks every status-interval and catches `work`
+# being entered in the pane you are already looking at, which no tmux hook
+# reports. Also on the attach and create hooks, so a new session is right before
+# it is ever drawn.
+#
+# usage: mux-style [-q] SESSION PANE_PID
+#
+# -q applies the side effects (colour, title prefix) but prints nothing.
+# status-left wants the banner on stdout; the attach/create HOOKS want only the
+# side effects. tmux run-shell displays a command's stdout in a VIEW-MODE buffer
+# over the pane (freezing it on a [0/0] snapshot until a key is pressed), so a
+# hook must never let the banner through -- it would do exactly that the instant
+# a work session attaches.
+set -eu
+
+quiet=0
+[ "${1:-}" = -q ] && { quiet=1; shift; }
+
+session=${1:?usage: mux-style [-q] SESSION PANE_PID}
+pane_pid=${2:?usage: mux-style [-q] SESSION PANE_PID}
+
+MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
+# The shared comment/normalize rule (see bin/mux); a fallback strips only
+# whole-line comments so a missing lib never breaks the status line.
+_conf=$(dirname "$0")/mux-conf.sh
+if [ -r "$_conf" ]; then . "$_conf"
+else mux_conf_clean() { grep -vE '^[[:space:]]*(#|$)'; }
+fi
+# The context seam (see mux-context.sh): the label/banner/theme for the pane's
+# ACTUAL context come from the hook. A stub yields the default context (no
+# banner, mux's own default theme) if the lib is somehow missing.
+_ctx=$(dirname "$0")/mux-context.sh
+if [ -r "$_ctx" ]; then . "$_ctx"
+else mux_ctx_env() { MUX_CTX_SOCKET=''; MUX_CTX_SIDE=default
+	MUX_CTX_LABEL=''; MUX_CTX_BANNER=''; MUX_CTX_THEME=''; }
+fi
+
+# The pane's foreground process group is tpgid, field 8 of /proc/<pid>/stat.
+# comm sits in field 2 and may itself contain spaces and parens, so split on
+# the LAST ')' and count from there: state ppid pgrp session tty_nr tpgid.
+fg=$pane_pid
+if [ -r "/proc/$pane_pid/stat" ]; then
+        set -- $(sed 's/.*)//' "/proc/$pane_pid/stat")
+        case ${6:-} in
+                ''|*[!0-9]*) ;;         # no foreground group: keep the shell
+                *) fg=$6 ;;
+        esac
+fi
+
+gopt() { tmux show-options -gqv "$1"; }   # a global option, empty if unset
+
+# The context of the pane's ACTUAL foreground process (not its layout's claim):
+# the hook owns the group test and the label/banner/theme. MUX_CTX_LABEL is the
+# banner/title text (empty = no banner), MUX_CTX_BANNER its style, MUX_CTX_THEME
+# the context's default theme.
+mux_ctx_env "$fg"
+
+# Resolve the colour theme: an explicit per-session @mux-theme (set by a
+# layout's `theme` directive) wins; else the context's default theme; else the
+# global default. The theme is cosmetic -- the banner and title prefix below
+# mark the boundary regardless of which theme is in force. All colour VALUES in
+# tmux.conf.
+theme=$(tmux show-options -qv -t "$session" @mux-theme || true)
+[ -n "$theme" ] || theme=$MUX_CTX_THEME
+[ -n "$theme" ] || theme=$(gopt @theme-default)
+bar=$(gopt "@theme-$theme-bar")
+win=$(gopt "@theme-$theme-window")
+acc=$(gopt "@theme-$theme-accent")
+# Optional elements; a theme may omit them and we derive below.
+bord=$(gopt "@theme-$theme-border")
+sel=$(gopt "@theme-$theme-select")
+prompt=$(gopt "@theme-$theme-prompt")
+if [ -z "$bar" ] || [ -z "$win" ]; then
+        # Theme not defined yet (e.g. tmux.conf not reloaded since these options
+        # were added). Fall back to the bootstrap bar rather than break the live
+        # status line; a bad `theme` NAME is already rejected at build by mux.
+        bar=$(gopt status-style)
+        win=$(gopt window-status-current-style)
+        [ -n "$acc" ] || acc=$(gopt pane-active-border-style)
+fi
+# Derive the optional elements when a theme leaves them unset: a dim grey for
+# inactive borders (so the accent active border pops), the current-window chip
+# reused for the copy-mode selection (a proven contrast pair), and the bar for
+# the command prompt. A theme that DOES set them overrides each here.
+bord=${bord:-fg=colour238}
+sel=${sel:-$win}
+prompt=${prompt:-$bar}
+
+# Set a session option only when it differs: status-left re-runs this every
+# tick, and an unconditional set would redraw the bar each time. @mux-prefix is
+# deliberately settable to empty (to clear the WORK marker on leaving work).
+set_opt() {   # option value
+        _c=$(tmux show-options -qv -t "$session" "$1" || true)
+        [ "$_c" = "$2" ] || tmux set-option -t "$session" "$1" "$2"
+}
+set_opt status-style "$bar"
+set_opt window-status-current-style "$win"
+set_opt message-style "$bar"
+# The active pane border follows the theme accent (the vivid hue, matching the
+# current-window chip). Only when the theme defines one, so an old server that
+# predates @theme-*-accent keeps its bootstrap border rather than losing it.
+[ -n "$acc" ] && set_opt pane-active-border-style "$acc"
+# The rest of the frame follows the theme too: inactive pane borders recede,
+# the copy-mode selection reads in-theme, and the command prompt matches. Each
+# is always non-empty (derived above), so unlike accent it sets unconditionally.
+[ -n "$bord" ]   && set_opt pane-border-style "$bord"
+[ -n "$sel" ]    && set_opt mode-style "$sel"
+[ -n "$prompt" ] && set_opt message-command-style "$prompt"
+
+# The context reminder, belt and suspenders: a prefix on the terminal title
+# (rendered by set-titles-string from @mux-prefix; see tmux.conf) AND a banner
+# in the status bar. Both carry the context LABEL (tackup: "WORK: Manifest"); a
+# context with no label (the default) shows neither. The title side is a side
+# effect, so it happens under -q too; the banner is stdout, status-left only.
+if [ -n "$MUX_CTX_LABEL" ] && [ -n "$MUX_CTX_BANNER" ]; then
+        # Title prefix is terse ([LABEL] ) to leave room for #S:#W; the status
+        # banner double-brackets it ([[...]]) for emphasis.
+        set_opt @mux-prefix "[$MUX_CTX_LABEL] "
+        if [ "$quiet" = 0 ]; then
+                printf '#[%s][[%s]]#[default]' \
+                        "$MUX_CTX_BANNER" "$MUX_CTX_LABEL"
+        fi
+else
+        set_opt @mux-prefix ""
+fi
+
+# Host label (status-left only, both modes): the machine identity as a CHIP --
+# a per-host fg on a per-host bg, so it reads clearly against ANY bar theme (a
+# bare fg colour collides with the bar bg), and near-identically-named boxes
+# are told apart at a glance. Printed AFTER any WORK banner, so the banner stays
+# leftmost.
+#
+# Colours are DATA, not code: an explicit `<host> <style>` line in
+# $MUX_DIR/hosts wins (style is a comma-joined tmux run, e.g.
+# fg=colour230,bg=#5f3a1a -- the hash sits after a comma, not whitespace, so the
+# normalizer keeps it); an unlisted host gets a colour derived from its name, so
+# every machine still gets a distinct, readable chip with zero config. (tackup
+# ships manifold/manifestor there, preserving their hand-picked hues.)
+if [ "$quiet" = 0 ]; then
+        _host=$(hostname -s 2>/dev/null || hostname)
+        _hstyle=
+        _hostsf=$MUX_DIR/hosts
+        if [ -r "$_hostsf" ]; then
+                _hstyle=$(mux_conf_clean <"$_hostsf" \
+                        | awk -v h="$_host" '$1==h{print $2; exit}')
+        fi
+        if [ -z "$_hstyle" ]; then
+                # Deterministic: cksum of the name selects one of eight readable
+                # fg/bg pairs, so an unconfigured host is stable and legible.
+                _n=$(printf '%s' "$_host" | cksum \
+                        | { read _c _r; echo $((_c%8)); })
+                case $_n in
+                0) _hstyle=fg=colour252,bg=colour236 ;;
+                1) _hstyle=fg=colour230,bg=colour238 ;;
+                2) _hstyle=fg=colour231,bg=colour24  ;;
+                3) _hstyle=fg=colour231,bg=colour88  ;;
+                4) _hstyle=fg=colour016,bg=colour109 ;;
+                5) _hstyle=fg=colour231,bg=colour54  ;;
+                6) _hstyle=fg=colour016,bg=colour179 ;;
+                7) _hstyle=fg=colour231,bg=colour22  ;;
+                esac
+        fi
+        printf '#[%s,bold] %s #[default] ' "$_hstyle" "$_host"
+fi

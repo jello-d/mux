@@ -1,0 +1,43 @@
+#!/bin/sh
+# mux-pin: hold every mux bottom pane at the size its layout asked for.
+#
+# tmux redistributes rows proportionally when a window resizes, so a pane
+# split to N lines does not stay N lines: attach a bigger client and it grows
+# with everything else. mux records the wanted size on the pane itself as
+# @mux-bottom (MIN-MAX, equal when the layout pinned a fixed height) and this
+# re-applies it. Run from the tmux hooks in tmux.conf on attach and on resize,
+# and safe to run by hand at any time.
+#
+# A MIN-MAX pane tracks the window at 1/DIVISOR of its height, clamped to the
+# bounds, so a laptop gets the floor and a tall monitor gets the ceiling.
+set -eu
+
+DIVISOR=5
+
+# Panes with no @mux-bottom leave the last field empty and are skipped, so
+# this walks every pane on the server and only touches the ones mux marked.
+tmux list-panes -a -F \
+        '#{pane_id} #{window_height} #{pane_height} #{@mux-bottom}' |
+while read -r pane wh ph spec; do
+        [ -n "${spec:-}" ] || continue
+
+        min=${spec%%-*}
+        max=${spec##*-}
+
+        # A pane mux did not write is not ours to resize: say so, do nothing.
+        case $min in ''|*[!0-9]*) spec= ;; esac
+        case $max in ''|*[!0-9]*) spec= ;; esac
+        [ -n "$spec" ] || {
+                echo "mux-pin: bad @mux-bottom on $pane, skipping" >&2
+                continue
+        }
+
+        want=$((wh / DIVISOR))
+        [ "$want" -ge "$min" ] || want=$min
+        [ "$want" -le "$max" ] || want=$max
+
+        # Already right: leave it alone rather than churn the layout.
+        [ "$want" -ne "$ph" ] || continue
+
+        tmux resize-pane -t "$pane" -y "$want"
+done

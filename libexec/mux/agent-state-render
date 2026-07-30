@@ -1,0 +1,359 @@
+#!/bin/sh
+# agent-state-render: the tmux status-right session strip. One token per session
+# on this server, in tmux's OWN session order -- so the strip reads the same way
+# switch-client -n/-p walks it: prev is to the left, next is to the right. The
+# attached session wears a fixed "current" chip (constant on every theme),
+# in accent brackets, so "where am I" is obvious. State reads from the glyph;
+# non-current sessions colour their chip by state -- glyph carries state,
+# colour marks current.
+#
+# Agent state lives in per-pane files (see agent-state-emit), namespaced by tmux
+# socket so a work bar never shows personal agents and vice versa. A killed
+# agent never fires Stop, so dead-pane files are pruned here. Meant for tmux
+# status-right via #().
+#
+# Per client: the current session is passed in as $1 (#S from status-right), and
+# only that one session gets the fixed "current" chip in accent brackets (its
+# state still shows via the glyph).
+# tmux keys a #() job by its EXPANDED command, so each
+# client (each monitor, each on its own session) runs its own render and
+# highlights its own current session, never another monitor's.
+#
+# GRACEFUL REDUCTION: the strip is measured against status-right-length and,
+# when the full chips overflow, degrades in tiers rather than letting tmux
+# truncate it blind -- drop the age field, then fold runs of agentless sessions
+# into a ·N· cluster, then window around the current session with ‹N / N› edge
+# counts, then a bare "needs-you count · total". The order is ALWAYS tmux's (so
+# ( / ) still reads left-to-right); reduction only compresses low-signal
+# sessions. Invariant: a blocked (needs-you) session is never silently dropped
+# -- it stays a chip, or becomes a caution-marked edge/summary count. Below the
+# threshold the output is byte-for-byte the un-reduced strip.
+set -eu
+
+# Sibling libs: inherit MUX_LIB when spawned by bin/mux, else self-resolve to
+# this script's own dir (the lib scripts are colocated).
+_lib=${MUX_LIB:-$(dirname "$0")}
+
+# The state GLYPHS (MUX_GLYPH_*) and the state reader (mux_agent_state) live in
+# a shared lib, so the strip and the mux picker map state the same way and
+# cannot drift. The bar's COLOUR knobs (styles, accents) stay below -- they are
+# the strip's own look, which the picker does not share.
+. "$_lib/mux-agent-state.sh"
+
+# ---------------------------------------------------------------------------
+# LOOK & FEEL -- every colour knob for the strip in one place. Colours are tmux
+# colour names (colour0-255) or truecolor #rrggbb. The render logic below reads
+# ONLY these (and the shared glyphs) -- tweak here, nowhere else.
+# ---------------------------------------------------------------------------
+
+# Per-state chip: a STYLE and an ACCENT (the glyph comes from the shared lib).
+# The style pairs fg AND bg so it reads on any bar theme; NONE (agentless) and
+# UNKNOWN keep a bare dim fg (no bg), so they recede. The ACCENT is the state's
+# one signature hue, drawn on the current session's white chip frame (see CUR_*
+# below) -- so the accent must read on white, which is why it tracks the state's
+# VIVID field (the pink working fg, the green/orange/red bg), not the chip text.
+STY_WORKING='fg=colour211,bg=colour56,bold'
+# bg stays an INDEXED colour on purpose: the palette's green-cube shift happens
+# to land colour120 on a green that reads well as this chip body, so unlike
+# ACC_IDLE below it wants no hex. Keep it colourNN; do not "fix" it to a hex.
+STY_IDLE='fg=colour232,bg=colour120,bold'
+STY_NONE='fg=colour250'
+STY_UNKNOWN='fg=colour250'
+
+ACC_WORKING=colour211    # pink, the working chip's own fg
+ACC_IDLE='#7faa00'       # warm (yellow-leaning) green as a TRUECOLOR hex, not
+                         # an indexed colour: red lifted, blue at zero. This
+                         # terminal's palette shifts the 256-colour green cube
+                         # toward blue, so colourNN greens read blue; a hex goes
+                         # out as a direct RGB escape (tmux Tc), bypassing the
+                         # palette, so this stays truly green on the chip.
+ACC_NONE=colour250       # gray, agentless recedes
+ACC_UNKNOWN=colour250
+
+# blocked ESCALATES the longer it waits: fresh -> warm -> hot, gated on the
+# seconds blocked -- the louder the wait, the louder the chip (and the accent).
+BLOCK_WARM_S=120 ; BLOCK_HOT_S=600
+STY_BLOCK_FRESH='fg=colour232,bg=colour202,bold'   # orange
+STY_BLOCK_WARM='fg=colour232,bg=colour196,bold'    # red
+STY_BLOCK_HOT='fg=colour231,bg=colour196,bold'     # red, white text
+ACC_BLOCK_FRESH=colour202   # orange, the fresh-blocked chip bg
+ACC_BLOCK_WARM=colour196    # red
+ACC_BLOCK_HOT=colour196     # red
+
+# Current-session chip: a black-on-white BODY, CONSTANT on every theme, so
+# "where am I" never rides on a hue. Its FRAME -- the [ ] brackets AND the
+# underline rule (us= colours the rule alone; the text stays black) -- takes the
+# agent-state ACCENT (ACC_* above), so the active chip's edge echoes its own
+# glyph: green idle, pink working, orange->red blocked, gray agentless. The body
+# stays white either way, so location never depends on reading the state hue.
+CUR_FG=colour232 ; CUR_BG=colour231      # chip body: black text on white
+CUR_LB='[' ; CUR_RB=']'                  # frame glyphs
+
+SEP='│'                                  # drawn between tokens
+
+# The namespaced state dir for this tmux socket (see agent-state-emit); the
+# shared lib derives the namespace from $TMUX just as agent-state-emit does.
+dir=$(mux_agent_dir)
+
+# Live pane ids across the server, space-padded so the membership test is a
+# simple case-glob. Used only to prune phantom state files below.
+live=" $(tmux list-panes -a -F '#{pane_id}' 2>/dev/null | tr '\n' ' ')"
+
+# Prune phantoms once: drop any state file whose pane is gone, dismissing any
+# notification it still holds -- so a pane killed while blocked leaves no stale
+# "needs you" behind (best effort: no makoctl just no-ops).
+if [ -d "$dir" ]; then
+        for f in "$dir"/*; do
+                [ -e "$f" ] || continue
+                read -r st ss win pane ep nid <"$f" || continue
+                case "$live" in *" $pane "*) continue ;; esac
+                [ -n "$nid" ] && command -v makoctl >/dev/null 2>&1 \
+                        && makoctl dismiss -n "$nid" 2>/dev/null || true
+                rm -f "$f"
+        done
+fi
+
+# Format an age in seconds as a fixed 3-column field (right-justified number and
+# unit), so the duration never changes width as it ticks and the strip holds.
+fmt_age() {
+        _a=$1
+        if   [ "$_a" -lt 60 ];   then printf '%2ds' "$_a"
+        elif [ "$_a" -lt 3600 ]; then printf '%2dm' $((_a / 60))
+        else _h=$((_a / 3600)); [ "$_h" -gt 99 ] && _h=99; printf '%2dh' "$_h"
+        fi
+}
+
+# The bar's current session, passed as $1 (#S). Only this one is highlighted.
+current=${1:-}
+
+# The bar's client, passed as $2 (#{client_name}). Sessions this client has
+# hidden (mux hide) drop off ITS strip -- per client, so each monitor differs.
+client=${2:-}
+excluded=
+if [ -r "$_lib/mux-exclude.sh" ]; then
+        . "$_lib/mux-exclude.sh"
+        excluded=$(mux_excluded "$client")
+fi
+
+# --- gather: one record per visible session, in tmux order ------------------
+# Fields "iscur state age name" (state 'none' for agentless, so the field is
+# never empty). Written to a file so the strip's WIDTH can be measured before it
+# is drawn: the graceful-reduction tiers below choose a layout that fits inside
+# status-right-length, instead of letting tmux truncate the strip blind and drop
+# whatever fell off the right -- possibly a session that needs you.
+tmpf=$(mktemp); recs=$(mktemp)
+trap 'rm -f "$tmpf" "$recs"' EXIT
+tmux list-sessions -F '#{session_name}' >"$tmpf" 2>/dev/null || true
+now=$(date +%s)          # one instant, so every age is measured the same
+nsess=0
+while read -r sess; do
+        [ -n "$sess" ] || continue
+        case " $excluded " in *" $sess "*) continue ;; esac   # mux hide
+        _pair=$(mux_agent_state "$dir" "$sess")
+        _st=${_pair%% *}; _ep=${_pair##* }
+        [ -n "$_st" ] || _st=none
+        _age=0; [ -n "$_ep" ] && _age=$((now - _ep))
+        _cur=0; [ "$sess" = "$current" ] && _cur=1
+        printf '%s %s %s %s\n' "$_cur" "$_st" "$_age" "$sess" >>"$recs"
+        nsess=$((nsess + 1))
+done <"$tmpf"
+[ "$nsess" -gt 0 ] || exit 0
+
+# Width budget: columns status-right may fill (status-right-length), less the
+# one-space margin in its format string. MUX_STRIP_WIDTH overrides (tests).
+budget=${MUX_STRIP_WIDTH:-}
+[ -n "$budget" ] || budget=$(tmux show-options -gqv status-right-length \
+        2>/dev/null || true)
+[ -n "$budget" ] || budget=160
+budget=$((budget - 1))
+
+# The strip is BUILT into BS (the escape string) while BW tracks its VISIBLE
+# width, computed ARITHMETICALLY (a glyph is 2 cols, a name 1/char, the age a
+# fixed 3) because escapes in BS carry no display width to measure. BF is the
+# first-unit flag, so a separator is drawn BETWEEN units, not before the first.
+BS= BW=0 BF=1
+_reset() { BS= BW=0 BF=1; }
+_sep() {
+        if [ "$BF" -eq 1 ]; then BF=0
+        else BS="$BS#[default]$SEP"; BW=$((BW + 1)); fi
+}
+
+# _style STATE AGE -> set sty and acc (per-state chip look; blocked escalates by
+# how long it waited). Shared by every builder so the look cannot drift.
+_style() {
+        case $1 in
+        blocked)
+                if   [ "$2" -ge "$BLOCK_HOT_S" ]; then
+                        sty=$STY_BLOCK_HOT;   acc=$ACC_BLOCK_HOT
+                elif [ "$2" -ge "$BLOCK_WARM_S" ]; then
+                        sty=$STY_BLOCK_WARM;  acc=$ACC_BLOCK_WARM
+                else    sty=$STY_BLOCK_FRESH; acc=$ACC_BLOCK_FRESH
+                fi ;;
+        working) sty=$STY_WORKING; acc=$ACC_WORKING ;;
+        idle)    sty=$STY_IDLE;    acc=$ACC_IDLE ;;
+        none|'') sty=$STY_NONE;    acc=$ACC_NONE ;;
+        *)       sty=$STY_UNKNOWN; acc=$ACC_UNKNOWN ;;
+        esac
+}
+
+# _emit_session CUR STATE AGE NAME SHOWAGE -> append one session chip. With
+# SHOWAGE=1 the chip is byte-for-byte the pre-reduction chip, so a strip that
+# fits is exactly what it always was; SHOWAGE=0 drops the age field (the blocked
+# escalation still shows through the chip COLOUR, so no signal is lost).
+_emit_session() {
+        _c=$1 _s=$2 _a=$3 _nm=$4 _sa=$5
+        _sg=$_s; [ "$_s" = none ] && _sg=''
+        _style "$_s" "$_a"
+        _mk=$(mux_agent_glyph "$_sg")
+        _af=''
+        if [ "$_sa" -eq 1 ]; then
+                _d='   '
+                case $_s in blocked|working|idle) _d=$(fmt_age "$_a") ;; esac
+                _af=" $_d"
+        fi
+        _p=' '; _bp=' '
+        if [ "$_c" -eq 1 ]; then
+                _p="#[fg=$acc,bold]$CUR_LB#[fg=$CUR_FG]"
+                _bp="#[fg=$acc,bold]$CUR_RB"
+                sty="fg=$CUR_FG,bg=$CUR_BG,bold,underscore,us=$acc"
+        fi
+        _sep
+        BS="$BS#[range=user|s:$_nm]#[default]#[$sty]$_p$_mk $_nm$_af$_bp"
+        BS="$BS#[default]#[norange]"
+        _bw=$((${#_nm} + 5)); [ "$_sa" -eq 1 ] && _bw=$((_bw + 4))
+        BW=$((BW + _bw))
+}
+
+# _emit_cluster R -> a dim stand-in for R folded agentless sessions. No range
+# tag: it maps to no single session, so a click is a deliberate no-op.
+_emit_cluster() {
+        _sep
+        BS="$BS#[default]#[fg=colour240]·$1·#[default]"
+        BW=$((BW + 2 + ${#1}))
+}
+
+# _emit_edge SIDE COUNT BLOCKED -> a window-edge counter for COUNT sessions off
+# that side; if BLOCKED it wears the caution glyph, so a needs-you off-window
+# is NEVER silently lost. SIDE 'l' points left (‹), 'r' points right (›).
+_emit_edge() {
+        [ "$1" = l ] && _tx="‹$2" || _tx="$2›"
+        _sep
+        if [ "$3" -eq 1 ]; then
+                [ "$1" = l ] && _tx="$MUX_GLYPH_BLOCKED$_tx" \
+                             || _tx="$_tx$MUX_GLYPH_BLOCKED"
+                BS="$BS#[default]#[fg=colour232,bg=colour202,bold]"
+                BS="$BS$_tx#[default]"
+                BW=$((BW + 3 + ${#2}))
+        else
+                BS="$BS#[default]#[fg=colour244]$_tx#[default]"
+                BW=$((BW + 1 + ${#2}))
+        fi
+}
+
+# Builders: each resets and lays out the whole strip one way; the caller keeps
+# the leanest that fits.
+build_plain() {          # SHOWAGE(1|0): every session as a chip
+        _reset
+        while read -r _c _s _a _nm; do
+                _emit_session "$_c" "$_s" "$_a" "$_nm" "$1"
+        done <"$recs"
+}
+build_collapse() {       # no age, runs of agentless sessions folded to ·N·
+        _reset; _run=0
+        while read -r _c _s _a _nm; do
+                if [ "$_c" -eq 0 ] && [ "$_s" = none ]; then
+                        _run=$((_run + 1)); continue
+                fi
+                [ "$_run" -gt 0 ] && { _emit_cluster "$_run"; _run=0; }
+                _emit_session "$_c" "$_s" "$_a" "$_nm" 0
+        done <"$recs"
+        [ "$_run" -gt 0 ] && _emit_cluster "$_run"
+}
+build_window() {         # last resort: a window around current + edge counters
+        set --
+        while IFS= read -r _l; do set -- "$@" "$_l"; done <"$recs"
+        _tot=$#
+        _ci=1 _k=0
+        for _l in "$@"; do
+                _k=$((_k + 1)); case $_l in "1 "*) _ci=$_k ;; esac
+        done
+        _avail=$((budget - 12))          # reserve for two edge counters + seps
+        _lo=$_ci _hi=$_ci
+        eval "_l=\${$_ci}"; _r=${_l#* }; _r=${_r#* }; _nm=${_r#* }
+        _w=$((${#_nm} + 5))
+        _stall=0 _side=r                 # grow alternately until neither fits
+        while [ "$_stall" -lt 2 ]; do
+                _moved=0
+                if [ "$_side" = r ] && [ "$_hi" -lt "$_tot" ]; then
+                        eval "_l=\${$((_hi + 1))}"
+                        _r=${_l#* }; _r=${_r#* }; _nm=${_r#* }
+                        _nw=$((${#_nm} + 5))
+                        if [ $((_w + _nw + 1)) -le "$_avail" ]; then
+                                _hi=$((_hi + 1)); _w=$((_w + _nw + 1)); _moved=1
+                        fi
+                elif [ "$_side" = l ] && [ "$_lo" -gt 1 ]; then
+                        eval "_l=\${$((_lo - 1))}"
+                        _r=${_l#* }; _r=${_r#* }; _nm=${_r#* }
+                        _nw=$((${#_nm} + 5))
+                        if [ $((_w + _nw + 1)) -le "$_avail" ]; then
+                                _lo=$((_lo - 1)); _w=$((_w + _nw + 1)); _moved=1
+                        fi
+                fi
+                [ "$_moved" -eq 1 ] && _stall=0 || _stall=$((_stall + 1))
+                [ "$_side" = r ] && _side=l || _side=r
+        done
+        _reset
+        if [ "$_lo" -gt 1 ]; then
+                _bl=0 _i=1
+                while [ "$_i" -lt "$_lo" ]; do
+                        eval "_l=\${$_i}"; _s=${_l#* }; _s=${_s%% *}
+                        [ "$_s" = blocked ] && { _bl=1; break; }
+                        _i=$((_i + 1))
+                done
+                _emit_edge l $((_lo - 1)) "$_bl"
+        fi
+        _i=$_lo
+        while [ "$_i" -le "$_hi" ]; do
+                eval "_l=\${$_i}"
+                _c=${_l%% *}; _r=${_l#* }
+                _s=${_r%% *}; _r=${_r#* }
+                _a=${_r%% *}; _nm=${_r#* }
+                _emit_session "$_c" "$_s" "$_a" "$_nm" 0
+                _i=$((_i + 1))
+        done
+        if [ "$_hi" -lt "$_tot" ]; then
+                _bl=0 _i=$((_hi + 1))
+                while [ "$_i" -le "$_tot" ]; do
+                        eval "_l=\${$_i}"; _s=${_l#* }; _s=${_s%% *}
+                        [ "$_s" = blocked ] && { _bl=1; break; }
+                        _i=$((_i + 1))
+                done
+                _emit_edge r $((_tot - _hi)) "$_bl"
+        fi
+}
+
+build_summary() {        # the floor: too narrow even to window; show a count
+        _reset
+        _nb=0
+        while read -r _c _s _a _nm; do
+                [ "$_s" = blocked ] && _nb=$((_nb + 1))
+        done <"$recs"
+        if [ "$_nb" -gt 0 ]; then          # keep the needs-you count, always
+                BS="#[fg=colour232,bg=colour202,bold]$MUX_GLYPH_BLOCKED$_nb"
+                BS="$BS#[default]"; BW=$((2 + ${#_nb}))
+                BS="$BS#[fg=colour244] "; BW=$((BW + 1))
+        fi
+        BS="$BS#[fg=colour244]·$nsess#[default]"; BW=$((BW + 1 + ${#nsess}))
+}
+
+# Pick the leanest layout that fits, cheapest first: the FULL strip (same as
+# before), then drop the age field, then fold agentless runs, then a window
+# around the current session, then -- at a width too small even for that -- a
+# bare "needs-you count · total". A blocked session is never silently dropped:
+# it survives as a chip, a caution-marked edge count, or that summary count.
+build_plain 1
+[ "$BW" -le "$budget" ] || build_plain 0
+[ "$BW" -le "$budget" ] || build_collapse
+[ "$BW" -le "$budget" ] || build_window
+[ "$BW" -le "$budget" ] || build_summary
+printf '%s' "$BS"

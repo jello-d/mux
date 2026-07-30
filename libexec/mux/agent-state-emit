@@ -1,0 +1,111 @@
+#!/bin/sh
+# agent-state-emit: record this agent's lifecycle state for the status bar.
+# Invoked from Claude Code hooks with one argument, the new state. Writes a
+# single line to a per-pane file under the runtime state dir and nudges tmux
+# to redraw. Stays silent on stdout so the UserPromptSubmit hook never injects
+# noise into the model context.
+set -eu
+
+state=${1:?usage: agent-state-emit STATE}
+
+# Runtime dir, with a fallback for sessions where XDG_RUNTIME_DIR is unset.
+runtime=${XDG_RUNTIME_DIR:-/tmp/user-$(id -u)}
+
+# No tmux pane means nothing to track. Exit clean so the hook never fails.
+[ -n "${TMUX_PANE:-}" ] || exit 0
+
+# Namespace the state by tmux socket, so a work session and a personal one --
+# separate tmux servers sharing this runtime dir -- never collide on pane ids.
+# TMUX is socketpath,pid,session; its socket basename names the namespace
+# (default, work). agent-state-render derives the same namespace the same way.
+ns=default
+[ -n "${TMUX:-}" ] && { ns=${TMUX%%,*}; ns=${ns##*/}; }
+dir=$runtime/agent-state/$ns
+
+mkdir -p "$dir"
+
+# Key by pane id (for example %5). Strip the % for a clean filename.
+key=${TMUX_PANE#%}
+file=$dir/$key
+
+# Read the previous record once (state session window pane epoch): its state
+# gates the downgrade below and the notification, its epoch lets an unchanged
+# state keep its start time.
+_pstate= _pepoch= _pnotif=
+if [ -f "$file" ]; then
+        read -r _pstate _ps _pw _pp _pepoch _pnotif \
+                < "$file" 2>/dev/null || _pstate=
+fi
+
+# Claude Code fires Notification for TWO things: a permission prompt (mid-work),
+# and the "waiting for your input" nudge a few seconds after a turn ends. Both
+# arrive here as `blocked`. A permission prompt only happens while working, so a
+# `blocked` that lands while the agent is already idle is the waiting nudge --
+# keep it idle, so a finished turn stays a check (done), not a bell (needs you).
+if [ "$state" = blocked ] && [ "$_pstate" = idle ]; then
+        state=idle
+fi
+
+# The epoch marks when the CURRENT state BEGAN. Keep it across same-state
+# re-emits (one turn can fire `working` repeatedly) and stamp fresh only on a
+# real change, so a duration reads "time in THIS state", not "since last hook".
+if [ "$state" = "$_pstate" ] && [ -n "$_pepoch" ]; then
+        epoch=$_pepoch
+else
+        epoch=$(date +%s)
+fi
+
+# Resolve session and window once, at emit time, so the renderer never has
+# to call back into tmux per entry. If tmux is gone, degrade gracefully.
+loc=$(tmux display-message -p -t "$TMUX_PANE" \
+        '#{session_name} #{window_index}' 2>/dev/null || true)
+[ -n "$loc" ] || loc="? ?"
+
+# Clear a notification we raised for THIS pane once the agent leaves the state
+# that raised it -- you answered, restarted, or the turn moved on -- so a
+# critical "needs you" (which never times out in mako) does not sit stale for
+# manual dismissal. Carry the id across same-state re-emits; on any real change
+# drop it, dismissing any live one first (best effort: no makoctl just no-ops).
+notif=$_pnotif
+if [ -n "$_pnotif" ] && [ "$state" != "$_pstate" ]; then
+        command -v makoctl >/dev/null 2>&1 \
+                && makoctl dismiss -n "$_pnotif" 2>/dev/null || true
+        notif=
+fi
+
+# Push notification when the agent stops needing the CPU and starts needing YOU:
+# a real transition FROM working INTO blocked (permission) or idle (finished).
+# Not on same-state re-emits, not on ->working (that is you starting it). And
+# not when you are already looking at this pane -- it is the active pane of the
+# active window of an attached session -- since the bar already shows it; a
+# session opts out with the `notify always` layout directive
+# (@mux-notify-always). -p keeps the id so the block above can clear it later.
+# Best effort: no daemon or no notify-send just no-ops.
+if [ "$_pstate" = working ] && [ "$state" != working ] \
+   && command -v notify-send >/dev/null 2>&1; then
+        _vf='#{&&:#{pane_active},#{&&:#{window_active},#{session_attached}}}'
+        _vis=$(tmux display-message -p -t "$TMUX_PANE" "$_vf" \
+                2>/dev/null || true)
+        _always=$(tmux display-message -p -t "$TMUX_PANE" \
+                '#{@mux-notify-always}' 2>/dev/null || true)
+        if [ "$_always" = 1 ] || [ "$_vis" != 1 ]; then
+                _sess=${loc%% *}
+                case $state in
+                blocked) notif=$(notify-send -u critical -p \
+                                "Claude needs you: $_sess" \
+                                "permission or input" 2>/dev/null || true) ;;
+                idle)    notif=$(notify-send -p "Claude finished: $_sess" \
+                                "your turn" 2>/dev/null || true) ;;
+                esac
+        fi
+fi
+
+# Fields: state session window pane epoch notif-id. Space separated, one line.
+printf '%s %s %s %s %s\n' \
+        "$state" "$loc" "$TMUX_PANE" "$epoch" "$notif" >"$file"
+
+# Instant redraw for clients on this server. Interval polling is the
+# cross server backstop, so a failure here is not fatal.
+tmux refresh-client -S 2>/dev/null || true
+
+exit 0

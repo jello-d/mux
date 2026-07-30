@@ -1,0 +1,50 @@
+#!/bin/sh
+# mux-cycle - switch a client to the next/prev VISIBLE session, honouring that
+# client's hidden set (see `mux hide`). tmux's own ( / ) cannot skip, so we
+# enumerate the visible sessions, find the current one, and switch-client -t
+# straight to the neighbour. Bound to prefix ( / ) in tmux.conf, which pass the
+# client name and its current session.
+#
+#   mux-cycle next|prev CLIENT CURRENT
+#
+# Silent by contract: it runs from a key binding, whose stdout tmux would pop in
+# a view-mode buffer over the pane.
+set -eu
+
+dir=${1:?}; client=${2:?}; current=${3:-}
+# Sibling lib: MUX_LIB from bin/mux, else this script's own (colocated) dir.
+. "${MUX_LIB:-$(dirname "$0")}/mux-exclude.sh"
+excluded=$(mux_excluded "$client")
+
+# Visible sessions in tmux name order (the same order the status strip uses).
+set --
+for _s in $(tmux list-sessions -F '#{session_name}' 2>/dev/null); do
+        case " $excluded " in *" $_s "*) continue ;; esac
+        set -- "$@" "$_s"
+done
+[ "$#" -gt 0 ] || exit 0                # nothing visible; nowhere to go
+n=$#
+
+# Index of the current session in the visible ring (0 if it is itself hidden).
+idx=0; i=0
+for _s in "$@"; do
+        i=$((i + 1))
+        if [ "$_s" = "$current" ]; then idx=$i; break; fi
+done
+
+# The neighbour, wrapping around; a hidden current falls to first (next) / last.
+if [ "$dir" = next ]; then
+        if [ "$idx" -eq 0 ]; then j=1; else j=$((idx % n + 1)); fi
+else
+        if [ "$idx" -eq 0 ]; then j=$n; else j=$(((idx - 2 + n) % n + 1)); fi
+fi
+
+# Switch to the j-th visible session.
+i=0
+for _s in "$@"; do
+        i=$((i + 1))
+        if [ "$i" -eq "$j" ]; then
+                tmux switch-client -c "$client" -t "=$_s"
+                break
+        fi
+done
