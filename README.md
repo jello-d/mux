@@ -26,6 +26,11 @@ work/personal boundary in the status bar).
 
 Being extracted from a personal provisioning repo (tackup), where it is
 currently staged under `repos/mux/`. Done: the layout above, a single `mux`
-entry point that self-locates its `libexec` (every helper is a `mux <verb>`,
-so callers carry no path), and path-free tmux/agent integration. Remaining:
-install under `~/.local`, then split to its own repo.
+entry point that self-locates its `libexec`/`share` (every helper is a `mux
+<verb>`, so callers carry no path), path-free tmux/agent integration, and a
+`~/.local` install. Remaining: the `git subtree split` to its own repo.
+
+## Reference
+
+Full command, layout, theme, and seam reference: **`man mux`** (or
+`man -l share/man/man1/mux.1` from a checkout).
