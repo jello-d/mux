@@ -1,0 +1,12 @@
+# gemini.agent - Google's Gemini CLI, an ALT mux agent to experiment with.
+# Claude stays the mux default; select this per session with an `agent gemini`
+# line in a layout (or `pane gemini` for one pane).
+#
+# `go` resumes the most recent session for the project (like claude --continue),
+# falling back to a fresh one when there is none. Gemini has no interactive
+# conversation PICKER (claude --resume opens one) -- its CLI resumes only by
+# "latest" or an index -- so `resume` also continues the latest. To pick a
+# specific one by hand: `gemini --list-sessions`, then `gemini -r <index>`.
+# Install: the `gemini` command must be on PATH (@google/gemini-cli, via npm).
+go      gemini -r latest || gemini
+resume  gemini -r latest || gemini

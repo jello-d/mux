@@ -1,0 +1,7 @@
+# green. Truecolor hex, not colourNN: this terminal's palette shifts the
+# 256-colour green cube toward blue, so indexed greens read blue-green (see
+# agent-state-render's ACC_IDLE). These are warm (yellow-leaning) greens with
+# the blue channel near zero, so the theme reads green on this box.
+bar     bg=#3f5f00 fg=#c8f0a0
+window  fg=colour232 bg=#6fd000 bold
+accent  fg=#6faf00

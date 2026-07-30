@@ -1,0 +1,7 @@
+# graphite: monochrome slate with a cool steel-blue accent. Truecolor hex.
+bar     bg=#1c2024 fg=#c4ccd4
+window  fg=#12161a bg=#8fa8c0 bold
+accent  fg=#7fa8d0
+border  fg=#454e57
+select  fg=#12161a bg=#a8c0d8
+prompt  bg=#2a3138 fg=#c4ccd4

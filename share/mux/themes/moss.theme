@@ -1,0 +1,8 @@
+# moss: earthy forest greens. Truecolor hex (also dodges the green-cube blue
+# shift; see green.theme).
+bar     bg=#18220e fg=#c8e0a0
+window  fg=#0e1608 bg=#7fb03f bold
+accent  fg=#7fb03f
+border  fg=#465a2e
+select  fg=#0e1608 bg=#9fc85f
+prompt  bg=#26341a fg=#c8e0a0

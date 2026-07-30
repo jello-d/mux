@@ -1,0 +1,7 @@
+# cobalt: deep cobalt blue with a striking amber pop. Truecolor hex.
+bar     bg=#0a2a44 fg=#b8d8f0
+window  fg=#08202e bg=#ffc020 bold
+accent  fg=#ffc020
+border  fg=#2f5a7e
+select  fg=#08202e bg=#ffd460
+prompt  bg=#123f60 fg=#b8d8f0

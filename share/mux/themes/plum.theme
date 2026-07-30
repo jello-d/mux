@@ -1,0 +1,7 @@
+# plum: deep wine with a rose-plum highlight. Truecolor hex.
+bar     bg=#260e1c fg=#f0c0d8
+window  fg=#1a0812 bg=#d05088 bold
+accent  fg=#d05088
+border  fg=#5e3448
+select  fg=#1a0812 bg=#e878a8
+prompt  bg=#38152a fg=#f0c0d8

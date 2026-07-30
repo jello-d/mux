@@ -1,0 +1,7 @@
+# ultraviolet: near-black violet with an electric blue-violet. Truecolor hex.
+bar     bg=#160a2a fg=#c8b0f0
+window  fg=#0a0418 bg=#8a5cff bold
+accent  fg=#8a5cff
+border  fg=#453874
+select  fg=#0a0418 bg=#a888ff
+prompt  bg=#22143e fg=#c8b0f0

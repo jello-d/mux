@@ -1,0 +1,7 @@
+# copper: dark bronze with a warm metallic copper. Truecolor hex.
+bar     bg=#221812 fg=#e8c0a0
+window  fg=#180f0a bg=#c87848 bold
+accent  fg=#c87848
+border  fg=#5e4432
+select  fg=#180f0a bg=#e09868
+prompt  bg=#36261c fg=#e8c0a0

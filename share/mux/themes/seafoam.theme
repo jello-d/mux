@@ -1,0 +1,8 @@
+# seafoam: deep sea with foamy teal-green. Truecolor hex (also dodges this box's
+# green-cube blue shift; see green.theme).
+bar     bg=#0c2622 fg=#a8e8d8
+window  fg=#04150f bg=#3fd9a8 bold
+accent  fg=#3fd9a8
+border  fg=#2f5f56
+select  fg=#04150f bg=#6fe8c0
+prompt  bg=#123a32 fg=#a8e8d8

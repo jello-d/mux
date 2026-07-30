@@ -1,0 +1,8 @@
+# claude.agent - Claude Code, the default agent.
+# `go` continues the most recent conversation, falling back to a fresh session
+# when there is none: `claude --continue` errors "No conversation found" on a
+# fresh project rather than starting fresh, so the `|| claude` is load-bearing.
+# `resume` picks a conversation. Two keys, each a shell command; mux runs the
+# one for the verb (go/resume) as the agent pane's process. --bare runs neither.
+go      claude --continue || claude
+resume  claude --resume

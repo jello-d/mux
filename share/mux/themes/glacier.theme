@@ -1,0 +1,9 @@
+# glacier: a pale, icy steel-blue -- the one LIGHT theme in the set. Truecolor
+# hex. The bar is kept clearly tinted (not near-white) so the constant white
+# current-session chip in the strip still reads against it.
+bar     bg=#a8c8de fg=#1c3040
+window  fg=#f0f6fc bg=#3f88bf bold
+accent  fg=#2f78af
+border  fg=#7f9db2
+select  fg=#f0f6fc bg=#5aa0d0
+prompt  bg=#c0d8e8 fg=#1c3040

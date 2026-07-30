@@ -1,0 +1,4 @@
+# purple: the personal default. bg/fg for the bar, then the current-window chip.
+bar     bg=colour54 fg=colour189
+window  fg=colour232 bg=colour141 bold
+accent  fg=colour141

@@ -1,0 +1,7 @@
+# tidal: deep ocean blues with a bright cyan crest. Truecolor hex.
+bar     bg=#0a1e2e fg=#a0d8f0
+window  fg=#04121e bg=#3fa8e0 bold
+accent  fg=#3fa8e0
+border  fg=#2f5670
+select  fg=#04121e bg=#5fc0f0
+prompt  bg=#123246 fg=#a0d8f0
