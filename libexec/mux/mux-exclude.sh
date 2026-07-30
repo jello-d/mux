@@ -3,8 +3,8 @@
 # A tmux client -- one attachment, keyed by its client_name (its tty) -- hides
 # sessions from its own status strip and ( / ) cycling. client_name is unique
 # per attachment, so it alone keys the set; no socket namespace is needed. The
-# set lives under XDG_RUNTIME_DIR, so it clears on reboot. Sourced by ~/bin/mux,
-# ~/lib/mux/mux-cycle, and ~/lib/mux/agent-state-render; defines functions only.
+# set lives under XDG_RUNTIME_DIR, so it clears on reboot. Sourced by the mux
+# entry point and by mux-cycle / agent-state-render; defines functions only.
 
 # mux_exclude_file <client-name> -> this client's hidden-sessions file path.
 mux_exclude_file() {
