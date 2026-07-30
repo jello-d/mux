@@ -30,9 +30,8 @@
 # threshold the output is byte-for-byte the un-reduced strip.
 set -eu
 
-# Sibling libs: inherit MUX_LIB when spawned by bin/mux, else self-resolve to
-# this script's own dir (the lib scripts are colocated).
-_lib=${MUX_LIB:-$(dirname "$0")}
+# Sibling libs in this script's own (colocated) libexec dir.
+_lib=$(dirname "$0")
 
 # The state GLYPHS (MUX_GLYPH_*) and the state reader (mux_agent_state) live in
 # a shared lib, so the strip and the mux picker map state the same way and

@@ -18,8 +18,8 @@
 # stdout into a view-mode buffer over the active pane). Safe to run by hand.
 set -eu
 
-# Sibling lib: MUX_LIB from bin/mux, else this script's own (colocated) dir.
-_lib=${MUX_LIB:-$(dirname "$0")}
+# Sibling lib in this script's own (colocated) libexec dir.
+_lib=$(dirname "$0")
 
 force=0
 case "${1:-}" in --force|-f) force=1 ;; esac
