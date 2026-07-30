@@ -1,25 +1,23 @@
 #!/bin/sh
-# mux-style: reflect the context the active pane is ACTUALLY in, rather than the
-# one its layout claimed -- a "[WORK: ...]" banner and title prefix when
-# the pane holds the work group, plus a colour theme.
+# mux-style: reflect the CONTEXT the active pane is ACTUALLY in, rather than the
+# one its layout claimed -- a banner and title prefix when the pane's process is
+# in a marked context, plus a colour theme.
 #
-# THE TEXT IS THE SIGNAL; THE COLOUR IS NOT. The boundary is the kernel:
-# work_dir is owned root:<work group>, mode 2770, with a default ACL, and that
-# is what stops a personal process touching work files. The banner in the status
-# bar and the prefix on the terminal title are the human reminder -- text, so it
-# does not depend on registering a hue. The colour is cosmetic: a default per
-# mode (personal purple, work orange) that any session may override with a
-# `theme` directive. Never read either the banner or the colour as permission.
+# THE TEXT IS THE SIGNAL; THE COLOUR IS NOT. A context is reported by the
+# optional context hook (see mux-context.sh); mux only REFLECTS it in the UI and
+# enforces nothing -- whatever actually enforces a boundary, if anything, lives
+# in the integrator. The banner and the title prefix are the human reminder --
+# text, so it does not depend on registering a hue. The colour is cosmetic: a
+# per-context default any session may override with a `theme` directive. Never
+# read either the banner or the colour as permission.
 #
-# The context is observed, not asserted: `work check` is asked about the pane's
-# foreground process. It has to be the foreground process and not the pane's own
-# shell, because `work` acquires the group by re-exec'ing under sudo, so the
-# group lives in a child and the pane's shell never holds it.
+# The context is OBSERVED, not asserted: the hook is asked about the pane's
+# FOREGROUND process, not the pane's own shell, so a context entered inside a
+# running pane (which no tmux hook reports) is still caught.
 #
-# Wired to status-left, so it re-checks every status-interval and catches `work`
-# being entered in the pane you are already looking at, which no tmux hook
-# reports. Also on the attach and create hooks, so a new session is right before
-# it is ever drawn.
+# Wired to status-left, so it re-checks every status-interval and catches a
+# context change in the pane you are already looking at. Also on the attach and
+# create hooks, so a new session is right before it is ever drawn.
 #
 # usage: mux-style [-q] SESSION PANE_PID
 #
@@ -28,7 +26,7 @@
 # side effects. tmux run-shell displays a command's stdout in a VIEW-MODE buffer
 # over the pane (freezing it on a [0/0] snapshot until a key is pressed), so a
 # hook must never let the banner through -- it would do exactly that the instant
-# a work session attaches.
+# a marked session attaches.
 set -eu
 
 quiet=0
@@ -106,7 +104,7 @@ prompt=${prompt:-$bar}
 
 # Set a session option only when it differs: status-left re-runs this every
 # tick, and an unconditional set would redraw the bar each time. @mux-prefix is
-# deliberately settable to empty (to clear the WORK marker on leaving work).
+# deliberately settable to empty (to clear the marker on leaving a context).
 set_opt() {   # option value
         _c=$(tmux show-options -qv -t "$session" "$1" || true)
         [ "$_c" = "$2" ] || tmux set-option -t "$session" "$1" "$2"
@@ -127,7 +125,7 @@ set_opt message-style "$bar"
 
 # The context reminder, belt and suspenders: a prefix on the terminal title
 # (rendered by set-titles-string from @mux-prefix; see tmux.conf) AND a banner
-# in the status bar. Both carry the context LABEL (tackup: "WORK: Manifest"); a
+# in the status bar. Both carry the context LABEL from the hook; a
 # context with no label (the default) shows neither. The title side is a side
 # effect, so it happens under -q too; the banner is stdout, status-left only.
 if [ -n "$MUX_CTX_LABEL" ] && [ -n "$MUX_CTX_BANNER" ]; then
@@ -145,15 +143,15 @@ fi
 # Host label (status-left only, both modes): the machine identity as a CHIP --
 # a per-host fg on a per-host bg, so it reads clearly against ANY bar theme (a
 # bare fg colour collides with the bar bg), and near-identically-named boxes
-# are told apart at a glance. Printed AFTER any WORK banner, so the banner stays
-# leftmost.
+# are told apart at a glance. Printed AFTER any context banner, so the banner
+# stays leftmost.
 #
 # Colours are DATA, not code: an explicit `<host> <style>` line in
 # $MUX_DIR/hosts wins (style is a comma-joined tmux run, e.g.
 # fg=colour230,bg=#5f3a1a -- the hash sits after a comma, not whitespace, so the
 # normalizer keeps it); an unlisted host gets a colour derived from its name, so
-# every machine still gets a distinct, readable chip with zero config. (tackup
-# ships manifold/manifestor there, preserving their hand-picked hues.)
+# every machine still gets a distinct, readable chip with zero config (an
+# integrator can pin specific hosts to hand-picked hues there).
 if [ "$quiet" = 0 ]; then
         _host=$(hostname -s 2>/dev/null || hostname)
         _hstyle=
