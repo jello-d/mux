@@ -1,0 +1,62 @@
+#!/bin/sh
+# mux-check: audit that mux is coherently installed -- its package DATA (share),
+# its config overlay (MUX_DIR), and its one runtime dependency (tmux).
+#
+# Output is the [OK]/[FAIL]/[WARN] MARKER contract: one status line per check,
+# and a non-zero exit on any [FAIL]. An integrator can style the plain markers
+# with its own palette (tmux's mux ships no such coupling); run standalone at a
+# terminal, mux-check colours the markers itself. Either way mux depends on NO
+# integrator machinery -- the markers are a string convention, not shared code.
+set -eu
+
+# Inherited from the mux entry point (exported there); self-located as a
+# fallback so `mux-check` also works when run by its own path. share/ is a
+# sibling of this libexec dir under the install prefix.
+MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
+MUX_SHARE=${MUX_SHARE:-$(dirname "$0")/../share/mux}
+
+# Colour the markers ONLY on a real terminal (a captured/piped run stays plain,
+# so an integrator's styler paints it and a log stays escape-free). NO_COLOR
+# honoured. The codes match the common ANSI set; mux owns this copy (its
+# independence costs six lines, not a dependency).
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+	_e=$(printf '\033')
+	_G="$_e[1;32m"; _R="$_e[1;31m"; _Y="$_e[1;33m"; _O="$_e[0m"
+else
+	_G=; _R=; _Y=; _O=
+fi
+RC=0
+ok()   { printf '  %s[OK]%s   %s\n'   "$_G" "$_O" "$*"; }
+bad()  { printf '  %s[FAIL]%s %s\n'   "$_R" "$_O" "$*"; RC=1; }
+warn() { printf '  %s[WARN]%s %s\n'   "$_Y" "$_O" "$*"; }
+
+# 1. tmux -- the one hard runtime dependency.
+if command -v tmux >/dev/null 2>&1; then ok "tmux present"
+else bad "tmux not found (mux's one runtime dependency)"; fi
+
+# 2. package DATA (share): the dir plus the pieces mux reads at runtime.
+if [ -d "$MUX_SHARE" ]; then
+	ok "package data ($MUX_SHARE)"
+	for _f in mux.tmux themes shapes agents; do
+		[ -e "$MUX_SHARE/$_f" ] && ok "share/$_f present" \
+			|| bad "share/$_f missing (broken install)"
+	done
+	# The default theme named by themes/defaults must resolve to a fragment.
+	if [ -f "$MUX_SHARE/themes/defaults" ]; then
+		_dt=$(sed -n 's/^default[[:space:]]\{1,\}\([^[:space:]#]\{1,\}\).*/\1/p' \
+			"$MUX_SHARE/themes/defaults" | head -1)
+		if [ -n "$_dt" ] && [ -f "$MUX_SHARE/themes/$_dt.theme" ]; then
+			ok "default theme '$_dt' resolves"
+		else bad "default theme '${_dt:-unset}' has no themes/*.theme"; fi
+	else warn "themes/defaults absent (no global default theme)"; fi
+else
+	bad "package data missing ($MUX_SHARE) -- reinstall mux"
+fi
+
+# 3. config overlay (MUX_DIR): where user layouts + the integrator overlay live.
+# Optional: with none, mux runs the shipped defaults from share, so its absence
+# is a surfaced note, not drift.
+if [ -d "$MUX_DIR" ]; then ok "config overlay ($MUX_DIR)"
+else warn "no config overlay at $MUX_DIR (using shipped defaults)"; fi
+
+exit "$RC"
