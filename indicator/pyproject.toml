@@ -1,0 +1,13 @@
+[project]
+name = "mux-indicator"
+version = "0.0.1"
+description = "Optional SNI tray indicator for mux agent-session state"
+requires-python = ">=3.8"
+dependencies = ["dbus-next>=0.2.3", "Pillow>=9"]
+
+[project.scripts]
+mux-indicator = "mux_indicator.__main__:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
