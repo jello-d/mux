@@ -121,6 +121,7 @@ status-banner) shift; exec "$LIBEXEC/mux-status-banner" "$@" ;;
 agent-render)  shift; exec "$LIBEXEC/agent-state-render" "$@" ;;
 agent-emit)    shift; exec "$LIBEXEC/agent-state-emit" "$@" ;;
 themes)        shift; exec "$LIBEXEC/mux-themes" "$@" ;;
+check)         shift; exec "$LIBEXEC/mux-check" "$@" ;;
 esac
 
 # The ONE comment/normalize rule (mux_conf_clean) for every config parse below
@@ -241,6 +242,7 @@ usage: mux [VERB] [--bare] [NAME] [LAYOUT]
   theme [NAME|next|prev]     set/cycle/show the session theme (-p to persist)
   rename [OLD] NEW           rename a session (and its matching layout)
   edit [NAME]                open a layout in $EDITOR
+  check                      audit mux's install: package data, deps, overlay
   --bare                     go/resume without the agent (pane is a plain shell)
   --force                    overwrite an existing layout (save/new)
   help [TOPIC]               this help; TOPIC = agents|colors|layouts|palette
