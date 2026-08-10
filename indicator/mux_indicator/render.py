@@ -39,13 +39,16 @@ STATE_BADGE = {
 # bright-pink work badge, white for the idle check.
 STATE_INK = {
     "blocked": (0xFF, 0xF6, 0xA8, 0xFF),   # light yellow, pops on red
-    "working": (0xFF, 0xC8, 0xE2, 0xFF),   # light pink, pops on purple
+    "working": (0xFF, 0xDA, 0xEC, 0xFF),   # light pink, ~1/3 toward white
     "idle":    (0xF4, 0xF4, 0xF6, 0xFF),   # white check
 }
 _BASE = (0x14, 0x15, 0x19)           # near-black screen
 _PROMPT_LIFT = 0.55  # how far the ornamental >_ lifts from the screen toward
                      # white; higher = brighter/less recessive. Derived off the
                      # (state-tinted) screen so contrast tracks every state.
+_CURSOR_LIFT = 0.30  # the _ cursor lifts this much further from the prompt
+                     # colour toward white, so it reads a touch brighter than
+                     # the > chevron.
 _BADGE_INK = (0xF4, 0xF4, 0xF6, 0xFF)    # white count on the badge
 _SHADOW = (0, 0, 0, 120)
 
@@ -105,8 +108,9 @@ def _number(d, box, text, fnt, fill):
 
 def _hero(d, s, m, col, cursor=True):
     # A TALL custom '>' chevron (the font's is too squat) + an underscore cursor
-    # to its RIGHT, both in the prompt colour, with breathing room. The cursor
-    # is drawn only when `cursor` is set, so a caller can blink it.
+    # to its RIGHT. The chevron is the prompt colour; the cursor is lifted a
+    # touch brighter (_CURSOR_LIFT). The cursor is drawn only when `cursor` is
+    # set, so a caller can blink it.
     th = max(2, int(s * 0.11))
     top = int(s * 0.30)
     bot = s - m - int(s * 0.20)
@@ -115,10 +119,12 @@ def _hero(d, s, m, col, cursor=True):
            fill=col, width=th, joint="curve")
     if not cursor:
         return
+    cur = tuple(int(col[i] * (1 - _CURSOR_LIFT) + 0xFF * _CURSOR_LIFT)
+                for i in range(3)) + (0xFF,)
     cx = x + w + int(s * 0.12)
     cw, ch = int(s * 0.28), max(2, int(s * 0.09))      # wider underscore
     rlim = s - m - int(s * 0.14)
-    d.rectangle([cx, bot - ch, min(cx + cw, rlim), bot], fill=col)
+    d.rectangle([cx, bot - ch, min(cx + cw, rlim), bot], fill=cur)
 
 
 def _badge(img, s, fill, ink, count):
