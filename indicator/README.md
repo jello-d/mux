@@ -14,29 +14,33 @@ tray item needs one), so it lives here and installs on its own.
 
 ## Install
 
-Python, installed in isolation with `pipx` (so no system-package or
-externally-managed-environment friction):
+One command, all userspace (no sudo):
 
 ```sh
-pipx install ./indicator          # from a mux checkout -> ~/.local/bin/mux-indicator
-mux-indicator                      # run it in the foreground to try it
+./install                          # from this directory
 ```
 
-Dependencies (pulled in automatically): `dbus-next` (pure-Python D-Bus, so no
-PyGObject/gobject-introspection system dep) and `Pillow` (renders the glyph).
+It builds an isolated environment (a venv, so no system-package or
+externally-managed-environment friction), puts the `mux-indicator` command on
+`~/.local/bin`, and installs + enables the systemd **user** service so it starts
+with your graphical session. It is idempotent -- re-run it any time to update.
 
-To run it as a background service that starts with your graphical session, use
-the shipped **user** systemd unit (it runs `~/.local/bin/mux-indicator`, so it
-works with the `pipx` install above):
+Dependencies (`dbus-next`, a pure-Python D-Bus so no PyGObject/gobject-
+introspection system dep, and `Pillow`) come from `pyproject.toml` and are
+pulled in automatically. Sub-commands:
 
 ```sh
-mkdir -p ~/.config/systemd/user
-cp mux-indicator.service ~/.config/systemd/user/
-systemctl --user enable --now mux-indicator
+./install app         # just the command (no service)
+./install service     # just the systemd --user unit
+./install check       # verify the install
+./install uninstall   # remove the unit + the ~/.local/bin command
 ```
 
-Requires: a running StatusNotifierItem host (waybar's tray, or any desktop's)
-and `mux` on `PATH` (the daemon polls `mux agent-summary` for state).
+Requires: `python3`, a systemd **user** manager (for the service), a running
+StatusNotifierItem host (waybar's tray, or any desktop's), and `mux` on `PATH`
+(the daemon polls `mux agent-summary` for state). Prefer `pipx`? `pipx install
+.` then `./install service` works too -- both land the command at the same
+`~/.local/bin/mux-indicator` the unit runs.
 
 The feed is `mux agent-summary` (the aggregate worst state + session count),
 polled every `MUX_INDICATOR_POLL` seconds (default 1.5). Overrides via env:
