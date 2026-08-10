@@ -1,49 +1,143 @@
-"""Owned, programmatically-drawn state glyphs -- no emoji font, no SVG raster
-dependency. Shapes are drawn per size, so they stay crisp at any tray scale.
+"""Owned tray glyphs -- no emoji font, no SVG raster dep. Drawn per size so they
+stay crisp at any tray scale.
 
-Each state renders to an SNI IconPixmap entry list: [[w, h, argb], ...], where
-argb is ARGB32 in NETWORK (big-endian) byte order, i.e. bytes A,R,G,B per pixel,
-as the StatusNotifierItem spec requires.
+The icon is a terminal (mux is a terminal thing): a near-black rounded tile with
+a big, tall `>_` prompt as the hero, drawn in a FIXED dim grey (ornamental --
+attention belongs to the frame and badge). STATE is the frame colour + a subtle
+same-hue tint in the screen, MATCHING mux's own status chips so the two read as
+one system: blocked = orange, working = pink (the brain), idle = green, none =
+grey. The BADGE is a related-but-distinct pop that overhangs the corner:
+crimson (blocked) and purple (working) hold the count; idle holds a white check
+in a bright-green badge; none shows nothing. render.py is the ONLY place the
+visual identity lives.
 
-This is v1 placeholder art (simple shapes); it is deliberately the ONLY place
-the visual identity lives, so richer owned glyphs slot in here without touching
-the D-Bus plumbing.
+Each state+count renders to an SNI IconPixmap entry list [[w, h, argb], ...],
+argb being ARGB32 in NETWORK (big-endian) byte order per the StatusNotifierItem
+spec.
 """
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
-# state -> RGBA fill. A small, owned palette (amber/blue/green/grey).
-_PALETTE = {
-    "blocked": (0xF2, 0xB0, 0x36, 0xFF),
-    "working": (0x7A, 0xA2, 0xF7, 0xFF),
-    "idle":    (0x9E, 0xCE, 0x6A, 0xFF),
-    "none":    (0x88, 0x88, 0x88, 0xFF),
+# Frame colour + tint hue per state, keyed off mux's agent-state chips.
+STATE_FRAME = {
+    "blocked": (0xFF, 0xB0, 0x20, 0xFF),   # amber-gold -- warm, off the purple
+    "working": (0xFF, 0x8C, 0xE6, 0xFF),   # bright magenta/pink border
+    "idle":    (0x34, 0xC9, 0x4A, 0xFF),   # green (= the badge green)
+    "none":    (0x88, 0x88, 0x8E, 0xFF),   # grey (agentless)
 }
-_INK = (0x14, 0x14, 0x14, 0xFF)
+# Badge colour per state -- related to the frame, distinct from it. `none` is
+# absent -> no badge. idle's badge holds a white check, not a number.
+STATE_BADGE = {
+    "blocked": (0xC0, 0x18, 0x28, 0xFF),   # bold red -- urgent, less black
+    "working": (0x5F, 0x00, 0xD7, 0xFF),   # mux chip bg colour56 (purple)
+    "idle":    (0x25, 0xA8, 0x3A, 0xFF),   # green, a drop darker for contrast
+}
+# Number/check colour per state -- chosen for contrast on the badge, echoing the
+# frame hue: amber (= frame) on the dark-red block badge, deep purple on the
+# bright-pink work badge, white for the idle check.
+STATE_INK = {
+    "blocked": (0xFF, 0xF6, 0xA8, 0xFF),   # light yellow, pops on red
+    "working": (0xFF, 0xC8, 0xE2, 0xFF),   # light pink, pops on purple
+    "idle":    (0xF4, 0xF4, 0xF6, 0xFF),   # white check
+}
+_BASE = (0x14, 0x15, 0x19)           # near-black screen
+_PROMPT_COL = (0x86, 0x88, 0x8E, 0xFF)   # dim grey -- ornamental, recedes
+_BADGE_INK = (0xF4, 0xF4, 0xF6, 0xFF)    # white count on the badge
+_SHADOW = (0, 0, 0, 120)
+
+# Geometry, as fractions of the icon size.
+_BADGE_F = 0.65    # badge diameter (overhangs the corner)
+_MARGIN = 0.07     # small tile inset -> the terminal reaches near the edge
+_NUM = 1.10        # badge number, blown up to fill / clip the round badge
+_TINT = 0.14       # how much state hue bleeds into the near-black screen
+_TRACK = 0.28      # inter-digit tracking to pull, e.g., "12" tighter
+
+_SANS = ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+         "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf")
 
 
-def _glyph(state, size):
-    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+def _font(paths, px):
+    for p in paths:
+        try:
+            return ImageFont.truetype(p, px)
+        except OSError:
+            continue
+    return ImageFont.load_default()
+
+
+def _darker(c, f):
+    return tuple(int(c[i] * f) for i in range(3)) + (0xFF,)
+
+
+def _screen(state):
+    col = STATE_FRAME.get(state, STATE_FRAME["none"])
+    mix = tuple(int(_BASE[i] * (1 - _TINT) + col[i] * _TINT) for i in range(3))
+    return mix + (0xFF,)
+
+
+def _number(d, box, text, fnt, fill):
+    # Digits centered in the badge, with tightened inter-digit tracking so a
+    # two-digit count reads as one unit rather than two loose glyphs.
+    advs = [d.textlength(c, font=fnt) for c in text]
+    gap = _TRACK * (sum(advs) / len(text))
+    total = sum(advs) - gap * (len(text) - 1)
+    _, t, _, b = d.textbbox((0, 0), text, font=fnt)
+    x = box[0] + (box[2] - box[0] - total) / 2
+    y = box[1] + (box[3] - box[1] - (b - t)) / 2 - t
+    for i, c in enumerate(text):
+        d.text((x, y), c, font=fnt, fill=fill)
+        x += advs[i] - gap
+
+
+def _hero(d, s, m):
+    # A TALL custom '>' chevron (the font's is too squat) + an underscore cursor
+    # to its RIGHT, both in the fixed dim prompt colour, with breathing room.
+    th = max(2, int(s * 0.11))
+    top = int(s * 0.30)
+    bot = s - m - int(s * 0.20)
+    x, w = int(s * 0.18), int(s * 0.20)
+    d.line([(x, top), (x + w, (top + bot) / 2), (x, bot)],
+           fill=_PROMPT_COL, width=th, joint="curve")
+    cx = x + w + int(s * 0.12)
+    cw, ch = int(s * 0.28), max(2, int(s * 0.09))      # wider underscore
+    rlim = s - m - int(s * 0.14)
+    d.rectangle([cx, bot - ch, min(cx + cw, rlim), bot], fill=_PROMPT_COL)
+
+
+def _badge(img, s, fill, ink, count):
+    bd = int(s * _BADGE_F)
+    x0 = s - bd
+    box = [x0, -1, s - 1, bd - 1]
+    off = max(1, s // 22)
+    shadow = Image.new("RGBA", (s, s), (0, 0, 0, 0))
+    ImageDraw.Draw(shadow).ellipse(
+        [x0 + off, -1 + off, s - 1 + off, bd - 1 + off], fill=_SHADOW)
+    img.alpha_composite(shadow)
     d = ImageDraw.Draw(img)
-    c = _PALETTE.get(state, _PALETTE["none"])
-    m = max(1, size // 8)
-    w = max(2, size // 9)
-    if state == "blocked":                       # warning triangle + bang
-        d.polygon([(size // 2, m), (size - m, size - m), (m, size - m)], fill=c)
-        d.line([(size // 2, int(size * 0.42)), (size // 2, int(size * 0.66))],
-               fill=_INK, width=w)
-        r = max(1, size // 16)
-        cy = int(size * 0.76)
-        d.ellipse([size // 2 - r, cy - r, size // 2 + r, cy + r], fill=_INK)
-    elif state == "working":                     # filled dot
-        d.ellipse([m, m, size - m, size - m], fill=c)
-    elif state == "idle":                        # check mark
-        d.line([(int(size * 0.24), int(size * 0.54)),
-                (int(size * 0.42), int(size * 0.72)),
-                (int(size * 0.76), int(size * 0.30))],
-               fill=c, width=w, joint="curve")
-    else:                                        # hollow ring
-        rw = max(1, size // 10)
-        d.ellipse([m, m, size - m, size - m], outline=c, width=rw)
+    edge = _darker(fill, 0.62)
+    d.ellipse(box, fill=fill, outline=edge, width=max(1, s // 30))
+    if count is None:                     # idle -> a check, no number
+        r = bd
+        d.line([(x0 + r * 0.28, (bd - 1) / 2),
+                ((x0 + s - 1) / 2, bd - 1 - r * 0.20),
+                (s - 1 - r * 0.14, r * 0.10 - 1)],
+               fill=ink, width=max(2, s // 9), joint="curve")
+    else:
+        _number(d, box, str(count), _font(_SANS, int(bd * _NUM)), ink)
+
+
+def _tile(state, count, size):
+    s = size
+    img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    frame = STATE_FRAME.get(state, STATE_FRAME["none"])
+    m = max(2, int(s * _MARGIN))
+    d.rounded_rectangle([m, m, s - m, s - m], max(2, s // 7),
+                        fill=_screen(state), outline=frame,
+                        width=max(1, s // 11))
+    _hero(d, s, m)
+    bcol = STATE_BADGE.get(state)
+    if bcol is not None:              # blocked/working (number), idle (check)
+        _badge(img, s, bcol, STATE_INK.get(state, _BADGE_INK), count)
     return img
 
 
@@ -58,6 +152,6 @@ def _to_argb(img):
     return bytes(out)
 
 
-def icon_pixmap(state, sizes=(22, 32, 48)):
-    """SNI IconPixmap value for a state: a list of [w, h, argb-bytes]."""
-    return [[s, s, _to_argb(_glyph(state, s))] for s in sizes]
+def icon_pixmap(state, count, sizes=(22, 32, 48)):
+    """SNI IconPixmap for a state + count. idle/none draw no badge."""
+    return [[s, s, _to_argb(_tile(state, count, s))] for s in sizes]
