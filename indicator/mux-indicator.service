@@ -1,0 +1,15 @@
+[Unit]
+Description=mux-indicator: SNI tray icon for mux agent-session state
+After=default.target
+
+[Service]
+# The console script installed by `pipx install` (or the mux-indicator venv);
+# both land it at ~/.local/bin/mux-indicator. A --user service inherits no login
+# PATH, so name ~/.local/bin (for the `mux` CLI the daemon polls) explicitly.
+Environment=PATH=%h/.local/bin:%h/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/.local/bin/mux-indicator
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target
