@@ -2,8 +2,9 @@
 
 Exports one tray item and updates it live: on a state/count change it re-renders
 the owned pixmap and emits NewIcon/NewStatus so the host (waybar's tray, or any
-DE's) repaints. State currently comes from a small control file (poke it for
-testing); the real feed -- `mux agent-summary` -- replaces that source later.
+DE's) repaints. State comes from `mux agent-summary` (the aggregate worst state
++ count across the namespace's sessions), polled on a timer. A manual override
+file takes precedence when present, for testing without live sessions.
 """
 import asyncio
 import os
@@ -17,13 +18,17 @@ from .render import icon_pixmap
 WATCHER = "org.kde.StatusNotifierWatcher"
 WATCHER_PATH = "/StatusNotifierWatcher"
 ITEM_PATH = "/StatusNotifierItem"
-# Interim state source: a control file "<state> <count>" (count '-'/'idle' ->
-# the all-idle check). Fixed path so a poke script always finds it.
+# State feed. MUX runs `mux agent-summary` ("<state> <count>") as the live
+# source, polled every POLL seconds. CTL is a manual override file: write
+# "<state> <count>" into it to force a value (testing without live sessions);
+# remove it to fall back to the live feed.
+MUX = os.environ.get("MUX_BIN", "mux")
+POLL = float(os.environ.get("MUX_INDICATOR_POLL", "1.5"))
 CTL = "/tmp/mux-indicator.ctl"
 
 
 class Indicator(ServiceInterface):
-    def __init__(self, state="blocked", count=2):
+    def __init__(self, state="none", count=None):
         super().__init__("org.kde.StatusNotifierItem")
         self._state = state
         self._count = count
@@ -111,26 +116,57 @@ class Indicator(ServiceInterface):
         return status
 
 
-async def _watch(item, path):
-    """Poll the control file; on change, set() from '<state> <count>'."""
+def _parse(text):
+    """'<state> <count>' -> (state, count). idle/none carry no number (the
+    badge is a check / absent), so their count normalises to None; a missing or
+    non-numeric count is None too. Returns None on empty input."""
+    parts = text.split()
+    if not parts:
+        return None
+    state = parts[0]
+    if state in ("idle", "none"):
+        return (state, None)
+    raw = parts[1] if len(parts) > 1 else "-"
+    if raw in ("-", "check"):
+        return (state, None)
+    try:
+        return (state, int(raw))
+    except ValueError:
+        return (state, None)
+
+
+def _read_override():
+    """The manual override file if present and parseable, else None."""
+    try:
+        return _parse(open(CTL).read())
+    except OSError:
+        return None
+
+
+async def _query_mux():
+    """`mux agent-summary` -> (state, count), or None if it can't be run."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            MUX, "agent-summary",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL)
+        out, _ = await proc.communicate()
+    except OSError:
+        return None
+    return _parse(out.decode("utf-8", "replace"))
+
+
+async def _watch(item):
+    """Feed the icon: the override file if present, else `mux agent-summary`.
+    Only repaints when the (state, count) actually changes."""
     last = None
     while True:
-        try:
-            mt = os.stat(path).st_mtime
-        except OSError:
-            mt = None
-        if mt is not None and mt != last:
-            last = mt
-            try:
-                parts = open(path).read().split()
-                state = parts[0]
-                raw = parts[1] if len(parts) > 1 else "-"
-                idle = raw in ("-", "idle", "none", "check")
-                item.set(state, None if idle else int(raw))
-                print(f"mux-indicator: set {state} {raw}", flush=True)
-            except Exception as e:
-                print(f"mux-indicator: bad poke: {e}", flush=True)
-        await asyncio.sleep(0.25)
+        cur = _read_override() or await _query_mux()
+        if cur is not None and cur != last:
+            last = cur
+            item.set(*cur)
+            print(f"mux-indicator: set {cur[0]} {cur[1]}", flush=True)
+        await asyncio.sleep(POLL)
 
 
 async def run():
@@ -143,6 +179,7 @@ async def run():
     obj = bus.get_proxy_object(WATCHER, WATCHER_PATH, intro)
     watcher = obj.get_interface(WATCHER)
     await watcher.call_register_status_notifier_item(name)
-    print(f"mux-indicator: registered {name} (poke {CTL})", flush=True)
-    asyncio.create_task(_watch(item, CTL))
+    print(f"mux-indicator: registered {name} (feed: {MUX} agent-summary, "
+          f"override {CTL})", flush=True)
+    asyncio.create_task(_watch(item))
     await asyncio.get_event_loop().create_future()  # run until killed

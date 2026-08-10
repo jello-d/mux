@@ -120,6 +120,7 @@ style)         shift; exec "$LIBEXEC/mux-style" "$@" ;;
 status-banner) shift; exec "$LIBEXEC/mux-status-banner" "$@" ;;
 agent-render)  shift; exec "$LIBEXEC/agent-state-render" "$@" ;;
 agent-emit)    shift; exec "$LIBEXEC/agent-state-emit" "$@" ;;
+agent-summary) shift; exec "$LIBEXEC/agent-state-summary" "$@" ;;
 themes)        shift; exec "$LIBEXEC/mux-themes" "$@" ;;
 check)         shift; exec "$LIBEXEC/mux-check" "$@" ;;
 esac

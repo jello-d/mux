@@ -1,0 +1,53 @@
+#!/bin/sh
+# agent-state-summary: machine-readable aggregate of agent state across a
+# namespace, for an EXTERNAL presenter (the SNI tray indicator). Prints one
+# line "<state> <count>": STATE is the worst live state across the namespace's
+# sessions (blocked > working > idle), COUNT the number of sessions in that
+# state; with no tracked agent it prints "none 0". Reuses mux-agent-state.sh so
+# the ranking and the state model never drift from the strip and the picker.
+#
+#   mux agent-summary [NS]
+#
+# Sessions are derived from the per-pane state FILES in the namespace dir, NOT
+# from `tmux list-sessions`, so this answers headless (from a tray daemon, over
+# ssh, at boot) with no tmux client. NS is the namespace (tmux socket
+# basename); with none it falls back to $TMUX, else 'default' -- the same
+# resolution mux-agent-state.sh uses.
+set -eu
+
+# Sibling libs in this script's own (colocated) libexec dir.
+_lib=$(dirname "$0")
+. "$_lib/mux-agent-state.sh"
+
+dir=$(mux_agent_dir "${1:-}")
+
+# The distinct sessions that have a tracked agent (field 2 of each state file).
+sessions=
+if [ -d "$dir" ]; then
+	for f in "$dir"/*; do
+		[ -e "$f" ] || continue
+		read -r st ss rest <"$f" || continue
+		[ -n "${ss:-}" ] || continue
+		case " $sessions " in
+		*" $ss "*) ;;
+		*) sessions="$sessions $ss" ;;
+		esac
+	done
+fi
+
+# Worst state across sessions, and how many sessions sit in it.
+worst= wr=-1 count=0
+for s in $sessions; do
+	state=$(mux_agent_state "$dir" "$s")
+	state=${state%% *}
+	[ -n "$state" ] || continue
+	r=$(mux_agent_rank "$state")
+	if [ "$r" -gt "$wr" ]; then
+		wr=$r; worst=$state; count=1
+	elif [ "$r" -eq "$wr" ]; then
+		count=$((count + 1))
+	fi
+done
+
+[ -n "$worst" ] || { echo "none 0"; exit 0; }
+printf '%s %s\n' "$worst" "$count"
