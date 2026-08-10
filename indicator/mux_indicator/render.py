@@ -2,8 +2,11 @@
 stay crisp at any tray scale.
 
 The icon is a terminal (mux is a terminal thing): a near-black rounded tile with
-a big, tall `>_` prompt as the hero, drawn in a FIXED dim grey (ornamental --
-attention belongs to the frame and badge). STATE is the frame colour + a subtle
+a big, tall `>_` prompt as the hero, drawn in a light grey LIFTED off the screen
+(ornamental, but present -- attention still belongs to the frame and badge). Its
+brightness tracks the screen so it reads the same on every state's tint. The `_`
+cursor is BLINKABLE (render with cursor=False for the off frame). STATE is the
+frame colour + a subtle
 same-hue tint in the screen, MATCHING mux's own status chips so the two read as
 one system: blocked = orange, working = pink (the brain), idle = green, none =
 grey. The BADGE is a related-but-distinct pop that overhangs the corner:
@@ -40,7 +43,9 @@ STATE_INK = {
     "idle":    (0xF4, 0xF4, 0xF6, 0xFF),   # white check
 }
 _BASE = (0x14, 0x15, 0x19)           # near-black screen
-_PROMPT_COL = (0x86, 0x88, 0x8E, 0xFF)   # dim grey -- ornamental, recedes
+_PROMPT_LIFT = 0.55  # how far the ornamental >_ lifts from the screen toward
+                     # white; higher = brighter/less recessive. Derived off the
+                     # (state-tinted) screen so contrast tracks every state.
 _BADGE_INK = (0xF4, 0xF4, 0xF6, 0xFF)    # white count on the badge
 _SHADOW = (0, 0, 0, 120)
 
@@ -74,6 +79,16 @@ def _screen(state):
     return mix + (0xFF,)
 
 
+def _prompt(state):
+    # The ornamental >_ colour: the state's screen lifted toward white, so it
+    # sits a consistent step above whatever tint that state paints -- one rule,
+    # no per-state prompt table.
+    scr = _screen(state)
+    lift = [int(scr[i] * (1 - _PROMPT_LIFT) + 0xFF * _PROMPT_LIFT)
+            for i in range(3)]
+    return tuple(lift) + (0xFF,)
+
+
 def _number(d, box, text, fnt, fill):
     # Digits centered in the badge, with tightened inter-digit tracking so a
     # two-digit count reads as one unit rather than two loose glyphs.
@@ -88,19 +103,22 @@ def _number(d, box, text, fnt, fill):
         x += advs[i] - gap
 
 
-def _hero(d, s, m):
+def _hero(d, s, m, col, cursor=True):
     # A TALL custom '>' chevron (the font's is too squat) + an underscore cursor
-    # to its RIGHT, both in the fixed dim prompt colour, with breathing room.
+    # to its RIGHT, both in the prompt colour, with breathing room. The cursor
+    # is drawn only when `cursor` is set, so a caller can blink it.
     th = max(2, int(s * 0.11))
     top = int(s * 0.30)
     bot = s - m - int(s * 0.20)
     x, w = int(s * 0.18), int(s * 0.20)
     d.line([(x, top), (x + w, (top + bot) / 2), (x, bot)],
-           fill=_PROMPT_COL, width=th, joint="curve")
+           fill=col, width=th, joint="curve")
+    if not cursor:
+        return
     cx = x + w + int(s * 0.12)
     cw, ch = int(s * 0.28), max(2, int(s * 0.09))      # wider underscore
     rlim = s - m - int(s * 0.14)
-    d.rectangle([cx, bot - ch, min(cx + cw, rlim), bot], fill=_PROMPT_COL)
+    d.rectangle([cx, bot - ch, min(cx + cw, rlim), bot], fill=col)
 
 
 def _badge(img, s, fill, ink, count):
@@ -125,7 +143,7 @@ def _badge(img, s, fill, ink, count):
         _number(d, box, str(count), _font(_SANS, int(bd * _NUM)), ink)
 
 
-def _tile(state, count, size):
+def _tile(state, count, size, cursor=True):
     s = size
     img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
@@ -134,7 +152,7 @@ def _tile(state, count, size):
     d.rounded_rectangle([m, m, s - m, s - m], max(2, s // 7),
                         fill=_screen(state), outline=frame,
                         width=max(1, s // 11))
-    _hero(d, s, m)
+    _hero(d, s, m, _prompt(state), cursor)
     bcol = STATE_BADGE.get(state)
     if bcol is not None:              # blocked/working (number), idle (check)
         _badge(img, s, bcol, STATE_INK.get(state, _BADGE_INK), count)
@@ -152,6 +170,7 @@ def _to_argb(img):
     return bytes(out)
 
 
-def icon_pixmap(state, count, sizes=(22, 32, 48)):
-    """SNI IconPixmap for a state + count. idle/none draw no badge."""
-    return [[s, s, _to_argb(_tile(state, count, s))] for s in sizes]
+def icon_pixmap(state, count, sizes=(22, 32, 48), cursor=True):
+    """SNI IconPixmap for a state + count. idle/none draw no badge. cursor=False
+    renders the blink OFF frame (the `_` cursor hidden)."""
+    return [[s, s, _to_argb(_tile(state, count, s, cursor))] for s in sizes]
