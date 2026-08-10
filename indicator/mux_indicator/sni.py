@@ -25,6 +25,10 @@ ITEM_PATH = "/StatusNotifierItem"
 MUX = os.environ.get("MUX_BIN", "mux")
 POLL = float(os.environ.get("MUX_INDICATOR_POLL", "1.5"))
 CTL = "/tmp/mux-indicator.ctl"
+# On a state/count change the `_` cursor blinks BLINK_N times at BLINK_MS each,
+# to catch the eye, then settles cursor-on.
+BLINK_N = int(os.environ.get("MUX_INDICATOR_BLINK", "3"))
+BLINK_MS = int(os.environ.get("MUX_INDICATOR_BLINK_MS", "140"))
 
 
 class Indicator(ServiceInterface):
@@ -33,16 +37,37 @@ class Indicator(ServiceInterface):
         self._state = state
         self._count = count
         self._pixmap = icon_pixmap(state, count)
+        self._blink = None
 
     def _status(self):
         return "NeedsAttention" if self._state == "blocked" else "Active"
 
-    def set(self, state, count):
-        """Update the icon live: re-render, then tell the host to repaint."""
-        self._state, self._count = state, count
-        self._pixmap = icon_pixmap(state, count)
+    def _paint(self, cursor=True):
+        self._pixmap = icon_pixmap(self._state, self._count, cursor=cursor)
         self.NewIcon()
+
+    def set(self, state, count):
+        """Update the icon live: re-render, tell the host to repaint, then blink
+        the cursor a few frames to catch the eye."""
+        self._state, self._count = state, count
+        self._paint()
         self.NewStatus(self._status())
+        if self._blink is not None:
+            self._blink.cancel()
+        self._blink = asyncio.ensure_future(self._do_blink())
+
+    async def _do_blink(self):
+        """Toggle the `_` cursor BLINK_N times, then settle cursor-on. Cancelled
+        by the next set(); always leaves the cursor showing."""
+        try:
+            for _ in range(BLINK_N):
+                self._paint(cursor=False)
+                await asyncio.sleep(BLINK_MS / 1000)
+                self._paint(cursor=True)
+                await asyncio.sleep(BLINK_MS / 1000)
+        except asyncio.CancelledError:
+            self._paint(cursor=True)
+            raise
 
     @dbus_property(access=PropertyAccess.READ)
     def Category(self) -> "s":
