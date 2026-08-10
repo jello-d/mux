@@ -1,0 +1,5 @@
+# Python build detritus from `pip install .` / `pipx install .` and py_compile.
+__pycache__/
+*.egg-info/
+build/
+dist/
