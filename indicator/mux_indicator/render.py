@@ -39,7 +39,7 @@ STATE_BADGE = {
 # bright-pink work badge, white for the idle check.
 STATE_INK = {
     "blocked": (0xFF, 0xF6, 0xA8, 0xFF),   # light yellow, pops on red
-    "working": (0xFF, 0xDA, 0xEC, 0xFF),   # light pink, ~1/3 toward white
+    "working": (0xFF, 0xE2, 0xBC, 0xFF),   # warm peach, a drop brighter
     "idle":    (0xF4, 0xF4, 0xF6, 0xFF),   # white check
 }
 _BASE = (0x14, 0x15, 0x19)           # near-black screen
@@ -54,7 +54,7 @@ _SHADOW = (0, 0, 0, 120)
 
 # Geometry, as fractions of the icon size.
 _BADGE_F = 0.65    # badge diameter (overhangs the corner)
-_MARGIN = 0.07     # small tile inset -> the terminal reaches near the edge
+_MARGIN = 0.0      # tile inset as a fraction; 0 = frame fills the tile
 _NUM = 1.10        # badge number, blown up to fill / clip the round badge
 _TINT = 0.14       # how much state hue bleeds into the near-black screen
 _TRACK = 0.28      # inter-digit tracking to pull, e.g., "12" tighter
@@ -154,8 +154,8 @@ def _tile(state, count, size, cursor=True):
     img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     frame = STATE_FRAME.get(state, STATE_FRAME["none"])
-    m = max(2, int(s * _MARGIN))
-    d.rounded_rectangle([m, m, s - m, s - m], max(2, s // 7),
+    m = max(0, round(s * _MARGIN))
+    d.rounded_rectangle([m, m, s - 1 - m, s - 1 - m], max(2, s // 7),
                         fill=_screen(state), outline=frame,
                         width=max(1, s // 11))
     _hero(d, s, m, _prompt(state), cursor)
