@@ -200,11 +200,37 @@ async def run():
     bus.export(ITEM_PATH, item)
     name = f"org.kde.StatusNotifierItem-{os.getpid()}-1"
     await bus.request_name(name)
-    intro = await bus.introspect(WATCHER, WATCHER_PATH)
-    obj = bus.get_proxy_object(WATCHER, WATCHER_PATH, intro)
-    watcher = obj.get_interface(WATCHER)
-    await watcher.call_register_status_notifier_item(name)
-    print(f"mux-indicator: registered {name} (feed: {MUX} agent-summary, "
-          f"override {CTL})", flush=True)
+
+    async def register():
+        try:
+            intro = await bus.introspect(WATCHER, WATCHER_PATH)
+            obj = bus.get_proxy_object(WATCHER, WATCHER_PATH, intro)
+            w = obj.get_interface(WATCHER)
+            await w.call_register_status_notifier_item(name)
+            print(f"mux-indicator: registered {name} (feed: {MUX} "
+                  f"agent-summary, override {CTL})", flush=True)
+        except Exception as e:
+            print(f"mux-indicator: register failed: {e}", flush=True)
+
+    # (Re)register whenever the tray watcher (waybar) appears, so a `wb restart`
+    # or a late-starting bar never leaves us invisible.
+    di = await bus.introspect("org.freedesktop.DBus", "/org/freedesktop/DBus")
+    dobj = bus.get_proxy_object("org.freedesktop.DBus",
+                                "/org/freedesktop/DBus", di)
+    dbus = dobj.get_interface("org.freedesktop.DBus")
+
+    def on_owner(n, old, new):
+        if n == WATCHER and new:
+            asyncio.get_event_loop().create_task(register())
+    dbus.on_name_owner_changed(on_owner)
+
+    try:
+        owner = await dbus.call_get_name_owner(WATCHER)
+    except Exception:
+        owner = ""
+    if owner:
+        await register()
+    else:
+        print("mux-indicator: waiting for the tray watcher", flush=True)
     asyncio.create_task(_watch(item))
     await asyncio.get_event_loop().create_future()  # run until killed
