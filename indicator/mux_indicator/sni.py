@@ -19,12 +19,13 @@ WATCHER = "org.kde.StatusNotifierWatcher"
 WATCHER_PATH = "/StatusNotifierWatcher"
 ITEM_PATH = "/StatusNotifierItem"
 # State feed. MUX runs `mux agent-summary` ("<state> <count>") as the live
-# source, polled every POLL seconds. CTL is a manual override file: write
-# "<state> <count>" into it to force a value (testing without live sessions);
-# remove it to fall back to the live feed.
+# source, polled every POLL seconds. CTL is an OPT-IN manual override file for
+# testing: set MUX_INDICATOR_CTL to a path and write "<state> <count>" into it
+# to force a value. UNSET by default -- so the deployed service reads ONLY the
+# live feed and no stray /tmp file can silently pin it.
 MUX = os.environ.get("MUX_BIN", "mux")
 POLL = float(os.environ.get("MUX_INDICATOR_POLL", "1.5"))
-CTL = "/tmp/mux-indicator.ctl"
+CTL = os.environ.get("MUX_INDICATOR_CTL")
 # On a state/count change the `_` cursor blinks BLINK_N times at BLINK_MS each,
 # to catch the eye, then settles cursor-on.
 BLINK_N = int(os.environ.get("MUX_INDICATOR_BLINK", "3"))
@@ -161,7 +162,10 @@ def _parse(text):
 
 
 def _read_override():
-    """The manual override file if present and parseable, else None."""
+    """The opt-in override file (MUX_INDICATOR_CTL) if set + parseable, else
+    None -- so with the env unset the live feed is the only source."""
+    if not CTL:
+        return None
     try:
         return _parse(open(CTL).read())
     except OSError:
@@ -207,8 +211,8 @@ async def run():
             obj = bus.get_proxy_object(WATCHER, WATCHER_PATH, intro)
             w = obj.get_interface(WATCHER)
             await w.call_register_status_notifier_item(name)
-            print(f"mux-indicator: registered {name} (feed: {MUX} "
-                  f"agent-summary, override {CTL})", flush=True)
+            print(f"mux-indicator: registered {name} "
+                  f"(feed: {MUX} agent-summary)", flush=True)
         except Exception as e:
             print(f"mux-indicator: register failed: {e}", flush=True)
 
