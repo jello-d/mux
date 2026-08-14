@@ -28,8 +28,8 @@ POLL = float(os.environ.get("MUX_INDICATOR_POLL", "1.5"))
 CTL = os.environ.get("MUX_INDICATOR_CTL")
 # On a state/count change the `_` cursor blinks BLINK_N times at BLINK_MS each,
 # to catch the eye, then settles cursor-on.
-BLINK_N = int(os.environ.get("MUX_INDICATOR_BLINK", "3"))
-BLINK_MS = int(os.environ.get("MUX_INDICATOR_BLINK_MS", "140"))
+BLINK_N = int(os.environ.get("MUX_INDICATOR_BLINK", "5"))
+BLINK_MS = int(os.environ.get("MUX_INDICATOR_BLINK_MS", "250"))
 
 
 class Indicator(ServiceInterface):
