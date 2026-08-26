@@ -1,9 +1,10 @@
 #!/bin/sh
 # install - set up mux-indicator (the SNI tray icon for mux agent-session state)
 # for the CURRENT user. Standalone: just run `./install`. This script is the
-# single source of the install procedure; tackup delegates to it
-# (modules/mux-indicator -> `install` / `install check`), so the steps are
-# identical with or without tackup, and pipx-vs-venv stays an internal detail.
+# single source of the install procedure; an integrator (a provisioning system)
+# can delegate to it by calling `install` / `install check`, so the steps are
+# identical whether or not one drives it, and pipx-vs-venv stays an internal
+# detail.
 #
 #   install [all]        build the app env + install & enable the service
 #   install app          just the app: an isolated venv + a ~/.local/bin script
@@ -61,8 +62,8 @@ uninstall() {
 }
 
 # check: the [OK]/[FAIL] MARKER contract (same as `mux check`) -- coloured ONLY
-# on a real terminal, so a caller that captures the output (tackup) repaints the
-# plain markers itself. mux owns this copy; no integrator dependency.
+# on a real terminal, so a caller that captures the output repaints the plain
+# markers itself. mux owns this copy; no integrator dependency.
 check() {
 	if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
 		_e=$(printf '\033')
