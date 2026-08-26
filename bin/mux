@@ -102,7 +102,14 @@ LIBEXEC=${_self%/*}/../libexec/mux
 # Package DATA -- the shipped defaults (themes, agents, shapes, the default
 # layout) -- lives in share, a sibling of bin/ and libexec/ under the prefix.
 # User layouts and the integrator OVERLAY (context, hosts) live in $MUX_DIR.
-MUX_SHARE=${MUX_SHARE:-${_self%/*}/../share/mux}
+#
+# Respect an exported $MUX_SHARE ONLY if it still points at a real directory: a
+# stale value -- e.g. inherited from a long-running tmux server started against
+# a since-moved or removed install -- would otherwise send every include/theme
+# lookup to a dead path. Unset or dangling, self-locate the sibling share/.
+if [ -n "${MUX_SHARE:-}" ] && [ -d "$MUX_SHARE" ]; then :   # a valid override
+else MUX_SHARE=${_self%/*}/../share/mux
+fi
 export MUX_DIR MUX_SHARE   # the helper verbs (mux themes ...) inherit both
 
 # Fast path: the helper verbs ARE standalone executables in libexec, and the
