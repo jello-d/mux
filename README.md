@@ -87,7 +87,7 @@ mux is a single entry point (`bin/mux`) that self-locates its helpers
 standard package layout. Install it wherever you keep local tools, e.g.:
 
 ```sh
-git clone https://github.com/you/mux ~/.local/opt/mux
+git clone https://github.com/jello-d/mux ~/.local/opt/mux
 ln -s ~/.local/opt/mux/bin/mux ~/.local/bin/mux   # on PATH
 ```
 
@@ -310,6 +310,8 @@ Complete command, layout, theme, and seam reference: **`man mux`** (or
 
 ## Status and license
 
-mux is stable and in daily use; it is being published as a standalone project
-extracted from a personal environment repository. A `LICENSE` will accompany the
-release.
+mux is stable and in daily use, published as a standalone project extracted
+from a personal environment repository.
+
+Copyright 2026 JFC Innovations, Inc. Licensed under the Apache License,
+Version 2.0. See [LICENSE](LICENSE).
