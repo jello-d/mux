@@ -129,7 +129,12 @@ new work clean the same way.
 
 ## Testing
 
-No automated suite in-repo today. Verify a change with:
+`test/run` runs the shell-library tests (`test/*.t`): `mux-conf` (the config
+normalizer `mux_conf_clean`) and `mux-context` (the context-seam adapter
+`mux_ctx_*`). Each is pure string logic against a library under `libexec/mux/`,
+touching nothing outside a scratch dir. Add a `test/<name>.t` (source
+`test/lib.sh`, then the library) when you add or change a library with
+non-trivial parsing. Beyond that suite, verify a change with:
 
 1. The linters above (`dash -n`, `py_compile`, `groff -z -man`).
 2. A live tmux smoke test: from a scratch tmux, `source-file share/mux/
