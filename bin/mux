@@ -240,7 +240,7 @@ _wrap_list() {   # <label> <space-separated items>
 # 0). Ends with the live layouts (go/resume/kill NAME) and colors (new COLOR).
 usage() {
         cat >&2 <<'EOF'
-usage: mux [VERB] [--bare] [NAME] [LAYOUT]
+usage: mux [OPTION] [VERB] [NAME] [LAYOUT]   (OPTION may follow VERB too)
   (no verb)                  pick a session to attach (fzf or numbered menu)
   go [NAME] [LAYOUT]         create/attach/switch; agent continues in the pane
   resume [NAME] [LAYOUT]     same, but the agent resumes (choose a conversation)
@@ -271,36 +271,42 @@ EOF
         exit "${1:-2}"
 }
 
-# --- verb (required), then options, then positionals ----------------------
+# --- options and the verb in either order, then positionals ----------------
+# ONE loop takes both: an option is an option wherever it sits, and the first
+# non-option is the VERB. Once we have a verb the loop stops at the next
+# non-option -- those are the positionals, which must stay positional. So `mux
+# --bare go` and `mux go --bare` are the same command; the flag-first form is
+# what the README and the man page have always shown, and it used to die on
+# "unknown verb: --bare".
+#
 # No verb at all -> the session picker: pick=1, then flow as an attach (cmd=go).
-cmd=${1:-}
-pick=0
-if [ -z "$cmd" ]; then
-        pick=1
-        cmd=go
-else
-        shift
-fi
-case $cmd in
-        -h|--help) usage 0 ;;
-        go|resume|kill|kill-all|reload|ls|hide|show|show-all) ;;
-        save|new|help|theme|rename|edit) ;;
-        *) echo "mux: unknown verb: $cmd" >&2; usage ;;
-esac
-
 bare=0
 force=0
 persist=0
+cmd=
 while [ "$#" -gt 0 ]; do
         case $1 in
                 --bare|-b)    bare=1; shift ;;
                 --force)      force=1; shift ;;
                 --persist|-p) persist=1; shift ;;
+                -h|--help)    usage 0 ;;
                 --) shift; break ;;
                 -*) echo "mux: unknown option: $1" >&2; usage ;;
-                *) break ;;
+                *)  if [ -n "$cmd" ]; then break; fi
+                    cmd=$1; shift ;;
         esac
 done
+
+pick=0
+if [ -z "$cmd" ]; then
+        pick=1
+        cmd=go
+fi
+case $cmd in
+        go|resume|kill|kill-all|reload|ls|hide|show|show-all) ;;
+        save|new|help|theme|rename|edit) ;;
+        *) echo "mux: unknown verb: $cmd" >&2; usage ;;
+esac
 
 # Arity per verb. --bare is meaningful only where claude is launched. kill
 # requires an explicit NAME -- it is too destructive to run against an inferred
