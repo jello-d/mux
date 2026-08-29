@@ -60,6 +60,15 @@ List sessions in the current context, each tagged with its agent-state glyph.
 .TP
 .B mux new " [" \fINAME\fR "] [" \fICOLOR\fR "] [" \fIROOT\fR ]
 Write a new layout.
+.I NAME
+and
+.I ROOT
+both default to the project \(em the git toplevel if you are in a repo, else
+the current directory, the same derivation
+.B go
+uses \(em so the layout is written under the name
+.B go
+will look for.
 .RB ' \- '
 means the default colour / no root.
 .TP

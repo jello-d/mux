@@ -19,9 +19,10 @@
 #   mux ls                 list sessions in the current context.
 #   mux new [NAME] [COLOR] [ROOT]
 #                          write a <NAME>.layout of the shared code shape. NAME
-#                          defaults to this dir's basename, ROOT to $PWD (or '-'
-#                          to omit it), COLOR to the per-mode default. --force
-#                          to overwrite.
+#                          and ROOT default to the project (the git toplevel,
+#                          else the cwd -- the same derivation go uses); ROOT
+#                          takes '-' to omit it, COLOR defaults to the
+#                          per-context default. --force to overwrite.
 #                          It lands in the (dir-linked) mux dir, so it shows as
 #                          git drift: commit to keep, or delete.
 #   mux save [NAME]        snapshot the CURRENT session's shape into a
@@ -189,6 +190,16 @@ _stems_line() {   # <kind> <ext>
         mux_data_stems "$1" "$2" | tr '\n' ' '
 }
 
+# The PROJECT a bare invocation refers to: the git toplevel if we are in a
+# repo, else the current directory. The ONE derivation, used for both the
+# default session NAME and the default root, so `mux new` writes a layout under
+# exactly the name `mux go` will later look for. They used to disagree -- new
+# took the cwd basename and go the git toplevel basename, so a `mux new` run
+# anywhere but a repo's top level wrote a layout go could never find.
+_project_base() {
+        git rev-parse --show-toplevel 2>/dev/null || pwd
+}
+
 # Work/personal (or any) filtering. A layout's SIDE is a property of its ROOT,
 # and which side the caller is on both come from the context hook (see
 # mux-context.sh); mux core just compares tokens. A layout shows when its side
@@ -351,17 +362,20 @@ layout_arg=${2:-}
 
 # --- new: write a layout from [NAME] [COLOR] [ROOT] --------------------------
 # Create a session blueprint from args -- no live session, no cd required. NAME
-# defaults to the current dir's basename, so a bare `mux new` in a project makes
-# <project>.layout rooted here. COLOR is a theme fragment name ('-' or omitted =
-# the per-mode default, no theme line); ROOT defaults to $PWD, or '-' to write
+# and ROOT both default to the PROJECT (_project_base: the git toplevel, else
+# the cwd), the same derivation `mux go` uses, so a bare `mux new` anywhere in a
+# repo makes <project>.layout rooted at the repo -- and `mux go` from anywhere
+# in that repo finds it. COLOR is a theme fragment name ('-' or omitted = the
+# per-context default, no theme line); ROOT takes '-' to write
 # NO root line (portable -- the session then roots at the launch dir). A given
 # ROOT expands a leading ~, is made absolute, and folds $HOME back to ~ so it
 # travels. --force to clobber. Needs no tmux; runs before any socket work.
 if [ "$cmd" = new ]; then
-        nw_name=${1:-$(basename "$(pwd)")}
+        nw_base=$(_project_base)
+        nw_name=${1:-$(basename "$nw_base")}
         nw_name=$(printf '%s' "$nw_name" | tr ':.' '--')
         nw_color=${2:-}
-        nw_root=${3:-$(pwd)}
+        nw_root=${3:-$nw_base}
         [ "$nw_color" = - ] && nw_color=          # '-' = default theme
         [ "$nw_root" = - ] && nw_root=            # '-' = no root line
         if [ -n "$nw_color" ] \
@@ -673,7 +687,7 @@ fi
 # Root and identity both derive from the project: the git toplevel if we are in
 # a repo, else the current directory. tmux forbids ':' and '.' in a session
 # name, so fold them to '-' in a derived name.
-base=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+base=$(_project_base)
 name=${name_arg:-$(basename "$base")}
 name=$(printf '%s' "$name" | tr ':.' '--')
 
