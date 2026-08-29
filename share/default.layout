@@ -1,0 +1,12 @@
+# The default layout: what `mux go` builds when there is neither an explicit
+# LAYOUT argument nor a per-project <NAME>.layout. Without this file a fresh
+# install could not run `mux go` at all -- the verb every quickstart opens with.
+#
+# Deliberately the same shape `mux new` writes, so the layout you get by
+# default and the layout you get once you write one agree.
+#
+# No `root` line, so the session roots at the project mux was invoked in; no
+# `theme` line, so it takes the global default (themes/defaults). To change any
+# of that for yourself, drop your own default.layout into $MUX_DIR -- a user
+# layout wins over this shipped one.
+include shapes/code
