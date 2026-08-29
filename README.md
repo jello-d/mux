@@ -167,10 +167,15 @@ root    ~/src/api
 include shapes/code      # the shared vim | agent | shell shape (from share/)
 ```
 
-`include` searches your config first (`$MUX_DIR`), then the shipped defaults
-(`$MUX_SHARE`), so `shapes/code` pulls the packaged shape while your own
-`include mylayout` finds a layout you wrote. `mux new` and `mux save` write
-layouts for you.
+Every package-data read follows one rule: your config (`$MUX_DIR`) first, then
+the shipped defaults (`$MUX_SHARE`). So `include shapes/code` pulls the
+packaged shape while your own `include mylayout` finds a layout you wrote, and
+a layout, theme, or agent profile you drop in `$MUX_DIR` under a shipped name
+overrides it. Writes (`mux new`, `mux save`, `mux theme -p`) always land in
+`$MUX_DIR`.
+
+With no layout named at all, `mux go` builds the shipped `default.layout`, so
+a fresh install works before you have written anything.
 
 ### Agents
 
@@ -185,9 +190,10 @@ resume  claude --resume
 ```
 
 A layout picks one with `agent <name>`; Claude is the default. Add any CLI by
-dropping in a profile. The state strip works for any agent whose lifecycle
-calls `mux agent-emit working|blocked|idle` (Claude Code does this via a hook
-plugin).
+dropping in a profile — `$MUX_DIR/agents/<name>.agent` for one of your own, or
+to override a shipped profile of the same name. The state strip works for any
+agent whose lifecycle calls `mux agent-emit working|blocked|idle` (Claude Code
+does this via a hook plugin).
 
 ### Themes
 

@@ -15,6 +15,14 @@ set -eu
 MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
 MUX_SHARE=${MUX_SHARE:-$(dirname "$0")/../share}
 
+# The shared $MUX_DIR-over-$MUX_SHARE resolver (mux-data.sh), so the check
+# audits the data mux would ACTUALLY read -- a default theme or layout supplied
+# by the overlay counts, and one shadowed by it is judged on the overlay copy.
+_data=$(dirname "$0")/mux-data.sh
+[ -r "$_data" ] || {
+	printf '  [FAIL] %s missing (broken install)\n' "$_data" >&2; exit 1; }
+. "$_data"
+
 # Colour the markers ONLY on a real terminal (a captured/piped run stays plain,
 # so an integrator's styler paints it and a log stays escape-free). NO_COLOR
 # honoured. The codes match the common ANSI set; mux owns this copy (its
@@ -42,11 +50,12 @@ if [ -d "$MUX_SHARE" ]; then
 			|| bad "share/$_f missing (broken install)"
 	done
 	# The default theme named by themes/defaults must resolve to a fragment.
-	if [ -f "$MUX_SHARE/themes/defaults" ]; then
+	_df=$(mux_data_find themes defaults '')
+	if [ -n "$_df" ]; then
 		_dt=$(sed -n 's/^default[[:space:]]\{1,\}\([^[:space:]#]\{1,\}\).*/\1/p' \
-			"$MUX_SHARE/themes/defaults" | head -1)
-		if [ -n "$_dt" ] && [ -f "$MUX_SHARE/themes/$_dt.theme" ]; then
-			ok "default theme '$_dt' resolves"
+			"$_df" | head -1)
+		if [ -n "$_dt" ] && [ -n "$(mux_data_find themes "$_dt" .theme)" ]
+		then ok "default theme '$_dt' resolves"
 		else bad "default theme '${_dt:-unset}' has no themes/*.theme"; fi
 	else warn "themes/defaults absent (no global default theme)"; fi
 else

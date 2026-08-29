@@ -142,6 +142,16 @@ if [ -r "$_conf_lib" ]; then . "$_conf_lib"
 else mux_conf_clean() { grep -vE '^[[:space:]]*(#|$)'; }
 fi
 
+# The ONE $MUX_DIR-over-$MUX_SHARE rule (mux_data_find / _stems / _files) for
+# every package-data read below -- layouts, shapes, themes, agent profiles. No
+# fallback here, unlike mux_conf_clean above: a normalizer has a safe degraded
+# mode, a data resolver has none (it would silently resolve nothing), so a
+# missing lib is a broken install and says so.
+_data_lib=$LIBEXEC/mux-data.sh
+[ -r "$_data_lib" ] || {
+        echo "mux: $_data_lib missing (incomplete install)" >&2; exit 1; }
+. "$_data_lib"
+
 # The shared agent-state reader (also used by the status strip) lets the session
 # picker and `mux ls` show each session's agent glyph. Cosmetic, so a missing
 # lib degrades to plain names rather than taking down core verbs (kill, reload).
@@ -163,23 +173,20 @@ else
 	mux_ctx_sockets() { :; }
 fi
 
-# Space-joined basenames (sans extension) of $1/*$2, or empty. Feeds the help so
-# `mux --help` lists the layouts and colors actually present on this box.
-# Resolve a layout REFERENCE (a launch target or an `include`): a user layout in
-# $MUX_DIR wins over a shipped one in $MUX_SHARE (a shape like shapes/code, or
-# the default). Echo the first that exists, else nothing.
+# Resolve a layout REFERENCE (a launch target or an `include`) through the
+# shared overlay rule: a user layout in $MUX_DIR wins over a shipped one in
+# $MUX_SHARE (a shape like shapes/code, or the default). Empty if neither
+# exists. A named wrapper because the call sites read as layout lookups.
 _find_layout() {   # <ref, no .layout>
-  if [ -f "$MUX_DIR/$1.layout" ]; then printf '%s' "$MUX_DIR/$1.layout"
-  elif [ -f "$MUX_SHARE/$1.layout" ]; then printf '%s' "$MUX_SHARE/$1.layout"
-  fi
+        mux_data_find '' "$1" .layout
 }
 
-_list_stems() {   # <dir> <ext>
-        [ -d "$1" ] || return 0
-        for _f in "$1"/*"$2"; do
-                [ -e "$_f" ] || continue
-                _b=${_f##*/}; printf '%s ' "${_b%"$2"}"
-        done
+# Space-joined NAMEs for one data kind -- what the help listings and the theme
+# cycler want (one line, or a word-splittable list). Feeds `mux --help`, so it
+# lists the themes and agents actually available on this box, shipped ones and
+# overlay ones alike.
+_stems_line() {   # <kind> <ext>
+        mux_data_stems "$1" "$2" | tr '\n' ' '
 }
 
 # Work/personal (or any) filtering. A layout's SIDE is a property of its ROOT,
@@ -199,9 +206,7 @@ _ensure_side() {
 # one-side-or-the-other view `mux ls` gives for sessions.
 _list_layouts() {
         _ensure_side
-        [ -d "$MUX_DIR" ] || return 0
-        for _f in "$MUX_DIR"/*.layout; do
-                [ -e "$_f" ] || continue
+        mux_data_files '' .layout | while IFS= read -r _f; do
                 _rt=$(awk '$1=="root"{print $2; exit}' "$_f")
                 case "$(mux_ctx_side "$_rt")" in
                         shared|"$_cur_side") ;;
@@ -260,9 +265,9 @@ EOF
         echo >&2
         _wrap_list "  layouts (go/resume NAME):  " "$(_list_layouts)"
         _wrap_list "  colors  (new NAME COLOR):  " \
-                "$(_list_stems "$MUX_SHARE/themes" .theme)"
+                "$(_stems_line themes .theme)"
         _wrap_list "  agents  (agent NAME):      " \
-                "$(_list_stems "$MUX_SHARE/agents" .agent)"
+                "$(_stems_line agents .agent)"
         exit "${1:-2}"
 }
 
@@ -354,9 +359,9 @@ if [ "$cmd" = new ]; then
         [ "$nw_color" = - ] && nw_color=          # '-' = default theme
         [ "$nw_root" = - ] && nw_root=            # '-' = no root line
         if [ -n "$nw_color" ] \
-           && [ ! -f "$MUX_SHARE/themes/$nw_color.theme" ]; then
+           && [ -z "$(mux_data_find themes "$nw_color" .theme)" ]; then
                 echo "mux: unknown theme: $nw_color" \
-                        "(no $MUX_SHARE/themes/$nw_color.theme)" >&2
+                        "(see: mux help colors)" >&2
                 exit 1
         fi
         case $nw_root in                          # expand input to absolute
@@ -434,8 +439,7 @@ _sgr_style() {          # <style>
 help_colors() {
         echo 'colors -- `mux new NAME COLOR`, or a `theme` line in a layout:'
         echo
-        for _f in "$MUX_DIR"/themes/*.theme; do
-                [ -e "$_f" ] || continue
+        mux_data_files themes .theme | while IFS= read -r _f; do
                 _n=${_f##*/}; _n=${_n%.theme}
                 _cf=$(mktemp); mux_conf_clean < "$_f" > "$_cf"
                 _bar=$(awk '$1=="bar"{sub(/^bar[ \t]+/,"");print;exit}' "$_cf")
@@ -464,8 +468,8 @@ help_colors() {
                 printf ' %s sel %s   %-12s %s\n' \
                         "$(_sgr_style "$_sel")" "$_RST" "$_bg" "$_fg"
         done
-        _d=$MUX_SHARE/themes/defaults
-        [ -f "$_d" ] || return 0
+        _d=$(mux_data_find themes defaults '')
+        [ -n "$_d" ] || return 0
         # The global default (themes/defaults); a context may override it via
         # the context hook (a per-context theme), not probed by this summary.
         printf '\n  default theme:  %s\n' \
@@ -525,8 +529,7 @@ help_layouts() {
         [ "$_cur_side" = default ] || _tag=" [$_cur_side]"
         printf 'layouts%s -- `mux go NAME`:\n' "$_tag"
         echo
-        for _f in "$MUX_DIR"/*.layout; do
-                [ -e "$_f" ] || continue
+        mux_data_files '' .layout | while IFS= read -r _f; do
                 _n=${_f##*/}; _n=${_n%.layout}
                 _flat=$(_flat_layout "$_f" 0)
                 _th=$(printf '%s\n' "$_flat" | awk '$1=="theme"{print $2;exit}')
@@ -537,8 +540,9 @@ help_layouts() {
                 esac
                 printf '  %s' "$_n"
                 if [ -n "$_th" ]; then          # theme name in its own colour
+                        _tf=$(mux_data_find themes "$_th" .theme)
                         _tb=$(mux_conf_clean \
-                            < "$MUX_SHARE/themes/$_th.theme" 2>/dev/null \
+                            < "${_tf:-/dev/null}" 2>/dev/null \
                             | awk '$1=="bar"{sub(/^bar[ \t]+/,"");print;exit}')
                         printf '  theme %s %s %s' \
                                 "$(_sgr_style "$_tb")" "$_th" "$_RST"
@@ -626,8 +630,7 @@ help_agents() {
         echo 'agents -- the CLI a `pane agent` runs; choose per session with an'
         echo '`agent <name>` line in a layout (or `pane <name>` for one pane):'
         echo
-        for _f in "$MUX_DIR"/agents/*.agent; do
-                [ -e "$_f" ] || continue
+        mux_data_files agents .agent | while IFS= read -r _f; do
                 _n=${_f##*/}; _n=${_n%.agent}
                 _cf=$(mktemp); mux_conf_clean < "$_f" > "$_cf"
                 _go=$(awk '$1=="go"{sub(/^go[ \t]+/,"");print;exit}' "$_cf")
@@ -639,8 +642,11 @@ help_agents() {
                 printf '    go      %s\n' "${_go:-<none>}"
                 printf '    resume  %s\n' "${_rs:-<none>}"
         done
-        printf '\n  profiles: %s/agents/<name>.agent' "$MUX_SHARE"
-        printf ' (a `go` and a `resume` line).\n'
+        printf '\n  profiles: <name>.agent, a `go` line and a `resume` line:\n'
+        printf '    %s/agents\n' "$MUX_DIR"
+        printf '      (yours -- a profile here overrides a shipped one)\n'
+        printf '    %s/agents\n' "$MUX_SHARE"
+        printf '      (shipped)\n'
         printf '  add a CLI by dropping in a profile; strip state also needs'
         printf '\n  a hook producer (claude: plugin; gemini: modules/gemini).\n'
 }
@@ -849,7 +855,7 @@ _theme_cycle() {        # next|prev CURRENT "space list" -> neighbour stem
         done
 }
 if [ "$cmd" = theme ]; then
-        _themes=$(_list_stems "$MUX_SHARE/themes" .theme)
+        _themes=$(_stems_line themes .theme)
         if [ -z "$name_arg" ]; then
                 if [ -n "${TMUX:-}" ]; then
                         _s=$(tm display-message -p '#{session_name}')
@@ -868,7 +874,7 @@ if [ "$cmd" = theme ]; then
                 next|prev) _t=$(_theme_cycle "$name_arg" "$_c" "$_themes") ;;
                 *)         _t=$name_arg ;;
         esac
-        { [ -n "$_t" ] && [ -f "$MUX_SHARE/themes/$_t.theme" ]; } || {
+        { [ -n "$_t" ] && [ -n "$(mux_data_find themes "$_t" .theme)" ]; } || {
                 echo "mux: unknown theme: ${_t:-$name_arg}" >&2; exit 1; }
         tm set-option -t "$_s" @mux-theme "$_t"
         [ -x "$LIBEXEC/mux-style" ] \
@@ -1085,18 +1091,24 @@ expand_tilde() {
 # Agent PROFILES make the "agent pane" pluggable, and are the ONE Claude
 # coupling in the front end -- now behind a file, so another CLI (gemini, codex)
 # is just a profile and mux can run with no Claude at all. A profile is data in
-# $MUX_SHARE/agents/<name>.agent: a `go` line and a `resume` line, each a shell
-# command. `mux go` runs the agent's `go` (continue the recent conversation),
-# `mux resume` its `resume` (pick one), --bare runs neither (a plain shell).
-# Claude is the default; a layout selects another with `agent <name>`.
-AGENTS_DIR=$MUX_SHARE/agents
+# agents/<name>.agent: a `go` line and a `resume` line, each a shell command.
+# `mux go` runs the agent's `go` (continue the recent conversation), `mux
+# resume` its `resume` (pick one), --bare runs neither (a plain shell). Claude
+# is the default; a layout selects another with `agent <name>`. Resolved
+# through the shared overlay rule like every other data kind, so a profile in
+# $MUX_DIR/agents overrides its shipped twin and `mux help agents` lists
+# exactly what a pane can actually run.
+_find_agent() {   # <name>
+        mux_data_find agents "$1" .agent
+}
 
 # agent_launch NAME -> the command NAME's pane runs for THIS verb (go/resume),
 # empty under --bare. An unknown agent (no profile) fails loud.
 agent_launch() {
-        _af=$AGENTS_DIR/$1.agent
-        [ -f "$_af" ] || {
-                echo "mux: unknown agent: $1 (no $_af)" >&2; exit 1; }
+        _af=$(_find_agent "$1")
+        [ -n "$_af" ] || {
+                echo "mux: unknown agent: $1 (see: mux help agents)" >&2
+                exit 1; }
         [ "$bare" -eq 1 ] && return 0
         mux_conf_clean < "$_af" \
                 | awk -v v="$cmd" '$1==v{sub("^"v"[ \t]+","");print;exit}'
@@ -1108,7 +1120,7 @@ agent_launch() {
 shape_cmd() {
         case $1 in
         agent) agent_launch "$active_agent" ;;
-        *)     if [ -f "$AGENTS_DIR/$1.agent" ]; then agent_launch "$1"
+        *)     if [ -n "$(_find_agent "$1")" ]; then agent_launch "$1"
                else printf '%s' "$1"; fi ;;
         esac
 }
@@ -1347,9 +1359,9 @@ done <"$flat"
 # after boot/kill-all. The file is the source of truth, and its presence
 # guarantees mux-themes load will push @theme-<name>-* at server start.
 if [ -n "$want_theme" ]; then
-	[ -f "$MUX_SHARE/themes/$want_theme.theme" ] || {
+	[ -n "$(mux_data_find themes "$want_theme" .theme)" ] || {
 		echo "mux: unknown theme: $want_theme" \
-			"(no $MUX_SHARE/themes/$want_theme.theme)" >&2
+			"(see: mux help colors)" >&2
 		exit 1
 	}
 fi
@@ -1358,9 +1370,9 @@ fi
 # claude. Validate the profile exists here so a typo fails at build with a clear
 # message, not later as an empty pane command.
 if [ -n "$want_agent" ]; then
-	[ -f "$AGENTS_DIR/$want_agent.agent" ] || {
+	[ -n "$(_find_agent "$want_agent")" ] || {
 		echo "mux: unknown agent: $want_agent" \
-			"(no $AGENTS_DIR/$want_agent.agent)" >&2
+			"(see: mux help agents)" >&2
 		exit 1
 	}
 fi
