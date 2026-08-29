@@ -6,10 +6,13 @@
 # repeat press walks to the next-most-urgent. Silent by contract: it runs from a
 # key binding, whose stdout tmux would pop in a view-mode buffer over the pane.
 #
-#   mux-next-blocked CLIENT [CURRENT]
+#   mux next-blocked [CLIENT [CURRENT]]
 #
-# CURRENT (the session to skip) defaults to CLIENT's own session, so the key
-# binding need only pass the client. Longest-blocked == earliest epoch:
+# CLIENT defaults to the client of the pane we are running in, so the bare CLI
+# form resolves itself; the `b` binding passes it explicitly (#{client_name})
+# since a key-triggered run-shell has no unambiguous "current" client. CURRENT
+# (the session to skip) defaults to CLIENT's own session, so the key binding
+# need only pass the client. Longest-blocked == earliest epoch:
 # mux_agent_state returns "STATE EPOCH" where EPOCH is when the state began, so
 # the smallest epoch is the oldest wait.
 set -eu
@@ -19,7 +22,16 @@ _lib=$(dirname "$0")
 
 client=${1:-}
 current=${2:-}
-if [ -z "$current" ] && [ -n "$client" ]; then
+# No CLIENT given (the bare `mux next-blocked`): resolve the client of the pane
+# we are in, which means we have to BE in one -- switch-client needs a target.
+if [ -z "$client" ]; then
+	[ -n "${TMUX:-}" ] || {
+		echo "mux: next-blocked must run in a session" >&2; exit 1; }
+	client=$(tmux display-message -p '#{client_name}' 2>/dev/null || true)
+	[ -n "$client" ] || {
+		echo "mux: could not identify the client" >&2; exit 1; }
+fi
+if [ -z "$current" ]; then
 	current=$(tmux display-message -c "$client" -p '#{client_session}' \
 		2>/dev/null || true)
 fi

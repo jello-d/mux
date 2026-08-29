@@ -130,6 +130,7 @@ agent-emit)    shift; exec "$LIBEXEC/agent-state-emit" "$@" ;;
 agent-summary) shift; exec "$LIBEXEC/agent-state-summary" "$@" ;;
 themes)        shift; exec "$LIBEXEC/mux-themes" "$@" ;;
 check)         shift; exec "$LIBEXEC/mux-check" "$@" ;;
+next-blocked)  shift; exec "$LIBEXEC/mux-next-blocked" "$@" ;;
 esac
 
 # The ONE comment/normalize rule (mux_conf_clean) for every config parse below
@@ -278,7 +279,7 @@ fi
 case $cmd in
         -h|--help) usage 0 ;;
         go|resume|kill|kill-all|reload|ls|hide|show|show-all) ;;
-        save|new|help|next-blocked|theme|rename|edit) ;;
+        save|new|help|theme|rename|edit) ;;
         *) echo "mux: unknown verb: $cmd" >&2; usage ;;
 esac
 
@@ -300,7 +301,7 @@ done
 # requires an explicit NAME -- it is too destructive to run against an inferred
 # session; kill-all takes none (it hits the whole socket, behind a prompt).
 case $cmd in
-        reload|ls|kill-all|show-all|next-blocked) [ "$#" -eq 0 ] || {
+        reload|ls|kill-all|show-all) [ "$#" -eq 0 ] || {
                 echo "mux: $cmd takes no arguments" >&2; usage; } ;;
         kill|hide|show) [ "$#" -eq 1 ] || {
                 echo "mux: $cmd needs a session NAME (see: mux ls)" >&2
@@ -811,23 +812,6 @@ if [ "$cmd" = ls ]; then
         else
                 printf '%s\n' "$_ls"
         fi
-        exit 0
-fi
-
-# --- next-blocked: jump to the session that has needed you longest ----------
-# The CLI twin of the `prefix b` binding; both run mux-next-blocked. Must run
-# inside a session, so the client (its tty) is known. The `b` binding passes the
-# acting client explicitly (#{client_name}) since a key-triggered run-shell has
-# no unambiguous "current" client to resolve; the bare CLI form resolves it.
-if [ "$cmd" = next-blocked ]; then
-        [ -n "${TMUX:-}" ] || {
-                echo "mux: next-blocked must run in a session" >&2; exit 1; }
-        _nb=$LIBEXEC/mux-next-blocked
-        [ -x "$_nb" ] || { echo "mux: $_nb missing (incomplete install)" >&2
-                exit 1; }
-        _cl=${2:-$(tm display-message -p '#{client_name}' 2>/dev/null || true)}
-        _cs=${3:-$(tm display-message -p '#{client_session}' 2>/dev/null||true)}
-        "$_nb" "$_cl" "$_cs"
         exit 0
 fi
 
