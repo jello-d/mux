@@ -1,8 +1,13 @@
 #!/bin/sh
-# mux-themes: compile the mux colour palette from $MUX_SHARE/themes/*.theme into
-# tmux @theme-* options, so the palette is authored as data beside the layouts
+# mux-themes: compile the mux colour palette from themes/*.theme into tmux
+# @theme-* options, so the palette is authored as data beside the layouts
 # instead of inline in tmux.conf. mux-style reads those options live every
 # status tick; it neither knows nor cares that they came from files.
+#
+# Fragments are resolved through the shared overlay rule (mux-data.sh): the
+# shipped set in $MUX_SHARE/themes, with anything in $MUX_DIR/themes replacing
+# a shipped fragment of the same name and adding any name of its own. So the
+# palette the SERVER gets is the same set `mux help colors` lists.
 #
 #   mux-themes load   push the palette to the AMBIENT tmux server ($TMUX) and
 #                     stamp it. Run from tmux.conf `run-shell` at server start,
@@ -27,12 +32,19 @@
 set -eu
 
 MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
-# Themes are package DATA (shipped defaults), so they live in share, not the
-# $MUX_DIR overlay. Inherited from the mux entry point; self-located as a
-# fallback (share is a sibling of this libexec dir under the prefix).
+# The shipped defaults root -- the FALLBACK set, which the $MUX_DIR overlay
+# may override per fragment (see mux-data.sh). Inherited from the mux entry
+# point; self-located as a fallback (share/ is a sibling of libexec/).
 MUX_SHARE=${MUX_SHARE:-$(dirname "$0")/../share}
-THEMES=$MUX_SHARE/themes
 STAMPDIR=${MUX_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/mux}
+
+# The shared $MUX_DIR-over-$MUX_SHARE resolver (see mux-data.sh), so a theme
+# dropped in $MUX_DIR/themes is COMPILED, not just listed -- the palette the
+# server gets and the palette the help shows come from one resolution.
+_data=$(dirname "$0")/mux-data.sh
+[ -r "$_data" ] || {
+	echo "mux-themes: $_data missing (incomplete install)" >&2; exit 1; }
+. "$_data"
 
 # The shared comment/normalize rule (see bin/mux); a fallback strips only
 # whole-line comments so a missing lib never breaks a palette push.
@@ -47,11 +59,24 @@ if [ -r "$_ctx" ]; then . "$_ctx"
 else mux_ctx_sockets() { :; }
 fi
 
-# Content hash over every fragment (name and bytes), so a rename or an edit both
-# move it. Absent dir hashes to a constant -- pushing nothing, which is safe.
+# Every file the palette is compiled FROM: the resolved fragments plus the
+# resolved defaults file. Resolved, so an overlay fragment REPLACES its shipped
+# twin rather than being pushed after it.
+theme_inputs() {
+	mux_data_files themes .theme
+	_td=$(mux_data_find themes defaults '')
+	[ -n "$_td" ] && printf '%s\n' "$_td"
+	return 0
+}
+
+# Content hash over that resolved set (paths and bytes, since sha256sum prints
+# the path), so an edit, a rename, or an overlay fragment appearing or being
+# removed all move it. An empty set hashes to a constant -- pushing nothing,
+# which is safe.
 themes_hash() {
-	[ -d "$THEMES" ] || { echo none; return 0; }
-	find "$THEMES" -type f | LC_ALL=C sort | xargs -r sha256sum \
+	_tf=$(theme_inputs)
+	[ -n "$_tf" ] || { echo none; return 0; }
+	printf '%s\n' "$_tf" | LC_ALL=C sort | xargs -r sha256sum \
 		| sha256sum | cut -d' ' -f1
 }
 
@@ -62,10 +87,16 @@ push_palette() {
 	# Normalize each fragment via mux_conf_clean into a temp (comments, inline
 	# ` #`, trailing space, CRLF), then read from the FILE so a bad-key exit
 	# aborts. #rrggbb survives (only WHITESPACE-hash begins a comment). A bad-key
-	# exit leaks the temp, but it aborts the whole run, so that is moot.
+	# exit leaks the temps, but it aborts the whole run, so that is moot.
+	#
+	# The resolved fragment LIST goes through a file for the same reason: a
+	# `for _f in $(...)` would split a path containing a space, and piping
+	# into `while read` would put the bad-key exit in a subshell, which would
+	# carry on rather than abort.
 	_ct=$(mktemp)
-	for _f in "$THEMES"/*.theme; do
-		[ -e "$_f" ] || continue
+	_fl=$(mktemp)
+	mux_data_files themes .theme >"$_fl"
+	while IFS= read -r _f; do
 		_name=${_f##*/}
 		_name=${_name%.theme}
 		mux_conf_clean < "$_f" > "$_ct"
@@ -82,9 +113,11 @@ push_palette() {
 				exit 1 ;;
 			esac
 		done <"$_ct"
-	done
-	if [ -f "$THEMES/defaults" ]; then
-		mux_conf_clean < "$THEMES/defaults" > "$_ct"
+	done <"$_fl"
+	rm -f "$_fl"
+	_df=$(mux_data_find themes defaults '')
+	if [ -n "$_df" ]; then
+		mux_conf_clean < "$_df" > "$_ct"
 		while read -r _k _v; do
 			case $_k in
 			default) tmux "$@" set -g @theme-default "$_v" ;;

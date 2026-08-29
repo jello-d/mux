@@ -183,7 +183,9 @@ is two lines: a
 command and a
 .B resume
 command, each a shell command mux runs as the agent pane's process. Claude is
-the default; add a CLI by dropping in a profile.
+the default; add a CLI by dropping in a profile. A profile in
+.I $MUX_DIR/agents
+overrides a shipped one of the same name.
 .SH KEY BINDINGS
 Provided by the tmux fragment (prefix table unless noted):
 .TP
@@ -295,8 +297,16 @@ User session layouts (\c
 .I $MUX_DIR/context
 The optional context hook.
 .TP
+.I $MUX_DIR/{themes,agents}
+Overrides for shipped themes and agent profiles, and any of your own.
+.TP
 .I $MUX_SHARE/{themes,shapes,agents}
 Shipped palette, shape fragments, and agent profiles.
+.TP
+.I $MUX_SHARE/default.layout
+The layout
+.B go
+builds when no other one applies.
 .TP
 .I $MUX_SHARE/mux.tmux
 The tmux integration fragment.

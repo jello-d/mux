@@ -1,6 +1,6 @@
 #!/bin/sh
 # test/mux-next-blocked.t - `mux next-blocked` end to end: that the verb REACHES
-# libexec/mux/mux-next-blocked at all (it used to hit the zero-arity gate, so
+# libexec/mux-next-blocked at all (it used to hit the zero-arity gate, so
 # `prefix b` popped usage text instead of jumping), that the oldest blocked
 # session wins, and that the client argument survives the dispatch.
 #
