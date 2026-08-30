@@ -5,11 +5,16 @@
 # share, and man live. The runtime command stays `mux` (bin/mux); this only
 # wires it in and audits it.
 #
-#   ./setup.sh install     link bin + libexec + share + man into the prefix
+#   ./setup.sh install     link core bin + libexec + share + man (NO indicator)
 #   ./setup.sh uninstall   remove those links
 #   ./setup.sh check       audit install + deps; [OK]/[FAIL] markers; drift rc
 #   ./setup.sh test        run the in-repo test suite (test/run)
 #   ./setup.sh version     the packaged version
+#   ./setup.sh all         install + the optional tray indicator
+#   ./setup.sh indicator [VERB]  drive the optional indicator sub-package (a
+#                          passthrough to indicator/setup.sh; VERB defaults to
+#                          install). Kept OUT of `install`: it is Python + a
+#                          daemon, unlike core mux (shell, no deps but tmux).
 #
 # POSIX sh, non-privileged. PREFIX (default ~/.local) and the XDG_* vars
 # override the destinations, so a test drives it against a scratch dir. The
@@ -74,6 +79,7 @@ do_check() {
   "$_root/bin/mux" check || RC=1      # deps + package data (its own markers)
 }
 
+_U="usage: setup.sh [install|uninstall|check|test|version|all|indicator]"
 case "${1:-help}" in
   install)   do_install ;;
   uninstall) do_uninstall ;;
@@ -81,9 +87,8 @@ case "${1:-help}" in
   test)      exec sh "$_root/test/run" ;;
   version)   _v=$(git -C "$_root" describe --tags --always 2>/dev/null || true)
              echo "${_v:-$PKG (unversioned)}" ;;
-  -h|--help|help)
-    echo "usage: ./setup.sh [install|uninstall|check|test|version]" ;;
-  *) echo "setup.sh: unknown command '${1:-}'" >&2
-     echo "usage: setup.sh [install|uninstall|check|test|version]" >&2
-     exit 2 ;;
+  all)       do_install; sh "$_root/indicator/setup.sh" install ;;
+  indicator) shift; exec sh "$_root/indicator/setup.sh" "$@" ;;  # passthrough
+  -h|--help|help) echo "$_U" ;;
+  *) echo "setup.sh: unknown command '${1:-}'" >&2; echo "$_U" >&2; exit 2 ;;
 esac
