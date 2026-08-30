@@ -30,7 +30,7 @@ MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
 # Themes are package DATA (shipped defaults), so they live in share, not the
 # $MUX_DIR overlay. Inherited from the mux entry point; self-located as a
 # fallback (share is a sibling of this libexec dir under the prefix).
-MUX_SHARE=${MUX_SHARE:-$(dirname "$0")/../share/mux}
+MUX_SHARE=${MUX_SHARE:-$(dirname "$0")/../share}
 THEMES=$MUX_SHARE/themes
 STAMPDIR=${MUX_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/mux}
 

@@ -98,7 +98,7 @@ case $_self in
 *) _self=$(command -v -- "$_self" 2>/dev/null || echo "$_self") ;;
 esac
 _self=$(readlink -f -- "$_self" 2>/dev/null || echo "$_self")
-LIBEXEC=${_self%/*}/../libexec/mux
+LIBEXEC=${_self%/*}/../libexec
 # Package DATA -- the shipped defaults (themes, agents, shapes, the default
 # layout) -- lives in share, a sibling of bin/ and libexec/ under the prefix.
 # User layouts and the integrator OVERLAY (context, hosts) live in $MUX_DIR.
@@ -108,7 +108,7 @@ LIBEXEC=${_self%/*}/../libexec/mux
 # a since-moved or removed install -- would otherwise send every include/theme
 # lookup to a dead path. Unset or dangling, self-locate the sibling share/.
 if [ -n "${MUX_SHARE:-}" ] && [ -d "$MUX_SHARE" ]; then :   # a valid override
-else MUX_SHARE=${_self%/*}/../share/mux
+else MUX_SHARE=${_self%/*}/../share
 fi
 export MUX_DIR MUX_SHARE   # the helper verbs (mux themes ...) inherit both
 

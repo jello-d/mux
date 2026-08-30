@@ -13,7 +13,7 @@ set -eu
 # fallback so `mux-check` also works when run by its own path. share/ is a
 # sibling of this libexec dir under the install prefix.
 MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
-MUX_SHARE=${MUX_SHARE:-$(dirname "$0")/../share/mux}
+MUX_SHARE=${MUX_SHARE:-$(dirname "$0")/../share}
 
 # Colour the markers ONLY on a real terminal (a captured/piped run stays plain,
 # so an integrator's styler paints it and a log stays escape-free). NO_COLOR
