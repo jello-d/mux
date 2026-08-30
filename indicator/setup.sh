@@ -1,16 +1,16 @@
 #!/bin/sh
-# install - set up mux-indicator (the SNI tray icon for mux agent-session state)
-# for the CURRENT user. Standalone: just run `./install`. This script is the
-# single source of the install procedure; an integrator (a provisioning system)
-# can delegate to it by calling `install` / `install check`, so the steps are
-# identical whether or not one drives it, and pipx-vs-venv stays an internal
-# detail.
+# setup.sh - set up mux-indicator (the SNI tray icon for mux agent-session
+# state) for the CURRENT user. Standalone: just run `./setup.sh`. This script is
+# the single source of the install procedure; an integrator (a provisioning
+# system) can delegate to it by calling `setup.sh install` / `setup.sh check`,
+# so the steps are identical whether or not one drives it, and pipx-vs-venv
+# stays an internal detail.
 #
-#   install [all]        build the app env + install & enable the service
-#   install app          just the app: an isolated venv + a ~/.local/bin script
-#   install service      just the systemd --user unit (install + enable + start)
-#   install check        verify the install ([OK]/[FAIL]/[WARN] markers)
-#   install uninstall    remove the unit + the ~/.local/bin script
+#   setup.sh install     build the app env + install & enable the service
+#   setup.sh app         just the app: an isolated venv + a ~/.local/bin script
+#   setup.sh service     just the systemd --user unit (install + enable + start)
+#   setup.sh check       verify the install ([OK]/[FAIL]/[WARN] markers)
+#   setup.sh uninstall   remove the unit + the ~/.local/bin script
 #
 # All userspace: NO sudo. Idempotent (safe to re-run; adopts what exists). Needs
 # python3 (for the venv) and, for the service, a systemd --user manager. A tray
@@ -90,11 +90,12 @@ check() {
 	return "$RC"
 }
 
-case "${1:-all}" in
-	all)       app; service ;;
+case "${1:-install}" in
+	install)   app; service ;;
 	app)       app ;;
 	service)   service ;;
 	check)     check ;;
 	uninstall) uninstall ;;
-	*) echo "usage: install [all|app|service|check|uninstall]" >&2; exit 2 ;;
+	*) echo "usage: setup.sh [install|app|service|check|uninstall]" >&2
+	   exit 2 ;;
 esac

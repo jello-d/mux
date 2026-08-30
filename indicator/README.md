@@ -17,7 +17,7 @@ tray item needs one), so it lives here and installs on its own.
 One command, all userspace (no sudo):
 
 ```sh
-./install                          # from this directory
+./setup.sh                          # from this directory
 ```
 
 It builds an isolated environment (a venv, so no system-package or
@@ -30,16 +30,16 @@ introspection system dep, and `Pillow`) come from `pyproject.toml` and are
 pulled in automatically. Sub-commands:
 
 ```sh
-./install app         # just the command (no service)
-./install service     # just the systemd --user unit
-./install check       # verify the install
-./install uninstall   # remove the unit + the ~/.local/bin command
+./setup.sh app         # just the command (no service)
+./setup.sh service     # just the systemd --user unit
+./setup.sh check       # verify the install
+./setup.sh uninstall   # remove the unit + the ~/.local/bin command
 ```
 
 Requires: `python3`, a systemd **user** manager (for the service), a running
 StatusNotifierItem host (waybar's tray, or any desktop's), and `mux` on `PATH`
 (the daemon polls `mux agent-summary` for state). Prefer `pipx`? `pipx install
-.` then `./install service` works too -- both land the command at the same
+.` then `./setup.sh service` works too -- both land the command at the same
 `~/.local/bin/mux-indicator` the unit runs.
 
 The feed is `mux agent-summary` (the aggregate worst state + session count),
