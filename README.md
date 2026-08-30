@@ -83,28 +83,28 @@ The text is the signal; colour is decoration.
 ## Install
 
 mux is a single entry point (`bin/mux`) that self-locates its helpers
-(`libexec/mux/`) and data (`share/mux/`) as siblings under one prefix — the
-standard package layout. Install it wherever you keep local tools, e.g.:
+(`libexec/`) and data (`share/`) as siblings under one prefix — the
+standard package layout. Clone it and let `setup.sh` wire it into `~/.local`:
 
 ```sh
-git clone https://github.com/jello-d/mux ~/.local/opt/mux
-ln -s ~/.local/opt/mux/bin/mux ~/.local/bin/mux   # on PATH
+git clone https://github.com/jello-d/mux ~/.mux
+~/.mux/setup.sh install    # links mux into ~/.local (bin, libexec, share, man)
 ```
 
 Then source the tmux integration from your `~/.config/tmux/tmux.conf` (or
 `~/.tmux.conf`):
 
 ```tmux
-source-file /path/to/mux/share/mux/mux.tmux           # required
-source-file /path/to/mux/share/mux/mux-opinions.tmux  # optional ergonomics
+source-file ~/.local/share/mux/mux.tmux           # required
+source-file ~/.local/share/mux/mux-opinions.tmux  # optional ergonomics
 ```
 
 `mux.tmux` reaches mux only as `mux <verb>`, so it carries no paths; it just
 needs `mux` on `PATH`. `mux-opinions.tmux` adds mouse, scroll-routing, and
 navigation defaults you can skip if you have your own.
 
-Man pages install to `share/man/man1/`; put that on your `MANPATH` for
-`man mux`.
+`setup.sh` installs the man page under `~/.local/share/man`, on the default
+`MANPATH`, so `man mux` works.
 
 ## Quickstart
 
@@ -174,12 +174,12 @@ layouts for you.
 
 ### Agents
 
-An **agent profile**, `share/mux/agents/<name>.agent`, is two lines — a `go`
+An **agent profile**, `share/agents/<name>.agent`, is two lines — a `go`
 command and a `resume` command, each a shell command mux runs as the agent
 pane's process:
 
 ```
-# share/mux/agents/claude.agent
+# share/agents/claude.agent
 go      claude --continue || claude
 resume  claude --resume
 ```
@@ -191,13 +191,13 @@ plugin).
 
 ### Themes
 
-The palette is **data**: `share/mux/themes/<name>.theme`, each naming up to six
+The palette is **data**: `share/themes/<name>.theme`, each naming up to six
 styles — `bar`, `window` (the current-window chip), `accent` (active border),
 `border` (inactive), `select` (copy-mode), `prompt`. Only `bar`/`window`/
 `accent` are required; mux derives the rest.
 
 ```
-# share/mux/themes/orange.theme
+# share/themes/orange.theme
 bar     bg=colour94 fg=colour223
 window  fg=colour232 bg=colour214 bold
 accent  fg=colour214
@@ -270,7 +270,7 @@ Provided by `mux.tmux` (prefix table unless noted; your prefix is untouched):
 - **`MUX_DIR`** — your config and overrides: layouts, the optional `context`
   hook, and theme overrides. Default `~/.config/mux`.
 - **`MUX_SHARE`** — shipped package data: themes, shapes, agents, and the tmux
-  fragments. Default: the `share/mux` sibling of the `mux` binary.
+  fragments. Default: the `share` sibling of the `mux` binary.
 - **`MUX_CACHE`** — per-socket palette stamp directory. Default `~/.cache/mux`.
 
 Defaults live in `MUX_SHARE`; your overrides and layouts live in `MUX_DIR`. mux
@@ -279,7 +279,7 @@ reads your override first, then the shipped default.
 ## How it works
 
 - **One entry point, self-locating.** `bin/mux` resolves its own path and finds
-  `../libexec/mux` and `../share/mux` beside it, so it works from any install
+  `../libexec` and `../share` beside it, so it works from any install
   prefix with no configuration. Every helper is reached as `mux <verb>`, so the
   tmux fragment and agent hooks carry no paths.
 - **Agent state** lives in per-pane files under `$XDG_RUNTIME_DIR`, namespaced
@@ -297,9 +297,9 @@ reads your override first, then the shipped default.
 ## Extending
 
 - **Add a theme:** drop `<name>.theme` in `$MUX_DIR/themes` (override) or
-  `share/mux/themes` (ship it), then `mux reload`.
+  `share/themes` (ship it), then `mux reload`.
 - **Add an agent:** drop `<name>.agent` (a `go` and a `resume` line) in
-  `share/mux/agents`, and select it with `agent <name>` in a layout.
+  `share/agents`, and select it with `agent <name>` in a layout.
 - **Mark a context:** make `$MUX_DIR/context` an executable implementing the
   three verbs above; mux picks it up automatically.
 

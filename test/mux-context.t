@@ -1,6 +1,6 @@
 #!/bin/sh
 # test/mux-context.t - the mux CONTEXT seam, mux_ctx_* in
-# libexec/mux/mux-context.sh: the adapter mapping mux core onto an optional
+# libexec/mux-context.sh: the adapter mapping mux core onto an optional
 # $MUX_DIR/context hook. A fake hook stands in for the real one -- nothing on
 # the box is touched.
 set -eu
@@ -10,7 +10,7 @@ _name=mux-context
 # Point the adapter at a hook we write per-case under $T, then source it fresh.
 MUX_CTX_HOOK=$T/context
 export MUX_CTX_HOOK
-. "$HERE/libexec/mux/mux-context.sh"
+. "$HERE/libexec/mux-context.sh"
 
 # write_hook BODY : install $BODY as the executable hook.
 write_hook() {

@@ -1,6 +1,6 @@
 # test/lib.sh - a tiny harness for mux's shell tests, sourced by each *.t.
 #
-# Sets HERE (the repo root, so a test sources libexec/mux/<lib>.sh), a private
+# Sets HERE (the repo root, so a test sources libexec/<lib>.sh), a private
 # scratch dir T (removed on exit), and fail/pass. A test sets _name, sources
 # this, then the library under test. Pure string logic; nothing outside T is
 # touched. POSIX sh; run one test with `sh test/<name>.t` or all with test/run.

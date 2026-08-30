@@ -1,11 +1,11 @@
 #!/bin/sh
 # test/mux-conf.t - the shared config normalizer, mux_conf_clean in
-# libexec/mux/mux-conf.sh: the ONE comment/normalize rule for layouts, themes,
+# libexec/mux-conf.sh: the ONE comment/normalize rule for layouts, themes,
 # and agent profiles. Pure string logic; nothing on the box is touched.
 set -eu
 _name=mux-conf
 . "$(dirname "$0")/lib.sh"
-. "$HERE/libexec/mux/mux-conf.sh"
+. "$HERE/libexec/mux-conf.sh"
 
 # ck LABEL RAW EXPECT : clean RAW (with \n \r \t escapes) and compare to EXPECT.
 ck() {
