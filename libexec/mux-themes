@@ -25,7 +25,8 @@
 # accent are required; mux-style derives border/select/prompt when a theme omits
 # them (dim border, select = the window chip, prompt = the bar). themes/defaults
 # names the global default theme (`default <name>`), used when neither the
-# session nor its context picks one. Unknown keys fail loud.
+# session nor its context picks one, and how an unset theme is DERIVED
+# (`derive hash|off`). Unknown keys fail loud.
 # The per-socket stamp lives under mux's own cache dir; a content hash gates the
 # push so an unchanged palette is free. $MUX_CACHE overrides it so an integrator
 # can point it wherever it keeps runtime stamps.
@@ -121,6 +122,7 @@ push_palette() {
 		while read -r _k _v; do
 			case $_k in
 			default) tmux "$@" set -g @theme-default "$_v" ;;
+			derive)  tmux "$@" set -g @theme-derive "$_v" ;;
 			*)
 				echo "mux-themes: defaults: bad key: $_k" >&2
 				exit 1 ;;

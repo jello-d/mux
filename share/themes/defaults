@@ -3,3 +3,15 @@
 # context's banner/title marker shows regardless of the theme. Per-context theme
 # overrides live in the context hook ($MUX_DIR/context), not here.
 default         purple
+
+# derive: how a session with no `theme` of its own gets one.
+#   hash  pick deterministically from the session NAME, so every project wears
+#         a stable colour with nothing configured -- and two projects only
+#         share one by coincidence, which `mux theme` fixes in one keystroke.
+#   off   every such session falls back to `default` above.
+# A profile's own `theme`, and a context's theme, both still win over this.
+#
+# NOTE: the choice is an index into the sorted theme set, so ADDING or REMOVING
+# a theme reshuffles the colours of every session that has not pinned one.
+# Cosmetic, and pinning one you like makes it stick.
+derive          hash

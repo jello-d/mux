@@ -1145,6 +1145,32 @@ _find_agent() {   # <name>
         mux_data_find agents "$1" .agent
 }
 
+# A theme chosen deterministically from a session NAME, so a project wears a
+# stable colour with nothing configured and two projects share one only by
+# coincidence. cksum is POSIX and its exact value does not matter -- only that
+# the same name always lands on the same theme.
+#
+# The index is into the SORTED theme set, so adding or removing a theme
+# reshuffles every session that has not pinned one. Cosmetic, and pinning is one
+# `mux theme -p` away. Deliberately NOT unique-per-live-session: an identity you
+# can learn ("api is the green one") beats one that avoids every collision but
+# changes between launches.
+_hash_theme() {   # <session name>
+        _ht=$(mux_data_stems themes .theme)
+        [ -n "$_ht" ] || return 0
+        _hn=$(printf '%s\n' "$_ht" | grep -c .)
+        [ "$_hn" -gt 0 ] || return 0
+        _hs=$(printf '%s' "$1" | cksum | awk '{print $1}')
+        printf '%s\n' "$_ht" | sed -n "$(( _hs % _hn + 1 ))p"
+}
+
+# The value of one key in themes/defaults, or empty.
+_theme_default() {  # <key>
+        _df=$(mux_data_find themes defaults '')
+        [ -n "$_df" ] || return 0
+        mux_conf_clean < "$_df" | awk -v k="$1" '$1==k{print $2; exit}'
+}
+
 # agent_launch NAME -> the command NAME's pane runs for THIS verb (go/resume),
 # empty under --bare. An unknown agent (no profile) fails loud.
 agent_launch() {
@@ -1453,11 +1479,24 @@ if [ -n "$want_agent" ]; then
 fi
 active_agent=${want_agent:-claude}
 
+# No `theme` in the profile: derive one from the session name, when
+# themes/defaults says to (`derive hash`). The priority is explicit > context >
+# derived > global default, so a profile that pins a colour and a context that
+# supplies one both still win -- this only fills the gap that used to send every
+# unconfigured session to the same global default, which is what made pinning a
+# colour the single most common reason to write a profile at all.
+if [ -z "$want_theme" ] && [ -z "${MUX_CTX_THEME:-}" ] \
+   && [ "$(_theme_default derive)" = hash ]; then
+	want_theme=$(_hash_theme "$name")
+fi
+
 # Pass 2: build. Everything is validated, so this only executes -- using the
 # now-final root for every pane's -c, wherever root sat in the source.
 have_session=0
 firstwin=
 firstpane=
+agentwin=
+agentpane=
 win=
 paneseen=0
 while read -r verb rest; do
@@ -1486,8 +1525,25 @@ while read -r verb rest; do
 		if [ "$paneseen" -gt 0 ]; then
 			tm split-window -h -t "$name:$win" -c "$root" "$proc"
 			tm select-layout -t "$name:$win" even-horizontal
+			thispane=$(tm display-message -p -t "$name:$win" \
+				'#{pane_id}')
 		else
 			tm respawn-pane -k -t "$name:$win" -c "$root" "$proc"
+			thispane=$(tm display-message -p -t "$name:$win" \
+				'#{pane_id}')
+		fi
+		# Remember the FIRST agent pane, so the session opens ON the
+		# agent: it is the pane you came to look at, and landing left of
+		# it cost a keystroke on every single launch. A `pane <name>`
+		# that names an agent counts too. Falls back to the first pane
+		# when a layout has no agent at all.
+		if [ -z "$agentpane" ]; then
+			case $rest in
+			agent) agentwin=$win; agentpane=$thispane ;;
+			*)     if [ -n "$(_find_agent "${rest%% *}")" ]; then
+				agentwin=$win; agentpane=$thispane
+			       fi ;;
+			esac
 		fi
 		paneseen=$((paneseen + 1))
 		;;
@@ -1531,9 +1587,10 @@ elif [ "$want_notify" = away ]; then
 	tm set-option -t "$name" @mux-notify-always 0
 fi
 
-# Land on the first window and its first pane (by id, so base-index is
-# irrelevant).
-tm select-window -t "$name:$firstwin"
-tm select-pane -t "$firstpane"
+# Land on the agent pane if the layout has one, else the first pane (by id, so
+# base-index is irrelevant). Selecting the agent's WINDOW too, since an agent in
+# a later window is still the thing you opened the session for.
+tm select-window -t "$name:${agentwin:-$firstwin}"
+tm select-pane -t "${agentpane:-$firstpane}"
 
 mux_attach

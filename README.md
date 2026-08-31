@@ -159,7 +159,9 @@ directive is optional.
 | `layout NAME` | the pane arrangement to build (default: `default`) |
 
 A **layout** is the pane arrangement, and only that: `layouts/<name>.layout`,
-in your config or shipped in `$MUX_SHARE`.
+in your config or shipped in `$MUX_SHARE`. Two ship: `default` (yours | the
+agent, over a scratch shell) and `logs` (the same, plus a second window for
+something long-running). A session opens focused on the **agent** pane.
 
 | directive | meaning |
 | --- | --- |
@@ -222,7 +224,12 @@ window  fg=colour232 bg=colour214 bold
 accent  fg=colour214
 ```
 
-`themes/defaults` names the global default (`default <name>`). `mux themes`
+`themes/defaults` names the global default (`default <name>`) and how an unset
+theme is derived (`derive hash`). With `hash`, a session with no `theme` of its
+own takes one deterministically from its **name**, so every project wears a
+stable colour with nothing configured. Two projects share one only by
+coincidence; `mux theme` fixes that in a keystroke. Priority is explicit >
+context > derived > global default. `mux themes`
 compiles the palette into tmux `@theme-*` options at server start and re-pushes
 it on drift, so a theme edit needs no manual step. `mux theme [NAME|next|prev]`
 switches a live session (`-p` persists it into the layout). A theme dropped in
