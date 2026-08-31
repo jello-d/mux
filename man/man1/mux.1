@@ -3,7 +3,7 @@
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
 .B mux
-.RI [ verb "] [" --bare "] [" NAME "] [" LAYOUT ]
+.RI [ verb "] [" --bare "] [" NAME "] [" PROFILE ]
 .SH DESCRIPTION
 .B mux
 builds and drives tmux sessions from declarative
@@ -35,7 +35,7 @@ With no verb, pick a session to attach (an fzf picker, else a numbered menu).
 Create, attach, or switch to session
 .I NAME
 (default: derived from the current directory), building it from
-.I LAYOUT
+.I PROFILE
 if it is not up. The agent
 .B continues
 its most recent conversation.
@@ -73,11 +73,14 @@ will look for.
 means the default colour / no root.
 .TP
 .B mux save " [" \fINAME\fR ]
-Snapshot the current session's shape (windows, panes, root, theme) to
-.IR NAME .layout.
+Snapshot the current session to
+.IR NAME .profile
+(root, theme) plus the
+.IR NAME .layout
+it names (windows, panes, bottom).
 .TP
 .B mux edit " [" \fINAME\fR ]
-Open a layout in
+Open a profile in
 .BR $EDITOR .
 .TP
 .B mux rename " [" \fIOLD\fR "] " \fINEW\fR
@@ -113,14 +116,13 @@ takes effect without a restart.
 .TP
 .B mux kill " " \fINAME\fR ", " mux kill-all
 Tear down the named session, or (with a prompt) every session on this socket.
-.SH LAYOUTS
-A layout is a small declarative file,
-.IR "$MUX_DIR/<name>" .layout,
-read and validated in full before any tmux call. Directives are either
-.B session-wide
-(last-wins, order-independent) or
-.B shape
-(build the windows and panes in order):
+.SH PROFILES AND LAYOUTS
+A
+.B profile
+is the session: its identity and appearance. It lives at
+.IR "$MUX_DIR/<name>" .profile,
+and the FILENAME is the session name. Every directive is optional, and they are
+last-wins and order-independent:
 .TP
 .B root \fIDIR\fR
 Working directory for every pane (a leading
@@ -140,35 +142,45 @@ runs (see
 .B notify \fIalways\fR | \fIaway\fR
 Whether the agent notification fires always, or only while you are away.
 .TP
+.B layout \fINAME\fR
+The pane arrangement to build. Default
+.BR default .
+.PP
+A
+.B layout
+is the pane arrangement, and only that:
+.IR NAME .layout
+under
+.IR layouts/ ,
+in
+.B $MUX_DIR
+or shipped in
+.BR $MUX_SHARE ,
+the former winning on a name collision.
+.TP
 .B window \fINAME\fR
-Start a new window.
+Start a new window. The first one opens the session.
 .TP
 .B pane \fICMD\fR
 A pane running
 .IR CMD .
 .B pane agent
-runs the session's agent;
+runs the session's agent,
 .B pane \fINAME\fR
-runs a specific agent profile.
+a specific agent, and a bare
+.B pane
+a plain shell.
 .TP
 .B bottom \fIN\fR | \fIMIN\-MAX\fR
 A full-width bottom shell pane, with a fixed or bounded height in lines.
-.TP
-.B include \fIREF\fR
-Splice in
-.IR REF .layout.
-A user layout in
-.B $MUX_DIR
-wins over a shipped one (a
-.B shape
-in
-.BR $MUX_SHARE ),
-so
-.RB ' "include shapes/code" '
-pulls the shared vim | agent | shell shape from the package.
 .PP
-Shapes are reusable fragments under
-.IR $MUX_SHARE/shapes .
+The split is enforced: an arrangement directive in a profile, or an identity
+directive in a layout, fails loud rather than half-working. With no profile at
+all, mux roots the session at the project you are in and builds the shipped
+.B default
+layout, so nothing needs configuring for
+.B mux go
+to work.
 .SH THEMES
 The palette is data:
 .IR $MUX_SHARE/themes/<name> .theme,
@@ -185,14 +197,14 @@ names the global default. A user override in
 .I $MUX_DIR/themes
 wins.
 .SH AGENTS
-An agent profile,
+An agent,
 .IR $MUX_SHARE/agents/<name> .agent,
 is two lines: a
 .B go
 command and a
 .B resume
 command, each a shell command mux runs as the agent pane's process. Claude is
-the default; add a CLI by dropping in a profile. A profile in
+the default; add a CLI by dropping in a profile. One in
 .I $MUX_DIR/agents
 overrides a shipped one of the same name.
 .SH KEY BINDINGS
@@ -288,7 +300,7 @@ else
 .IR ~/.config/mux .
 .TP
 .B MUX_SHARE
-Shipped package data (themes, shapes, agents, the tmux fragments). Default the
+Shipped package data (themes, layouts, agents, the tmux fragments). Default the
 .I share
 sibling of the
 .B mux
@@ -299,23 +311,23 @@ Per-socket palette stamp directory. Default
 .IR $XDG_CACHE_HOME/mux .
 .SH FILES
 .TP
-.I $MUX_DIR/<name>.layout
-User session layouts (\c
+.I $MUX_DIR/<name>.profile
+User session profiles (\c
 .BR "mux new" ", " save " write here)."
 .TP
 .I $MUX_DIR/context
 The optional context hook.
 .TP
-.I $MUX_DIR/{themes,agents}
-Overrides for shipped themes and agent profiles, and any of your own.
+.I $MUX_DIR/{themes,layouts,agents}
+Overrides for shipped themes, layouts and agents, and any of your own.
 .TP
-.I $MUX_SHARE/{themes,shapes,agents}
-Shipped palette, shape fragments, and agent profiles.
+.I $MUX_SHARE/{themes,layouts,agents}
+Shipped palette, layouts, and agents.
 .TP
-.I $MUX_SHARE/default.layout
-The layout
+.I $MUX_SHARE/layouts/default.layout
+The arrangement
 .B go
-builds when no other one applies.
+builds when a profile names no other.
 .TP
 .I $MUX_SHARE/mux.tmux
 The tmux integration fragment.

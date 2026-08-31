@@ -1,7 +1,7 @@
 #!/bin/sh
 # test/mux-new.t - `mux new` and `mux go` must derive the session name the SAME
 # way. new used to take the cwd basename while go took the git toplevel
-# basename, so a `mux new` run anywhere but a repo's top level wrote a layout
+# basename, so a `mux new` run anywhere but a repo's top level wrote a profile
 # `mux go` would never find.
 #
 # `mux new` writes a file and exits before any tmux or socket work, so this
@@ -25,15 +25,15 @@ new() {
 		GIT_CEILING_DIRECTORIES="$T" "$HERE/bin/mux" new "$@" ) \
 		>/dev/null || fail "mux new in $_d exited $?"
 }
-# root_of NAME -> the root line of NAME.layout, or empty if it has none.
+# root_of NAME -> the root line of NAME.profile, or empty if it has none.
 root_of() {
-	awk '$1=="root"{print $2; exit}' "$T/conf/$1.layout"
+	awk '$1=="root"{print $2; exit}' "$T/conf/$1.profile"
 }
 
-# --- in a repo: the layout is named for the REPO, wherever you run it -------
+# --- in a repo: the profile is named for the REPO, wherever you run it -------
 new "$T/myrepo/deep/sub"
-[ -f "$T/conf/myrepo.layout" ] \
-	|| fail "from a repo subdir, new wrote $(ls "$T/conf") not myrepo.layout"
+[ -f "$T/conf/myrepo.profile" ] \
+	|| fail "from a repo subdir, new wrote $(ls "$T/conf") not myrepo.profile"
 # ... and rooted at the repo, not at the subdir it was run from, so the
 # session `mux go` builds from it is the same session either way.
 eq_root=$(root_of myrepo)
@@ -41,32 +41,32 @@ eq_root=$(root_of myrepo)
 	|| fail "root: got [$eq_root] want [$T/myrepo]"
 
 # Running it again from the TOP of the same repo must resolve to the same
-# layout name -- that is the whole point -- so it hits the exists guard.
+# profile name -- that is the whole point -- so it hits the exists guard.
 _out=$( ( cd "$T/myrepo" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
 	GIT_CEILING_DIRECTORIES="$T" "$HERE/bin/mux" new ) 2>&1 ) \
 	&& fail "second new should have refused to clobber"
 case $_out in
-*"layout exists"*) ;;
+*"profile exists"*) ;;
 *) fail "top-of-repo new resolved to a DIFFERENT name: [$_out]" ;;
 esac
 
 # --- outside a repo: the cwd, as before ------------------------------------
 new "$T/plaindir/sub"
-[ -f "$T/conf/sub.layout" ] \
-	|| fail "outside a repo, new should name the layout for the cwd"
+[ -f "$T/conf/sub.profile" ] \
+	|| fail "outside a repo, new should name the profile for the cwd"
 eq_root=$(root_of sub)
 [ "$eq_root" = "$T/plaindir/sub" ] \
 	|| fail "non-repo root: got [$eq_root] want [$T/plaindir/sub]"
 
 # --- explicit arguments still win ------------------------------------------
 new "$T/myrepo/deep/sub" chosen - "$T/plaindir"
-[ -f "$T/conf/chosen.layout" ] || fail "an explicit NAME was not honoured"
+[ -f "$T/conf/chosen.profile" ] || fail "an explicit NAME was not honoured"
 eq_root=$(root_of chosen)
 [ "$eq_root" = "$T/plaindir" ] || fail "an explicit ROOT was not honoured"
 
-# '-' still means NO root line, so the layout stays portable.
+# '-' still means NO root line, so the profile stays portable.
 new "$T/myrepo" rootless - -
-[ -f "$T/conf/rootless.layout" ] || fail "rootless layout was not written"
+[ -f "$T/conf/rootless.profile" ] || fail "rootless layout was not written"
 [ -z "$(root_of rootless)" ] || fail "'-' should write no root line"
 
 pass

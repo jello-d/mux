@@ -34,12 +34,12 @@ no() {
 }
 
 # --force before the verb and after it are the same command. The first write
-# creates the layout; both --force runs must then clobber it.
+# creates the profile; both --force runs must then clobber it.
 ok create        new lay - -
 ok force-after   new --force lay - -
 ok force-before  --force new lay - -
 # ... and without it, the existing file is still protected.
-no no-force "layout exists" new lay - -
+no no-force "profile exists" new lay - -
 
 # -h / --help are help wherever they appear, and exit 0.
 ok help-long  --help
@@ -60,8 +60,8 @@ no unknown-verb       "unknown verb: nosuchverb" nosuchverb
 # A POSITIONAL is not a verb: the first non-option is the verb, the rest stay
 # positional. `new lay4 cyan -` must write lay4, not treat `cyan` as a verb.
 ok positional new lay4 cyan -
-[ -f "$T/conf/lay4.layout" ] || fail "positional: lay4.layout was not written"
-grep -q '^theme   cyan$' "$T/conf/lay4.layout" \
+[ -f "$T/conf/lay4.profile" ] || fail "positional: lay4.layout was not written"
+grep -q '^theme   cyan$' "$T/conf/lay4.profile" \
 	|| fail "positional: COLOR was not written as the theme"
 
 pass
