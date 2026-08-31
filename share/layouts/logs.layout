@@ -1,0 +1,23 @@
+# logs: the default arrangement, plus a second window to tail things in.
+#
+#   [main]                          [logs]
+#   +-------------+-------------+   +---------------------------+
+#   |  yours      |  the agent  |   |                           |
+#   +-------------+-------------+   |  a full-window shell      |
+#   |  scratch (5-10 lines)     |   |                           |
+#   +---------------------------+   +---------------------------+
+#
+# For a project where something long-running wants its own window rather than
+# the few lines the scratch pane gives it: a build watcher, journalctl -f, a
+# dev server. The session still OPENS on the agent in [main]; prefix-n tabs to
+# [logs].
+#
+# The window opens on a plain shell rather than a command, because what you
+# want tailed is per-project. To pin one, copy this to $MUX_DIR/layouts and put
+# a command on the pane, e.g. `pane journalctl -fu myservice`.
+window  main
+pane
+pane    agent
+bottom  5-10
+window  logs
+pane

@@ -193,7 +193,17 @@ options by
 run from the tmux fragment at server start and re-pushed on drift, so a theme
 edit needs no manual step.
 .I $MUX_SHARE/themes/defaults
-names the global default. A user override in
+names the global default
+.RB ( "default " \fINAME\fR )
+and how an unset theme is derived
+.RB ( "derive hash" | off ).
+With
+.BR hash ,
+a session with no
+.B theme
+of its own takes one deterministically from its NAME, so a project wears a
+stable colour with nothing configured. Priority is explicit, then the context's,
+then derived, then the global default. A user override in
 .I $MUX_DIR/themes
 wins.
 .SH AGENTS
