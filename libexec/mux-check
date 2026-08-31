@@ -45,7 +45,7 @@ else bad "tmux not found (mux's one runtime dependency)"; fi
 # 2. package DATA (share): the dir plus the pieces mux reads at runtime.
 if [ -d "$MUX_SHARE" ]; then
 	ok "package data ($MUX_SHARE)"
-	for _f in mux.tmux themes shapes agents default.layout; do
+	for _f in mux.tmux themes layouts agents; do
 		[ -e "$MUX_SHARE/$_f" ] && ok "share/$_f present" \
 			|| bad "share/$_f missing (broken install)"
 	done
@@ -58,6 +58,11 @@ if [ -d "$MUX_SHARE" ]; then
 		then ok "default theme '$_dt' resolves"
 		else bad "default theme '${_dt:-unset}' has no themes/*.theme"; fi
 	else warn "themes/defaults absent (no global default theme)"; fi
+	# The default ARRANGEMENT must resolve: a profile that names no layout,
+	# and a bare `mux go` with no profile at all, both land on it.
+	if [ -n "$(mux_data_find layouts default .layout)" ]; then
+		ok "default layout resolves"
+	else bad "no layouts/default.layout (a bare 'mux go' cannot build)"; fi
 else
 	bad "package data missing ($MUX_SHARE) -- reinstall mux"
 fi
@@ -65,7 +70,20 @@ fi
 # 3. config overlay (MUX_DIR): where user layouts + the integrator overlay live.
 # Optional: with none, mux runs the shipped defaults from share, so its absence
 # is a surfaced note, not drift.
-if [ -d "$MUX_DIR" ]; then ok "config overlay ($MUX_DIR)"
+if [ -d "$MUX_DIR" ]; then
+	ok "config overlay ($MUX_DIR)"
+	# TRANSITIONAL: profiles used to be called layouts and sat in
+	# <name>.layout at the overlay root. mux still reads those, with a
+	# warning; say so here with the command that fixes it.
+	_old=0
+	for _f in "$MUX_DIR"/*.layout; do
+		[ -e "$_f" ] || continue
+		_old=$((_old + 1))
+	done
+	if [ "$_old" -gt 0 ]; then
+		warn "$_old pre-rename *.layout file(s) in $MUX_DIR"
+		warn "  convert them:  mux migrate-profiles"
+	fi
 else warn "no config overlay at $MUX_DIR (using shipped defaults)"; fi
 
 exit "$RC"

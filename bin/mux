@@ -18,16 +18,16 @@
 #   mux reload             re-source tmux.conf on every running mux server.
 #   mux ls                 list sessions in the current context.
 #   mux new [NAME] [COLOR] [ROOT]
-#                          write a <NAME>.layout of the shared code shape. NAME
+#                          write a <NAME>.profile. NAME
 #                          and ROOT default to the project (the git toplevel,
 #                          else the cwd -- the same derivation go uses); ROOT
 #                          takes '-' to omit it, COLOR defaults to the
 #                          per-context default. --force to overwrite.
 #                          It lands in the (dir-linked) mux dir, so it shows as
 #                          git drift: commit to keep, or delete.
-#   mux save [NAME]        snapshot the CURRENT session's shape into a
-#                          <NAME>.layout (windows, panes, bottom, root, theme);
-#                          pane commands are best-effort. --force to overwrite.
+#   mux save [NAME]        snapshot the CURRENT session into a <NAME>.profile
+#                          plus the <NAME>.layout it names; pane commands are
+#                          best-effort. --force to overwrite.
 #   mux hide SESSION       hide SESSION from THIS client's status strip and
 #                          ( / ) cycling; mux show SESSION restores it, mux
 #                          show-all clears this client's hides. Per client
@@ -37,8 +37,8 @@
 #
 # A verb, or none for the session picker. For go/resume, NAME defaults to the
 # project (git toplevel basename, else cwd basename); kill requires it
-# explicitly. LAYOUT is the third token; with none, a per-project <NAME>.layout
-# is used if one exists, else default.layout.
+# explicitly. PROFILE is the third token; with none, a per-project
+# <NAME>.profile is used if one exists, else mux's built-in defaults.
 #
 # Idempotent: `go`/`resume` on a live session just attaches, never clobbers.
 #
@@ -51,37 +51,44 @@
 # lists only the context you are in; `reload` freshens EVERY server (the config
 # is shared), so a single reload from any pane updates everything.
 #
-# Layouts live in $MUX_DIR (default ~/.config/mux) as <name>.layout files.
-# Directives, one per line:
+# A PROFILE is the session: its identity and appearance. It lives in $MUX_DIR
+# (default ~/.config/mux) as <name>.profile, and the FILENAME is the session
+# name. Directives, one per line, all optional:
 #   root   DIR           working dir for the session (a leading ~ expands);
 #                        defaults to the project mux was invoked in
-#   theme  NAME          colour theme for the session (a themes/NAME.theme
-#                        fragment: purple, orange, cyan, green, slate, red),
-#                        overriding the per-mode default. Cosmetic only --
-#                        work mode still shows its banner + title regardless.
-#   agent  NAME          the agent a `pane agent` runs (an agents/NAME.agent
-#                        profile: claude, gemini, ...), default claude. go and
-#                        resume use that agent's own continue/resume command.
+#   theme  NAME          colour theme (a themes/NAME.theme fragment: purple,
+#                        orange, cyan, green, slate, red, ...). Cosmetic only.
+#   agent  NAME          the agent a `pane agent` runs (an agents/NAME.agent:
+#                        claude, gemini, ...), default claude. go and resume use
+#                        that agent's own continue/resume command.
 #   notify always|away   whether the agent notification (see agent-state-emit)
 #                        fires while you are LOOKING at the pane: `away` (the
 #                        default) suppresses it then, `always` fires anyway.
+#   layout NAME          the pane ARRANGEMENT to build (a layouts/NAME.layout),
+#                        default `default`.
+#
+# A LAYOUT is the arrangement, and nothing else: layouts/<name>.layout, in
+# $MUX_DIR or shipped in $MUX_SHARE. Directives:
 #   window NAME          start a new window; the first opens the session
 #   pane   CMD [ARG...]  add a pane running CMD; `pane agent` runs the session's
 #                        agent (shaped by go/resume), `pane <name>` a specific
-#                        agent profile, anything else runs literally
+#                        agent, anything else runs literally. A bare `pane` is a
+#                        plain shell.
 #   bottom SIZE [CMD]    add a pane spanning the full width below the panes of
 #                        the current window; must come after them. SIZE is N to
 #                        pin the height, or MIN-MAX to track the window between
 #                        those bounds. Held there by mux-pin on every resize.
-#   include NAME         splice in NAME.layout here, resolved from $MUX_DIR like
-#                        any layout -- e.g. a shared shape fragment. Nests; a
-#                        cycle fails loud. Its window/pane/bottom accumulate.
 # Blank lines and lines beginning with # are ignored.
 #
-# The whole layout, includes expanded, is parsed and VALIDATED before any tmux
-# call, so a malformed layout builds nothing. root and theme are resolved for
-# the session as a whole -- last one wins, position irrelevant; window/pane/
-# bottom build the shape in the order they appear.
+# The two files are kept apart deliberately: an arrangement directive in a
+# profile, or an identity directive in a layout, fails loud rather than
+# half-working. So the same layout serves every profile that names it, which is
+# what `include` used to approximate.
+#
+# The profile and its layout are parsed and VALIDATED together before any tmux
+# call, so a malformed pair builds nothing. root and theme are resolved for the
+# session as a whole -- last one wins, position irrelevant; window/pane/bottom
+# build the arrangement in the order they appear.
 set -eu
 
 MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
@@ -132,6 +139,7 @@ agent-summary) shift; exec "$LIBEXEC/agent-state-summary" "$@" ;;
 themes)        shift; exec "$LIBEXEC/mux-themes" "$@" ;;
 check)         shift; exec "$LIBEXEC/mux-check" "$@" ;;
 next-blocked)  shift; exec "$LIBEXEC/mux-next-blocked" "$@" ;;
+migrate-profiles) shift; exec "$LIBEXEC/mux-migrate-profiles" "$@" ;;
 esac
 
 # The ONE comment/normalize rule (mux_conf_clean) for every config parse below
@@ -174,12 +182,17 @@ else
 	mux_ctx_sockets() { :; }
 fi
 
-# Resolve a layout REFERENCE (a launch target or an `include`) through the
-# shared overlay rule: a user layout in $MUX_DIR wins over a shipped one in
-# $MUX_SHARE (a shape like shapes/code, or the default). Empty if neither
-# exists. A named wrapper because the call sites read as layout lookups.
-_find_layout() {   # <ref, no .layout>
-        mux_data_find '' "$1" .layout
+# Resolve a PROFILE (a launch target) through the shared overlay rule: one in
+# $MUX_DIR wins over a shipped one in $MUX_SHARE. Empty if neither exists.
+#
+# TRANSITIONAL: mux profiles were once called layouts and lived in <name>.layout
+# files. A leftover .layout is still accepted, with a warning, so that deploying
+# a new mux and converting your config need not happen in the same instant.
+# Delete this fallback (and the mux-check warning) once nobody has one.
+_find_profile() {  # <name>
+        _p=$(mux_data_find '' "$1" .profile)
+        [ -n "$_p" ] || _p=$(mux_data_find '' "$1" .layout)
+        printf '%s' "$_p"
 }
 
 # Space-joined NAMEs for one data kind -- what the help listings and the theme
@@ -217,13 +230,15 @@ _ensure_side() {
 # one-side-or-the-other view `mux ls` gives for sessions.
 _list_layouts() {
         _ensure_side
-        mux_data_files '' .layout | while IFS= read -r _f; do
+        { mux_data_files '' .profile; mux_data_files '' .layout; } \
+        | while IFS= read -r _f; do
                 _rt=$(awk '$1=="root"{print $2; exit}' "$_f")
                 case "$(mux_ctx_side "$_rt")" in
                         shared|"$_cur_side") ;;
                         *) continue ;;
                 esac
-                _b=${_f##*/}; printf '%s ' "${_b%.layout}"
+                _b=${_f##*/}; _b=${_b%.profile}
+                printf '%s ' "${_b%.layout}"
         done
 }
 
@@ -251,30 +266,31 @@ _wrap_list() {   # <label> <space-separated items>
 # 0). Ends with the live layouts (go/resume/kill NAME) and colors (new COLOR).
 usage() {
         cat >&2 <<'EOF'
-usage: mux [OPTION] [VERB] [NAME] [LAYOUT]   (OPTION may follow VERB too)
+usage: mux [OPTION] [VERB] [NAME] [PROFILE]  (OPTION may follow VERB too)
   (no verb)                  pick a session to attach (fzf or numbered menu)
-  go [NAME] [LAYOUT]         create/attach/switch; agent continues in the pane
-  resume [NAME] [LAYOUT]     same, but the agent resumes (choose a conversation)
+  go [NAME] [PROFILE]        create/attach/switch; agent continues in the pane
+  resume [NAME] [PROFILE]    same, but the agent resumes (choose a conversation)
   kill NAME                  tear the named session down
   kill-all                   tear down every session on this socket (prompts)
   reload                     re-source tmux.conf on every running mux server
   ls                         list sessions in the current context
-  new [NAME] [COLOR] [ROOT]  write a layout; '-' = COLOR default / ROOT off
-  save [NAME]                snapshot the current session's shape to NAME.layout
+  new [NAME] [COLOR] [ROOT]  write a profile; '-' = COLOR default / ROOT off
+  save [NAME]                snapshot this session to NAME.profile + .layout
   hide/show SESSION          hide/unhide SESSION for this client (strip/cycle)
   show-all                   clear this client's hidden sessions
   next-blocked               jump to the session that has needed you longest
   theme [NAME|next|prev]     set/cycle/show the session theme (-p to persist)
   rename [OLD] NEW           rename a session (and its matching layout)
-  edit [NAME]                open a layout in $EDITOR
+  edit [NAME]                open a profile in $EDITOR
   check                      audit mux's install: package data, deps, overlay
+  migrate-profiles           convert pre-rename *.layout files (--apply)
   --bare                     go/resume without the agent (pane is a plain shell)
-  --force                    overwrite an existing layout (save/new)
-  help [TOPIC]               this help; TOPIC = agents|colors|layouts|palette
+  --force                    overwrite an existing profile (save/new)
+  help [TOPIC]               this help; TOPIC = agents|colors|profiles|palette
   -h, --help                 alias for bare `help`
 EOF
         echo >&2
-        _wrap_list "  layouts (go/resume NAME):  " "$(_list_layouts)"
+        _wrap_list "  profiles (go/resume NAME): " "$(_list_layouts)"
         _wrap_list "  colors  (new NAME COLOR):  " \
                 "$(_stems_line themes .theme)"
         _wrap_list "  agents  (agent NAME):      " \
@@ -337,7 +353,7 @@ case $cmd in
         new) [ "$#" -le 3 ] || {
                 echo "mux: new takes NAME [COLOR] [ROOT]" >&2; usage; } ;;
         help) [ "$#" -le 6 ] || {
-                echo "mux: help [agents|colors|layouts|palette [FG|test]]" >&2
+                echo "mux: help [agents|colors|profiles|palette]" >&2
                 usage; } ;;
 esac
 case $cmd in
@@ -396,19 +412,18 @@ if [ "$cmd" = new ]; then
                 "$HOME")   nw_root='~' ;;
                 "$HOME"/*) nw_root="~/${nw_root#"$HOME"/}" ;;
         esac
-        nw_file=$MUX_DIR/$nw_name.layout
+        nw_file=$MUX_DIR/$nw_name.profile
         [ "$force" -eq 1 ] || [ ! -e "$nw_file" ] || {
-                echo "mux: layout exists: $nw_file (use --force)" >&2
+                echo "mux: profile exists: $nw_file (use --force)" >&2
                 exit 1
         }
         mkdir -p "$MUX_DIR"
         {
-                printf '# %s: made by `mux new`; the shared code shape.\n' \
-                        "$nw_name"
+                printf '# %s: made by `mux new`.\n' "$nw_name"
                 printf '# Edit the theme line to recolour; commit to keep.\n'
                 [ -n "$nw_color" ] && printf 'theme   %s\n' "$nw_color"
                 [ -n "$nw_root" ] && printf 'root    %s\n' "$nw_root"
-                printf 'include shapes/code\n'
+                printf 'layout  default\n'
         } >"$nw_file"
         echo "mux: wrote $nw_file"
         echo "mux: launch it with  mux go $nw_name"
@@ -495,25 +510,19 @@ help_colors() {
         printf '\n  default theme:  %s\n' \
                 "$(awk '$1=="default"{print $2}' "$_d")"
 }
-# Flatten a layout for display: resolve `include NAME` recursively; emit the
-# window/pane/bottom/theme/root directives. Depth-capped; a real cycle is
-# caught by `mux go`.
-_flat_layout() {        # <file> <depth>
-        [ "${2:-0}" -lt 16 ] || return 0
-        # Display-only, so a pipe is fine (no exit-on-error to preserve); the
-        # cleaner drops comments/blanks, so no comment case is needed.
-        mux_conf_clean < "$1" | while read -r _v _r; do
-                case $_v in
-                include)
-                        _i=$(_find_layout "$_r")
-                        [ -n "$_i" ] && _flat_layout "$_i" "$((${2:-0}+1))" ;;
-                *) printf '%s %s\n' "$_v" "$_r" ;;
-                esac
-        done
+# Flatten a profile for display: its own directives, then the window/pane/
+# bottom lines of the layout it names. Display-only, so a pipe is fine (no
+# exit-on-error to preserve) and an unresolvable layout just shows nothing.
+_flat_profile() {       # <profile file>
+        _wl=$(mux_conf_clean < "$1" | awk '$1=="layout"{print $2; exit}')
+        mux_conf_clean < "$1" | grep -v '^layout[[:space:]]' || true
+        _lf=$(mux_data_find layouts "${_wl:-default}" .layout)
+        [ -n "$_lf" ] && mux_conf_clean < "$_lf"
+        return 0
 }
 # Draw the window/pane/bottom directives (on stdin) as ASCII boxes: top panes
 # side by side, a full-width bottom strip below when present; one per window.
-_draw_shape() {
+_draw_layout() {
         awk '
         function rep(c,n,  s){s="";while(n-->0)s=s c;return s}
         function cell(s,w){return sprintf(" %-" (w-1) "s", substr(s,1,w-1))}
@@ -541,17 +550,18 @@ _draw_shape() {
         $1=="bottom"{bot=$2; bl="shell " $2}
         END{flush()}'
 }
-help_layouts() {
+help_profiles() {
         _ensure_side
         # Tag the heading with the side only when there is more than one (a hook
         # is active); the default single-context case stays untagged.
         _tag=''
         [ "$_cur_side" = default ] || _tag=" [$_cur_side]"
-        printf 'layouts%s -- `mux go NAME`:\n' "$_tag"
+        printf 'profiles%s -- `mux go NAME`:\n' "$_tag"
         echo
-        mux_data_files '' .layout | while IFS= read -r _f; do
-                _n=${_f##*/}; _n=${_n%.layout}
-                _flat=$(_flat_layout "$_f" 0)
+        { mux_data_files '' .profile; mux_data_files '' .layout; } \
+        | while IFS= read -r _f; do
+                _n=${_f##*/}; _n=${_n%.profile}; _n=${_n%.layout}
+                _flat=$(_flat_profile "$_f")
                 _th=$(printf '%s\n' "$_flat" | awk '$1=="theme"{print $2;exit}')
                 _rt=$(printf '%s\n' "$_flat" | awk '$1=="root"{print $2;exit}')
                 case "$(mux_ctx_side "$_rt")" in
@@ -568,7 +578,7 @@ help_layouts() {
                                 "$(_sgr_style "$_tb")" "$_th" "$_RST"
                 fi
                 printf '  root %s\n' "${_rt:-<the dir you run it in>}"
-                printf '%s\n' "$_flat" | _draw_shape
+                printf '%s\n' "$_flat" | _draw_layout
                 echo
         done
 }
@@ -673,12 +683,12 @@ help_agents() {
 if [ "$cmd" = help ]; then
         case ${1:-} in
         '')      usage 0 ;;
-        agents)  help_agents ;;
-        colors)  help_colors ;;
-        layouts) help_layouts ;;
+        agents)   help_agents ;;
+        colors)   help_colors ;;
+        profiles|layouts) help_profiles ;;
         palette) shift; help_palette "$@" ;;
         *) echo "mux: unknown help topic: $1" \
-                "(agents, colors, layouts, palette)" >&2
+                "(agents, colors, profiles, palette)" >&2
            exit 2 ;;
         esac
         exit 0
@@ -919,9 +929,10 @@ if [ "$cmd" = theme ]; then
         tm refresh-client 2>/dev/null || true
         echo "mux: theme $_t"
         if [ "$persist" -eq 1 ]; then
-                _lf=$MUX_DIR/$_s.layout
+                _lf=$MUX_DIR/$_s.profile
                 [ -f "$_lf" ] || {
-                        echo "mux: no layout $_lf to persist to" >&2; exit 1; }
+                        echo "mux: no profile $_lf to persist to" >&2
+                        exit 1; }
                 _persist_theme "$_lf" "$_t"
                 echo "mux: persisted theme into $_lf"
         fi
@@ -947,10 +958,10 @@ if [ "$cmd" = rename ]; then
                 echo "mux: no such session: $_old" >&2; exit 1; }
         tm rename-session -t "=$_old" "$_new"
         echo "mux: renamed session $_old -> $_new"
-        if [ -f "$MUX_DIR/$_old.layout" ] \
-           && [ ! -e "$MUX_DIR/$_new.layout" ]; then
-                mv "$MUX_DIR/$_old.layout" "$MUX_DIR/$_new.layout"
-                echo "mux: renamed layout $_old.layout -> $_new.layout"
+        if [ -f "$MUX_DIR/$_old.profile" ] \
+           && [ ! -e "$MUX_DIR/$_new.profile" ]; then
+                mv "$MUX_DIR/$_old.profile" "$MUX_DIR/$_new.profile"
+                echo "mux: renamed profile $_old -> $_new"
         fi
         exit 0
 fi
@@ -965,17 +976,17 @@ if [ "$cmd" = edit ]; then
                         exit 1; }
                 _en=$(tm display-message -p '#{session_name}')
         fi
-        _ef=$MUX_DIR/$_en.layout
-        [ -f "$_ef" ] || { echo "mux: no layout: $_ef" >&2; exit 1; }
+        _ef=$MUX_DIR/$_en.profile
+        [ -f "$_ef" ] || { echo "mux: no profile: $_ef" >&2; exit 1; }
         exec "${EDITOR:-vi}" "$_ef"
 fi
 
-# --- save: snapshot the CURRENT live session into a reusable layout ---------
-# Reads the session's windows and panes and writes $MUX_DIR/<name>.layout that
-# rebuilds them: window names, each pane's current command (a shell -> a bare
-# pane), any full-width bottom (from @mux-bottom), plus the session root and
-# theme. Pane commands are best-effort -- review them. Runs inside a session;
-# NAME is the layout file, defaulting to the session name.
+# --- save: snapshot the CURRENT live session -------------------------------
+# Writes the TWO files the split calls for: <name>.layout with the arrangement
+# it read off the session (window names, each pane's current command, any
+# full-width bottom from @mux-bottom), and <name>.profile with the identity and
+# appearance (root, theme) naming that layout. Pane commands are best-effort --
+# review them. Runs inside a session; NAME defaults to the session name.
 if [ "$cmd" = save ]; then
         [ -n "${TMUX:-}" ] || {
                 echo "mux: save must run inside a session" >&2; exit 1; }
@@ -984,11 +995,14 @@ if [ "$cmd" = save ]; then
                 echo "mux: could not identify the session" >&2; exit 1; }
         sv_name=${name_arg:-$sv_sess}
         sv_name=$(printf '%s' "$sv_name" | tr ':.' '--')
-        sv_file=$MUX_DIR/$sv_name.layout
-        [ "$force" -eq 1 ] || [ ! -e "$sv_file" ] || {
-                echo "mux: layout exists: $sv_file (use --force)" >&2
-                exit 1
-        }
+        sv_file=$MUX_DIR/$sv_name.profile
+        sv_lfile=$MUX_DIR/layouts/$sv_name.layout
+        for _e in "$sv_file" "$sv_lfile"; do
+                [ "$force" -eq 1 ] || [ ! -e "$_e" ] || {
+                        echo "mux: exists: $_e (use --force)" >&2
+                        exit 1
+                }
+        done
         # Root: the first window's first pane path (the primary; for a mux-built
         # session every pane shares it anyway), folded to ~.
         sv_fw=$(tm list-windows -t "$sv_sess" -F '#{window_index}' \
@@ -1001,21 +1015,30 @@ if [ "$cmd" = save ]; then
         esac
         sv_theme=$(tm show-options -t "$sv_sess" -qv @mux-theme \
                 2>/dev/null || true)
-        mkdir -p "$MUX_DIR"
+        sv_stamp=$(date '+%Y-%m-%d')
+        mkdir -p "$MUX_DIR/layouts"
+        # The arrangement.
         {
-                printf '# %s: captured from session %s by `mux save` on %s.\n' \
-                        "$sv_name" "$sv_sess" "$(date '+%Y-%m-%d')"
+                printf '# %s: arrangement captured from session %s on %s.\n' \
+                        "$sv_name" "$sv_sess" "$sv_stamp"
                 printf '# Pane commands are best-effort; review them.\n'
-                [ -n "$sv_theme" ] && printf 'theme   %s\n' "$sv_theme"
-                [ -n "$sv_root" ] && printf 'root    %s\n' "$sv_root"
                 tm list-windows -t "=$sv_sess" \
                         -F '#{window_index} #{window_name}' \
                 | while read -r _wi _wn; do
                         printf 'window  %s\n' "$_wn"
                         emit_window "=$sv_sess:$_wi"
                 done
+        } >"$sv_lfile"
+        # The identity and appearance, naming that arrangement.
+        {
+                printf '# %s: captured from session %s by `mux save` on %s.\n' \
+                        "$sv_name" "$sv_sess" "$sv_stamp"
+                [ -n "$sv_root" ] && printf 'root    %s\n' "$sv_root"
+                [ -n "$sv_theme" ] && printf 'theme   %s\n' "$sv_theme"
+                printf 'layout  %s\n' "$sv_name"
         } >"$sv_file"
         echo "mux: wrote $sv_file"
+        echo "mux: wrote $sv_lfile"
         echo "mux: launch it with  mux go $sv_name"
         exit 0
 fi
@@ -1159,40 +1182,55 @@ pane_process() {
         fi
 }
 
-# Flatten a layout to stdout: emit every directive line verbatim, but resolve
-# `include NAME` by splicing NAME.layout in its place, recursively. A depth cap
-# and a visited-path set (space-wrapped so a substring match is exact) make a
-# cycle or runaway nesting fail loud rather than spin. Blank and comment lines
-# are dropped, so the flattened stream downstream is pure directives.
-expand_layout() {       # PATH DEPTH VISITED
-        _path=$1
-        _depth=$2
-        [ "$_depth" -le 16 ] || {
-                echo "mux: include nested too deep at $_path" >&2; exit 1; }
-        case " $3 " in
-                *" $_path "*)
-                        echo "mux: include cycle at $_path" >&2; exit 1 ;;
-        esac
-        _seen="$3 $_path"
-        # Normalize once via mux_conf_clean (the single comment/whitespace/CRLF
-        # rule), then read from a FILE -- an include error must exit the whole
+# Flatten a PROFILE and the LAYOUT it names into one directive stream: the
+# profile's own lines, then the layout's window/pane/bottom lines. Two files,
+# one level, no recursion -- a profile names a layout, a layout names nothing.
+#
+# This replaced a recursive `include` with a depth cap, a visited-path set and
+# cycle detection. That machinery existed to support composition that never
+# happened: every layout in the wild held the single line `include shapes/code`.
+# A profile that declares `layout code` says the same thing without a splice.
+expand_profile() {      # PROFILE_PATH
+        # Normalize via mux_conf_clean (the single comment/whitespace/CRLF
+        # rule), then read from a FILE -- a bad layout name must exit the whole
         # run, which a pipe's subshell would swallow. Every surviving line is a
-        # directive, so no comment/blank case is needed here any more.
+        # directive, so no comment/blank case is needed here.
         _cl=$(mktemp) || { echo "mux: mktemp failed" >&2; exit 1; }
-        mux_conf_clean < "$_path" > "$_cl"
+        # Pass A: the profile's own directives. It is the only place that knows
+        # which FILE a line came from, so it is where the split is enforced:
+        # identity and appearance here, arrangement in the layout, and a line in
+        # the wrong file says so rather than half-working.
+        mux_conf_clean < "$1" > "$_cl"
+        _want_layout=
         while read -r _verb _rest; do
                 case $_verb in
-                include)
-                        _inc=$(_find_layout "$_rest")
-                        [ -n "$_inc" ] || {
-                                echo "mux: no layout to include: $_rest" >&2
-                                rm -f "$_cl"; exit 1
-                        }
-                        expand_layout "$_inc" $((_depth + 1)) "$_seen"
-                        ;;
-                *)
-                        printf '%s\n' "$_verb${_rest:+ $_rest}"
-                        ;;
+                layout) _want_layout=$_rest ;;
+                window|pane|bottom)
+                        echo "mux: '$_verb' belongs in a layout, not a" \
+                                "profile: $1" >&2
+                        echo "mux: put the arrangement in a .layout and" \
+                                "name it with 'layout <name>'" >&2
+                        rm -f "$_cl"; exit 1 ;;
+                *)      printf '%s\n' "$_verb${_rest:+ $_rest}" ;;
+                esac
+        done <"$_cl"
+        # No `layout` line: the shipped default arrangement. So a profile can be
+        # nothing but a theme or a root and still build a whole session.
+        _lf=$(mux_data_find layouts "${_want_layout:-default}" .layout)
+        [ -n "$_lf" ] || {
+                echo "mux: no layout: ${_want_layout:-default}" \
+                        "(see: mux help layouts)" >&2
+                rm -f "$_cl"; exit 1
+        }
+        # Pass B: the layout's arrangement.
+        mux_conf_clean < "$_lf" > "$_cl"
+        while read -r _verb _rest; do
+                case $_verb in
+                root|theme|agent|notify|layout)
+                        echo "mux: '$_verb' belongs in a profile, not a" \
+                                "layout: $_lf" >&2
+                        rm -f "$_cl"; exit 1 ;;
+                *)      printf '%s\n' "$_verb${_rest:+ $_rest}" ;;
                 esac
         done <"$_cl"
         rm -f "$_cl"
@@ -1276,18 +1314,28 @@ if tm has-session -t "=$name" 2>/dev/null; then
         mux_attach
 fi
 
-# Building a new session: resolve the blueprint. An explicit LAYOUT positional
-# wins, then a per-project <name>.layout, then the shared default -- each a user
-# layout in $MUX_DIR over a shipped one in $MUX_SHARE (see _find_layout).
+# Building a new session: resolve the blueprint. An explicit PROFILE positional
+# wins and must exist (a typo is an error, never a silent fallback); else a
+# per-project <name>.profile if there is one.
+#
+# With NEITHER, mux builds from its own defaults rather than demanding a file:
+# the shipped layouts/default arrangement, rooted at the project, themed by the
+# global default. That is the whole point of the profile/layout split -- a
+# profile records a DEVIATION, so needing none is the normal case, and a fresh
+# install with an empty $MUX_DIR runs `mux go` with nothing configured at all.
+# /dev/null stands in as the empty profile so one code path serves both.
 if [ -n "$layout_arg" ]; then
-        _want=$layout_arg
-elif [ -n "$(_find_layout "$name")" ]; then
-        _want=$name
+        profile=$(_find_profile "$layout_arg")
+        [ -n "$profile" ] || {
+                echo "mux: no profile: $layout_arg" >&2; exit 1; }
 else
-        _want=default
+        profile=$(_find_profile "$name")
 fi
-layout=$(_find_layout "$_want")
-[ -n "$layout" ] || { echo "mux: no layout: $_want" >&2; exit 1; }
+: "${profile:=/dev/null}"
+case $profile in *.layout)
+        echo "mux: $profile is a pre-rename layout file; rename it to" \
+                "${profile%.layout}.profile (see: mux check)" >&2 ;;
+esac
 
 # Flatten includes into one directive stream, then parse it TWICE: first to
 # resolve the session-wide root/theme and validate the whole shape (touching
@@ -1296,11 +1344,12 @@ layout=$(_find_layout "$_want")
 # and root/theme are position-independent (last one wins).
 flat=$(mktemp) || { echo "mux: mktemp failed" >&2; exit 1; }
 trap 'rm -f "$flat"' EXIT
-expand_layout "$layout" 0 "" >"$flat"
+expand_profile "$profile" >"$flat"
 
 # Pass 1: resolve root (default the project; a leading ~ expands) and theme,
-# each last-wins across the whole layout, and validate structure. window/
-# pane/bottom are checked only here; the build pass trusts what got through.
+# each last-wins across the profile, and validate structure. window/pane/bottom
+# are checked only here; the build pass trusts what got through. `layout` never
+# reaches this stream -- expand_profile consumed it to pick the layout file.
 root=$base
 want_theme=
 want_notify=
@@ -1338,31 +1387,37 @@ while read -r verb rest; do
 		;;
 	pane)
 		[ "$v_win" -eq 1 ] || {
-			echo "mux: 'pane' before 'window' in $layout" >&2
+			echo "mux: 'pane' before 'window' in $profile" >&2
 			exit 1
 		}
 		# even-horizontal at build would flatten a bottom pane back
 		# into the row, so refuse the order that would wreck it.
 		[ "$v_bottom" -eq 0 ] || {
-			echo "mux: 'pane' after 'bottom' in $layout" >&2
+			echo "mux: 'pane' after 'bottom' in $profile" >&2
 			exit 1
 		}
 		v_panes=$((v_panes + 1))
 		;;
 	bottom)
 		[ "$v_panes" -gt 0 ] || {
-			echo "mux: 'bottom' with no pane in $layout" >&2
+			echo "mux: 'bottom' with no pane in $profile" >&2
 			exit 1
 		}
 		[ "$v_bottom" -eq 0 ] || {
-			echo "mux: two 'bottom' in one window in $layout" >&2
+			echo "mux: two 'bottom' in one window in $profile" >&2
 			exit 1
 		}
 		bottom_spec "$rest" || exit 1
 		v_bottom=1
 		;;
+	include)
+		echo "mux: 'include' was replaced by 'layout <name>' in a" \
+			"profile: $profile" >&2
+		echo "mux: convert it:  mux-migrate-profiles" >&2
+		exit 1
+		;;
 	*)
-		echo "mux: unknown directive: $verb in $layout" >&2
+		echo "mux: unknown directive: $verb in $profile" >&2
 		exit 1
 		;;
 	esac

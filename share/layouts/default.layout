@@ -1,0 +1,20 @@
+# default: the arrangement `mux go` builds when a profile names no other one.
+# Three panes, each with a job:
+#
+#   +-------------+-------------+
+#   |  yours      |  the agent  |   yours: files, commands, long scrollback
+#   +-------------+-------------+   agent: whatever `agent <name>` selects
+#   |  scratch (5-10 lines)     |   scratch: short commands, log tails
+#   +---------------------------+
+#
+# The left pane runs NO command on purpose. It is the editor pane, but there is
+# no sensible file to open on your behalf, and starting an editor means quitting
+# it before you can do anything else. A shell prompt is the useful default; open
+# what you want from there.
+#
+# A layout describes pane ARRANGEMENT only. Identity (name, root) and the theme
+# live in a profile, which selects a layout with `layout <name>`.
+window  main
+pane
+pane    agent
+bottom  5-10

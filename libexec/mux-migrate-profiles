@@ -1,0 +1,128 @@
+#!/bin/sh
+# mux-migrate-profiles: convert a pre-rename $MUX_DIR to the profile/layout
+# split. Idempotent, and a dry run by default -- it prints exactly what it would
+# do and changes nothing until you pass --apply.
+#
+#   mux migrate-profiles            show the plan
+#   mux migrate-profiles --apply    carry it out
+#
+# What changed. A single <name>.layout used to hold BOTH the session identity
+# (root, theme, agent, notify) and its pane arrangement, the latter almost
+# always as the one line `include shapes/code`. Those are now two files:
+#
+#   <name>.profile          root / theme / agent / notify / layout <name>
+#   layouts/<name>.layout   window / pane / bottom
+#
+# So the conversion is:
+#   - <name>.layout                  -> <name>.profile
+#   - `include shapes/code`          -> `layout default`   (the shipped
+#                                       arrangement, formerly shapes/code)
+#   - `include NAME` / `include shapes/NAME` -> `layout NAME`
+#   - any window/pane/bottom lines   -> split out into layouts/<name>.layout,
+#                                       with the profile pointed at it
+#
+# Originals are left in place as <name>.layout.bak so nothing is lost.
+set -eu
+
+MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
+MUX_SHARE=${MUX_SHARE:-$(dirname "$0")/../share}
+
+# The shared overlay resolver (so a composed file's `include` target is looked
+# up exactly as mux would have looked it up) and the shared comment/whitespace
+# rule (so a spliced layout arrives normalized, as the parser would see it).
+for _l in mux-data.sh mux-conf.sh; do
+	[ -r "$(dirname "$0")/$_l" ] || {
+		echo "mux: $_l missing (incomplete install)" >&2; exit 1; }
+	. "$(dirname "$0")/$_l"
+done
+
+APPLY=0
+case "${1:-}" in
+--apply) APPLY=1 ;;
+''|--dry-run) ;;
+*) echo "usage: mux migrate-profiles [--apply]" >&2; exit 2 ;;
+esac
+
+[ -d "$MUX_DIR" ] || { echo "mux: no $MUX_DIR to migrate"; exit 0; }
+
+_n=0
+for _f in "$MUX_DIR"/*.layout; do
+	[ -e "$_f" ] || continue
+	_n=$((_n + 1))
+	_base=${_f##*/}; _base=${_base%.layout}
+	_prof=$MUX_DIR/$_base.profile
+	_lay=$MUX_DIR/layouts/$_base.layout
+
+	if [ -e "$_prof" ]; then
+		echo "skip  $_base: $_prof already exists"
+		continue
+	fi
+	# `default` is no longer a profile at all: a session with no profile
+	# now builds from mux's own defaults, so a user default.layout has
+	# nothing left to override. Convert it anyway (nothing is lost, and the
+	# .bak stays), but say it is probably deletable.
+	if [ "$_base" = default ]; then
+		echo "note  default: superseded by the shipped defaults;" \
+			"likely deletable"
+	fi
+
+	# Does it carry an arrangement of its own (beyond a bare include)?
+	_has_shape=$(awk '$1=="window"||$1=="pane"||$1=="bottom"{print "y";exit}' \
+		"$_f")
+	# The layout it names: `include [shapes/]NAME` -> NAME, else `default`.
+	_named=$(awk '$1=="include"{n=$2; sub(/^shapes\//,"",n); print n; exit}' \
+		"$_f")
+	[ -n "$_named" ] || _named=default
+	[ "$_named" = code ] && _named=default   # shapes/code IS layouts/default
+
+	if [ -n "$_has_shape" ]; then
+		_target=$_base
+		echo "split $_base -> $_base.profile + layouts/$_base.layout"
+	else
+		_target=$_named
+		echo "conv  $_base -> $_base.profile (layout $_named)"
+	fi
+	[ "$APPLY" -eq 1 ] || continue
+
+	mkdir -p "$MUX_DIR/layouts"
+	# The profile: everything that is not an arrangement or an include, plus
+	# one `layout` line. Comments are carried over so intent survives.
+	{
+		awk '$1!="window" && $1!="pane" && $1!="bottom" && $1!="include"' \
+			"$_f"
+		printf 'layout  %s\n' "$_target"
+	} >"$_prof"
+
+	# The arrangement, only when this file had one of its own. A bare
+	# `include` needs no layout file: it just names the shipped one.
+	if [ -n "$_has_shape" ]; then
+		# COMPOSED: the file both included an arrangement and added to
+		# it. Splice the included one in first, then its own lines, so
+		# the resulting layout builds the same session the old file did
+		# rather than leaving the reader a note to do it by hand.
+		_inc=$(mux_data_find layouts "$_named" .layout)
+		{
+			printf '# %s: arrangement split out of the' "$_base"
+			printf ' pre-rename %s.layout.\n' "$_base"
+			if [ -n "$_inc" ]; then
+				printf '# The first window came from `include'
+				printf ' %s`, spliced in here so this\n' \
+					"$_named"
+				printf '# layout builds what the original did.'
+				printf ' Trim it if you only wanted the rest.\n'
+				mux_conf_clean <"$_inc"
+			fi
+			awk '$1=="window"||$1=="pane"||$1=="bottom"' "$_f"
+		} >"$_lay"
+	fi
+	mv "$_f" "$_f.bak"
+done
+
+if [ "$_n" -eq 0 ]; then
+	echo "mux: nothing to migrate in $MUX_DIR"
+elif [ "$APPLY" -eq 1 ]; then
+	echo "mux: migrated $_n file(s); originals kept as *.layout.bak"
+	echo "mux: check with  mux check  and  mux help profiles"
+else
+	echo "mux: $_n file(s) to migrate; re-run with --apply to do it"
+fi

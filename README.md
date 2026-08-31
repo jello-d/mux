@@ -10,9 +10,10 @@ through a wall of look-alike sessions.
 
 mux turns tmux into that dashboard:
 
-- **Declarative layouts.** A session's windows, panes, working directory, agent,
-  and theme live in one small file. `mux go api` builds or attaches the `api`
-  session the same way every time.
+- **Declarative profiles.** A session's identity and appearance (working
+  directory, theme, agent) live in one small file that names a *layout* for the
+  pane arrangement. `mux go api` builds or attaches `api` the same way every
+  time, and with no profile at all you still get a working session.
 - **A live agent-state strip.** Every session wears a glyph for its agent —
   idle, working, or blocked (needs you). One glance answers "who's waiting on
   me."
@@ -35,7 +36,7 @@ itself (`fzf` optional, for a nicer session picker).
 - [Quickstart](#quickstart)
 - [Concepts](#concepts)
   - [Sessions: go and resume](#sessions-go-and-resume)
-  - [Layouts](#layouts)
+  - [Profiles and layouts](#profiles-and-layouts)
   - [Agents](#agents)
   - [Themes](#themes)
   - [The context seam](#the-context-seam)
@@ -112,7 +113,7 @@ navigation defaults you can skip if you have your own.
 # open (or attach) a session for the current project, agent continuing
 mux go
 
-# write a layout for a project, then bring it up
+# write a profile for a project, then bring it up
 mux new api - ~/src/api      # name=api, default colour, root=~/src/api
 mux go api
 
@@ -127,59 +128,71 @@ mux go api
 
 ### Sessions: go and resume
 
-A **session** is a running tmux session; mux builds it from a **layout** of the
-same name (or an explicit one you pass). Two build verbs differ only in how the
-agent pane starts:
+A **session** is a running tmux session. mux builds it from a **profile** of
+the same name if there is one, and from its own defaults if there is not. Two
+build verbs differ only in how the agent pane starts:
 
-- `mux go [NAME] [LAYOUT]` — the agent **continues** its most recent
+- `mux go [NAME] [PROFILE]` — the agent **continues** its most recent
   conversation.
-- `mux resume [NAME] [LAYOUT]` — the agent **resumes**, prompting you to pick a
+- `mux resume [NAME] [PROFILE]` — the agent **resumes**, prompting you to pick a
   conversation.
 
 If the session is already up, both just attach or switch to it (idempotent —
-they never clobber a live session). `--bare` builds the shape but runs a plain
-shell in the agent pane instead.
+they never clobber a live session). `--bare` builds the same panes but runs a
+plain shell in the agent pane instead.
 
-### Layouts
+### Profiles and layouts
 
-A layout is a small declarative file, `$MUX_DIR/<name>.layout`, parsed and
-validated in full **before** any tmux call, so a malformed layout builds
-nothing. Directives are either **session-wide** (last-wins, order-independent)
-or **shape** (build windows and panes in the order they appear):
+Two files, two jobs, and a directive in the wrong one fails loud rather than
+half-working.
 
-| directive | kind | meaning |
-| --- | --- | --- |
-| `root DIR` | session | working dir for every pane (`~` expands) |
-| `theme NAME` | session | the colour theme |
-| `agent NAME` | session | which agent profile a `pane agent` runs |
-| `notify always\|away` | session | when the agent notification fires |
-| `window NAME` | shape | start a new window |
-| `pane CMD` | shape | a pane running `CMD` (`pane agent` = the agent) |
-| `bottom N\|MIN-MAX` | shape | a full-width bottom shell, bounded height |
-| `include REF` | shape | splice in `REF.layout` (a shape or a layout) |
+A **profile** is the session: who it is and how it looks. It lives at
+`$MUX_DIR/<name>.profile`, and the filename is the session name. Every
+directive is optional.
 
-A real layout composes a shared shape:
+| directive | meaning |
+| --- | --- |
+| `root DIR` | working dir for every pane (`~` expands) |
+| `theme NAME` | the colour theme |
+| `agent NAME` | which agent a `pane agent` runs |
+| `notify always\|away` | when the agent notification fires |
+| `layout NAME` | the pane arrangement to build (default: `default`) |
+
+A **layout** is the pane arrangement, and only that: `layouts/<name>.layout`,
+in your config or shipped in `$MUX_SHARE`.
+
+| directive | meaning |
+| --- | --- |
+| `window NAME` | start a new window (the first opens the session) |
+| `pane CMD` | a pane running `CMD` (`pane agent` = the agent; bare = a shell) |
+| `bottom N\|MIN-MAX` | a full-width bottom shell, bounded height |
+
+So a real profile is three lines, or fewer:
 
 ```
-# ~/.config/mux/api.layout
+# ~/.config/mux/api.profile
 theme   orange
 root    ~/src/api
-include shapes/code      # the shared vim | agent | shell shape (from share/)
+layout  default          # optional; this is already the default
 ```
 
-Every package-data read follows one rule: your config (`$MUX_DIR`) first, then
-the shipped defaults (`$MUX_SHARE`). So `include shapes/code` pulls the
-packaged shape while your own `include mylayout` finds a layout you wrote, and
-a layout, theme, or agent profile you drop in `$MUX_DIR` under a shipped name
-overrides it. Writes (`mux new`, `mux save`, `mux theme -p`) always land in
-`$MUX_DIR`.
+Both are parsed and validated in full **before** any tmux call, so a malformed
+pair builds nothing.
 
-With no layout named at all, `mux go` builds the shipped `default.layout`, so
-a fresh install works before you have written anything.
+Every package-data read follows one rule: your config (`$MUX_DIR`) first, then
+the shipped defaults (`$MUX_SHARE`). So `layout default` finds the packaged
+arrangement, while a layout, theme, or agent you drop in `$MUX_DIR` under a
+shipped name overrides it. Writes (`mux new`, `mux save`, `mux theme -p`)
+always land in `$MUX_DIR`. `mux new` and `mux save` write these for you.
+
+**A profile is a deviation, not a requirement.** With no profile at all, `mux
+go` roots the session at the project you are standing in, builds the shipped
+`default` layout, and takes the default theme. You only write a profile when
+you want something *other* than that, which is why most projects need none.
 
 ### Agents
 
-An **agent profile**, `share/agents/<name>.agent`, is two lines — a `go`
+An **agent**, `share/agents/<name>.agent`, is two lines — a `go`
 command and a `resume` command, each a shell command mux runs as the agent
 pane's process:
 
@@ -241,14 +254,14 @@ Full reference in **`man mux`**. The essentials:
 
 ```
 mux                          pick a session to attach (fzf or a menu)
-mux go [NAME] [LAYOUT]        create/attach/switch; agent continues
-mux resume [NAME] [LAYOUT]    same, but the agent resumes (choose a chat)
+mux go [NAME] [PROFILE]       create/attach/switch; agent continues
+mux resume [NAME] [PROFILE]   same, but the agent resumes (choose a chat)
 mux --bare ...               build the shape, plain shell in the agent pane
 mux ls                       list sessions (with agent-state glyphs)
-mux new [NAME] [COLOR] [ROOT] write a layout ('-' = default colour / no root)
-mux save [NAME]              snapshot this session's shape to NAME.layout
-mux edit [NAME]              open a layout in $EDITOR
-mux rename [OLD] NEW         rename a session and its layout
+mux new [NAME] [COLOR] [ROOT] write a profile ('-' = default colour / no root)
+mux save [NAME]              snapshot this session to NAME.profile + .layout
+mux edit [NAME]              open a profile in $EDITOR
+mux rename [OLD] NEW         rename a session and its profile
 mux theme [NAME|next|prev]   set/cycle/show the theme (-p to persist)
 mux next-blocked             jump to the session that has needed you longest
 mux hide/show SESSION        hide/unhide a session for this client

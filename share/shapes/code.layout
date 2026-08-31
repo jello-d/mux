@@ -1,9 +1,0 @@
-# The code shape: vim on the left, the AGENT on the right (claude by default; a
-# layout can pick another with `agent <name>`), a 5-10 line full-width shell
-# below for commands and log tails. A fragment -- `include shapes/code` from a
-# full layout, which adds its own root/theme/agent. No window of its own beyond
-# this one; included, its window/pane/bottom accumulate into the caller.
-window  code
-pane    vim
-pane    agent
-bottom  5-10
