@@ -315,3 +315,10 @@ from a personal environment repository.
 
 Copyright 2026 JFC Innovations, Inc. Licensed under the Apache License,
 Version 2.0. See [LICENSE](LICENSE).
+
+## Development
+
+An 80-column limit is enforced by a tracked pre-commit hook. Enable it once
+per clone:
+
+    git config core.hooksPath .githooks
