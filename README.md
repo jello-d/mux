@@ -134,12 +134,12 @@ build verbs differ only in how the agent pane starts:
 
 - `mux go [NAME] [PROFILE]` — the agent **continues** its most recent
   conversation.
-- `mux resume [NAME] [PROFILE]` — the agent **resumes**, prompting you to pick a
-  conversation.
+- `mux go --resume [NAME]` — the agent **resumes**, prompting you to pick a
+  conversation (`mux resume` is kept as an alias).
 
 If the session is already up, both just attach or switch to it (idempotent —
-they never clobber a live session). `--bare` builds the same panes but runs a
-plain shell in the agent pane instead.
+they never clobber a live session). `--no-agent` builds the same panes but a
+plain shell runs in the agent pane instead.
 
 ### Profiles and layouts
 
@@ -293,6 +293,20 @@ it on drift, so a theme edit needs no manual step. `mux theme [NAME|next|prev]`
 switches a live session (`-p` persists it into the layout). A theme dropped in
 `$MUX_DIR/themes` overrides a shipped one of the same name.
 
+### Host chips
+
+`$MUX_DIR/hosts` pins the status-left host chip's colour per machine, one
+`HOST STYLE` per line where `HOST` is `hostname -s` and `STYLE` is a
+**comma**-joined tmux run:
+
+```
+manifold    fg=colour252,bg=colour236
+```
+
+Optional, and it holds only the hosts you want to pin — an unlisted host gets a
+stable, readable colour derived from its name, so identically-named sessions on
+different machines are told apart with no configuration.
+
 ### The context seam
 
 mux core knows nothing about any particular notion of "context" — a
@@ -321,7 +335,8 @@ Full reference in **`man mux`**. The essentials:
 mux                          pick a session to attach (fzf or a menu)
 mux go [NAME] [PROFILE]       create/attach/switch; agent continues
 mux resume [NAME] [PROFILE]   same, but the agent resumes (choose a chat)
-mux --bare ...               build the shape, plain shell in the agent pane
+mux --no-agent ...           build the panes, plain shell in the agent pane
+mux why [NAME]               show each resolved value and where it came from
 mux ls                       list sessions (with agent-state glyphs)
 mux new NAME                 create NAME here, binding the name if needed
 mux scan                     rebuild the project discovery map
