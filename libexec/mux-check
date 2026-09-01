@@ -84,6 +84,20 @@ if [ -d "$MUX_DIR" ]; then
 		warn "$_old pre-rename *.layout file(s) in $MUX_DIR"
 		warn "  convert them:  mux migrate-profiles"
 	fi
+	# A name in BOTH the table and profiles.d is drift: promotion is meant
+	# to delete the row, so a surviving one is stale. The breakout wins, but
+	# say so rather than leaving it to precedence.
+	if [ -f "$MUX_DIR/profiles" ]; then
+		for _b in "$MUX_DIR"/profiles.d/*.profile; do
+			[ -e "$_b" ] || continue
+			_bn=${_b##*/}; _bn=${_bn%.profile}
+			if awk '!/^[[:space:]]*#/ && NF {print $1}' \
+				"$MUX_DIR/profiles" | grep -qxF "$_bn"; then
+				warn "'$_bn' is both a row and a breakout file"
+				warn "  the file wins; drop the row"
+			fi
+		done
+	fi
 else warn "no config overlay at $MUX_DIR (using shipped defaults)"; fi
 
 exit "$RC"

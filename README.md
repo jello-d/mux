@@ -189,8 +189,58 @@ always land in `$MUX_DIR`. `mux new` and `mux save` write these for you.
 
 **A profile is a deviation, not a requirement.** With no profile at all, `mux
 go` roots the session at the project you are standing in, builds the shipped
-`default` layout, and takes the default theme. You only write a profile when
-you want something *other* than that, which is why most projects need none.
+`default` layout, and takes a theme derived from the name. You only write one
+when you want something *other* than that, which is why most projects need none.
+
+Most deviations are a single line, so they live in a table rather than a file
+each, `$MUX_DIR/profiles`:
+
+```
+# NAME      key=value ...
+api         theme=cyan
+kg          root=~/src/ManifestOS/apps/knowledge-store
+jellotron   layout=logs
+```
+
+Same keys as the file form, so the two say the same things. A row that outgrows
+one line (it wants comments, say) is promoted to a file under
+`$MUX_DIR/profiles.d/`, and `mux edit` does that for you. Values in a row
+cannot contain spaces, which is exactly the case a breakout file exists for.
+
+### Discovery
+
+`mux go <name>` reaches a project you have never configured and never have to
+`cd` to first, because mux keeps a **map** of the repositories under your source
+roots. Declare them in `$MUX_DIR/scan`, one `PATH [DEPTH]` per line (`~/src 3`
+is assumed if the file is absent):
+
+```
+~/src 3
+~/work 2
+```
+
+The map is a cache, not config: it holds only derived facts, it is rewritten
+wholesale, and deleting it loses nothing. It rebuilds on exactly three triggers
+and never on a timer — `mux scan`, first use, and a lookup miss (or a hit whose
+directory has since vanished). Between the last two it self-corrects whether a
+project appeared, moved, or went away.
+
+`mux go` resolves in this order: a live session, a breakout profile, a table
+row, the map, and then **nothing** — at which point it refuses:
+
+```
+$ mux go tackp
+mux: nothing known as 'tackp'
+mux:   did you mean:      tackup
+mux:   or create it here:  mux new tackp
+```
+
+That refusal is the one piece of deliberate strictness. With no evidence at all,
+a new session and a typo look identical, and silently creating a session at the
+current directory is almost never what was wanted. **`mux new NAME` is how you
+say you meant it**: it creates the session here and binds the name, writing a
+row only if the name is not one this directory already derives. Bare `mux go`
+never reaches that refusal — no name was typed, so nothing was mistyped.
 
 ### Agents
 
@@ -265,7 +315,8 @@ mux go [NAME] [PROFILE]       create/attach/switch; agent continues
 mux resume [NAME] [PROFILE]   same, but the agent resumes (choose a chat)
 mux --bare ...               build the shape, plain shell in the agent pane
 mux ls                       list sessions (with agent-state glyphs)
-mux new [NAME] [COLOR] [ROOT] write a profile ('-' = default colour / no root)
+mux new NAME                 create NAME here, binding the name if needed
+mux scan                     rebuild the project discovery map
 mux save [NAME]              snapshot this session to NAME.profile + .layout
 mux edit [NAME]              open a profile in $EDITOR
 mux rename [OLD] NEW         rename a session and its profile

@@ -1,0 +1,63 @@
+#!/bin/sh
+# mux-scan: rebuild the project discovery map for THIS context, then report what
+# it found. The on-demand trigger; mux also rebuilds silently when the map is
+# absent or a lookup misses (see mux-scan.sh).
+#
+#   mux scan          rescan and report
+#   mux scan --list   print the current map without rescanning
+set -eu
+
+MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
+
+_lib=$(dirname "$0")
+for _l in mux-profiles.sh mux-context.sh mux-scan.sh; do
+	[ -r "$_lib/$_l" ] || {
+		echo "mux: $_l missing (incomplete install)" >&2; exit 1; }
+	. "$_lib/$_l"
+done
+
+# The context decides which map this is: a scan run on one side of a boundary
+# cannot see the other side's trees.
+mux_ctx_env
+_key=${MUX_CTX_SOCKET:-default}
+
+case "${1:-}" in
+--list) ;;
+'')
+	_roots=$(mux_scan_roots)
+	if [ -z "$_roots" ]; then
+		echo "mux: no scan roots configured, and no $HOME/src to fall" \
+			"back on" >&2
+		echo "mux: list them in $(mux_scan_conf), one 'PATH [DEPTH]'" \
+			"per line, e.g." >&2
+		echo "mux:   ~/src 3" >&2
+		exit 1
+	fi
+	printf 'mux: scanning'
+	printf '%s\n' "$_roots" | while read -r _p _d; do
+		printf ' %s (depth %s)' "$_p" "$_d"
+	done
+	[ -f "$(mux_scan_conf)" ] || printf ' [default: no $MUX_DIR/scan]'
+	printf '\n'
+	mux_scan_build "$_key"
+	;;
+*) echo "usage: mux scan [--list]" >&2; exit 2 ;;
+esac
+
+_sf=$(mux_scan_file "$_key")
+if [ ! -f "$_sf" ]; then
+	echo "mux: no map at $_sf (run: mux scan)" >&2
+	exit 1
+fi
+_n=$(cut -f1 "$_sf" | grep -c . || true)
+printf 'mux: %s project(s) in %s\n' "$_n" "$_sf"
+# Name collisions are worth surfacing here rather than at `mux go` time: two
+# repos sharing a basename is a thing to resolve with an alias, once.
+_dup=$(cut -f1 "$_sf" | LC_ALL=C sort | uniq -d)
+if [ -n "$_dup" ]; then
+	printf 'mux: ambiguous name(s) -- give one an alias with `mux new`:\n'
+	printf '%s\n' "$_dup" | while IFS= read -r _d; do
+		printf '  %s\n' "$_d"
+		mux_scan_lookup "$_d" "$_key" | sed 's/^/      /'
+	done
+fi

@@ -13,7 +13,7 @@ set -eu
 _name=mux-theme-hash
 . "$(dirname "$0")/lib.sh"
 
-mkdir -p "$T/bin" "$T/conf/themes" "$T/proj"
+mkdir -p "$T/bin" "$T/conf/themes" "$T/conf/profiles.d" "$T/proj"
 cat >"$T/bin/tmux" <<'EOF'
 #!/bin/sh
 printf '%s\n' "$*" >>"$TMUXLOG"
@@ -28,12 +28,14 @@ chmod +x "$T/bin/tmux"
 TMUXLOG=$T/log; export TMUXLOG
 PATH=$T/bin:$PATH; export PATH
 
-# themeof NAME [PROFILE] -> the theme mux set on the session, or empty.
+# themeof NAME -> the theme mux set on the session, or empty. `new --force` is
+# the vehicle: a typed name nothing knows is refused by design, and --force
+# keeps a repeated call from tripping the already-bound guard.
 themeof() {
 	: >"$TMUXLOG"
 	( cd "$T/proj" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
-		MUX_CACHE="$T/cache" "$HERE/bin/mux" go "$@" ) >/dev/null 2>&1 \
-		|| fail "mux go $* exited $?"
+		MUX_CACHE="$T/cache" "$HERE/bin/mux" new --force "$@" ) \
+		>/dev/null 2>&1 || fail "mux new $* exited $?"
 	awk '/@mux-theme /{print $NF; exit}' "$TMUXLOG"
 }
 
@@ -58,8 +60,14 @@ done | sort -u | grep -c .)
 	|| fail "derived theme [$_a] is not a themes/*.theme that exists"
 
 # --- an explicit theme in the profile wins ----------------------------------
-printf 'theme   red\n' >"$T/conf/pinned.profile"
-_p=$(themeof pinned)
+# `go` here, not `new`: the breakout profile IS the evidence this name exists,
+# so it resolves at step 3 and never reaches the refusal.
+printf 'theme   red\n' >"$T/conf/profiles.d/pinned.profile"
+: >"$TMUXLOG"
+( cd "$T/proj" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
+	MUX_CACHE="$T/cache" "$HERE/bin/mux" go pinned ) >/dev/null 2>&1 \
+	|| fail "mux go pinned exited $?"
+_p=$(awk '/@mux-theme /{print $NF; exit}' "$TMUXLOG")
 [ "$_p" = red ] || fail "explicit theme lost: got [$_p], want red"
 
 # --- `derive off` falls back to the global default --------------------------

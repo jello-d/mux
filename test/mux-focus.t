@@ -9,7 +9,7 @@ set -eu
 _name=mux-focus
 . "$(dirname "$0")/lib.sh"
 
-mkdir -p "$T/bin" "$T/conf/layouts" "$T/proj"
+mkdir -p "$T/bin" "$T/conf/layouts" "$T/conf/profiles.d" "$T/proj"
 cat >"$T/bin/tmux" <<'EOF'
 #!/bin/sh
 printf '%s\n' "$*" >>"$TMUXLOG"
@@ -43,22 +43,22 @@ selected() {
 # for the shipped default (`pane`, `pane agent`, `bottom`) the window takes %1,
 # the left pane %2, and the agent %3. What matters is that the id selected at
 # the end is the one captured for the AGENT pane, not the first one.
-_got=$(selected go f1)
+_got=$(selected new --force f1)
 [ "$_got" = "%3" ] || fail "default: selected [$_got], want the agent %3"
 
 # --bare runs no agent command, but the agent PANE is still the one to open on.
-_got=$(selected --bare go f2)
+_got=$(selected --bare new --force f2)
 [ "$_got" = "%3" ] || fail "--bare: selected [$_got], want the agent %3"
 
 # `pane <name>` naming an agent profile counts as the agent pane too.
 printf 'window w\npane\npane    claude\n' >"$T/conf/layouts/named.layout"
-printf 'layout  named\n' >"$T/conf/named.profile"
+printf 'layout  named\n' >"$T/conf/profiles.d/named.profile"
 _got=$(selected go f3 named)
 [ "$_got" = "%3" ] || fail "pane claude: selected [$_got], want %3"
 
 # No agent anywhere: fall back to the first pane rather than selecting nothing.
 printf 'window w\npane\npane\n' >"$T/conf/layouts/noagent.layout"
-printf 'layout  noagent\n' >"$T/conf/noagent.profile"
+printf 'layout  noagent\n' >"$T/conf/profiles.d/noagent.profile"
 _got=$(selected go f4 noagent)
 [ "$_got" = "%1" ] || fail "no agent: selected [$_got], want the first pane %1"
 
@@ -66,7 +66,7 @@ _got=$(selected go f4 noagent)
 # still opens looking at the agent.
 printf 'window one\npane\nwindow two\npane    agent\n' \
 	>"$T/conf/layouts/late.layout"
-printf 'layout  late\n' >"$T/conf/late.profile"
+printf 'layout  late\n' >"$T/conf/profiles.d/late.profile"
 : >"$TMUXLOG"; : >"$PANESEQ"
 ( cd "$T/proj" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
 	MUX_CACHE="$T/cache" "$HERE/bin/mux" go f5 late ) >/dev/null 2>&1 \

@@ -1,11 +1,14 @@
 #!/bin/sh
-# test/mux-new.t - `mux new` and `mux go` must derive the session name the SAME
-# way. new used to take the cwd basename while go took the git toplevel
-# basename, so a `mux new` run anywhere but a repo's top level wrote a profile
-# `mux go` would never find.
+# test/mux-new.t - `mux new NAME` and `mux go` must agree on what "the project"
+# is. `new` used to take the cwd basename while `go` took the git toplevel
+# basename, so a `mux new` run anywhere but a repo's top level bound a name to
+# the wrong directory and `mux go` would never find it.
 #
-# `mux new` writes a file and exits before any tmux or socket work, so this
-# starts no server. Scratch repo, scratch overlay; nothing outside T.
+# That parity is now load-bearing in a second way: `new` writes a row only when
+# the name is NOT what the directory derives, so a disagreement between the two
+# derivations would write spurious rows for names that needed none.
+#
+# tmux is stubbed, so no server starts. Scratch repo, scratch overlay.
 set -eu
 _name=mux-new
 . "$(dirname "$0")/lib.sh"
@@ -13,60 +16,75 @@ _name=mux-new
 command -v git >/dev/null 2>&1 || { printf 'skip %s (no git)\n' "$_name"
 	exit 0; }
 
-mkdir -p "$T/conf" "$T/myrepo/deep/sub" "$T/plaindir/sub"
+mkdir -p "$T/bin" "$T/conf" "$T/myrepo/deep/sub" "$T/plaindir/sub"
 git init -q "$T/myrepo" 2>/dev/null || fail "could not make a scratch repo"
+cat >"$T/bin/tmux" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$*" >>"$TMUXLOG"
+case "$*" in
+*list-sessions*|*has-session*) exit 1 ;;
+*window_index*) printf '0\n' ;;
+*pane_id*)      printf '%%1\n' ;;
+esac
+exit 0
+EOF
+chmod +x "$T/bin/tmux"
+TMUXLOG=$T/log; export TMUXLOG
+PATH=$T/bin:$PATH; export PATH
 
-# new DIR ARGS... : run `mux new` from DIR against the scratch overlay.
-# GIT_CEILING_DIRECTORIES stops the toplevel search at T, so a repo ABOVE the
-# scratch dir (this checkout, if /tmp were ever inside one) cannot leak in.
-new() {
+# mux DIR ARGS... : GIT_CEILING_DIRECTORIES stops the toplevel search at T, so
+# a repo ABOVE the scratch tree cannot leak in.
+mux() {
 	_d=$1; shift
 	( cd "$_d" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
-		GIT_CEILING_DIRECTORIES="$T" "$HERE/bin/mux" new "$@" ) \
-		>/dev/null || fail "mux new in $_d exited $?"
+		MUX_CACHE="$T/cache" GIT_CEILING_DIRECTORIES="$T" \
+		"$HERE/bin/mux" "$@" ) 2>&1
 }
-# root_of NAME -> the root line of NAME.profile, or empty if it has none.
-root_of() {
-	awk '$1=="root"{print $2; exit}' "$T/conf/$1.profile"
+# built -> the session name of the last new-session call.
+built() {
+	awk '/^new-session /{for(i=1;i<=NF;i++) if($i=="-s") print $(i+1)}' \
+		"$TMUXLOG" | head -1
+}
+rooted() {
+	awk '/^new-session /{for(i=1;i<=NF;i++) if($i=="-c") print $(i+1)}' \
+		"$TMUXLOG" | head -1
 }
 
-# --- in a repo: the profile is named for the REPO, wherever you run it -------
-new "$T/myrepo/deep/sub"
-[ -f "$T/conf/myrepo.profile" ] \
-	|| fail "from a repo subdir, new wrote $(ls "$T/conf") not myrepo.profile"
-# ... and rooted at the repo, not at the subdir it was run from, so the
-# session `mux go` builds from it is the same session either way.
-eq_root=$(root_of myrepo)
-[ "$eq_root" = "$T/myrepo" ] \
-	|| fail "root: got [$eq_root] want [$T/myrepo]"
+# --- a NAME is required: `new` exists to name something ---------------------
+mux "$T/myrepo" new >/dev/null 2>&1 && fail "bare `mux new` should be refused"
 
-# Running it again from the TOP of the same repo must resolve to the same
-# profile name -- that is the whole point -- so it hits the exists guard.
-_out=$( ( cd "$T/myrepo" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
-	GIT_CEILING_DIRECTORIES="$T" "$HERE/bin/mux" new ) 2>&1 ) \
-	&& fail "second new should have refused to clobber"
-case $_out in
-*"profile exists"*) ;;
-*) fail "top-of-repo new resolved to a DIFFERENT name: [$_out]" ;;
-esac
+# --- `new` names THIS directory, even inside a repo -------------------------
+# The one place it deliberately differs from bare `go`: without this a
+# subdirectory could never have a session of its own, because the binding would
+# swallow the whole enclosing repo.
+: >"$TMUXLOG"
+mux "$T/myrepo/deep/sub" new alias1 >/dev/null || fail "mux new alias1 failed"
+[ "$(rooted)" = "$T/myrepo/deep/sub" ] \
+	|| fail "new rooted at [$(rooted)], want $T/myrepo/deep/sub"
+grep -q "^alias1 .*root=$T/myrepo/deep/sub" "$T/conf/profiles" \
+	|| fail "new bound alias1 wrongly: $(cat "$T/conf/profiles")"
 
-# --- outside a repo: the cwd, as before ------------------------------------
-new "$T/plaindir/sub"
-[ -f "$T/conf/sub.profile" ] \
-	|| fail "outside a repo, new should name the profile for the cwd"
-eq_root=$(root_of sub)
-[ "$eq_root" = "$T/plaindir/sub" ] \
-	|| fail "non-repo root: got [$eq_root] want [$T/plaindir/sub]"
+# --- bare `mux go` still derives the REPO, from any subdirectory ------------
+# The subdirectory binding above must not hijack the enclosing project: the
+# root-to-name lookup is an EXACT match, never a walk up the tree.
+: >"$TMUXLOG"
+mux "$T/myrepo/deep/sub" go >/dev/null || fail "bare go in a subdir failed"
+[ "$(built)" = myrepo ] || fail "bare go built [$(built)], want myrepo"
+[ "$(rooted)" = "$T/myrepo" ] || fail "bare go rooted at [$(rooted)]"
+: >"$TMUXLOG"
+mux "$T/myrepo" go >/dev/null || fail "bare go at the repo top failed"
+[ "$(built)" = myrepo ] || fail "top-of-repo go built [$(built)], want myrepo"
 
-# --- explicit arguments still win ------------------------------------------
-new "$T/myrepo/deep/sub" chosen - "$T/plaindir"
-[ -f "$T/conf/chosen.profile" ] || fail "an explicit NAME was not honoured"
-eq_root=$(root_of chosen)
-[ "$eq_root" = "$T/plaindir" ] || fail "an explicit ROOT was not honoured"
+# --- a name the directory already derives needs NO row ----------------------
+: >"$TMUXLOG"
+mux "$T/myrepo" new myrepo >/dev/null || fail "mux new myrepo failed"
+grep -q '^myrepo ' "$T/conf/profiles" 2>/dev/null \
+	&& fail "new wrote a row for a name the directory already derives"
 
-# '-' still means NO root line, so the profile stays portable.
-new "$T/myrepo" rootless - -
-[ -f "$T/conf/rootless.profile" ] || fail "rootless layout was not written"
-[ -z "$(root_of rootless)" ] || fail "'-' should write no root line"
+# --- outside a repo, the project is the cwd ---------------------------------
+: >"$TMUXLOG"
+mux "$T/plaindir/sub" go >/dev/null || fail "bare go outside a repo failed"
+[ "$(built)" = sub ] || fail "outside a repo, go built [$(built)], want sub"
+[ "$(rooted)" = "$T/plaindir/sub" ] || fail "non-repo root: [$(rooted)]"
 
 pass
