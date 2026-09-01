@@ -325,7 +325,7 @@ mux --bare ...               build the shape, plain shell in the agent pane
 mux ls                       list sessions (with agent-state glyphs)
 mux new NAME                 create NAME here, binding the name if needed
 mux scan                     rebuild the project discovery map
-mux save [NAME]              snapshot this session to NAME.profile + .layout
+mux save [NAME]              snapshot this session (records only deltas)
 mux edit [NAME]              open a profile in $EDITOR
 mux rename [OLD] NEW         rename a session and its profile
 mux theme [NAME|next|prev]   set/cycle/show the theme (-p to persist)

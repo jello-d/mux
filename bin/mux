@@ -719,11 +719,15 @@ is_shell() {
 # by @mux-bottom, carrying its SPEC). The command is the pane's CURRENT command
 # (best-effort); a shell pane emits a bare directive.
 emit_window() {
-        tm list-panes -t "$1" \
-                -F '#{pane_index}|#{@mux-bottom}|#{pane_current_command}' \
-        | sort -t'|' -k1,1n | while IFS='|' read -r _pi _pb _pc; do
+        tm list-panes -t "$1" -F \
+   '#{pane_index}|#{@mux-bottom}|#{@mux-agent}|#{pane_current_command}' \
+        | sort -t'|' -k1,1n | while IFS='|' read -r _pi _pb _pa _pc; do
                 [ -z "$_pb" ] || continue
-                if is_shell "$_pc"; then printf 'pane\n'
+                # @mux-agent, set at build: an agent that has exited (or was
+                # never installed) looks exactly like a shell here, so without
+                # the mark a round trip would turn `pane agent` into `pane`.
+                if [ -n "$_pa" ]; then printf 'pane    agent\n'
+                elif is_shell "$_pc"; then printf 'pane\n'
                 else printf 'pane    %s\n' "$_pc"; fi
         done
         tm list-panes -t "$1" -F '#{@mux-bottom}|#{pane_current_command}' \
@@ -1051,11 +1055,21 @@ if [ "$cmd" = edit ]; then
 fi
 
 # --- save: snapshot the CURRENT live session -------------------------------
-# Writes the TWO files the split calls for: <name>.layout with the arrangement
-# it read off the session (window names, each pane's current command, any
-# full-width bottom from @mux-bottom), and <name>.profile with the identity and
-# appearance (root, theme) naming that layout. Pane commands are best-effort --
-# review them. Runs inside a session; NAME defaults to the session name.
+# Records the session the way everything else does: as a DEVIATION. It reads the
+# arrangement off the live session (window names, each pane's current command,
+# any full-width bottom from @mux-bottom) and then writes only what mux could
+# not have worked out for itself:
+#
+#   - the arrangement, as layouts/<name>.layout, unless it is byte-for-byte one
+#     that already exists -- saving a session you never rearranged should not
+#     mint a private copy of the shipped default;
+#   - a row, carrying root only when the name would not derive from it, theme
+#     only when it is not the one the name hashes to, and layout only when it is
+#     not `default`.
+#
+# So `mux save` on an untouched session can correctly write NOTHING. Pane
+# commands are best-effort -- review them. Runs inside a session; NAME defaults
+# to the session name.
 if [ "$cmd" = save ]; then
         [ -n "${TMUX:-}" ] || {
                 echo "mux: save must run inside a session" >&2; exit 1; }
@@ -1064,50 +1078,89 @@ if [ "$cmd" = save ]; then
                 echo "mux: could not identify the session" >&2; exit 1; }
         sv_name=${name_arg:-$sv_sess}
         sv_name=$(printf '%s' "$sv_name" | tr ':.' '--')
-        sv_file=$MUX_DIR/$sv_name.profile
+
+        # The arrangement, into a temp so it can be compared before it lands.
+        sv_tmp=$(mktemp) || { echo "mux: mktemp failed" >&2; exit 1; }
+        trap 'rm -f "$sv_tmp"' EXIT
+        tm list-windows -t "=$sv_sess" -F '#{window_index} #{window_name}' \
+        | while read -r _wi _wn; do
+                printf 'window  %s\n' "$_wn"
+                emit_window "=$sv_sess:$_wi"
+        done >"$sv_tmp"
+        [ -s "$sv_tmp" ] || {
+                echo "mux: read no windows from $sv_sess" >&2; exit 1; }
+
+        # Does an existing layout already say this? Compare NORMALIZED, so
+        # comments and spacing do not make a match look like a difference.
+        sv_layout=
+        sv_norm=$(mux_conf_clean <"$sv_tmp")
+        for _cand in $(mux_data_stems layouts .layout); do
+                _cf=$(mux_data_find layouts "$_cand" .layout)
+                [ -n "$_cf" ] || continue
+                [ "$(mux_conf_clean <"$_cf")" = "$sv_norm" ] || continue
+                sv_layout=$_cand
+                break
+        done
+
         sv_lfile=$MUX_DIR/layouts/$sv_name.layout
-        for _e in "$sv_file" "$sv_lfile"; do
-                [ "$force" -eq 1 ] || [ ! -e "$_e" ] || {
-                        echo "mux: exists: $_e (use --force)" >&2
+        if [ -z "$sv_layout" ]; then
+                [ "$force" -eq 1 ] || [ ! -e "$sv_lfile" ] || {
+                        echo "mux: exists: $sv_lfile (use --force)" >&2
                         exit 1
                 }
-        done
-        # Root: the first window's first pane path (the primary; for a mux-built
-        # session every pane shares it anyway), folded to ~.
-        sv_fw=$(tm list-windows -t "$sv_sess" -F '#{window_index}' \
-                2>/dev/null | head -1)
-        sv_root=$(tm list-panes -t "$sv_sess:$sv_fw" \
-                -F '#{pane_current_path}' 2>/dev/null | head -1)
-        case $sv_root in
-                "$HOME") sv_root='~' ;;
-                "$HOME"/*) sv_root="~/${sv_root#"$HOME"/}" ;;
-        esac
-        sv_theme=$(tm show-options -t "$sv_sess" -qv @mux-theme \
+                mkdir -p "$MUX_DIR/layouts"
+                {
+                        printf '# %s: arrangement captured from session %s' \
+                                "$sv_name" "$sv_sess"
+                        printf ' on %s.\n' "$(date '+%Y-%m-%d')"
+                        printf '# Pane commands are best-effort;'
+                        printf ' review them.\n'
+                        cat "$sv_tmp"
+                } >"$sv_lfile"
+                sv_layout=$sv_name
+                echo "mux: wrote $sv_lfile"
+        else
+                echo "mux: arrangement matches the '$sv_layout' layout;" \
+                        "no new one written"
+        fi
+        rm -f "$sv_tmp"; trap - EXIT
+
+        # Root: the session's own start directory, folded to ~. Dropped when
+        # the name derives from it, which needs the root to BE a project base
+        # (a git toplevel, or in no repo at all) -- a subdirectory of a repo
+        # derives the REPO's name, so its root must be kept.
+        sv_root=$(tm display-message -t "=$sv_sess" -p '#{session_path}' \
                 2>/dev/null || true)
-        sv_stamp=$(date '+%Y-%m-%d')
-        mkdir -p "$MUX_DIR/layouts"
-        # The arrangement.
-        {
-                printf '# %s: arrangement captured from session %s on %s.\n' \
-                        "$sv_name" "$sv_sess" "$sv_stamp"
-                printf '# Pane commands are best-effort; review them.\n'
-                tm list-windows -t "=$sv_sess" \
-                        -F '#{window_index} #{window_name}' \
-                | while read -r _wi _wn; do
-                        printf 'window  %s\n' "$_wn"
-                        emit_window "=$sv_sess:$_wi"
-                done
-        } >"$sv_lfile"
-        # The identity and appearance, naming that arrangement.
-        {
-                printf '# %s: captured from session %s by `mux save` on %s.\n' \
-                        "$sv_name" "$sv_sess" "$sv_stamp"
-                [ -n "$sv_root" ] && printf 'root    %s\n' "$sv_root"
-                [ -n "$sv_theme" ] && printf 'theme   %s\n' "$sv_theme"
-                printf 'layout  %s\n' "$sv_name"
-        } >"$sv_file"
-        echo "mux: wrote $sv_file"
-        echo "mux: wrote $sv_lfile"
+        sv_pairs=
+        if [ -n "$sv_root" ]; then
+                _top=$(git -C "$sv_root" rev-parse --show-toplevel \
+                        2>/dev/null || true)
+                if [ "$(basename "$sv_root")" = "$sv_name" ] \
+                   && { [ -z "$_top" ] || [ "$_top" = "$sv_root" ]; }; then
+                        :        # derivable, so not worth recording
+                else
+                        sv_pairs="root=$(mux_fold_tilde "$sv_root")"
+                fi
+        fi
+        # Theme: only when it is not the one this name would hash to anyway.
+        sv_theme=$(tm show-options -t "=$sv_sess" -qv @mux-theme \
+                2>/dev/null || true)
+        if [ -n "$sv_theme" ] && [ "$sv_theme" != "$(_hash_theme "$sv_name")" ]
+        then
+                sv_pairs="$sv_pairs theme=$sv_theme"
+        fi
+        [ "$sv_layout" = default ] || sv_pairs="$sv_pairs layout=$sv_layout"
+        sv_pairs=${sv_pairs# }
+
+        if [ -n "$sv_pairs" ]; then
+                mux_prof_replace "$sv_name" "$sv_pairs" || {
+                        echo "mux: could not write $(mux_prof_file)" >&2
+                        exit 1; }
+                echo "mux: $sv_name -> $sv_pairs"
+        else
+                mux_prof_drop "$sv_name"
+                echo "mux: nothing to record -- $sv_name is entirely derivable"
+        fi
         echo "mux: launch it with  mux go $sv_name"
         exit 0
 fi
@@ -1717,13 +1770,21 @@ while read -r verb rest; do
 		# it cost a keystroke on every single launch. A `pane <name>`
 		# that names an agent counts too. Falls back to the first pane
 		# when a layout has no agent at all.
-		if [ -z "$agentpane" ]; then
-			case $rest in
-			agent) agentwin=$win; agentpane=$thispane ;;
-			*)     if [ -n "$(_find_agent "${rest%% *}")" ]; then
-				agentwin=$win; agentpane=$thispane
-			       fi ;;
-			esac
+		_isagent=0
+		case $rest in
+		agent) _isagent=1 ;;
+		*) [ -n "$(_find_agent "${rest%% *}")" ] && _isagent=1 ;;
+		esac
+		if [ "$_isagent" -eq 1 ]; then
+			# Marked on the PANE, the same way a bottom pane carries
+			# @mux-bottom. Without it `mux save` cannot tell the
+			# agent pane from any other: it reads the running
+			# command, and an agent that has exited (or was never
+			# installed) just looks like a shell, so a round trip
+			# would quietly turn `pane agent` into a bare `pane`.
+			tm set-option -p -t "$thispane" @mux-agent 1
+			[ -n "$agentpane" ] || { agentwin=$win
+				agentpane=$thispane; }
 		fi
 		paneseen=$((paneseen + 1))
 		;;
