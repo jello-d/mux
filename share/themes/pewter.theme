@@ -1,0 +1,9 @@
+# pewter: a MID-tone warm grey. Between the dark majority and the light few,
+# which is a band only orange and slate occupied. Neutral enough to sit under
+# any accent, warm enough not to read as graphite.
+bar     bg=#6b6259 fg=#f0e8de
+window  fg=#211d18 bg=#c8b49a bold
+accent  fg=#d8bc98
+border  fg=#8a8078
+select  fg=#211d18 bg=#d0bfa8
+prompt  bg=#6e645c fg=#f0e8de

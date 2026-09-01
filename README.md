@@ -202,10 +202,14 @@ kg          root=~/src/ManifestOS/apps/knowledge-store
 jellotron   layout=logs
 ```
 
-Same keys as the file form, so the two say the same things. A row that outgrows
-one line (it wants comments, say) is promoted to a file under
-`$MUX_DIR/profiles.d/`, and `mux edit` does that for you. Values in a row
-cannot contain spaces, which is exactly the case a breakout file exists for.
+Same keys as the file form, so the two say the same things. `mux edit NAME`
+opens the row as a readable multi-line draft and folds it back into a line on
+save. If the draft comes back with a **comment** in it — or a value containing a
+space, the other thing a line cannot hold — the entry is promoted to
+`$MUX_DIR/profiles.d/<name>.profile` instead and the row is dropped, so the
+breakout happens exactly when you need it and never on a rule you have to
+remember. A draft that will not parse is kept and named rather than discarded;
+`mux edit` on the same name resumes it, and `mux check` lists any you forgot.
 
 ### Discovery
 
@@ -275,7 +279,11 @@ accent  fg=colour214
 ```
 
 `themes/defaults` names the global default (`default <name>`) and how an unset
-theme is derived (`derive hash`). With `hash`, a session with no `theme` of its
+theme is derived (`derive hash`). Twenty-four themes ship, spread across
+background lightness as well as hue — dark, mid-tone, and light — since a pale
+bar in a strip of dark ones is the most legible distinction there is.
+
+With `hash`, a session with no `theme` of its
 own takes one deterministically from its **name**, so every project wears a
 stable colour with nothing configured. Two projects share one only by
 coincidence; `mux theme` fixes that in a keystroke. Priority is explicit >

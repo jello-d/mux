@@ -1,0 +1,6 @@
+# amber: the warm gold end, which the set had no entry for -- every other warm
+# theme (copper, ember, sandstone, orange) sits in the orange/tan range and
+# none of them read as YELLOW. Dark amber bar, gold chip.
+bar     bg=#2b2207 fg=#f2e0a8
+window  fg=#1a1400 bg=#e6b422 bold
+accent  fg=#ffcc3d

@@ -1,0 +1,9 @@
+# lilac: a LIGHT lavender. The purple family was four themes deep (purple,
+# orchid, plum, ultraviolet) and every one of them dark, so this separates on
+# lightness rather than adding another dark violet nobody could tell from them.
+bar     bg=#d8cce8 fg=#2e2440
+window  fg=#f4f0fa bg=#6a4f9a bold
+accent  fg=#7a58b0
+border  fg=#a89cbc
+select  fg=#f4f0fa bg=#785eb4
+prompt  bg=#e6dcf2 fg=#2e2440

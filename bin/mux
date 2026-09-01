@@ -966,9 +966,88 @@ if [ "$cmd" = edit ]; then
                         exit 1; }
                 _en=$(tm display-message -p '#{session_name}')
         fi
-        _ef=$MUX_DIR/$_en.profile
-        [ -f "$_ef" ] || { echo "mux: no profile: $_ef" >&2; exit 1; }
-        exec "${EDITOR:-vi}" "$_ef"
+
+        # A BREAKOUT profile is already a file in the right syntax; edit it in
+        # place. Everything else goes through a draft.
+        _bo=$(mux_data_find profiles.d "$_en" .profile)
+        # $EDITOR is word-split on purpose: it commonly carries flags, e.g.
+        # EDITOR="code -w" or "emacsclient -nw".
+        # shellcheck disable=SC2086
+        if [ -n "$_bo" ]; then exec ${EDITOR:-vi} "$_bo"; fi
+
+        # The draft lives at a DETERMINISTIC path, so recovering a botched edit
+        # needs no argument to be remembered or typed: `mux edit NAME` finds it
+        # and reopens it. Same idea as an interrupted `git commit`.
+        _dd=${MUX_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/mux}/edit
+        _df=$_dd/$_en.profile
+        mkdir -p "$_dd"
+        if [ -f "$_df" ]; then
+                echo "mux: resuming the unsaved draft at $_df" >&2
+        else
+                mux_prof_directives "$_en" >"$_df" || exit 1
+        fi
+
+        # shellcheck disable=SC2086
+        ${EDITOR:-vi} "$_df" || {
+                echo "mux: editor exited non-zero; draft kept at $_df" >&2
+                exit 1; }
+
+        # Parse the draft back. Anything unparseable KEEPS the draft and says
+        # where it is -- the failure hands your work back rather than eating it.
+        _pairs=
+        _promote=0
+        _bad=
+        while IFS= read -r _line; do
+                case $_line in
+                '') continue ;;
+                [[:space:]]*'#'*|'#'*)
+                        # A comment cannot live in a one-line row. That is the
+                        # signal the entry has outgrown the table, so it is
+                        # what triggers promotion to a breakout file.
+                        _promote=1; continue ;;
+                esac
+                _k=${_line%%[[:space:]]*}
+                _v=${_line#"$_k"}
+                _v=${_v#"${_v%%[![:space:]]*}"}
+                case $_k in
+                root|theme|agent|notify|layout) ;;
+                *) _bad="unknown key '$_k'"; break ;;
+                esac
+                [ -n "$_v" ] || { _bad="'$_k' has no value"; break; }
+                # A value with whitespace cannot be a pair on a shared line --
+                # the other case a breakout file exists for.
+                case $_v in *[[:space:]]*) _promote=1 ;; esac
+                _pairs="$_pairs $_k=$_v"
+        done <"$_df"
+        if [ -n "$_bad" ]; then
+                echo "mux: $_df: $_bad" >&2
+                echo "mux: draft kept; fix it and re-run  mux edit $_en" >&2
+                exit 1
+        fi
+        _pairs=${_pairs# }
+
+        if [ "$_promote" -eq 1 ]; then
+                # Promote: the draft becomes the breakout verbatim (comments
+                # and all), and the row goes, so a name never lives in both.
+                mkdir -p "$MUX_DIR/profiles.d"
+                mv -f "$_df" "$MUX_DIR/profiles.d/$_en.profile"
+                mux_prof_drop "$_en"
+                echo "mux: kept as $MUX_DIR/profiles.d/$_en.profile"
+                echo "mux: (a comment, or a value with a space, does not fit" \
+                        "a one-line row)"
+        else
+                mux_prof_replace "$_en" "$_pairs" || {
+                        echo "mux: could not write $(mux_prof_file);" \
+                                "draft kept at $_df" >&2
+                        exit 1; }
+                rm -f "$_df"
+                if [ -n "$_pairs" ]; then
+                        echo "mux: $_en -> $_pairs"
+                else
+                        echo "mux: $_en has no deviations left; row removed"
+                fi
+        fi
+        exit 0
 fi
 
 # --- save: snapshot the CURRENT live session -------------------------------

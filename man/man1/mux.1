@@ -86,6 +86,12 @@ it names (windows, panes, bottom).
 .B mux edit " [" \fINAME\fR ]
 Open a profile in
 .BR $EDITOR .
+A row is presented as a multi-line draft and folded back into a line on save. A
+draft returned with a COMMENT in it, or with a value containing a space, is
+promoted to
+.I $MUX_DIR/profiles.d/<name>.profile
+instead and its row dropped. A draft that does not parse is kept and reported;
+editing the same name resumes it.
 .TP
 .B mux rename " [" \fIOLD\fR "] " \fINEW\fR
 Rename a session and its matching layout.
