@@ -91,6 +91,11 @@
 # build the arrangement in the order they appear.
 set -eu
 
+# The ONE version string. The man page footer and `mux --version` both read it
+# from here, so they cannot drift apart the way a hardcoded "mux 0.1" in the
+# man page already had.
+MUX_VERSION=0.2
+
 MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
 TMUX_CONF=${XDG_CONFIG_HOME:-$HOME/.config}/tmux/tmux.conf
 
@@ -200,6 +205,38 @@ _find_profile() {  # <name>
         printf '%s' "$_p"
 }
 
+# Every profile NAME available, in any of its forms: a row in the table, a
+# breakout file, or (transitionally) a pre-rename <name>.layout at the overlay
+# root. The table is the PRIMARY form now, so anything that lists profiles has
+# to start here -- listing only files showed an empty set to anyone who had
+# done the sensible thing and used rows.
+_profile_names() {
+        {
+                mux_prof_names
+                for _f in "$MUX_DIR"/profiles.d/*.profile; do
+                        [ -e "$_f" ] || continue
+                        _b=${_f##*/}; printf '%s\n' "${_b%.profile}"
+                done
+                for _f in "$MUX_DIR"/*.layout; do
+                        [ -e "$_f" ] || continue
+                        _b=${_f##*/}; printf '%s\n' "${_b%.layout}"
+                done
+        } | LC_ALL=C sort -u | grep .
+        return 0
+}
+
+# The root a profile declares, whichever form it is in. Empty when it declares
+# none (the session then roots where it is launched).
+_profile_root() {   # <name>
+        _r=$(mux_prof_get "$1" root)
+        if [ -z "$_r" ]; then
+                _pf=$(_find_profile "$1")
+                [ -n "$_pf" ] && _r=$(mux_conf_clean <"$_pf" \
+                        | awk '$1=="root"{print $2; exit}')
+        fi
+        printf '%s' "$_r"
+}
+
 # Space-joined NAMEs for one data kind -- what the help listings and the theme
 # cycler want (one line, or a word-splittable list). Feeds `mux --help`, so it
 # lists the themes and agents actually available on this box, shipped ones and
@@ -207,6 +244,33 @@ _find_profile() {  # <name>
 _stems_line() {   # <kind> <ext>
         mux_data_stems "$1" "$2" | tr '\n' ' '
 }
+
+# A theme chosen deterministically from a session NAME, so a project wears a
+# stable colour with nothing configured and two projects share one only by
+# coincidence. cksum is POSIX and its exact value does not matter -- only that
+# the same name always lands on the same theme.
+#
+# The index is into the SORTED theme set, so adding or removing a theme
+# reshuffles every session that has not pinned one. Cosmetic, and pinning is one
+# `mux theme -p` away. Deliberately NOT unique-per-live-session: an identity you
+# can learn ("api is the green one") beats one that avoids every collision but
+# changes between launches.
+_hash_theme() {   # <session name>
+        _ht=$(mux_data_stems themes .theme)
+        [ -n "$_ht" ] || return 0
+        _hn=$(printf '%s\n' "$_ht" | grep -c .)
+        [ "$_hn" -gt 0 ] || return 0
+        _hs=$(printf '%s' "$1" | cksum | awk '{print $1}')
+        printf '%s\n' "$_ht" | sed -n "$(( _hs % _hn + 1 ))p"
+}
+
+# The value of one key in themes/defaults, or empty.
+_theme_default() {  # <key>
+        _df=$(mux_data_find themes defaults '')
+        [ -n "$_df" ] || return 0
+        mux_conf_clean < "$_df" | awk -v k="$1" '$1==k{print $2; exit}'
+}
+
 
 # The PROJECT a bare invocation refers to: the git toplevel if we are in a
 # repo, else the current directory. The ONE derivation, used for both the
@@ -251,15 +315,12 @@ _ensure_side() {
 # one-side-or-the-other view `mux ls` gives for sessions.
 _list_layouts() {
         _ensure_side
-        { mux_data_files '' .profile; mux_data_files '' .layout; } \
-        | while IFS= read -r _f; do
-                _rt=$(awk '$1=="root"{print $2; exit}' "$_f")
-                case "$(mux_ctx_side "$_rt")" in
+        _profile_names | while IFS= read -r _n; do
+                case "$(mux_ctx_side "$(_profile_root "$_n")")" in
                         shared|"$_cur_side") ;;
                         *) continue ;;
                 esac
-                _b=${_f##*/}; _b=${_b%.profile}
-                printf '%s ' "${_b%.layout}"
+                printf '%s ' "$_n"
         done
 }
 
@@ -290,30 +351,33 @@ usage() {
 usage: mux [OPTION] [VERB] [NAME] [PROFILE]  (OPTION may follow VERB too)
   (no verb)                  pick a session to attach (fzf or numbered menu)
   go [NAME] [PROFILE]        create/attach/switch; agent continues in the pane
-  resume [NAME] [PROFILE]    same, but the agent resumes (choose a conversation)
-  kill NAME                  tear the named session down
-  kill-all                   tear down every session on this socket (prompts)
+  go --resume                same, but the agent resumes (choose a conversation)
+  kill NAME                  tear the named session down (--all: every one)
   reload                     re-source tmux.conf on every running mux server
   ls                         list sessions in the current context
   new NAME                   create NAME here (binds the name if needed)
-  save [NAME]                snapshot this session to NAME.profile + .layout
+  save [NAME]                snapshot this session (records only deltas)
   hide/show SESSION          hide/unhide SESSION for this client (strip/cycle)
-  show-all                   clear this client's hidden sessions
+                             show --all clears this client's hidden set
   next-blocked               jump to the session that has needed you longest
   theme [NAME|next|prev]     set/cycle/show the theme (remembered)
   rename [OLD] NEW           rename a session (and its matching layout)
   edit [NAME]                open a profile in $EDITOR
+  why [NAME]                 show each resolved value and where it came from
   check                      audit mux's install: package data, deps, overlay
   migrate-profiles           convert pre-rename *.layout files (--apply)
   scan                       rebuild the project discovery map (--list)
-  --bare                     go/resume without the agent (pane is a plain shell)
+  --no-agent                 go/new without the agent (its pane is a shell)
+  --attach                   go: attach a live session whose root differs
+  --all                      kill/show: act on every session
   --force                    overwrite an existing profile (save/new)
-  help [TOPIC]               this help; TOPIC = agents|colors|profiles|palette
+  help [TOPIC]               this help; TOPIC = agents|themes|profiles|palette
   -h, --help                 alias for bare `help`
+  -V, --version              print the version
 EOF
         echo >&2
-        _wrap_list "  profiles (go/resume NAME): " "$(_list_layouts)"
-        _wrap_list "  colors  (new NAME COLOR):  " \
+        _wrap_list "  profiles (mux go NAME):    " "$(_list_layouts)"
+        _wrap_list "  themes  (mux theme NAME):  " \
                 "$(_stems_line themes .theme)"
         _wrap_list "  agents  (agent NAME):      " \
                 "$(_stems_line agents .agent)"
@@ -330,15 +394,23 @@ EOF
 #
 # No verb at all -> the session picker: pick=1, then flow as an attach (cmd=go).
 bare=0
+attach=0
+all=0
+resume=0
 force=0
 persist=0
 cmd=
 while [ "$#" -gt 0 ]; do
         case $1 in
-                --bare|-b)    bare=1; shift ;;
+                # --bare said nothing about what it did. --no-agent does.
+                --no-agent|--bare|-b) bare=1; shift ;;
+                --attach|-a)  attach=1; shift ;;
+                --all)        all=1; shift ;;
+                --resume)     resume=1; shift ;;
                 --force)      force=1; shift ;;
                 --persist|-p) persist=1; shift ;;   # retired: now the default
                 -h|--help)    usage 0 ;;
+                --version|-V) printf 'mux %s\n' "$MUX_VERSION"; exit 0 ;;
                 --) shift; break ;;
                 -*) echo "mux: unknown option: $1" >&2; usage ;;
                 *)  if [ -n "$cmd" ]; then break; fi
@@ -353,22 +425,38 @@ if [ -z "$cmd" ]; then
 fi
 case $cmd in
         go|resume|kill|kill-all|reload|ls|hide|show|show-all) ;;
-        save|new|help|theme|rename|edit) ;;
+        save|new|help|theme|rename|edit|why) ;;
         *) echo "mux: unknown verb: $cmd" >&2; usage ;;
 esac
+# The retired verbs are the flag forms spelled out. Kept as aliases rather than
+# removed: they are in muscle memory and in whatever scripts already call them,
+# and folding them here means exactly one code path below.
+case $cmd in
+        kill-all)  cmd=kill; all=1 ;;
+        show-all)  cmd=show; all=1 ;;
+        resume)    cmd=go;   resume=1 ;;
+esac
+[ "$resume" -eq 1 ] && [ "$cmd" = go ] && cmd=resume
 
 # Arity per verb. --bare is meaningful only where claude is launched. kill
 # requires an explicit NAME -- it is too destructive to run against an inferred
 # session; kill-all takes none (it hits the whole socket, behind a prompt).
 case $cmd in
-        reload|ls|kill-all|show-all) [ "$#" -eq 0 ] || {
+        reload|ls) [ "$#" -eq 0 ] || {
                 echo "mux: $cmd takes no arguments" >&2; usage; } ;;
-        kill|hide|show) [ "$#" -eq 1 ] || {
-                echo "mux: $cmd needs a session NAME (see: mux ls)" >&2
+        kill|show) if [ "$all" -eq 1 ]; then
+                [ "$#" -eq 0 ] || { echo "mux: $cmd --all takes no NAME" >&2
+                        usage; }
+           else
+                [ "$#" -eq 1 ] || {
+                        echo "mux: $cmd needs a NAME, or --all" >&2; usage; }
+           fi ;;
+        hide) [ "$#" -eq 1 ] || {
+                echo "mux: hide needs a session NAME (see: mux ls)" >&2
                 usage; } ;;
         go|resume) [ "$#" -le 2 ] || {
                 echo "mux: too many arguments" >&2; usage; } ;;
-        save|theme|edit) [ "$#" -le 1 ] || {
+        save|theme|edit|why) [ "$#" -le 1 ] || {
                 echo "mux: $cmd takes at most a NAME" >&2; usage; } ;;
         rename) { [ "$#" -ge 1 ] && [ "$#" -le 2 ]; } || {
                 echo "mux: rename [OLD] NEW" >&2; usage; } ;;
@@ -376,13 +464,23 @@ case $cmd in
                 echo "mux: new NAME (the session to create here)" >&2
                 usage; } ;;
         help) [ "$#" -le 6 ] || {
-                echo "mux: help [agents|colors|profiles|palette]" >&2
+                echo "mux: help [agents|themes|profiles|palette]" >&2
                 usage; } ;;
 esac
 case $cmd in
         go|resume|new) ;;
         *) [ "$bare" -eq 0 ] || {
-                echo "mux: --bare is only for go/resume/new" >&2; usage; } ;;
+                echo "mux: --no-agent is only for go/new" >&2; usage; } ;;
+esac
+case $cmd in
+        go|resume) ;;
+        *) [ "$attach" -eq 0 ] || {
+                echo "mux: --attach is only for go/resume" >&2; usage; } ;;
+esac
+case $cmd in
+        kill|show) ;;
+        *) [ "$all" -eq 0 ] || {
+                echo "mux: --all is only for kill/show" >&2; usage; } ;;
 esac
 case $cmd in
         save|new) ;;
@@ -446,7 +544,7 @@ _sgr_style() {          # <style>
         done
 }
 help_colors() {
-        echo 'colors -- `mux new NAME COLOR`, or a `theme` line in a layout:'
+        echo 'themes -- `mux theme NAME`, or a `theme` line in a profile:'
         echo
         mux_data_files themes .theme | while IFS= read -r _f; do
                 _n=${_f##*/}; _n=${_n%.theme}
@@ -485,11 +583,19 @@ help_colors() {
                 "$(awk '$1=="default"{print $2}' "$_d")"
 }
 # Flatten a profile for display: its own directives, then the window/pane/
-# bottom lines of the layout it names. Display-only, so a pipe is fine (no
+# bottom lines of the layout it names. Takes a NAME, not a path, so a row and a
+# breakout file both reach it. Display-only, so a pipe is fine (no
 # exit-on-error to preserve) and an unresolvable layout just shows nothing.
-_flat_profile() {       # <profile file>
-        _wl=$(mux_conf_clean < "$1" | awk '$1=="layout"{print $2; exit}')
-        mux_conf_clean < "$1" | grep -v '^layout[[:space:]]' || true
+_flat_profile() {       # <name>
+        _pf=$(_find_profile "$1")
+        if [ -n "$_pf" ]; then
+                _wl=$(mux_conf_clean < "$_pf" \
+                        | awk '$1=="layout"{print $2; exit}')
+                mux_conf_clean < "$_pf" | grep -v '^layout[[:space:]]' || true
+        else
+                _wl=$(mux_prof_get "$1" layout)
+                mux_prof_directives "$1" | grep -v '^layout ' || true
+        fi
         _lf=$(mux_data_find layouts "${_wl:-default}" .layout)
         [ -n "$_lf" ] && mux_conf_clean < "$_lf"
         return 0
@@ -532,10 +638,8 @@ help_profiles() {
         [ "$_cur_side" = default ] || _tag=" [$_cur_side]"
         printf 'profiles%s -- `mux go NAME`:\n' "$_tag"
         echo
-        { mux_data_files '' .profile; mux_data_files '' .layout; } \
-        | while IFS= read -r _f; do
-                _n=${_f##*/}; _n=${_n%.profile}; _n=${_n%.layout}
-                _flat=$(_flat_profile "$_f")
+        _profile_names | while IFS= read -r _n; do
+                _flat=$(_flat_profile "$_n")
                 _th=$(printf '%s\n' "$_flat" | awk '$1=="theme"{print $2;exit}')
                 _rt=$(printf '%s\n' "$_flat" | awk '$1=="root"{print $2;exit}')
                 case "$(mux_ctx_side "$_rt")" in
@@ -651,18 +755,18 @@ help_agents() {
         printf '      (yours -- a profile here overrides a shipped one)\n'
         printf '    %s/agents\n' "$MUX_SHARE"
         printf '      (shipped)\n'
-        printf '  add a CLI by dropping in a profile; strip state also needs'
-        printf '\n  a hook producer (claude: plugin; gemini: modules/gemini).\n'
+        printf '  add a CLI by dropping in one; the state strip also needs'
+        printf '\n  the agent to call `mux agent-emit` over its lifecycle.\n'
 }
 if [ "$cmd" = help ]; then
         case ${1:-} in
         '')      usage 0 ;;
         agents)   help_agents ;;
-        colors)   help_colors ;;
+        themes|colors) help_colors ;;
         profiles|layouts) help_profiles ;;
         palette) shift; help_palette "$@" ;;
         *) echo "mux: unknown help topic: $1" \
-                "(agents, colors, profiles, palette)" >&2
+                "(agents, themes, profiles, palette)" >&2
            exit 2 ;;
         esac
         exit 0
@@ -797,8 +901,8 @@ fi
 
 # --- reload: re-source tmux.conf on every running mux server ---------------
 # The config is machine-wide, so one reload from any pane freshens everything:
-# the default (personal) socket and the work-group socket if its server is up.
-# Both are the same uid, so a personal process can source the work server too.
+# the default socket, plus every non-default context socket the hook names, if
+# their servers are up. All the same uid, so one can source another's server.
 # Guard on list-sessions so source-file never STARTS a server that was not up.
 if [ "$cmd" = reload ]; then
         [ -f "$TMUX_CONF" ] || {
@@ -930,6 +1034,82 @@ if [ "$cmd" = theme ]; then
                         && echo "mux: remembered in $(mux_prof_file)" \
                         || echo "mux: could not write $(mux_prof_file)" >&2 ;;
         esac
+        exit 0
+fi
+
+# --- why: where every resolved value came from -----------------------------
+# Resolution now has five steps, the theme has four priority levels, and a name
+# may come from a row, a map, or the directory. That is a lot of inference
+# working on your behalf, and inference you cannot inspect is indistinguishable
+# from magic. This prints each field with its PROVENANCE, so "why is this
+# session green / rooted there / called that" is always a question with an
+# answer.
+if [ "$cmd" = why ]; then
+        wh=$name_arg
+        if [ -z "$wh" ]; then
+                wh=$(mux_prof_by_root "$base")
+                [ -n "$wh" ] || wh=$(basename "$base")
+                wh=$(printf '%s' "$wh" | tr ':.' '--')
+        fi
+        w_row=0; mux_prof_has "$wh" && w_row=1
+        w_file=$(_find_profile "$wh")
+
+        # name
+        if [ -n "$name_arg" ]; then w_src="you typed it"
+        elif [ -n "$(mux_prof_by_root "$base")" ]; then
+                w_src="a row claims root $(mux_fold_tilde "$base")"
+        elif git rev-parse --show-toplevel >/dev/null 2>&1; then
+                w_src="the git toplevel's basename"
+        else w_src="the current directory's basename"; fi
+        printf '%-8s %-24s %s\n' name "$wh" "$w_src"
+
+        # where the profile itself lives
+        if [ -n "$w_file" ]; then
+                printf '%-8s %-24s %s\n' profile '(breakout)' "$w_file"
+        elif [ "$w_row" -eq 1 ]; then
+                printf '%-8s %-24s %s\n' profile '(row)' "$(mux_prof_file)"
+        else
+                printf '%-8s %-24s %s\n' profile '(none)' \
+                        'everything below is derived'
+        fi
+
+        # one field: value, then where it came from
+        w_get() {   # <key>
+                if [ -n "$w_file" ]; then
+                        mux_conf_clean <"$w_file" \
+                                | awk -v k="$1" '$1==k{sub("^"k"[ \t]+","")
+                                        print; exit}'
+                elif [ "$w_row" -eq 1 ]; then mux_prof_get "$wh" "$1"
+                fi
+        }
+        # KEY, then either the declared value or the derived one, then where
+        # it came from. ALT is shown only where knowing the road not taken is
+        # useful -- the theme, where "why is it not the hashed one" is the
+        # question people actually ask.
+        w_field() { # <key> <derived> <derived source> [show-alt]
+                _v=$(w_get "$1")
+                case $1 in root) _v=$(mux_fold_tilde "$_v") ;; esac
+                if [ -n "$_v" ]; then
+                        _w=declared
+                        [ -n "${4:-}" ] && _w="declared ($3 would give $2)"
+                        printf '%-8s %-22s %s\n' "$1" "$_v" "$_w"
+                else
+                        printf '%-8s %-22s %s\n' "$1" "$2" "$3"
+                fi
+        }
+        w_field root "$(mux_fold_tilde "$base")" "the project you are in"
+        # theme: declared > context > hashed > global default.
+        w_dth=; w_dsrc=
+        if [ -n "${MUX_CTX_THEME:-}" ]; then
+                w_dth=$MUX_CTX_THEME; w_dsrc="this context"
+        elif [ "$(_theme_default derive)" = hash ]; then
+                w_dth=$(_hash_theme "$wh"); w_dsrc="hashed from the name"
+        else
+                w_dth=$(_theme_default default); w_dsrc="themes/defaults"
+        fi
+        w_field theme "$w_dth" "$w_dsrc" alt
+        w_field layout default "the shipped default"
+        w_field agent claude "mux's default"
         exit 0
 fi
 
@@ -1171,7 +1351,7 @@ fi
 # client's status strip and ( / ) cycling; show restores it; show-all clears
 # the set. Persists until shown or reboot. hide/show need SESSION to exist.
 case $cmd in
-hide|show|show-all)
+hide|show)
         [ -n "${TMUX:-}" ] || {
                 echo "mux: $cmd must run inside a session" >&2; exit 1; }
         [ -r "$LIBEXEC/mux-exclude.sh" ] || {
@@ -1183,7 +1363,7 @@ hide|show|show-all)
         . "$LIBEXEC/mux-exclude.sh"
         _f=$(mux_exclude_file "$_client")
         mkdir -p "$(dirname "$_f")"
-        if [ "$cmd" = show-all ]; then
+        if [ "$cmd" = show ] && [ "$all" -eq 1 ]; then
                 rm -f "$_f"
                 echo "mux: cleared this client's hidden sessions"
         else
@@ -1265,32 +1445,6 @@ expand_tilde() {
 # exactly what a pane can actually run.
 _find_agent() {   # <name>
         mux_data_find agents "$1" .agent
-}
-
-# A theme chosen deterministically from a session NAME, so a project wears a
-# stable colour with nothing configured and two projects share one only by
-# coincidence. cksum is POSIX and its exact value does not matter -- only that
-# the same name always lands on the same theme.
-#
-# The index is into the SORTED theme set, so adding or removing a theme
-# reshuffles every session that has not pinned one. Cosmetic, and pinning is one
-# `mux theme -p` away. Deliberately NOT unique-per-live-session: an identity you
-# can learn ("api is the green one") beats one that avoids every collision but
-# changes between launches.
-_hash_theme() {   # <session name>
-        _ht=$(mux_data_stems themes .theme)
-        [ -n "$_ht" ] || return 0
-        _hn=$(printf '%s\n' "$_ht" | grep -c .)
-        [ "$_hn" -gt 0 ] || return 0
-        _hs=$(printf '%s' "$1" | cksum | awk '{print $1}')
-        printf '%s\n' "$_ht" | sed -n "$(( _hs % _hn + 1 ))p"
-}
-
-# The value of one key in themes/defaults, or empty.
-_theme_default() {  # <key>
-        _df=$(mux_data_find themes defaults '')
-        [ -n "$_df" ] || return 0
-        mux_conf_clean < "$_df" | awk -v k="$1" '$1==k{print $2; exit}'
 }
 
 # Which of the agent profile's lines to run. `new` builds a session exactly as
@@ -1423,11 +1577,11 @@ bottom_spec() {         # ARG
         return 0
 }
 
-# --- kill-all: tear down every session on the current socket ---------------
+# --- kill --all: tear down every session on the current socket -------------
 # No name, and it hits the whole context (personal OR work -- whichever socket
 # you are on, never both), so it is guarded behind a typed confirmation and
 # lists what it will kill first. It must never fire by accident.
-if [ "$cmd" = kill-all ]; then
+if [ "$cmd" = kill ] && [ "$all" -eq 1 ]; then
         _all=$(tm list-sessions -F '#{session_name}' 2>/dev/null || true)
         if [ -z "$_all" ]; then
                 echo "mux: no sessions in this context"
@@ -1513,6 +1667,43 @@ fi
 # any layout resolution. The claude flag shapes a session only as it is built,
 # so say so on a resume rather than pretending to honour it on an attach.
 if tm has-session -t "=$name" 2>/dev/null; then
+        # Two projects whose basename is the same derive the same name, and
+        # attaching the wrong one is silent: you land in a live session that
+        # looks right and is rooted somewhere else entirely. tmux knows where it
+        # was started (#{session_path}), so compare before attaching.
+        #
+        # Only when the name was DERIVED. A name you typed is a name you meant,
+        # and looking a session up by it is what a name argument is for; the
+        # guard exists for the case where mux picked the name, not you.
+        if [ -z "$name_arg" ] && [ "$attach" -eq 0 ]; then
+                # Read via list-sessions rather than `display-message -t
+                # "=$name"`: display-message takes a PANE target, where the
+                # exact-match `=` prefix yields nothing and session_path comes
+                # back EMPTY. Matched on the whole rest of the line, so a root
+                # containing a space still compares correctly.
+                _live=$(tm list-sessions -F '#{session_name} #{session_path}' \
+                        2>/dev/null \
+                        | awk -v n="$name" \
+                            '$1==n{sub(/^[^ ]* /,""); print; exit}')
+                # Only when we actually got one. `readlink -f ""` resolves to
+                # the CWD, which would equal the side we are comparing against
+                # and quietly disable this whole guard.
+                # Resolved on both sides, so a symlinked home does not read
+                # as a mismatch.
+                _lr=$(readlink -f -- "${_live:-/}" 2>/dev/null \
+                        || printf '%s' "$_live")
+                _hr=$(readlink -f -- "$base" 2>/dev/null \
+                        || printf '%s' "$base")
+                if [ -n "$_live" ] && [ "$_lr" != "$_hr" ]; then
+                        echo "mux: '$name' is live at" \
+                                "$(mux_fold_tilde "$_live"), but you are" \
+                                "in $(mux_fold_tilde "$base")" >&2
+                        echo "mux:   attach it anyway: mux go $name" \
+                                "--attach" >&2
+                        echo "mux:   or name this one: mux new <name>" >&2
+                        exit 1
+                fi
+        fi
         [ "$cmd" = resume ] && \
                 echo "mux: $name already up; resume applies only at build" >&2
         mux_attach

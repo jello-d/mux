@@ -13,7 +13,7 @@
 #                     stamp it. Run from tmux.conf `run-shell` at server start,
 #                     and again whenever `mux reload` re-sources tmux.conf.
 #   mux-themes sync   drift-heal: for each running mux server (the default
-#                     socket, and the work-group socket if up), push the palette
+#                     socket, plus any context socket that is up), push it
 #                     IFF the fragments changed since that server was last
 #                     stamped. Run by the mux front end on every invocation -- a
 #                     cheap no-op when nothing changed, so edits need no reload.
@@ -168,7 +168,25 @@ sync)
 		heal "$_s" "-L $_s" "$_h"
 	done
 	;;
+''|list)
+	# Bare `mux themes` LISTS them. It used to print an internal usage
+	# string -- a helper's business, not an answer to the obvious question
+	# asked of a verb one character away from `mux theme`.
+	printf 'themes:\n'
+	mux_data_stems themes .theme | tr '\n' ' ' | fold -s -w 70 \
+		| sed -e 's/^/  /' -e 's/[[:space:]]*$//'
+	printf '\n'
+	_d=$(mux_data_find themes defaults '')
+	if [ -n "$_d" ]; then
+		printf 'default: %s' \
+			"$(mux_conf_clean <"$_d" | awk '$1=="default"{print $2;exit}')"
+		_dv=$(mux_conf_clean <"$_d" | awk '$1=="derive"{print $2;exit}')
+		[ -n "$_dv" ] && printf '  (unset themes: %s)' "$_dv"
+		printf '\n'
+	fi
+	printf 'swatches: mux help colors\n'
+	;;
 *)
-	echo "usage: mux-themes load|sync" >&2
+	echo "usage: mux themes [load|sync|list]" >&2
 	exit 2 ;;
 esac

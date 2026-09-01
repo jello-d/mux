@@ -42,6 +42,14 @@ warn() { printf '  %s[WARN]%s %s\n'   "$_Y" "$_O" "$*"; }
 if command -v tmux >/dev/null 2>&1; then ok "tmux present"
 else bad "tmux not found (mux's one runtime dependency)"; fi
 
+# 1b. mux ITSELF on PATH. share/mux.tmux carries no paths on purpose -- it
+# reaches every helper as `mux <verb>` -- so a mux that is not on PATH breaks
+# every key binding and every status-bar tick, while `mux check` run by its own
+# path would otherwise look perfectly healthy. This is the install failure that
+# actually happens.
+if _mp=$(command -v mux 2>/dev/null); then ok "mux on PATH ($_mp)"
+else bad "mux not on PATH -- the tmux fragment reaches it as \`mux <verb>\`"; fi
+
 # 2. package DATA (share): the dir plus the pieces mux reads at runtime.
 if [ -d "$MUX_SHARE" ]; then
 	ok "package data ($MUX_SHARE)"

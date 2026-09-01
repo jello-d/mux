@@ -1,9 +1,9 @@
-.TH MUX 1 "2026-07-30" "mux 0.1" "User Commands"
+.TH MUX 1 "" "mux 0.2" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
 .B mux
-.RI [ verb "] [" --bare "] [" NAME "] [" PROFILE ]
+.RI [ option "] [" verb "] [" NAME "] [" PROFILE ]
 .SH DESCRIPTION
 .B mux
 builds and drives tmux sessions from declarative
@@ -48,12 +48,14 @@ but the agent
 \(em it prompts to choose a conversation. Only meaningful when the session is
 being built.
 .TP
-.B mux \-\-bare " ..."
+.B mux \-\-no\-agent " ..."
 Build the session but run neither the agent's
 .I go
 nor
 .I resume
 command \(em a plain shell in the agent pane.
+.RB ( \-\-bare
+is kept as an alias.)
 .TP
 .B mux ls
 List sessions in the current context, each tagged with its agent-state glyph.
@@ -345,6 +347,30 @@ User session profiles (\c
 .I $MUX_DIR/context
 The optional context hook.
 .TP
+.I $MUX_DIR/profiles
+The profile TABLE: one line per session that deviates from what mux derives.
+.TP
+.I $MUX_DIR/profiles.d/<name>.profile
+A profile that outgrew one line (comments, or a value containing a space).
+.TP
+.I $MUX_DIR/scan
+Discovery roots, one
+.RI ' "PATH [DEPTH]" '
+per line. Absent,
+.I ~/src
+is used when it exists.
+.TP
+.I $MUX_DIR/hosts
+Per-host colours for the status-left host chip, so identically-named sessions
+on different machines are told apart. One
+.RI ' "HOST STYLE" '
+per line, where HOST is
+.RB ' "hostname \-s" '
+and STYLE is a COMMA-joined tmux run
+.RB ( fg=colour230,bg=#5f3a1a ).
+The file is optional and holds only the hosts you want to pin: an unlisted host
+gets a stable, readable colour derived from its name.
+.TP
 .I $MUX_DIR/{themes,layouts,agents}
 Overrides for shipped themes, layouts and agents, and any of your own.
 .TP
@@ -381,5 +407,4 @@ prefix
 .BR b " \(em ... \(em prefix " B
 .RE
 .SH SEE ALSO
-.BR tmux (1),
-.BR valet-key (1)
+.BR tmux (1)
