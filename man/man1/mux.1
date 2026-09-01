@@ -77,11 +77,18 @@ Rebuild the project discovery map for this context, or print it. The map is a
 cache: it also rebuilds on first use and on a lookup miss, never on a timer.
 .TP
 .B mux save " [" \fINAME\fR ]
-Snapshot the current session to
-.IR NAME .profile
-(root, theme) plus the
-.IR NAME .layout
-it names (windows, panes, bottom).
+Snapshot the current session, recording only what mux could not have derived:
+the arrangement as
+.IR layouts/NAME .layout
+unless it already matches an existing layout, and a row carrying
+.B root
+only when the name would not derive from it,
+.B theme
+only when it is not the one the name hashes to, and
+.B layout
+only when it is not
+.BR default .
+So saving a session you never rearranged writes nothing.
 .TP
 .B mux edit " [" \fINAME\fR ]
 Open a profile in
