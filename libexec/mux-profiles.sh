@@ -149,6 +149,29 @@ mux_prof_set() {        # <name> <key> <value>
 	mv -f "$_tmp" "$_pf"
 }
 
+# mux_prof_replace NAME PAIRS -> set NAME's row to exactly PAIRS (space
+# separated `key=value`), IN PLACE. Distinct from a sequence of mux_prof_set
+# calls in two ways that matter after an edit: a key the editor DELETED
+# disappears rather than surviving, and the row keeps its position in the file
+# instead of moving to the end and churning the diff. An empty PAIRS drops the
+# row, which is the right answer when nothing about the session deviates any
+# more.
+mux_prof_replace() {    # <name> <pairs>
+	[ -n "$2" ] || { mux_prof_drop "$1"; return 0; }
+	_pf=$(mux_prof_file)
+	mkdir -p "$MUX_DIR"
+	[ -f "$_pf" ] || : >"$_pf"
+	_tmp=$_pf.tmp.$$
+	awk -v n="$1" -v p="$2" '
+	BEGIN { found = 0 }
+	/^[[:space:]]*#/ || /^[[:space:]]*$/ { print; next }
+	$1 == n { printf "%-11s %s\n", n, p; found = 1; next }
+	{ print }
+	END { if (!found) printf "%-11s %s\n", n, p }
+	' "$_pf" >"$_tmp" || { rm -f "$_tmp"; return 1; }
+	mv -f "$_tmp" "$_pf"
+}
+
 # mux_prof_drop NAME -> remove NAME's row entirely (used when a row is promoted
 # to a breakout file, so a name never lives in both places).
 mux_prof_drop() {       # <name>

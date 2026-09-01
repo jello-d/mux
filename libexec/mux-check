@@ -100,4 +100,17 @@ if [ -d "$MUX_DIR" ]; then
 	fi
 else warn "no config overlay at $MUX_DIR (using shipped defaults)"; fi
 
+# 4. unsaved edit drafts. A draft survives an unparseable save on purpose, so
+# the work is handed back rather than eaten -- but a forgotten one means an edit
+# you think you made is not in effect anywhere. Surface it.
+_ed=${MUX_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/mux}/edit
+if [ -d "$_ed" ]; then
+	for _d in "$_ed"/*.profile; do
+		[ -e "$_d" ] || continue
+		_dn=${_d##*/}; _dn=${_dn%.profile}
+		warn "unsaved edit draft for '$_dn' at $_d"
+		warn "  resume it:  mux edit $_dn"
+	done
+fi
+
 exit "$RC"

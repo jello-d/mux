@@ -1,0 +1,8 @@
+# sage: a MID-tone muted green. moss and green are both dark and vivid; this is
+# the quiet, desaturated one, and sits in the mid band with pewter.
+bar     bg=#5a6b56 fg=#e6f0e2
+window  fg=#1c221a bg=#a8c49a bold
+accent  fg=#a8cc98
+border  fg=#7a8a76
+select  fg=#1c221a bg=#b4d0a4
+prompt  bg=#5e6d5b fg=#e6f0e2

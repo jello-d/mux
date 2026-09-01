@@ -1,0 +1,8 @@
+# mist: a LIGHT cool theme, the counterweight to parchment. Pale grey-green,
+# so it is told apart from glacier (pale blue) at a glance.
+bar     bg=#cbd8d0 fg=#243029
+window  fg=#f0f6f2 bg=#3b775f bold
+accent  fg=#2f8a66
+border  fg=#9aa8a0
+select  fg=#f0f6f2 bg=#3c7962
+prompt  bg=#dce8e0 fg=#243029
