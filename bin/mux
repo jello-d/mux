@@ -140,6 +140,7 @@ themes)        shift; exec "$LIBEXEC/mux-themes" "$@" ;;
 check)         shift; exec "$LIBEXEC/mux-check" "$@" ;;
 next-blocked)  shift; exec "$LIBEXEC/mux-next-blocked" "$@" ;;
 migrate-profiles) shift; exec "$LIBEXEC/mux-migrate-profiles" "$@" ;;
+scan)          shift; exec "$LIBEXEC/mux-scan" "$@" ;;
 esac
 
 # The ONE comment/normalize rule (mux_conf_clean) for every config parse below
@@ -156,10 +157,12 @@ fi
 # fallback here, unlike mux_conf_clean above: a normalizer has a safe degraded
 # mode, a data resolver has none (it would silently resolve nothing), so a
 # missing lib is a broken install and says so.
-_data_lib=$LIBEXEC/mux-data.sh
-[ -r "$_data_lib" ] || {
-        echo "mux: $_data_lib missing (incomplete install)" >&2; exit 1; }
-. "$_data_lib"
+for _l in mux-data.sh mux-profiles.sh mux-scan.sh; do
+        [ -r "$LIBEXEC/$_l" ] || {
+                echo "mux: $LIBEXEC/$_l missing (incomplete install)" >&2
+                exit 1; }
+        . "$LIBEXEC/$_l"
+done
 
 # The shared agent-state reader (also used by the status strip) lets the session
 # picker and `mux ls` show each session's agent glyph. Cosmetic, so a missing
@@ -182,15 +185,17 @@ else
 	mux_ctx_sockets() { :; }
 fi
 
-# Resolve a PROFILE (a launch target) through the shared overlay rule: one in
-# $MUX_DIR wins over a shipped one in $MUX_SHARE. Empty if neither exists.
+# Resolve a BREAKOUT profile: $MUX_DIR/profiles.d/<name>.profile, the heavier
+# form a row is promoted to when it outgrows one line (comments, or a value
+# with a space in it). Most profiles are rows in $MUX_DIR/profiles instead; see
+# mux-profiles.sh.
 #
 # TRANSITIONAL: mux profiles were once called layouts and lived in <name>.layout
 # files. A leftover .layout is still accepted, with a warning, so that deploying
 # a new mux and converting your config need not happen in the same instant.
 # Delete this fallback (and the mux-check warning) once nobody has one.
 _find_profile() {  # <name>
-        _p=$(mux_data_find '' "$1" .profile)
+        _p=$(mux_data_find profiles.d "$1" .profile)
         [ -n "$_p" ] || _p=$(mux_data_find '' "$1" .layout)
         printf '%s' "$_p"
 }
@@ -211,6 +216,22 @@ _stems_line() {   # <kind> <ext>
 # anywhere but a repo's top level wrote a layout go could never find.
 _project_base() {
         git rev-parse --show-toplevel 2>/dev/null || pwd
+}
+
+# The scan map for this context, self-correcting: entries whose path has since
+# vanished are dropped (a moved repo must read as a MISS, not as a hit that
+# fails later at build), and a miss rebuilds the map once and asks again. Those
+# two checks are the whole staleness story -- no TTL, no timer.
+_map_lookup() {   # <name> -> matching project paths, one per line
+        _mk=${sock:-default}
+        _mp=$(mux_scan_lookup "$1" "$_mk" | while IFS= read -r _d; do
+                [ -n "$_d" ] && [ -d "$_d" ] && printf '%s\n' "$_d"
+        done)
+        if [ -z "$_mp" ]; then
+                mux_scan_build "$_mk" 2>/dev/null || true
+                _mp=$(mux_scan_lookup "$1" "$_mk")
+        fi
+        printf '%s' "$_mp"
 }
 
 # Work/personal (or any) filtering. A layout's SIDE is a property of its ROOT,
@@ -274,16 +295,17 @@ usage: mux [OPTION] [VERB] [NAME] [PROFILE]  (OPTION may follow VERB too)
   kill-all                   tear down every session on this socket (prompts)
   reload                     re-source tmux.conf on every running mux server
   ls                         list sessions in the current context
-  new [NAME] [COLOR] [ROOT]  write a profile; '-' = COLOR default / ROOT off
+  new NAME                   create NAME here (binds the name if needed)
   save [NAME]                snapshot this session to NAME.profile + .layout
   hide/show SESSION          hide/unhide SESSION for this client (strip/cycle)
   show-all                   clear this client's hidden sessions
   next-blocked               jump to the session that has needed you longest
-  theme [NAME|next|prev]     set/cycle/show the session theme (-p to persist)
+  theme [NAME|next|prev]     set/cycle/show the theme (remembered)
   rename [OLD] NEW           rename a session (and its matching layout)
   edit [NAME]                open a profile in $EDITOR
   check                      audit mux's install: package data, deps, overlay
   migrate-profiles           convert pre-rename *.layout files (--apply)
+  scan                       rebuild the project discovery map (--list)
   --bare                     go/resume without the agent (pane is a plain shell)
   --force                    overwrite an existing profile (save/new)
   help [TOPIC]               this help; TOPIC = agents|colors|profiles|palette
@@ -315,7 +337,7 @@ while [ "$#" -gt 0 ]; do
         case $1 in
                 --bare|-b)    bare=1; shift ;;
                 --force)      force=1; shift ;;
-                --persist|-p) persist=1; shift ;;
+                --persist|-p) persist=1; shift ;;   # retired: now the default
                 -h|--help)    usage 0 ;;
                 --) shift; break ;;
                 -*) echo "mux: unknown option: $1" >&2; usage ;;
@@ -350,16 +372,17 @@ case $cmd in
                 echo "mux: $cmd takes at most a NAME" >&2; usage; } ;;
         rename) { [ "$#" -ge 1 ] && [ "$#" -le 2 ]; } || {
                 echo "mux: rename [OLD] NEW" >&2; usage; } ;;
-        new) [ "$#" -le 3 ] || {
-                echo "mux: new takes NAME [COLOR] [ROOT]" >&2; usage; } ;;
+        new) [ "$#" -eq 1 ] || {
+                echo "mux: new NAME (the session to create here)" >&2
+                usage; } ;;
         help) [ "$#" -le 6 ] || {
                 echo "mux: help [agents|colors|profiles|palette]" >&2
                 usage; } ;;
 esac
 case $cmd in
-        go|resume) ;;
+        go|resume|new) ;;
         *) [ "$bare" -eq 0 ] || {
-                echo "mux: --bare is only for go/resume" >&2; usage; } ;;
+                echo "mux: --bare is only for go/resume/new" >&2; usage; } ;;
 esac
 case $cmd in
         save|new) ;;
@@ -372,63 +395,14 @@ case $cmd in
         *) [ "$persist" -eq 0 ] || {
                 echo "mux: --persist is only for theme" >&2; usage; } ;;
 esac
+# -p used to be how a theme was made to stick. It always sticks now, so the flag
+# is accepted and ignored rather than breaking a habit or a script.
+[ "$persist" -eq 1 ] && [ "$cmd" = theme ] && \
+        echo "mux: -p is the default now; the theme is always remembered" >&2
 
 name_arg=${1:-}
 layout_arg=${2:-}
 
-# --- new: write a layout from [NAME] [COLOR] [ROOT] --------------------------
-# Create a session blueprint from args -- no live session, no cd required. NAME
-# and ROOT both default to the PROJECT (_project_base: the git toplevel, else
-# the cwd), the same derivation `mux go` uses, so a bare `mux new` anywhere in a
-# repo makes <project>.layout rooted at the repo -- and `mux go` from anywhere
-# in that repo finds it. COLOR is a theme fragment name ('-' or omitted = the
-# per-context default, no theme line); ROOT takes '-' to write
-# NO root line (portable -- the session then roots at the launch dir). A given
-# ROOT expands a leading ~, is made absolute, and folds $HOME back to ~ so it
-# travels. --force to clobber. Needs no tmux; runs before any socket work.
-if [ "$cmd" = new ]; then
-        nw_base=$(_project_base)
-        nw_name=${1:-$(basename "$nw_base")}
-        nw_name=$(printf '%s' "$nw_name" | tr ':.' '--')
-        nw_color=${2:-}
-        nw_root=${3:-$nw_base}
-        [ "$nw_color" = - ] && nw_color=          # '-' = default theme
-        [ "$nw_root" = - ] && nw_root=            # '-' = no root line
-        if [ -n "$nw_color" ] \
-           && [ -z "$(mux_data_find themes "$nw_color" .theme)" ]; then
-                echo "mux: unknown theme: $nw_color" \
-                        "(see: mux help colors)" >&2
-                exit 1
-        fi
-        case $nw_root in                          # expand input to absolute
-                "")    ;;                          # '-' sentinel: leave unset
-                "~")   nw_root=$HOME ;;
-                "~/"*) nw_root=$HOME/${nw_root#"~/"} ;;
-                /*)    ;;
-                *)     nw_root=$(pwd)/$nw_root ;;
-        esac
-        case $nw_root in                          # fold $HOME back to ~
-                "")        ;;
-                "$HOME")   nw_root='~' ;;
-                "$HOME"/*) nw_root="~/${nw_root#"$HOME"/}" ;;
-        esac
-        nw_file=$MUX_DIR/$nw_name.profile
-        [ "$force" -eq 1 ] || [ ! -e "$nw_file" ] || {
-                echo "mux: profile exists: $nw_file (use --force)" >&2
-                exit 1
-        }
-        mkdir -p "$MUX_DIR"
-        {
-                printf '# %s: made by `mux new`.\n' "$nw_name"
-                printf '# Edit the theme line to recolour; commit to keep.\n'
-                [ -n "$nw_color" ] && printf 'theme   %s\n' "$nw_color"
-                [ -n "$nw_root" ] && printf 'root    %s\n' "$nw_root"
-                printf 'layout  default\n'
-        } >"$nw_file"
-        echo "mux: wrote $nw_file"
-        echo "mux: launch it with  mux go $nw_name"
-        exit 0
-fi
 
 # --- help: `mux help [agents|colors|layouts|palette]` -----------------------
 # A proper verb. Bare (and the -h/--help flags) prints the plain usage; `colors`
@@ -698,7 +672,17 @@ fi
 # a repo, else the current directory. tmux forbids ':' and '.' in a session
 # name, so fold them to '-' in a derived name.
 base=$(_project_base)
-name=${name_arg:-$(basename "$base")}
+if [ -n "$name_arg" ]; then
+        name=$name_arg
+else
+        # No name typed: the directory decides. A row whose `root` IS this
+        # directory names it -- so an alias is authoritative for its own
+        # project, and `mux go` there reaches the same session `mux go <alias>`
+        # would, instead of creating a second one under the derived name.
+        # EXACT match only; a subdirectory still derives the enclosing project.
+        name=$(mux_prof_by_root "$base")
+        [ -n "$name" ] || name=$(basename "$base")
+fi
 name=$(printf '%s' "$name" | tr ':.' '--')
 
 # Which tmux namespace. The context hook names the socket: an isolated context
@@ -928,14 +912,20 @@ if [ "$cmd" = theme ]; then
         fi
         tm refresh-client 2>/dev/null || true
         echo "mux: theme $_t"
-        if [ "$persist" -eq 1 ]; then
-                _lf=$MUX_DIR/$_s.profile
-                [ -f "$_lf" ] || {
-                        echo "mux: no profile $_lf to persist to" >&2
-                        exit 1; }
-                _persist_theme "$_lf" "$_t"
-                echo "mux: persisted theme into $_lf"
-        fi
+        # REMEMBERED, not just applied. A theme set by hand is a decision, and
+        # the file is the only place decisions live -- so it is written now
+        # rather than behind a flag you have to remember. A breakout profile
+        # takes it in place; everything else becomes a row.
+        _bo=$(_find_profile "$_s")
+        case $_bo in
+        *.profile)
+                _persist_theme "$_bo" "$_t"
+                echo "mux: remembered in $_bo" ;;
+        *)
+                mux_prof_set "$_s" theme "$_t" \
+                        && echo "mux: remembered in $(mux_prof_file)" \
+                        || echo "mux: could not write $(mux_prof_file)" >&2 ;;
+        esac
         exit 0
 fi
 
@@ -1171,6 +1161,11 @@ _theme_default() {  # <key>
         mux_conf_clean < "$_df" | awk -v k="$1" '$1==k{print $2; exit}'
 }
 
+# Which of the agent profile's lines to run. `new` builds a session exactly as
+# `go` does -- it only differs in having bound a name first -- so it takes go's.
+agent_verb=go
+[ "$cmd" = resume ] && agent_verb=resume
+
 # agent_launch NAME -> the command NAME's pane runs for THIS verb (go/resume),
 # empty under --bare. An unknown agent (no profile) fails loud.
 agent_launch() {
@@ -1180,7 +1175,8 @@ agent_launch() {
                 exit 1; }
         [ "$bare" -eq 1 ] && return 0
         mux_conf_clean < "$_af" \
-                | awk -v v="$cmd" '$1==v{sub("^"v"[ \t]+","");print;exit}'
+                | awk -v v="$agent_verb" \
+                        '$1==v{sub("^"v"[ \t]+","");print;exit}'
 }
 
 # shape_cmd TOKEN -> a pane's actual command. `agent` is the session's agent
@@ -1216,7 +1212,7 @@ pane_process() {
 # cycle detection. That machinery existed to support composition that never
 # happened: every layout in the wild held the single line `include shapes/code`.
 # A profile that declares `layout code` says the same thing without a splice.
-expand_profile() {      # PROFILE_PATH
+expand_profile() {      # PROFILE_PATH [LABEL]
         # Normalize via mux_conf_clean (the single comment/whitespace/CRLF
         # rule), then read from a FILE -- a bad layout name must exit the whole
         # run, which a pipe's subshell would swallow. Every surviving line is a
@@ -1233,7 +1229,7 @@ expand_profile() {      # PROFILE_PATH
                 layout) _want_layout=$_rest ;;
                 window|pane|bottom)
                         echo "mux: '$_verb' belongs in a layout, not a" \
-                                "profile: $1" >&2
+                                "profile: ${2:-$1}" >&2
                         echo "mux: put the arrangement in a .layout and" \
                                 "name it with 'layout <name>'" >&2
                         rm -f "$_cl"; exit 1 ;;
@@ -1331,6 +1327,56 @@ if [ "$cmd" = kill ]; then
         exit 1
 fi
 
+# --- new: bind a NAME to this project, then build it ------------------------
+# The ONE explicit creation verb. `mux go` creates implicitly whenever it can
+# point at evidence the target exists -- a row, a breakout profile, a scanned
+# repo, or the directory you are standing in. `mux go NAME` for a name nothing
+# knows is refused, because from the input alone a new session and a typo look
+# identical. `mux new NAME` is how you say you meant it.
+#
+# It writes a row only when one is NEEDED: a name this directory would derive
+# anyway is already findable, and config never restates what mux can derive.
+if [ "$cmd" = new ]; then
+        if tm has-session -t "=$name" 2>/dev/null; then
+                echo "mux: $name is already up (attach it: mux go $name)" >&2
+                exit 1
+        fi
+        if [ "$force" -eq 0 ]; then
+                if mux_prof_has "$name" || [ -n "$(_find_profile "$name")" ]
+                then
+                        echo "mux: $name already has a profile" \
+                                "(edit it: mux edit $name, or --force)" >&2
+                        exit 1
+                fi
+                # Already discoverable as a DIFFERENT project: binding it here
+                # would silently change what `mux go $name` means elsewhere.
+                # Binding it to the directory it already means is a harmless
+                # no-op, so only a conflicting root is refused.
+                _other=$(mux_scan_lookup "$name" "${sock:-default}" \
+                        | grep -vxF "$base" | head -1)
+                if [ -n "$_other" ]; then
+                        echo "mux: '$name' already means $_other" >&2
+                        echo "mux: choose another name, or --force to" \
+                                "rebind it here" >&2
+                        exit 1
+                fi
+        fi
+        # `new` names THIS DIRECTORY, not the project enclosing it. That is
+        # the difference between it and a bare `mux go`, which takes the git
+        # toplevel: without it a subdirectory could never get a session of its
+        # own, since `mux new waybar` inside a repo would bind the whole repo.
+        # Subdirectory sessions stay an outlier, but an outlier mux supports.
+        here=$(pwd)
+        _derived=$(printf '%s' "$(basename "$base")" | tr ':.' '--')
+        if [ "$name" != "$_derived" ] || [ "$here" != "$base" ]; then
+                mux_prof_set "$name" root "$(mux_fold_tilde "$here")" || {
+                        echo "mux: could not write $(mux_prof_file)" >&2
+                        exit 1; }
+                echo "mux: $name -> $(mux_fold_tilde "$here")"
+        fi
+        base=$here
+fi
+
 # Already running: attach. A live session needs no layout, so this comes before
 # any layout resolution. The claude flag shapes a session only as it is built,
 # so say so on a resume rather than pretending to honour it on an attach.
@@ -1350,18 +1396,73 @@ fi
 # profile records a DEVIATION, so needing none is the normal case, and a fresh
 # install with an empty $MUX_DIR runs `mux go` with nothing configured at all.
 # /dev/null stands in as the empty profile so one code path serves both.
+profile=
+prow=
 if [ -n "$layout_arg" ]; then
+        # An explicit PROFILE positional wins and must exist -- a typo here is
+        # an error, never a silent fallback. It may name a row or a breakout.
         profile=$(_find_profile "$layout_arg")
-        [ -n "$profile" ] || {
-                echo "mux: no profile: $layout_arg" >&2; exit 1; }
+        if [ -z "$profile" ]; then
+                mux_prof_has "$layout_arg" && prow=$layout_arg
+                [ -n "$prow" ] || {
+                        echo "mux: no profile: $layout_arg" >&2; exit 1; }
+        fi
 else
+        # A BREAKOUT file wins over a row of the same name. Promotion is meant
+        # to delete the row, so a surviving one is stale, and the file is the
+        # thing you deliberately promoted. `mux check` reports the pair as
+        # drift rather than leaving it to precedence.
         profile=$(_find_profile "$name")
+        if [ -z "$profile" ] && mux_prof_has "$name"; then prow=$name; fi
 fi
-: "${profile:=/dev/null}"
 case $profile in *.layout)
         echo "mux: $profile is a pre-rename layout file; rename it to" \
                 "${profile%.layout}.profile (see: mux check)" >&2 ;;
 esac
+
+# Does anything we found already declare a root? If so the map is irrelevant.
+hasroot=0
+if [ -n "$prow" ] && [ -n "$(mux_prof_get "$prow" root)" ]; then hasroot=1; fi
+if [ -n "$profile" ] \
+   && grep -qE '^[[:space:]]*root[[:space:]]' "$profile" 2>/dev/null; then
+        hasroot=1
+fi
+
+# A TYPED name means "that project", not "wherever I happen to be standing", so
+# its root comes from the discovery map. Bare `mux go` never gets here: the
+# directory is the answer, and there was no name to have mistyped.
+if [ -n "$name_arg" ] && [ "$cmd" != new ] && [ "$hasroot" -eq 0 ]; then
+        hits=$(_map_lookup "$name")
+        nhit=$(printf '%s\n' "$hits" | grep -c . || true)
+        if [ "$nhit" -eq 1 ]; then
+                base=$hits
+        elif [ "$nhit" -gt 1 ]; then
+                echo "mux: '$name' is ambiguous -- $nhit projects share it:" >&2
+                printf '%s\n' "$hits" | sed 's/^/         /' >&2
+                echo "mux: name one of them:  cd <dir> && mux new <alias>" >&2
+                exit 1
+        elif [ -z "$prow$profile" ]; then
+                # Step 5: nothing knows this name, so "new session" and "typo"
+                # are indistinguishable. Refuse, and hand over both fixes.
+                echo "mux: nothing known as '$name'" >&2
+                near=$(mux_scan_near "$name" "${sock:-default}" | tr '\n' ' ')
+                [ -n "$near" ] && \
+                        echo "mux:   did you mean:      $near" >&2
+                echo "mux:   or create it here:  mux new $name" >&2
+                exit 1
+        fi
+fi
+
+# A row is materialised as the same `key value` stream a breakout file holds,
+# so there is one parse path below whichever form the profile was stored in.
+plabel=$profile
+if [ -n "$prow" ]; then
+        profile=$(mktemp) || { echo "mux: mktemp failed" >&2; exit 1; }
+        mux_prof_directives "$prow" >"$profile" || exit 1
+        plabel="$(mux_prof_file) [$prow]"
+fi
+: "${profile:=/dev/null}"
+: "${plabel:=$profile}"
 
 # Flatten includes into one directive stream, then parse it TWICE: first to
 # resolve the session-wide root/theme and validate the whole shape (touching
@@ -1370,7 +1471,7 @@ esac
 # and root/theme are position-independent (last one wins).
 flat=$(mktemp) || { echo "mux: mktemp failed" >&2; exit 1; }
 trap 'rm -f "$flat"' EXIT
-expand_profile "$profile" >"$flat"
+expand_profile "$profile" "$plabel" >"$flat"
 
 # Pass 1: resolve root (default the project; a leading ~ expands) and theme,
 # each last-wins across the profile, and validate structure. window/pane/bottom

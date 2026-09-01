@@ -58,19 +58,23 @@ command \(em a plain shell in the agent pane.
 .B mux ls
 List sessions in the current context, each tagged with its agent-state glyph.
 .TP
-.B mux new " [" \fINAME\fR "] [" \fICOLOR\fR "] [" \fIROOT\fR ]
-Write a new layout.
+.B mux new " " \fINAME\fR
+Create session
 .I NAME
-and
-.I ROOT
-both default to the project \(em the git toplevel if you are in a repo, else
-the current directory, the same derivation
+rooted at the CURRENT directory, and bind the name so
+.B mux go \fINAME\fR
+finds it again. The one EXPLICIT creation verb:
 .B go
-uses \(em so the layout is written under the name
-.B go
-will look for.
-.RB ' \- '
-means the default colour / no root.
+creates implicitly whenever it can point at evidence the target exists (a
+profile, a scanned repository, or the directory you are in), and refuses a typed
+name that nothing knows, because from the input alone a new session and a typo
+are identical. A row is written only when
+.I NAME
+is not what this directory already derives.
+.TP
+.B mux scan " [" \-\-list ]
+Rebuild the project discovery map for this context, or print it. The map is a
+cache: it also rebuilds on first use and on a lookup miss, never on a timer.
 .TP
 .B mux save " [" \fINAME\fR ]
 Snapshot the current session to
@@ -323,7 +327,7 @@ Per-socket palette stamp directory. Default
 .TP
 .I $MUX_DIR/<name>.profile
 User session profiles (\c
-.BR "mux new" ", " save " write here)."
+.BR save " writes here)."
 .TP
 .I $MUX_DIR/context
 The optional context hook.
@@ -348,11 +352,11 @@ Open (or attach) a session for the current project, agent continuing:
 .B mux go
 .RE
 .PP
-Write a layout rooted at a repo, then bring it up resuming a conversation:
+Name a session for a directory, then bring it up resuming a conversation:
 .PP
 .nf
 .RS
-mux new api - ~/src/api
+cd ~/src/api && mux new api
 mux resume api
 .RE
 .fi

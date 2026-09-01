@@ -11,7 +11,7 @@ set -eu
 _name=mux-profile
 . "$(dirname "$0")/lib.sh"
 
-mkdir -p "$T/bin" "$T/conf/layouts" "$T/proj"
+mkdir -p "$T/bin" "$T/conf/layouts" "$T/conf/profiles.d" "$T/proj"
 cat >"$T/bin/tmux" <<'EOF'
 #!/bin/sh
 printf '%s\n' "$*" >>"$TMUXLOG"
@@ -44,34 +44,35 @@ fails() { # LABEL WANT ARGS...
 # --- a profile may be nothing but a theme ----------------------------------
 # The arrangement then comes from the shipped layouts/default, which is the
 # whole point: a profile records a DEVIATION, not a whole session.
-printf 'theme   cyan\n' >"$T/conf/themeonly.profile"
-go themeonly >/dev/null
+printf 'theme   cyan\n' >"$T/conf/profiles.d/themeonly.profile"
+go themeonly >/dev/null || fail "a theme-only profile should build"
 has themeonly-builds 'new-session -d -s themeonly'
 has themeonly-bottom 'split-window -v -f'
 has themeonly-theme  '@mux-theme cyan'
 
 # --- a profile names a layout ----------------------------------------------
 printf 'window solo\npane    agent\n' >"$T/conf/layouts/solo.layout"
-printf 'layout  solo\nroot    %s\n' "$T/proj" >"$T/conf/named.profile"
-go named >/dev/null
+printf 'layout  solo\nroot    %s\n' "$T/proj" \
+	>"$T/conf/profiles.d/named.profile"
+go named >/dev/null || fail "a profile naming a layout should build"
 has named-window 'new-session -d -s named -n solo'
 grep -q 'split-window -v -f' "$TMUXLOG" \
 	&& fail "named: the solo layout has no bottom, one was built anyway"
 
 # --- the split is enforced BOTH ways ---------------------------------------
-printf 'window nope\npane\n' >"$T/conf/inprofile.profile"
+printf 'window nope\npane\n' >"$T/conf/profiles.d/inprofile.profile"
 fails arrangement-in-profile "belongs in a layout, not a profile" inprofile
 
 printf 'theme red\nwindow w\npane\n' >"$T/conf/layouts/bad.layout"
-printf 'layout  bad\n' >"$T/conf/inlayout.profile"
+printf 'layout  bad\n' >"$T/conf/profiles.d/inlayout.profile"
 fails identity-in-layout "belongs in a profile, not a layout" inlayout
 
 # --- retired syntax points at the fix, it does not silently ignore ---------
-printf 'include shapes/code\n' >"$T/conf/legacy.profile"
+printf 'include shapes/code\n' >"$T/conf/profiles.d/legacy.profile"
 fails include-retired "mux-migrate-profiles" legacy
 
 # --- a named layout that does not exist fails loud -------------------------
-printf 'layout  ghost\n' >"$T/conf/ghost.profile"
+printf 'layout  ghost\n' >"$T/conf/profiles.d/ghost.profile"
 fails missing-layout "no layout: ghost" ghost
 
 # --- a pre-rename .profile-less <name>.layout is still READ, with a warning -
