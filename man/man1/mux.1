@@ -270,47 +270,71 @@ The explorer (\c
 .TP
 .B click " (status)"
 Click a session chip in the strip to jump straight to it.
-.SH THE CONTEXT SEAM
-mux core knows no particular notion of "context" (a work / personal split, a
-namespace, a git host). An optional executable hook,
-.IR $MUX_DIR/context ,
-supplies one; with none installed, mux runs a single default context. Verbs:
-.TP
-.B context env " [" \fIPID\fR ]
-Emit
-.IR PID 's
-context as whitelisted
-.RI < key >
-.RI < value >
-lines:
-.B socket
-(tmux
-.B \-L
-suffix for isolation),
-.B side
-(an opaque token driving layout filtering and the marker),
-.B label
-and
-.B banner
-(the reminder text and its style),
-.B theme
-(the context's default theme).
-.TP
-.B context side \fIROOT\fR
-The side a layout rooted at
-.I ROOT
-belongs to, or
-.B shared
-(visible in every context).
-.TP
-.B context sockets
-Every non-default context server the hook can address (for
-.B reload
-and palette sync).
+.SH CONTEXTS AND PARTITIONS
+mux core knows nothing about any particular notion of "context" (a
+work/personal split, a namespace, a git host). It asks an OPTIONAL command for
+one word and decides everything else itself.
 .PP
-Output is parsed against the key whitelist, never eval'd. mux only
-.B reflects
-a context; whatever enforces a boundary lives in the integrator.
+.RS
+.B context\-command
+.I <cmd>
+.RB "in " $MUX_DIR/config
+.RE
+.PP
+The command prints a TOKEN; empty output or a non\-zero exit means
+.BR global .
+That is the entire integration surface: no sockets, no styles, no themes, no
+path classification. The integrator reports IDENTITY; mux decides presentation
+and isolation.
+.PP
+A
+.B context
+is a settings axis, named by the token. A
+.B partition
+is an isolation axis: sessions in different partitions are mutually invisible.
+A context's partition defaults to its own token, so contexts are isolated by
+default, but several may name one partition to share it. Everything
+isolation\-scoped keys on the partition: the tmux socket, the agent\-state
+directory, the discovery map, the session set, and profile visibility.
+.PP
+Settings resolve in three levels, merged last\-wins, unconditionally:
+.TP
+1.
+mux's built\-in defaults \(em BEHAVIOUR only, never a location.
+.TP
+2.
+.IR partitions/<name> .partition
+\(em what this partition shares.
+.TP
+3.
+.IR contexts/<token> .context
+\(em what is unique to this context.
+.PP
+The same key set is legal in either file
+.RB ( label ", " theme ", " derive ", " agent ", " layout ", " scan ,
+.BR host\-chip ,
+plus
+.B partition
+in a context), so WHERE you put a key is the statement of its scope and there
+is no per\-key rule to learn.
+.PP
+The built\-in defaults carry no location keys. That is what stops
+.B scan
+leaking between partitions: a partition nobody configured gets no roots and so
+no map, making a missing context file visible rather than quietly indexing the
+wrong tree.
+.I $MUX_SHARE/partitions/global.partition
+ships with
+.RB ' "scan ~/src 3" '.
+.PP
+A token becomes a socket name and a path component and is validated as a DNS
+label. An invalid one is an error, never a silent fall back: a typo'd token
+quietly becoming the baseline would put work sessions in the personal
+partition.
+.PP
+.B mux only reflects a context; it enforces nothing.
+Whatever backs a boundary (a Unix group, an ACL, a namespace) lives in whatever
+supplies the token. The banner is a reminder, never permission.
 .SH TMUX INTEGRATION
 Source the shipped fragments from your
 .IR tmux.conf :
@@ -355,8 +379,15 @@ Per-socket palette stamp directory. Default
 User session profiles (\c
 .BR save " writes here)."
 .TP
-.I $MUX_DIR/context
-The optional context hook.
+.I $MUX_DIR/config
+Invariants; today just
+.BR context\-command .
+.TP
+.I $MUX_DIR/partitions/<name>.partition
+Settings shared by everything in a partition.
+.TP
+.I $MUX_DIR/contexts/<token>.context
+Settings unique to one context.
 .TP
 .I $MUX_DIR/profiles
 The profile TABLE: one line per session that deviates from what mux derives.

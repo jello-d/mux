@@ -20,8 +20,8 @@ mux turns tmux into that dashboard:
 - **Jump to whoever's waited longest.** One key takes you to the most-blocked
   session; repeat to walk down the urgency order.
 - **Per-host colour chips, per-client hide/show, skip-hidden cycling,
-  data-driven themes**, and a **pluggable context seam** to mark (say) a
-  work/personal boundary in the status bar.
+  data-driven themes**, and **contexts and partitions** to isolate (say) work
+  from personal, driven by one word from an integrator.
 
 It's POSIX shell over tmux. No daemon, no runtime dependencies beyond tmux
 itself (`fzf` optional, for a nicer session picker).
@@ -39,7 +39,7 @@ itself (`fzf` optional, for a nicer session picker).
   - [Profiles and layouts](#profiles-and-layouts)
   - [Agents](#agents)
   - [Themes](#themes)
-  - [The context seam](#the-context-seam)
+  - [Contexts and partitions](#contexts-and-partitions)
 - [Commands](#commands)
 - [Key bindings](#key-bindings)
 - [Configuration](#configuration)
@@ -326,25 +326,73 @@ Optional, and it holds only the hosts you want to pin — an unlisted host gets 
 stable, readable colour derived from its name, so identically-named sessions on
 different machines are told apart with no configuration.
 
-### The context seam
+### Contexts and partitions
 
 mux core knows nothing about any particular notion of "context" — a
-work/personal split, a Kubernetes namespace, a git host. It asks an **optional**
-hook, `$MUX_DIR/context` (an executable), and falls back to a single default
-context when none is installed. The hook answers three verbs:
+work/personal split, a Kubernetes namespace, a git host. It asks an **optional
+command for one word** and decides everything else itself.
 
-- `context env [PID]` — the context of a process: an isolation `socket` (a tmux
-  `-L` suffix, so a marked context gets its own server), an opaque `side` token
-  (drives layout filtering and the marker), a `label` and `banner` (the reminder
-  text and its style), and a default `theme`.
-- `context side ROOT` — which side a layout rooted at `ROOT` belongs to (or
-  `shared`, visible everywhere).
-- `context sockets` — every non-default context server, so `reload` and palette
-  sync reach them all.
+```
+# $MUX_DIR/config
+context-command   severance mux-context
+```
 
-Output is parsed against a key whitelist, never eval'd. **mux only reflects a
-context; it enforces nothing** — whatever backs a boundary (a Unix group, an
-ACL, a namespace) lives in the integrator that supplies the hook.
+That command prints a **token**; empty output or a non-zero exit means
+`global`. That is the entire integration surface — no sockets, no styles, no
+themes, no path classification. The integrator reports *identity*; mux decides
+presentation and isolation.
+
+Two axes, deliberately separate:
+
+- a **context** is a settings axis, named by the token;
+- a **partition** is an isolation axis. Sessions in different partitions are
+  mutually invisible. A context's partition defaults to its own token, so
+  contexts are isolated by default — but several contexts may name one
+  partition to share it, which is how you can pick a default agent from
+  external criteria *without* forcing a separate session namespace on yourself.
+
+Everything isolation-scoped keys on the partition: the tmux socket, the
+agent-state directory, the discovery map, the session set, and which profiles
+are visible.
+
+Settings resolve in three levels, merged last-wins, with no conditions:
+
+```
+1. mux's built-in defaults      behaviour only, never a location
+2. partitions/<name>.partition  what this partition shares
+3. contexts/<token>.context     what is unique to this context
+```
+
+The same key set is legal in either file — `label`, `theme`, `derive`, `agent`,
+`layout`, `scan`, `host-chip`, plus `partition` in a context — so **where you
+put a key is the statement of its scope**, and there is no per-key rule to
+learn. Drop-in files have owners: an integrator installs
+`partitions/manifest.partition` without ever editing a file you also edit.
+
+```
+# $MUX_DIR/partitions/manifest.partition
+label   Manifest
+theme   orange
+scan    ~/src/manifest 3
+```
+
+The built-in defaults carry **no location keys**. That is what stops `scan`
+leaking between partitions: a partition nobody configured gets no roots and
+therefore no map, so a missing context file is *visible* rather than quietly
+indexing the wrong tree. mux ships `partitions/global.partition` with
+`scan ~/src 3`, which is why the out-of-the-box case works.
+
+A token becomes a socket name and a path component, so it is validated as a DNS
+label (`[a-z0-9]([a-z0-9-]*[a-z0-9])?`). An invalid one is an error, never a
+silent fall back — a typo'd token quietly becoming the baseline would put work
+sessions in the personal partition.
+
+**mux only reflects a context; it enforces nothing.** Whatever backs a boundary
+— a Unix group, an ACL, a namespace — lives in whatever supplies the token. The
+banner is a reminder, never permission.
+
+`mux why` prints the resolved context, partition, and where every setting came
+from.
 
 ## Commands
 
@@ -356,6 +404,7 @@ mux go [NAME] [PROFILE]       create/attach/switch; agent continues
 mux resume [NAME] [PROFILE]   same, but the agent resumes (choose a chat)
 mux --no-agent ...           build the panes, plain shell in the agent pane
 mux restore                  rebuild this partition's sessions (--list)
+mux scan                     rebuild the project discovery map
 mux why [NAME]               show each resolved value and where it came from
 mux ls                       list sessions (with agent-state glyphs)
 mux new NAME                 create NAME here, binding the name if needed
