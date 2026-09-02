@@ -74,6 +74,17 @@ are identical. A row is written only when
 .I NAME
 is not what this directory already derives.
 .TP
+.B mux restore " [" \-\-list ]
+Rebuild every session this partition had recorded, then attach the first.
+Sessions are recorded automatically as you open them and forgotten on
+.BR "mux kill" ,
+so after a reboot this brings back what you had. It acts on the CURRENT
+partition and takes no way to name another. The set is state, not config:
+.IR $MUX_CACHE/sessions.<socket> ,
+one
+.RI NAME <TAB> ROOT
+per line, per machine and never in git.
+.TP
 .B mux scan " [" \-\-list ]
 Rebuild the project discovery map for this context, or print it. The map is a
 cache: it also rebuilds on first use and on a lookup miss, never on a timer.

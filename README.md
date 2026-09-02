@@ -293,6 +293,25 @@ it on drift, so a theme edit needs no manual step. `mux theme [NAME|next|prev]`
 switches a live session (`-p` persists it into the layout). A theme dropped in
 `$MUX_DIR/themes` overrides a shipped one of the same name.
 
+### Session sets
+
+The sessions you have open are recorded as you open them, per socket, in
+`$MUX_CACHE/sessions.<socket>` — one `NAME<TAB>ROOT` per line. After a reboot:
+
+```sh
+mux restore          # rebuild them all, then attach the first
+mux restore --list   # just show what would be rebuilt
+```
+
+It is **state, not config**: never in `$MUX_DIR`, never in git, and per
+machine. Recording is additive when a session is built or attached and
+subtractive on `mux kill` (`kill --all` clears it) — deliberately *not* a
+snapshot of what is live, which the first `mux go` after a reboot would
+clobber. The root is recorded because the common session is a bare `mux go` in
+a directory, with no profile to rebuild it from. That also makes the set an
+evidence source: `mux go <name>` resolves through it, so a session you had is
+as good a reason to build as a profile or a scanned repo.
+
 ### Host chips
 
 `$MUX_DIR/hosts` pins the status-left host chip's colour per machine, one
@@ -336,6 +355,7 @@ mux                          pick a session to attach (fzf or a menu)
 mux go [NAME] [PROFILE]       create/attach/switch; agent continues
 mux resume [NAME] [PROFILE]   same, but the agent resumes (choose a chat)
 mux --no-agent ...           build the panes, plain shell in the agent pane
+mux restore                  rebuild this partition's sessions (--list)
 mux why [NAME]               show each resolved value and where it came from
 mux ls                       list sessions (with agent-state glyphs)
 mux new NAME                 create NAME here, binding the name if needed
