@@ -118,6 +118,29 @@ grep -q 'new-session -d -s alpha2 ' "$TMUXLOG" \
 # --- new refuses a name that is already known -------------------------------
 fails new-dup "already has a profile" "$T/tree/solo" new alpha2
 
+# --- a miss with no map must not read like a miss with one -----------------
+# "I never looked" and "I looked and did not find it" are different failures,
+# and offering a spelling correction when discovery is off is misleading.
+#
+# Modelled with a partition that has no file ANYWHERE -- moving the user's
+# global.partition aside would not do it, because the SHIPPED one overlays in.
+# That is also the real case: an unconfigured non-global partition, exactly
+# what a work context looks like before anyone sets it up.
+printf '#!/bin/sh\necho nomap\n' >"$T/cc"; chmod +x "$T/cc"
+printf 'context-command %s/cc\n' "$T" >"$T/conf/config"
+fails no-roots "discovery is off" "$T/elsewhere" go whatever
+fails no-roots-fix "scan <dir>" "$T/elsewhere" go whatever
+_o=$(mux "$T/elsewhere" go whatever) || true
+case $_o in
+*"did you mean"*) fail "suggested a spelling with no map to search" ;;
+esac
+# It also says the partition is unconfigured, rather than only failing later.
+case $_o in
+*"no config for context 'nomap'"*) ;;
+*) fail "an unconfigured context should say so: [$_o]" ;;
+esac
+rm -f "$T/conf/config"
+
 # --- a session is addressable by its ROOT, not only by its name -------------
 # The public form `mux restore` replays, so restoring is a loop over a command
 # anyone can type rather than a private path through the resolver.
