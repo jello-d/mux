@@ -162,7 +162,7 @@ fi
 # fallback here, unlike mux_conf_clean above: a normalizer has a safe degraded
 # mode, a data resolver has none (it would silently resolve nothing), so a
 # missing lib is a broken install and says so.
-for _l in mux-data.sh mux-profiles.sh mux-scan.sh; do
+for _l in mux-data.sh mux-profiles.sh mux-scan.sh mux-sessions.sh; do
         [ -r "$LIBEXEC/$_l" ] || {
                 echo "mux: $LIBEXEC/$_l missing (incomplete install)" >&2
                 exit 1; }
@@ -363,6 +363,7 @@ usage: mux [OPTION] [VERB] [NAME] [PROFILE]  (OPTION may follow VERB too)
   theme [NAME|next|prev]     set/cycle/show the theme (remembered)
   rename [OLD] NEW           rename a session (and its matching layout)
   edit [NAME]                open a profile in $EDITOR
+  restore                    rebuild this partition's sessions (--list)
   why [NAME]                 show each resolved value and where it came from
   check                      audit mux's install: package data, deps, overlay
   migrate-profiles           convert pre-rename *.layout files (--apply)
@@ -395,7 +396,9 @@ EOF
 # No verb at all -> the session picker: pick=1, then flow as an attach (cmd=go).
 bare=0
 attach=0
+noattach=0
 all=0
+listing=0
 resume=0
 force=0
 persist=0
@@ -405,7 +408,9 @@ while [ "$#" -gt 0 ]; do
                 # --bare said nothing about what it did. --no-agent does.
                 --no-agent|--bare|-b) bare=1; shift ;;
                 --attach|-a)  attach=1; shift ;;
+                --no-attach)  noattach=1; shift ;;
                 --all)        all=1; shift ;;
+                --list)       listing=1; shift ;;
                 --resume)     resume=1; shift ;;
                 --force)      force=1; shift ;;
                 --persist|-p) persist=1; shift ;;   # retired: now the default
@@ -425,7 +430,7 @@ if [ -z "$cmd" ]; then
 fi
 case $cmd in
         go|resume|kill|kill-all|reload|ls|hide|show|show-all) ;;
-        save|new|help|theme|rename|edit|why) ;;
+        save|new|help|theme|rename|edit|why|restore) ;;
         *) echo "mux: unknown verb: $cmd" >&2; usage ;;
 esac
 # The retired verbs are the flag forms spelled out. Kept as aliases rather than
@@ -442,7 +447,7 @@ esac
 # requires an explicit NAME -- it is too destructive to run against an inferred
 # session; kill-all takes none (it hits the whole socket, behind a prompt).
 case $cmd in
-        reload|ls) [ "$#" -eq 0 ] || {
+        reload|ls|restore) [ "$#" -eq 0 ] || {
                 echo "mux: $cmd takes no arguments" >&2; usage; } ;;
         kill|show) if [ "$all" -eq 1 ]; then
                 [ "$#" -eq 0 ] || { echo "mux: $cmd --all takes no NAME" >&2
@@ -481,6 +486,17 @@ case $cmd in
         kill|show) ;;
         *) [ "$all" -eq 0 ] || {
                 echo "mux: --all is only for kill/show" >&2; usage; } ;;
+esac
+case $cmd in
+        restore) ;;
+        *) [ "$listing" -eq 0 ] || {
+                echo "mux: --list is only for restore" >&2; usage; } ;;
+esac
+case $cmd in
+        go|resume|new) ;;
+        *) [ "$noattach" -eq 0 ] || {
+                echo "mux: --no-attach is only for go/resume/new" >&2
+                usage; } ;;
 esac
 case $cmd in
         save|new) ;;
@@ -1396,6 +1412,17 @@ esac
 # a real in-pane shell's controlling tty IS that pane's tty; a leaked one's is
 # not. Across sockets switch-client cannot reach either, so we attach there too.
 mux_attach() {
+        # Record here rather than only after a build: every path that lands you
+        # in a session funnels through this one function, so recording is
+        # idempotent AND heals a set that predates the feature or a session made
+        # with raw tmux. --no-attach still records (it built the thing), it just
+        # does not take you there.
+        _sr=${root:-}
+        [ -n "$_sr" ] || _sr=$(tm list-sessions \
+                -F '#{session_name} #{session_path}' 2>/dev/null \
+                | awk -v n="$name" '$1==n{sub(/^[^ ]* /,""); print; exit}')
+        mux_sess_add "$name" "$_sr" "${sock:-default}"
+        if [ "$noattach" -eq 1 ]; then return 0; fi
         _switch=0
         cur=${TMUX:-}                   # our client, if any: socket,pid,session
         cur=${cur%%,*}                  # -> just the socket path
@@ -1598,6 +1625,7 @@ if [ "$cmd" = kill ] && [ "$all" -eq 1 ]; then
                 *) echo "mux: aborted"; exit 0 ;;
         esac
         tm kill-server 2>/dev/null || true
+        mux_sess_clear "${sock:-default}"
         echo "mux: killed all sessions on \"${sock:-default}\""
         exit 0
 fi
@@ -1606,6 +1634,10 @@ fi
 if [ "$cmd" = kill ]; then
         if tm has-session -t "=$name" 2>/dev/null; then
                 tm kill-session -t "=$name"
+                # Killing is how you say you are done with it, so the set
+                # forgets it. Nothing else prunes: that is the whole reason a
+                # snapshot of the live set would be wrong.
+                mux_sess_drop "$name" "${sock:-default}"
                 echo "mux: killed $name"
                 exit 0
         fi
@@ -1663,6 +1695,67 @@ if [ "$cmd" = new ]; then
         base=$here
 fi
 
+# --- restore: bring back this partition's sessions --------------------------
+# The point of the session set: after a reboot, `mux restore` and the five
+# sessions you had are back. It acts on the CURRENT partition only and takes no
+# way to name another -- if you want a different partition's sessions, you go to
+# that partition, which is what partitions are for.
+#
+# Each session is rebuilt by re-running the front end with --no-attach, so the
+# whole build path (profile resolution, layout, theme, agent) is reused exactly
+# rather than reimplemented here. Then we attach the first, which insertion
+# order makes the oldest -- usually the one you think of as primary.
+if [ "$cmd" = restore ]; then
+        rs_key=${sock:-default}
+        rs_set=$(mux_sess_list "$rs_key")
+        if [ "$listing" -eq 1 ]; then
+                [ -n "$rs_set" ] && printf '%s\n' "$rs_set"
+                exit 0
+        fi
+        if [ -z "$rs_set" ]; then
+                echo "mux: no sessions recorded for this partition" >&2
+                echo "mux: they are recorded as you open them; nothing to" \
+                        "restore yet" >&2
+                exit 1
+        fi
+        rs_first=
+        rs_built=0
+        rs_up=0
+        rs_failed=
+        for rs_n in $rs_set; do
+                [ -n "$rs_first" ] || rs_first=$rs_n
+                if tm has-session -t "=$rs_n" 2>/dev/null; then
+                        rs_up=$((rs_up + 1))
+                        continue
+                fi
+                # Flag BEFORE the positional: the parser stops consuming
+                # options at the first positional, so `go NAME --no-attach`
+                # would leave --no-attach to be read as a PROFILE name.
+                if "$_self" go --no-attach "$rs_n" >/dev/null 2>&1; then
+                        rs_built=$((rs_built + 1))
+                else
+                        # Keep going: one unbuildable session (a root that
+                        # moved, a profile since deleted) must not cost you the
+                        # other four.
+                        rs_failed="$rs_failed $rs_n"
+                fi
+        done
+        printf 'mux: restored %s, %s already up\n' "$rs_built" "$rs_up"
+        if [ -n "$rs_failed" ]; then
+                echo "mux: could NOT build:$rs_failed" >&2
+                echo "mux: see why with  mux go <name>" >&2
+        fi
+        # Land somewhere real: the first recorded session that is actually up.
+        name=
+        for rs_n in $rs_set; do
+                if tm has-session -t "=$rs_n" 2>/dev/null; then
+                        name=$rs_n; break
+                fi
+        done
+        [ -n "$name" ] || { echo "mux: nothing to attach" >&2; exit 1; }
+        mux_attach
+fi
+
 # Already running: attach. A live session needs no layout, so this comes before
 # any layout resolution. The claude flag shapes a session only as it is built,
 # so say so on a resume rather than pretending to honour it on an attach.
@@ -1707,6 +1800,7 @@ if tm has-session -t "=$name" 2>/dev/null; then
         [ "$cmd" = resume ] && \
                 echo "mux: $name already up; resume applies only at build" >&2
         mux_attach
+        exit 0          # reached only under --no-attach; otherwise exec'd away
 fi
 
 # Building a new session: resolve the blueprint. An explicit PROFILE positional
@@ -1755,7 +1849,12 @@ fi
 # its root comes from the discovery map. Bare `mux go` never gets here: the
 # directory is the answer, and there was no name to have mistyped.
 if [ -n "$name_arg" ] && [ "$cmd" != new ] && [ "$hasroot" -eq 0 ]; then
-        hits=$(_map_lookup "$name")
+        # The session set first: a session you HAD is evidence at least as
+        # good as a scanned repo, and it is the only source that knows where a
+        # profile-less `mux go` was rooted. Without it, restore could not
+        # rebuild the common case at all.
+        hits=$(mux_sess_root "$name" "${sock:-default}")
+        [ -n "$hits" ] && [ -d "$hits" ] || hits=$(_map_lookup "$name")
         nhit=$(printf '%s\n' "$hits" | grep -c . || true)
         if [ "$nhit" -eq 1 ]; then
                 base=$hits
