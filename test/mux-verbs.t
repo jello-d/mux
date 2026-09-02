@@ -81,6 +81,38 @@ case $_w in *"hashed from the name"*) ;;
 *) fail "why: did not attribute the derived theme: $_w" ;;
 esac
 
+# --- why says WHERE, and flags a root that is not there ---------------------
+# The confusing case: a directory whose basename matches a profile rooted
+# somewhere ELSE. Without saying so, the output reads as if that root described
+# where you are standing.
+mkdir -p "$T/proj/elsewhere"
+printf 'proj        root=%s/proj/elsewhere\n' "$T" >"$T/conf/profiles"
+_w=$(mux why)
+case $_w in
+*"where"*) ;; *) fail "why does not say where it is answering about" ;;
+esac
+case $_w in
+*"NOT where you are"*) ;;
+*) fail "why did not flag a profile root that differs from the cwd: [$_w]" ;;
+esac
+# ... and when the root DOES match, no alarming marker.
+printf 'proj        root=%s/proj\n' "$T" >"$T/conf/profiles"
+_w=$(mux why)
+case $_w in
+*"NOT where you are"*) fail "why flagged a root that is exactly here" ;;
+esac
+
+# --- why does not print an alternative identical to the declared value ------
+# "declared (x would give x)" reads like a bug rather than an explanation.
+printf 'proj        theme=purple\n' "$T" >"$T/conf/profiles"
+mkdir -p "$T/conf/partitions"
+printf 'theme purple\n' >"$T/conf/partitions/global.partition"
+_w=$(mux why)
+case $_w in
+*"would give purple"*) fail "why showed a redundant alternative: [$_w]" ;;
+esac
+rm -f "$T/conf/partitions/global.partition"
+
 # --- the collision guard: a DERIVED name meeting a live session elsewhere ---
 LIVE=proj; LIVEROOT=$T/somewhere-else; export LIVE LIVEROOT
 fails collide "is live at" go

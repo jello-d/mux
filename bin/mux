@@ -1135,27 +1135,32 @@ if [ "$cmd" = why ]; then
         # name
         if [ -n "$name_arg" ]; then w_src="you typed it"
         elif [ -n "$(mux_prof_by_root "$base")" ]; then
-                w_src="a row claims root $(mux_fold_tilde "$base")"
+                w_src="a profile claims this directory"
         elif git rev-parse --show-toplevel >/dev/null 2>&1; then
                 w_src="the git toplevel's basename"
         else w_src="the current directory's basename"; fi
-        printf '%-8s %-24s %s\n' context "$MUX_CTX_TOKEN" \
+        # `where` FIRST: every line below is an answer about a directory, and
+        # without naming it the reader cannot tell that a profile's root may
+        # not be the place they are standing.
+        printf '%-9s %-26s %s\n' where "$(mux_fold_tilde "$base")" \
+                "the project you are in"
+        printf '%-9s %-26s %s\n' context "$MUX_CTX_TOKEN" \
                 "$([ -n "$(mux_ctx_conf context-command)" ] \
                         && echo 'from context-command' \
                         || echo 'no context-command; the baseline')"
-        printf '%-8s %-24s %s\n' partition "$MUX_CTX_PARTITION" \
+        printf '%-9s %-26s %s\n' partition "$MUX_CTX_PARTITION" \
                 "$([ "$MUX_CTX_PARTITION" = "$MUX_CTX_TOKEN" ] \
                         && echo 'defaults to the context name' \
                         || echo 'named by the context file')"
-        printf '%-8s %-24s %s\n' name "$wh" "$w_src"
+        printf '%-9s %-26s %s\n' name "$wh" "$w_src"
 
         # where the profile itself lives
         if [ -n "$w_file" ]; then
-                printf '%-8s %-24s %s\n' profile '(breakout)' "$w_file"
+                printf '%-9s %-26s %s\n' profile '(breakout)' "$w_file"
         elif [ "$w_row" -eq 1 ]; then
-                printf '%-8s %-24s %s\n' profile '(row)' "$(mux_prof_file)"
+                printf '%-9s %-26s %s\n' profile '(row)' "$(mux_prof_file)"
         else
-                printf '%-8s %-24s %s\n' profile '(none)' \
+                printf '%-9s %-26s %s\n' profile '(none)' \
                         'everything below is derived'
         fi
 
@@ -1177,10 +1182,19 @@ if [ "$cmd" = why ]; then
                 case $1 in root) _v=$(mux_fold_tilde "$_v") ;; esac
                 if [ -n "$_v" ]; then
                         _w=declared
-                        [ -n "${4:-}" ] && _w="declared ($3 would give $2)"
-                        printf '%-8s %-22s %s\n' "$1" "$_v" "$_w"
+                        # Only worth showing the road not taken when it DIFFERS
+                        # -- "declared (x would give x)" reads like a bug.
+                        [ -n "${4:-}" ] && [ "$_v" != "$2" ] \
+                                && _w="declared ($3 would give $2)"
+                        # A profile's root is where its panes open, which need
+                        # not be where you are standing. Saying so is the whole
+                        # point of this verb: the name resolved to a profile,
+                        # and that profile lives somewhere else.
+                        [ "$1" = root ] && [ "$_v" != "$2" ] \
+                                && _w="$_w -- NOT where you are"
+                        printf '%-9s %-26s %s\n' "$1" "$_v" "$_w"
                 else
-                        printf '%-8s %-22s %s\n' "$1" "$2" "$3"
+                        printf '%-9s %-26s %s\n' "$1" "$2" "$3"
                 fi
         }
         w_field root "$(mux_fold_tilde "$base")" "the project you are in"
