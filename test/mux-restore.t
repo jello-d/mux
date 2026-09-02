@@ -92,6 +92,20 @@ _set=$(mux "$T/elsewhere" restore --list | tr '\n' ' ')
 mux "$T/elsewhere" restore >/dev/null || fail "restore after kill failed"
 [ "$(live)" = "bravo " ] || fail "a killed session was resurrected: [$(live)]"
 
+# --- restore addresses each session by its ROOT, the public form ------------
+# Not by a private path through the resolver: `mux go <dir>` is a command
+# anyone can type, so restore is a loop over it. Proven by a session whose root
+# is a repo SUBDIRECTORY -- addressing it by name alone could not distinguish
+# it from its enclosing repo.
+mkdir -p "$T/tree/bravo/inner"
+printf 'inner       root=%s/tree/bravo/inner\n' "$T" >"$T/conf/profiles"
+mux "$T/tree/bravo/inner" go inner >/dev/null || fail "opening inner failed"
+: >"$LIVE"
+mux "$T/elsewhere" restore >/dev/null || fail "restore with a subdir failed"
+grep -q "^inner	$T/tree/bravo/inner$" "$LIVE" \
+	|| fail "the subdirectory session did not come back at its own root"
+rm -f "$T/conf/profiles"
+
 # --- one broken entry must not cost the others ------------------------------
 mux "$T/tree/alpha" go >/dev/null || fail "re-open alpha failed"
 rm -rf "$T/tree/alpha"
