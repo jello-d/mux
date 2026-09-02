@@ -35,7 +35,7 @@ selected() {
 	( cd "$T/proj" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
 		MUX_CACHE="$T/cache" "$HERE/bin/mux" "$@" ) >/dev/null 2>&1 \
 		|| fail "mux $* exited $?"
-	awk '/^select-pane -t /{p=$3} END{print p}' "$TMUXLOG"
+	awk '/select-pane -t/{p=$NF} END{print p}' "$TMUXLOG"
 }
 
 # Ids follow the STUB's query order, not real tmux pane numbering: mux asks for
@@ -71,9 +71,9 @@ printf 'layout  late\n' >"$T/conf/profiles.d/late.profile"
 ( cd "$T/proj" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
 	MUX_CACHE="$T/cache" "$HERE/bin/mux" go f5 late ) >/dev/null 2>&1 \
 	|| fail "late-agent layout exited $?"
-grep -q '^select-pane -t %3' "$TMUXLOG" \
+grep -q 'select-pane -t %3' "$TMUXLOG" \
 	|| fail "an agent in a later window should still be selected"
-grep -q '^select-window -t f5:0' "$TMUXLOG" \
+grep -q 'select-window -t f5:0' "$TMUXLOG" \
 	|| fail "the agent's window should be selected too"
 
 pass

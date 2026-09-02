@@ -18,41 +18,32 @@
 # rebuild could only help in cases where the staleness had no observable
 # effect, which is why mux stays daemon-free.
 #
-# PER CONTEXT, keyed like the agent-state dir and the theme stamps: a scan run
-# on one side of a context boundary cannot see the other side's trees, so a
+# PER PARTITION, keyed like the agent-state dir, the theme stamps and the
+# session set: a scan run in one partition cannot see another's trees, so a
 # single shared map would silently conclude those projects do not exist.
 
-# Where the scan roots are declared: $MUX_DIR/scan, one `PATH [DEPTH]` per line
-# (DEPTH defaults to 3). With no such file, ~/src is used when it exists, which
-# `mux scan` always reports so the default is visible rather than magic.
-mux_scan_conf() {
-	printf '%s/scan' "$MUX_DIR"
-}
+# Roots come from the resolved context ($MUX_CFG_scan: repeatable `scan PATH
+# [DEPTH]` keys in a .partition or .context file). There is NO built-in
+# fallback: the built-in defaults carry behaviour only, never a location, so a
+# partition nobody configured gets no roots and therefore no map -- which is
+# how a missing context file makes itself visible rather than silently
+# indexing somebody else's tree.
 
 # The cache for THIS context. $1 is the socket key (the caller's resolved
 # context), defaulting to the ambient one.
-mux_scan_file() {       # [socket key]
-	_sk=${1:-}
-	if [ -z "$_sk" ]; then
-		_sk=default
-		[ -n "${TMUX:-}" ] && { _sk=${TMUX%%,*}; _sk=${_sk##*/}; }
-	fi
+mux_scan_file() {       # [partition]
+	_sk=${1:-${MUX_CTX_PARTITION:-global}}
 	printf '%s/projects.%s' \
 		"${MUX_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/mux}" "$_sk"
 }
 
 # The configured roots, as `PATH DEPTH` lines.
 mux_scan_roots() {
-	_sc=$(mux_scan_conf)
-	if [ -f "$_sc" ]; then
-		sed -e 's/\r$//' -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' \
-			"$_sc" \
-		| while read -r _p _d; do
-			printf '%s %s\n' "$(mux_expand_tilde "$_p")" "${_d:-3}"
-		done
-	elif [ -d "$HOME/src" ]; then
-		printf '%s 3\n' "$HOME/src"
-	fi
+	[ -n "${MUX_CFG_scan:-}" ] || return 0
+	printf '%s\n' "$MUX_CFG_scan" | while read -r _p _d; do
+		[ -n "$_p" ] || continue
+		printf '%s %s\n' "$(mux_expand_tilde "$_p")" "${_d:-3}"
+	done
 }
 
 # mux_scan_build [socket key] -> rescan every root and REPLACE the cache. Writes

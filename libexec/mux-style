@@ -42,13 +42,12 @@ _conf=$(dirname "$0")/mux-conf.sh
 if [ -r "$_conf" ]; then . "$_conf"
 else mux_conf_clean() { grep -vE '^[[:space:]]*(#|$)'; }
 fi
-# The context seam (see mux-context.sh): the label/banner/theme for the pane's
-# ACTUAL context come from the hook. A stub yields the default context (no
-# banner, mux's own default theme) if the lib is somehow missing.
+# The context seam (see mux-context.sh). A stub yields the global context if
+# the lib is somehow missing.
 _ctx=$(dirname "$0")/mux-context.sh
 if [ -r "$_ctx" ]; then . "$_ctx"
-else mux_ctx_env() { MUX_CTX_SOCKET=''; MUX_CTX_SIDE=default
-	MUX_CTX_LABEL=''; MUX_CTX_BANNER=''; MUX_CTX_THEME=''; }
+else mux_ctx_resolve() { MUX_CTX_TOKEN=global; MUX_CTX_PARTITION=global
+	MUX_CFG_label=''; MUX_CFG_theme=''; MUX_CFG_host_chip=on; }
 fi
 
 # The pane's foreground process group is tpgid, field 8 of /proc/<pid>/stat.
@@ -65,11 +64,10 @@ fi
 
 gopt() { tmux show-options -gqv "$1"; }   # a global option, empty if unset
 
-# The context of the pane's ACTUAL foreground process (not its layout's claim):
-# the hook owns the group test and the label/banner/theme. MUX_CTX_LABEL is the
-# banner/title text (empty = no banner), MUX_CTX_BANNER its style, MUX_CTX_THEME
-# the context's default theme.
-mux_ctx_env "$fg"
+# The context of the pane's ACTUAL foreground process (not its profile's
+# claim). The integrator answers only "which context is this"; the label,
+# theme and chip below are mux's own resolved settings.
+mux_ctx_resolve "$fg" || :
 
 # Resolve the colour theme: an explicit per-session @mux-theme (set by a
 # layout's `theme` directive) wins; else the context's default theme; else the
@@ -77,8 +75,7 @@ mux_ctx_env "$fg"
 # mark the boundary regardless of which theme is in force. All colour VALUES in
 # tmux.conf.
 theme=$(tmux show-options -qv -t "$session" @mux-theme || true)
-[ -n "$theme" ] || theme=$MUX_CTX_THEME
-[ -n "$theme" ] || theme=$(gopt @theme-default)
+[ -n "$theme" ] || theme=${MUX_CFG_theme:-${MUX_THEME_FALLBACK:-purple}}
 bar=$(gopt "@theme-$theme-bar")
 win=$(gopt "@theme-$theme-window")
 acc=$(gopt "@theme-$theme-accent")
@@ -125,16 +122,25 @@ set_opt message-style "$bar"
 
 # The context reminder, belt and suspenders: a prefix on the terminal title
 # (rendered by set-titles-string from @mux-prefix; see tmux.conf) AND a banner
-# in the status bar. Both carry the context LABEL from the hook; a
-# context with no label (the default) shows neither. The title side is a side
-# effect, so it happens under -q too; the banner is stdout, status-left only.
-if [ -n "$MUX_CTX_LABEL" ] && [ -n "$MUX_CTX_BANNER" ]; then
+# in the status bar. A context with no `label` shows neither. The title side is
+# a side effect, so it happens under -q too; the banner is stdout, status-left
+# only.
+#
+# MUX OWNS THE STYLE. It used to come from the integrator, which meant an
+# integrator that supplied a label and no style got NO banner and no title
+# prefix at all -- a safety reminder that disappeared when its colours were
+# omitted. The style is fixed, loud and theme-neutral (bright red, white, bold)
+# so the reminder reads against any bar theme: it is the SIGNAL, and the theme
+# colour is decoration. An integrator says WHAT the boundary is; mux guarantees
+# it is seen.
+MUX_BANNER_STYLE=${MUX_BANNER_STYLE:-bg=colour196,fg=colour231,bold}
+if [ -n "$MUX_CFG_label" ]; then
         # Title prefix is terse ([LABEL] ) to leave room for #S:#W; the status
         # banner double-brackets it ([[...]]) for emphasis.
-        set_opt @mux-prefix "[$MUX_CTX_LABEL] "
+        set_opt @mux-prefix "[$MUX_CFG_label] "
         if [ "$quiet" = 0 ]; then
                 printf '#[%s][[%s]]#[default]' \
-                        "$MUX_CTX_BANNER" "$MUX_CTX_LABEL"
+                        "$MUX_BANNER_STYLE" "$MUX_CFG_label"
         fi
 else
         set_opt @mux-prefix ""
@@ -152,7 +158,7 @@ fi
 # normalizer keeps it); an unlisted host gets a colour derived from its name, so
 # every machine still gets a distinct, readable chip with zero config (an
 # integrator can pin specific hosts to hand-picked hues there).
-if [ "$quiet" = 0 ]; then
+if [ "$quiet" = 0 ] && [ "${MUX_CFG_host_chip:-on}" != off ]; then
         _host=$(hostname -s 2>/dev/null || hostname)
         _hstyle=
         _hostsf=$MUX_DIR/hosts

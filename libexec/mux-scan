@@ -16,29 +16,28 @@ for _l in mux-profiles.sh mux-context.sh mux-scan.sh; do
 	. "$_lib/$_l"
 done
 
-# The context decides which map this is: a scan run on one side of a boundary
-# cannot see the other side's trees.
-mux_ctx_env
-_key=${MUX_CTX_SOCKET:-default}
+# The partition decides which map this is: a scan run in one partition cannot
+# see another's trees.
+mux_ctx_resolve || { echo "mux: ${MUX_CTX_ERR:-context error}" >&2; exit 1; }
+_key=$MUX_CTX_PARTITION
 
 case "${1:-}" in
 --list) ;;
 '')
 	_roots=$(mux_scan_roots)
 	if [ -z "$_roots" ]; then
-		echo "mux: no scan roots configured, and no $HOME/src to fall" \
-			"back on" >&2
-		echo "mux: list them in $(mux_scan_conf), one 'PATH [DEPTH]'" \
-			"per line, e.g." >&2
-		echo "mux:   ~/src 3" >&2
+		echo "mux: no scan roots for partition '$_key'" >&2
+		echo "mux: add 'scan <dir> [depth]' to" \
+			"$MUX_DIR/partitions/$_key.partition" >&2
+		echo "mux: (there is no built-in root on purpose -- a" \
+			"partition scans only where you say)" >&2
 		exit 1
 	fi
 	printf 'mux: scanning'
 	printf '%s\n' "$_roots" | while read -r _p _d; do
 		printf ' %s (depth %s)' "$_p" "$_d"
 	done
-	[ -f "$(mux_scan_conf)" ] || printf ' [default: no $MUX_DIR/scan]'
-	printf '\n'
+	printf ' [partition %s]\n' "$_key"
 	mux_scan_build "$_key"
 	;;
 *) echo "usage: mux scan [--list]" >&2; exit 2 ;;

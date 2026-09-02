@@ -42,11 +42,11 @@ mux() {
 }
 # built -> the session name of the last new-session call.
 built() {
-	awk '/^new-session /{for(i=1;i<=NF;i++) if($i=="-s") print $(i+1)}' \
+	awk '/new-session /{for(i=1;i<=NF;i++) if($i=="-s") print $(i+1)}' \
 		"$TMUXLOG" | head -1
 }
 rooted() {
-	awk '/^new-session /{for(i=1;i<=NF;i++) if($i=="-c") print $(i+1)}' \
+	awk '/new-session /{for(i=1;i<=NF;i++) if($i=="-c") print $(i+1)}' \
 		"$TMUXLOG" | head -1
 }
 

@@ -184,10 +184,13 @@ if [ -r "$_astate_lib" ]; then . "$_astate_lib"; _have_astate=1; fi
 _ctx_lib=$LIBEXEC/mux-context.sh
 if [ -r "$_ctx_lib" ]; then . "$_ctx_lib"
 else
-	mux_ctx_env() { MUX_CTX_SOCKET=''; MUX_CTX_SIDE=default
-		MUX_CTX_LABEL=''; MUX_CTX_BANNER=''; MUX_CTX_THEME=''; }
-	mux_ctx_side() { echo shared; }
-	mux_ctx_sockets() { :; }
+	mux_ctx_resolve() { MUX_CTX_TOKEN=global; MUX_CTX_PARTITION=global
+		MUX_CTX_UNKNOWN=0; MUX_CTX_ERR=
+		MUX_CFG_label=''; MUX_CFG_theme=''; MUX_CFG_derive=hash
+		MUX_CFG_agent=claude; MUX_CFG_layout=default
+		MUX_CFG_host_chip=on; MUX_CFG_scan=''; }
+	mux_ctx_socket() { printf '%s' "${1:-global}"; }
+	mux_ctx_partitions() { echo global; }
 fi
 
 # Resolve a BREAKOUT profile: $MUX_DIR/profiles.d/<name>.profile, the heavier
@@ -223,6 +226,30 @@ _profile_names() {
                 done
         } | LC_ALL=C sort -u | grep .
         return 0
+}
+
+# The PARTITION a profile belongs to. Its `context=` tag names a context; that
+# context's file names a partition (defaulting to the token). An UNTAGGED
+# profile belongs to `global`.
+#
+# This replaced classifying a profile by its ROOT, which needed the integrator
+# to answer "which context owns this path" -- the one question requiring its
+# private knowledge (severance's personal carve-outs inside the work tree), and
+# the messiest thing in the old contract. A profile's root is now purely a
+# session property: where its panes open, never a context signal.
+_profile_partition() {   # <name>
+        _pc=$(mux_prof_get "$1" context)
+        if [ -z "$_pc" ]; then
+                _pf=$(_find_profile "$1")
+                [ -n "$_pf" ] && _pc=$(mux_conf_clean <"$_pf" \
+                        | awk '$1=="context"{print $2; exit}')
+        fi
+        [ -n "$_pc" ] || { printf 'global'; return 0; }
+        _pcf=$(_mux_ctx_file contexts "$_pc" .context)
+        _pp=
+        [ -n "$_pcf" ] && _pp=$(sed -e '/^[[:space:]]*#/d' "$_pcf" \
+                | awk '$1=="partition"{print $2; exit}')
+        printf '%s' "${_pp:-$_pc}"
 }
 
 # The root a profile declares, whichever form it is in. Empty when it declares
@@ -264,13 +291,6 @@ _hash_theme() {   # <session name>
         printf '%s\n' "$_ht" | sed -n "$(( _hs % _hn + 1 ))p"
 }
 
-# The value of one key in themes/defaults, or empty.
-_theme_default() {  # <key>
-        _df=$(mux_data_find themes defaults '')
-        [ -n "$_df" ] || return 0
-        mux_conf_clean < "$_df" | awk -v k="$1" '$1==k{print $2; exit}'
-}
-
 
 # The PROJECT a bare invocation refers to: the git toplevel if we are in a
 # repo, else the current directory. The ONE derivation, used for both the
@@ -304,11 +324,11 @@ _map_lookup() {   # <name> -> matching project paths, one per line
 # is `shared` (rootless / any context) or equals the caller's side. Resolved
 # once,
 # lazily -- usage() lists layouts before the socket block below runs.
-_cur_side=''
+_cur_part=''
 _ensure_side() {
-        [ -n "$_cur_side" ] && return 0
-        mux_ctx_env
-        _cur_side=$MUX_CTX_SIDE
+        [ -n "$_cur_part" ] && return 0
+        mux_ctx_resolve || :
+        _cur_part=$MUX_CTX_PARTITION
 }
 
 # Layout stems for the caller's side plus the shared (rootless) ones -- the same
@@ -316,10 +336,7 @@ _ensure_side() {
 _list_layouts() {
         _ensure_side
         _profile_names | while IFS= read -r _n; do
-                case "$(mux_ctx_side "$(_profile_root "$_n")")" in
-                        shared|"$_cur_side") ;;
-                        *) continue ;;
-                esac
+                [ "$(_profile_partition "$_n")" = "$_cur_part" ] || continue
                 printf '%s ' "$_n"
         done
 }
@@ -591,12 +608,13 @@ help_colors() {
                 printf ' %s sel %s   %-12s %s\n' \
                         "$(_sgr_style "$_sel")" "$_RST" "$_bg" "$_fg"
         done
-        _d=$(mux_data_find themes defaults '')
-        [ -n "$_d" ] || return 0
-        # The global default (themes/defaults); a context may override it via
-        # the context hook (a per-context theme), not probed by this summary.
-        printf '\n  default theme:  %s\n' \
-                "$(awk '$1=="default"{print $2}' "$_d")"
+        # The resolved default for THIS context: a hashed theme when `derive
+        # hash` is in force, else the context's own `theme`.
+        if [ "${MUX_CFG_derive:-hash}" = hash ]; then
+                printf '\n  unset themes:   hashed from the session name\n'
+        else
+                printf '\n  default theme:  %s\n' "$MUX_CFG_theme"
+        fi
 }
 # Flatten a profile for display: its own directives, then the window/pane/
 # bottom lines of the layout it names. Takes a NAME, not a path, so a row and a
@@ -651,17 +669,14 @@ help_profiles() {
         # Tag the heading with the side only when there is more than one (a hook
         # is active); the default single-context case stays untagged.
         _tag=''
-        [ "$_cur_side" = default ] || _tag=" [$_cur_side]"
+        [ "$_cur_part" = global ] || _tag=" [$_cur_part]"
         printf 'profiles%s -- `mux go NAME`:\n' "$_tag"
         echo
         _profile_names | while IFS= read -r _n; do
                 _flat=$(_flat_profile "$_n")
                 _th=$(printf '%s\n' "$_flat" | awk '$1=="theme"{print $2;exit}')
                 _rt=$(printf '%s\n' "$_flat" | awk '$1=="root"{print $2;exit}')
-                case "$(mux_ctx_side "$_rt")" in
-                        shared|"$_cur_side") ;;
-                        *) continue ;;
-                esac
+                [ "$(_profile_partition "$_n")" = "$_cur_part" ] || continue
                 printf '  %s' "$_n"
                 if [ -n "$_th" ]; then          # theme name in its own colour
                         _tf=$(mux_data_find themes "$_th" .theme)
@@ -810,9 +825,18 @@ name=$(printf '%s' "$name" | tr ':.' '--')
 # to the default socket when no hook is installed, or
 # when the caller is in no special context. Prime _cur_side here too, so the
 # common path resolves the hook once.
-mux_ctx_env
-sock=$MUX_CTX_SOCKET
-_cur_side=$MUX_CTX_SIDE
+mux_ctx_resolve || { echo "mux: ${MUX_CTX_ERR:-context error}" >&2; exit 1; }
+sock=$(mux_ctx_socket)
+_cur_part=$MUX_CTX_PARTITION
+# Nothing knows this context. Say so ONCE, here in the front end -- never from
+# mux-context.sh, which mux-style and mux-agent-render call every status
+# interval, where output pops a view-mode buffer over the active pane.
+[ "${MUX_CTX_UNKNOWN:-0}" -eq 1 ] && {
+        echo "mux: no config for context '$MUX_CTX_TOKEN'" \
+                "(no contexts/$MUX_CTX_TOKEN.context," \
+                "no partitions/$MUX_CTX_PARTITION.partition)" >&2
+        echo "mux: running on built-in defaults; discovery is off" >&2
+}
 
 # Single chokepoint for the socket choice: every session-scoped tmux call goes
 # through here. reload deliberately bypasses it to reach BOTH servers.
@@ -929,7 +953,7 @@ if [ "$cmd" = reload ]; then
         fi
         # Plus every non-default context server the hook knows, so a reload
         # reaches them regardless of the caller's side.
-        for _s in $(mux_ctx_sockets); do
+        for _s in $(mux_ctx_partitions); do
                 if tmux -L "$_s" list-sessions >/dev/null 2>&1; then
                         tmux -L "$_s" source-file "$TMUX_CONF" && did="$did $_s"
                 fi
@@ -1077,6 +1101,14 @@ if [ "$cmd" = why ]; then
         elif git rev-parse --show-toplevel >/dev/null 2>&1; then
                 w_src="the git toplevel's basename"
         else w_src="the current directory's basename"; fi
+        printf '%-8s %-24s %s\n' context "$MUX_CTX_TOKEN" \
+                "$([ -n "$(mux_ctx_conf context-command)" ] \
+                        && echo 'from context-command' \
+                        || echo 'no context-command; the baseline')"
+        printf '%-8s %-24s %s\n' partition "$MUX_CTX_PARTITION" \
+                "$([ "$MUX_CTX_PARTITION" = "$MUX_CTX_TOKEN" ] \
+                        && echo 'defaults to the context name' \
+                        || echo 'named by the context file')"
         printf '%-8s %-24s %s\n' name "$wh" "$w_src"
 
         # where the profile itself lives
@@ -1116,12 +1148,12 @@ if [ "$cmd" = why ]; then
         w_field root "$(mux_fold_tilde "$base")" "the project you are in"
         # theme: declared > context > hashed > global default.
         w_dth=; w_dsrc=
-        if [ -n "${MUX_CTX_THEME:-}" ]; then
-                w_dth=$MUX_CTX_THEME; w_dsrc="this context"
-        elif [ "$(_theme_default derive)" = hash ]; then
+        if [ -n "$MUX_CFG_theme" ]; then
+                w_dth=$MUX_CFG_theme; w_dsrc="this context's theme"
+        elif [ "${MUX_CFG_derive:-hash}" = hash ]; then
                 w_dth=$(_hash_theme "$wh"); w_dsrc="hashed from the name"
         else
-                w_dth=$(_theme_default default); w_dsrc="themes/defaults"
+                w_dth=$MUX_THEME_FALLBACK; w_dsrc="mux's fallback"
         fi
         w_field theme "$w_dth" "$w_dsrc" alt
         w_field layout default "the shipped default"
@@ -1210,7 +1242,7 @@ if [ "$cmd" = edit ]; then
                 _v=${_line#"$_k"}
                 _v=${_v#"${_v%%[![:space:]]*}"}
                 case $_k in
-                root|theme|agent|notify|layout) ;;
+                root|theme|agent|notify|layout|context) ;;
                 *) _bad="unknown key '$_k'"; break ;;
                 esac
                 [ -n "$_v" ] || { _bad="'$_k' has no value"; break; }
@@ -2003,14 +2035,18 @@ fi
 active_agent=${want_agent:-claude}
 
 # No `theme` in the profile: derive one from the session name, when
-# themes/defaults says to (`derive hash`). The priority is explicit > context >
-# derived > global default, so a profile that pins a colour and a context that
-# supplies one both still win -- this only fills the gap that used to send every
-# unconfigured session to the same global default, which is what made pinning a
-# colour the single most common reason to write a profile at all.
-if [ -z "$want_theme" ] && [ -z "${MUX_CTX_THEME:-}" ] \
-   && [ "$(_theme_default derive)" = hash ]; then
-	want_theme=$(_hash_theme "$name")
+# the resolved context says to (`derive hash`). A profile that pins a colour
+# still wins; this only fills the gap that used to send every unconfigured
+# session to the same default, which is what made pinning a colour the single
+# most common reason to write a profile at all.
+if [ -z "$want_theme" ]; then
+	if [ -n "$MUX_CFG_theme" ]; then
+		want_theme=$MUX_CFG_theme          # a context said so
+	elif [ "${MUX_CFG_derive:-hash}" = hash ]; then
+		want_theme=$(_hash_theme "$name")  # nobody did; derive one
+	else
+		want_theme=$MUX_THEME_FALLBACK
+	fi
 fi
 
 # Pass 2: build. Everything is validated, so this only executes -- using the

@@ -53,19 +53,15 @@ else bad "mux not on PATH -- the tmux fragment reaches it as \`mux <verb>\`"; fi
 # 2. package DATA (share): the dir plus the pieces mux reads at runtime.
 if [ -d "$MUX_SHARE" ]; then
 	ok "package data ($MUX_SHARE)"
-	for _f in mux.tmux themes layouts agents; do
+	for _f in mux.tmux themes layouts agents partitions; do
 		[ -e "$MUX_SHARE/$_f" ] && ok "share/$_f present" \
 			|| bad "share/$_f missing (broken install)"
 	done
-	# The default theme named by themes/defaults must resolve to a fragment.
-	_df=$(mux_data_find themes defaults '')
-	if [ -n "$_df" ]; then
-		_dt=$(sed -n 's/^default[[:space:]]\{1,\}\([^[:space:]#]\{1,\}\).*/\1/p' \
-			"$_df" | head -1)
-		if [ -n "$_dt" ] && [ -n "$(mux_data_find themes "$_dt" .theme)" ]
-		then ok "default theme '$_dt' resolves"
-		else bad "default theme '${_dt:-unset}' has no themes/*.theme"; fi
-	else warn "themes/defaults absent (no global default theme)"; fi
+	# The global partition must ship, or an unconfigured mux has no scan
+	# roots and discovery is silently off everywhere.
+	if [ -n "$(mux_data_find partitions global .partition)" ]; then
+		ok "partitions/global.partition present"
+	else bad "no partitions/global.partition (discovery cannot work)"; fi
 	# The default ARRANGEMENT must resolve: a profile that names no layout,
 	# and a bare `mux go` with no profile at all, both land on it.
 	if [ -n "$(mux_data_find layouts default .layout)" ]; then

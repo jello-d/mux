@@ -13,7 +13,7 @@ set -eu
 _name=mux-theme-hash
 . "$(dirname "$0")/lib.sh"
 
-mkdir -p "$T/bin" "$T/conf/themes" "$T/conf/profiles.d" "$T/proj"
+mkdir -p "$T/bin" "$T/conf/partitions" "$T/conf/profiles.d" "$T/proj"
 cat >"$T/bin/tmux" <<'EOF'
 #!/bin/sh
 printf '%s\n' "$*" >>"$TMUXLOG"
@@ -70,13 +70,17 @@ printf 'theme   red\n' >"$T/conf/profiles.d/pinned.profile"
 _p=$(awk '/@mux-theme /{print $NF; exit}' "$TMUXLOG")
 [ "$_p" = red ] || fail "explicit theme lost: got [$_p], want red"
 
-# --- `derive off` falls back to the global default --------------------------
-# mux sets no @mux-theme at all then, leaving mux-style to use @theme-default.
-printf 'default purple\nderive  off\n' >"$T/conf/themes/defaults"
+# --- `derive off` falls back to the context's own theme ---------------------
+# Set EXPLICITLY on the session rather than left to a global tmux option: with
+# themes/defaults retired nothing pushes @theme-default any more, so the
+# resolved context theme is the answer and mux records it.
+printf 'theme purple\nderive off\n' >"$T/conf/partitions/global.partition"
 _o=$(themeof offcase)
-[ -z "$_o" ] || fail "derive off should set no @mux-theme, got [$_o]"
+[ "$_o" = purple ] || fail "derive off should give the context theme: [$_o]"
 # ... and turning it back on resumes the SAME colour the name had before.
-printf 'default purple\nderive  hash\n' >"$T/conf/themes/defaults"
+# No `theme` key: an explicitly configured context theme now BEATS the hash,
+# so setting one here would defeat the thing under test.
+printf 'derive hash\n' >"$T/conf/partitions/global.partition"
 _a3=$(themeof alpha)
 [ "$_a3" = "$_a" ] || fail "derive re-enabled: got [$_a3], want [$_a]"
 

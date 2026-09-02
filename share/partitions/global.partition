@@ -1,0 +1,9 @@
+# global: the partition every context lands in unless it names another, and the
+# one an unconfigured mux uses. Shipped, so discovery works out of the box;
+# override it by dropping your own in $MUX_DIR/partitions/.
+#
+# `scan` is here rather than in mux's built-in defaults ON PURPOSE. Built-ins
+# carry behaviour only, never a location, so a partition nobody configured gets
+# no roots and therefore no map -- which is how a missing context file makes
+# itself visible instead of quietly indexing the wrong tree.
+scan    ~/src 3
