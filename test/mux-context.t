@@ -128,6 +128,14 @@ printf 'partition global\nfuture-key whatever\ntheme red\n' \
 mux_ctx_resolve || fail "an unknown key should not fail resolution"
 eq unknown-key-ok "$MUX_CFG_theme" red
 
+# --- a bare context-command resolves against $MUX_DIR ----------------------
+# The config file is commonly shared between machines through a dotfiles repo,
+# so it must not have to carry an absolute path that is right on only one.
+printf '#!/bin/sh\necho bare\n' >"$MUX_DIR/tok"; chmod +x "$MUX_DIR/tok"
+printf 'context-command tok\n' >"$MUX_DIR/config"
+mux_ctx_resolve || fail "a bare context-command should resolve"
+eq bare-cmd "$MUX_CTX_TOKEN" bare
+
 # --- the socket is derived, and global is an ordinary name -----------------
 eq socket-derived "$(mux_ctx_socket global)" global
 eq socket-named "$(mux_ctx_socket manifest)" manifest

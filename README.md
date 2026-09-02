@@ -352,10 +352,12 @@ command for one word** and decides everything else itself.
 context-command   severance mux-context
 ```
 
-That command prints a **token**; empty output or a non-zero exit means
-`global`. That is the entire integration surface — no sockets, no styles, no
-themes, no path classification. The integrator reports *identity*; mux decides
-presentation and isolation.
+A bare name is looked up in `$MUX_DIR` before `$PATH`, so a config shared
+between machines needn't carry an absolute path. The command prints a
+**token**; empty output or a non-zero exit means `global`. That is the entire
+integration surface — no sockets, no styles, no themes, no path
+classification. The integrator reports *identity*; mux decides presentation
+and isolation.
 
 Two axes, deliberately separate:
 

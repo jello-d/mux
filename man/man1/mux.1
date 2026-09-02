@@ -295,7 +295,12 @@ one word and decides everything else itself.
 .RB "in " $MUX_DIR/config
 .RE
 .PP
-The command prints a TOKEN; empty output or a non\-zero exit means
+A bare name (no slash) is looked up in
+.B $MUX_DIR
+before
+.BR $PATH ,
+so a config file shared between machines need not carry an absolute path. The
+command prints a TOKEN; empty output or a non\-zero exit means
 .BR global .
 That is the entire integration surface: no sockets, no styles, no themes, no
 path classification. The integrator reports IDENTITY; mux decides presentation
