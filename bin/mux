@@ -1208,8 +1208,32 @@ if [ "$cmd" = why ]; then
                 w_dth=$MUX_THEME_FALLBACK; w_dsrc="mux's fallback"
         fi
         w_field theme "$w_dth" "$w_dsrc" alt
-        w_field layout default "the shipped default"
-        w_field agent claude "mux's default"
+        w_field layout "${MUX_CFG_layout:-default}" "the context's default"
+        w_field agent "${MUX_CFG_agent:-claude}" "the context's default"
+
+        # If the name was DERIVED and the profile it landed on lives somewhere
+        # else, say WHY plainly. The bare "NOT where you are" marker above
+        # flags the fact without explaining it, which is how you end up asking
+        # why mux is talking about a directory you did not mention.
+        if [ -z "$name_arg" ]; then
+                _wr=$(w_get root)
+                _wrx=$(readlink -f -- "$(mux_expand_tilde "${_wr:-$base}")" \
+                        2>/dev/null || true)
+                _wbx=$(readlink -f -- "$base" 2>/dev/null \
+                        || printf '%s' "$base")
+                if [ -n "$_wr" ] && [ -n "$_wrx" ] && [ "$_wrx" != "$_wbx" ]
+                then
+                        echo
+                        echo "note: '$wh' is this directory's basename," \
+                                "but it is also a"
+                        echo "      profile rooted at" \
+                                "$(mux_fold_tilde "$_wr")."
+                        echo "      \`mux go\` here refuses rather than" \
+                                "build the wrong one:"
+                        echo "      \`mux go $wh\` for that project," \
+                                "\`mux new <name>\` for this one."
+                fi
+        fi
         exit 0
 fi
 
@@ -1934,6 +1958,31 @@ if [ -n "$prow" ] && [ -n "$(mux_prof_get "$prow" root)" ]; then hasroot=1; fi
 if [ -n "$profile" ] \
    && grep -qE '^[[:space:]]*root[[:space:]]' "$profile" 2>/dev/null; then
         hasroot=1
+fi
+
+# A DERIVED name that collides with a profile meaning somewhere ELSE. Exactly
+# the live-session guard one step earlier: a name mux picked FOR you must not
+# silently resolve to a different place. Standing in ~/src/manifest and getting
+# a session rooted at ~/src/manifest/ManifestOS -- because the directory's
+# basename happens to match an unrelated profile -- is a surprise, not a
+# service. A name you TYPED is still trusted, since looking a profile up by
+# name is what a name argument is for.
+if [ -z "$name_arg" ] && [ "$cmd" != new ] && [ "$bypath" -eq 0 ]; then
+        _cr=$(_profile_root "$name")
+        if [ -n "$_cr" ]; then
+                _crx=$(readlink -f -- "$(mux_expand_tilde "$_cr")" \
+                        2>/dev/null || true)
+                _bsx=$(readlink -f -- "$base" 2>/dev/null \
+                        || printf '%s' "$base")
+                if [ -n "$_crx" ] && [ "$_crx" != "$_bsx" ]; then
+                        echo "mux: '$name' already means" \
+                                "$(mux_fold_tilde "$_cr")," \
+                                "but you are in $(mux_fold_tilde "$base")" >&2
+                        echo "mux:   that project:     mux go $name" >&2
+                        echo "mux:   this one, named:  mux new <name>" >&2
+                        exit 1
+                fi
+        fi
 fi
 
 # A TYPED name means "that project", not "wherever I happen to be standing", so

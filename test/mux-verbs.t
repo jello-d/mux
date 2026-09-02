@@ -95,6 +95,25 @@ case $_w in
 *"NOT where you are"*) ;;
 *) fail "why did not flag a profile root that differs from the cwd: [$_w]" ;;
 esac
+# It also EXPLAINS the collision rather than only marking it: the name came
+# from the directory, the profile it landed on lives elsewhere, and `mux go`
+# here will refuse. Answering "why is it talking about a directory I did not
+# mention" is the whole job of this verb.
+case $_w in
+*"but it is also a"*) ;;
+*) fail "why flagged the mismatch without explaining it: [$_w]" ;;
+esac
+
+# --- and `mux go` refuses rather than building the wrong project ------------
+# Same rule as the live-session guard, one step earlier: a name mux DERIVED
+# must not silently resolve somewhere you did not ask for.
+_o=$(mux go) && fail "a derived name colliding with a profile should refuse"
+case $_o in
+*"already means"*) ;; *) fail "unhelpful collision error: [$_o]" ;;
+esac
+# A TYPED name is still trusted -- looking a profile up by name is the point.
+mux go proj >/dev/null || fail "a typed name should still resolve"
+
 # ... and when the root DOES match, no alarming marker.
 printf 'proj        root=%s/proj\n' "$T" >"$T/conf/profiles"
 _w=$(mux why)
