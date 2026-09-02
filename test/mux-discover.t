@@ -43,9 +43,13 @@ mux() {
 		MUX_CACHE="$T/cache" GIT_CEILING_DIRECTORIES="$T" \
 		"$HERE/bin/mux" "$@" ) 2>&1
 }
-# rooted -> the -c directory of the new-session call in the last run.
+# rooted / built -> the -c directory and -s name of the last new-session call.
 rooted() {
 	awk '/new-session /{for(i=1;i<=NF;i++) if($i=="-c") print $(i+1)}' \
+		"$TMUXLOG" | head -1
+}
+built() {
+	awk '/new-session /{for(i=1;i<=NF;i++) if($i=="-s") print $(i+1)}' \
 		"$TMUXLOG" | head -1
 }
 fails() {  # LABEL WANT DIR ARGS...
@@ -113,5 +117,39 @@ grep -q 'new-session -d -s alpha2 ' "$TMUXLOG" \
 
 # --- new refuses a name that is already known -------------------------------
 fails new-dup "already has a profile" "$T/tree/solo" new alpha2
+
+# --- a session is addressable by its ROOT, not only by its name -------------
+# The public form `mux restore` replays, so restoring is a loop over a command
+# anyone can type rather than a private path through the resolver.
+: >"$TMUXLOG"
+mux "$T/elsewhere" go "$T/tree/solo" >/dev/null || fail "go <path> failed"
+[ "$(rooted)" = "$T/tree/solo" ] || fail "go <path> rooted at [$(rooted)]"
+[ "$(built)" = solo ] || fail "go <path> built [$(built)], want solo"
+
+# A path is EVIDENCE, so it never reaches the unknown-name refusal even for a
+# directory nothing has ever heard of.
+: >"$TMUXLOG"
+mkdir -p "$T/nameless"
+mux "$T/elsewhere" go "$T/nameless" >/dev/null \
+	|| fail "go <path> to an unknown directory was refused"
+[ "$(built)" = nameless ] || fail "unknown path built [$(built)]"
+
+# An exact-root claim wins over climbing to the git toplevel: a subdirectory
+# session must resolve to ITSELF, not to its enclosing repo.
+: >"$TMUXLOG"
+mux "$T/elsewhere" go "$T/tree/nested/alpha" >/dev/null \
+	|| fail "go <path> to a claimed subdir failed"
+[ "$(built)" = alpha2 ] || fail "claimed subdir built [$(built)], want alpha2"
+[ "$(rooted)" = "$T/tree/nested/alpha" ] || fail "claimed subdir rooted wrongly"
+
+# ... but an UNclaimed subdirectory still climbs, as bare `mux go` would.
+: >"$TMUXLOG"
+mkdir -p "$T/tree/solo/inner"
+mux "$T/elsewhere" go "$T/tree/solo/inner" >/dev/null \
+	|| fail "go <path> to an unclaimed subdir failed"
+[ "$(built)" = solo ] || fail "unclaimed subdir built [$(built)], want solo"
+
+# A path that is not a directory fails loud rather than becoming a name.
+fails path-missing "not a directory" "$T/elsewhere" go "$T/no/such/dir"
 
 pass

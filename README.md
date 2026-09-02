@@ -229,8 +229,23 @@ and never on a timer — `mux scan`, first use, and a lookup miss (or a hit whos
 directory has since vanished). Between the last two it self-corrects whether a
 project appeared, moved, or went away.
 
-`mux go` resolves in this order: a live session, a breakout profile, a table
-row, the map, and then **nothing** — at which point it refuses:
+A session is addressable **by name or by root**:
+
+```sh
+mux go api            # the short name, most of the time
+mux go ~/src/api      # the root, which is equally a public address
+mux go .              # here
+```
+
+Anything with a slash is a path, since a session name never contains one. A
+path is *evidence*, so it never reaches the unknown-name refusal below — and an
+exact-root claim wins over climbing to the git toplevel, so a subdirectory
+session resolves to itself rather than to its enclosing repo. That is what lets
+`mux restore` replay a command anyone could type instead of reaching into
+mux's internals.
+
+`mux go` resolves a NAME in this order: a live session, a breakout profile, a
+table row, the map, and then **nothing** — at which point it refuses:
 
 ```
 $ mux go tackp
@@ -400,7 +415,7 @@ Full reference in **`man mux`**. The essentials:
 
 ```
 mux                          pick a session to attach (fzf or a menu)
-mux go [NAME] [PROFILE]       create/attach/switch; agent continues
+mux go [NAME|DIR] [PROFILE]   create/attach/switch; agent continues
 mux resume [NAME] [PROFILE]   same, but the agent resumes (choose a chat)
 mux --no-agent ...           build the panes, plain shell in the agent pane
 mux restore                  rebuild this partition's sessions (--list)

@@ -298,8 +298,23 @@ _hash_theme() {   # <session name>
 # exactly the name `mux go` will later look for. They used to disagree -- new
 # took the cwd basename and go the git toplevel basename, so a `mux new` run
 # anywhere but a repo's top level wrote a layout go could never find.
-_project_base() {
-        git rev-parse --show-toplevel 2>/dev/null || pwd
+_project_base() {   # [dir]
+        if [ -n "${1:-}" ]; then
+                ( cd "$1" 2>/dev/null \
+                  && { git rev-parse --show-toplevel 2>/dev/null || pwd; } )
+        else
+                git rev-parse --show-toplevel 2>/dev/null || pwd
+        fi
+}
+
+# Is this argument a PATH rather than a session name? A session name never
+# contains a slash (mux derives them from basenames and folds ':' and '.'), so
+# a slash, a leading ~, or a bare . / .. is unambiguous.
+_is_path() {   # <arg>
+        case $1 in
+        */*|'~'|'~/'*|.|..) return 0 ;;
+        esac
+        return 1
 }
 
 # The scan map for this context, self-correcting: entries whose path has since
@@ -367,7 +382,7 @@ usage() {
         cat >&2 <<'EOF'
 usage: mux [OPTION] [VERB] [NAME] [PROFILE]  (OPTION may follow VERB too)
   (no verb)                  pick a session to attach (fzf or numbered menu)
-  go [NAME] [PROFILE]        create/attach/switch; agent continues in the pane
+  go [NAME|DIR] [PROFILE]    create/attach/switch; agent continues in the pane
   go --resume                same, but the agent resumes (choose a conversation)
   kill NAME                  tear the named session down (--all: every one)
   reload                     re-source tmux.conf on every running mux server
@@ -807,7 +822,30 @@ fi
 # a repo, else the current directory. tmux forbids ':' and '.' in a session
 # name, so fold them to '-' in a derived name.
 base=$(_project_base)
-if [ -n "$name_arg" ]; then
+bypath=0
+if [ -n "$name_arg" ] && _is_path "$name_arg"; then
+        # A session addressed by its ROOT. Deliberately NOT the same as
+        # `cd <path> && mux go`: a bare go climbs to the git toplevel, which
+        # would turn a subdirectory session's root into its enclosing repo.
+        # Here an exact-root claim wins first, so a profile rooted below a
+        # toplevel resolves to itself.
+        #
+        # This is what lets `mux restore` replay a PUBLIC command rather than
+        # reach into mux's internals: it knows each session's root, and a root
+        # is an address.
+        bypath=1
+        _bp=$(mux_expand_tilde "$name_arg")
+        _bp=$(readlink -f -- "$_bp" 2>/dev/null || printf '%s' "$_bp")
+        [ -d "$_bp" ] || {
+                echo "mux: not a directory: $name_arg" >&2; exit 1; }
+        name=$(mux_prof_by_root "$_bp")
+        if [ -n "$name" ]; then
+                base=$_bp
+        else
+                base=$(_project_base "$_bp")
+                name=$(basename "$base")
+        fi
+elif [ -n "$name_arg" ]; then
         name=$name_arg
 else
         # No name typed: the directory decides. A row whose `root` IS this
@@ -1750,20 +1788,25 @@ if [ "$cmd" = restore ]; then
                         "restore yet" >&2
                 exit 1
         fi
-        rs_first=
         rs_built=0
         rs_up=0
         rs_failed=
         for rs_n in $rs_set; do
-                [ -n "$rs_first" ] || rs_first=$rs_n
                 if tm has-session -t "=$rs_n" 2>/dev/null; then
                         rs_up=$((rs_up + 1))
                         continue
                 fi
+                # Replay a PUBLIC command, addressing the session by its ROOT.
+                # Nothing here reaches into mux's internals: `mux go <dir>` is
+                # a form anyone can type, so restore is a loop over it rather
+                # than a private path through the resolver.
+                #
                 # Flag BEFORE the positional: the parser stops consuming
-                # options at the first positional, so `go NAME --no-attach`
+                # options at the first positional, so `go DIR --no-attach`
                 # would leave --no-attach to be read as a PROFILE name.
-                if "$_self" go --no-attach "$rs_n" >/dev/null 2>&1; then
+                rs_root=$(mux_sess_root "$rs_n" "$rs_key")
+                if [ -n "$rs_root" ] && [ -d "$rs_root" ] \
+                   && "$_self" go --no-attach "$rs_root" >/dev/null 2>&1; then
                         rs_built=$((rs_built + 1))
                 else
                         # Keep going: one unbuildable session (a root that
@@ -1880,7 +1923,8 @@ fi
 # A TYPED name means "that project", not "wherever I happen to be standing", so
 # its root comes from the discovery map. Bare `mux go` never gets here: the
 # directory is the answer, and there was no name to have mistyped.
-if [ -n "$name_arg" ] && [ "$cmd" != new ] && [ "$hasroot" -eq 0 ]; then
+if [ -n "$name_arg" ] && [ "$bypath" -eq 0 ] && [ "$cmd" != new ] \
+   && [ "$hasroot" -eq 0 ]; then
         # The session set first: a session you HAD is evidence at least as
         # good as a scanned repo, and it is the only source that knows where a
         # profile-less `mux go` was rooted. Without it, restore could not

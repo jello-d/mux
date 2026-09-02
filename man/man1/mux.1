@@ -146,6 +146,20 @@ takes effect without a restart.
 .TP
 .B mux kill " " \fINAME\fR ", " mux kill-all
 Tear down the named session, or (with a prompt) every session on this socket.
+.SS Addressing a session
+A session is named by its
+.I NAME
+or by its
+.IR DIR :
+anything containing a slash, a leading tilde, or a bare
+.B .
+is a path, since a session name never contains one. A path is EVIDENCE, so it
+never reaches the unknown\-name refusal, and an exact\-root claim wins over
+climbing to the git toplevel \(em a subdirectory session resolves to itself,
+not to its enclosing repository. This is the form
+.B mux restore
+replays, so restoring is a loop over a public command rather than a private
+path through the resolver.
 .SH PROFILES AND LAYOUTS
 A
 .B profile
