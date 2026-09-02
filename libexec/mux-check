@@ -18,10 +18,16 @@ MUX_SHARE=${MUX_SHARE:-$(dirname "$0")/../share}
 # The shared $MUX_DIR-over-$MUX_SHARE resolver (mux-data.sh), so the check
 # audits the data mux would ACTUALLY read -- a default theme or layout supplied
 # by the overlay counts, and one shadowed by it is judged on the overlay copy.
-_data=$(dirname "$0")/mux-data.sh
-[ -r "$_data" ] || {
-	printf '  [FAIL] %s missing (broken install)\n' "$_data" >&2; exit 1; }
-. "$_data"
+for _l in mux-data.sh mux-context.sh mux-scan.sh mux-profiles.sh; do
+	_lp=$(dirname "$0")/$_l
+	[ -r "$_lp" ] || {
+		printf '  [FAIL] %s missing (broken install)\n' "$_lp" >&2
+		exit 1; }
+	. "$_lp"
+done
+# The audit reports on the context the caller is ACTUALLY in, so a work session
+# and a personal one each check their own partition's roots.
+mux_ctx_resolve || true
 
 # Colour the markers ONLY on a real terminal (a captured/piped run stays plain,
 # so an integrator's styler paints it and a log stays escape-free). NO_COLOR
@@ -104,7 +110,21 @@ if [ -d "$MUX_DIR" ]; then
 	fi
 else warn "no config overlay at $MUX_DIR (using shipped defaults)"; fi
 
-# 4. unsaved edit drafts. A draft survives an unparseable save on purpose, so
+# 4. discovery. A configured root that has since moved means `mux go <name>`
+# quietly stops finding half your projects, with no error anywhere -- the map
+# just comes back smaller. Cheap to check, invisible otherwise.
+if [ -n "${MUX_CFG_scan:-}" ]; then
+	printf '%s\n' "$MUX_CFG_scan" | while read -r _p _d; do
+		[ -n "$_p" ] || continue
+		case $_p in "~") _p=$HOME ;; "~/"*) _p=$HOME/${_p#\~/} ;; esac
+		[ -d "$_p" ] && ok "scan root $_p" || bad "scan root missing: $_p"
+	done
+else
+	warn "no scan roots for partition '${MUX_CTX_PARTITION:-global}'"
+	warn "  discovery is off; \`mux go <name>\` cannot find projects"
+fi
+
+# 5. unsaved edit drafts. A draft survives an unparseable save on purpose, so
 # the work is handed back rather than eaten -- but a forgotten one means an edit
 # you think you made is not in effect anywhere. Surface it.
 _ed=${MUX_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/mux}/edit

@@ -75,6 +75,24 @@ fails include-retired "mux-migrate-profiles" legacy
 printf 'layout  ghost\n' >"$T/conf/profiles.d/ghost.profile"
 fails missing-layout "no layout: ghost" ghost
 
+# --- the context's agent and layout are DEFAULTS, not decoration -----------
+# Both were documented context keys that did nothing until they were wired:
+# `agent` fell through to a hardcoded claude and `layout` to a hardcoded
+# default, so a context could say either and be silently ignored.
+mkdir -p "$T/conf/partitions"
+printf 'agent gemini\nlayout logs\n' >"$T/conf/partitions/global.partition"
+printf 'theme cyan\n' >"$T/conf/profiles.d/ctxdefault.profile"
+go ctxdefault >/dev/null || fail "a context-defaulted session should build"
+has ctx-layout 'new-window -a -t ctxdefault: -n logs'
+has ctx-agent 'gemini'
+# ... and a profile still overrides the context.
+printf 'theme cyan\nagent claude\nlayout default\n' \
+	>"$T/conf/profiles.d/ctxdefault.profile"
+go ctxdefault >/dev/null || fail "a profile override should build"
+grep -q 'new-window .* -n logs' "$TMUXLOG" \
+	&& fail "the profile's layout did not override the context's"
+rm -f "$T/conf/partitions/global.partition"
+
 # --- a pre-rename .profile-less <name>.layout is still READ, with a warning -
 # Transitional: deploying a new mux and converting a config are separate acts.
 printf 'theme   green\n' >"$T/conf/old.layout"

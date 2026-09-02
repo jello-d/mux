@@ -1619,11 +1619,13 @@ expand_profile() {      # PROFILE_PATH [LABEL]
                 *)      printf '%s\n' "$_verb${_rest:+ $_rest}" ;;
                 esac
         done <"$_cl"
-        # No `layout` line: the shipped default arrangement. So a profile can be
-        # nothing but a theme or a root and still build a whole session.
-        _lf=$(mux_data_find layouts "${_want_layout:-default}" .layout)
+        # No `layout` line: the context's default arrangement, then mux's own.
+        # So a profile can be nothing but a theme or a root and still build a
+        # whole session, and a context can change what "nothing" means.
+        _dfl=${MUX_CFG_layout:-default}
+        _lf=$(mux_data_find layouts "${_want_layout:-$_dfl}" .layout)
         [ -n "$_lf" ] || {
-                echo "mux: no layout: ${_want_layout:-default}" \
+                echo "mux: no layout: ${_want_layout:-$_dfl}" \
                         "(see: mux help layouts)" >&2
                 rm -f "$_cl"; exit 1
         }
@@ -1943,9 +1945,20 @@ if [ -n "$name_arg" ] && [ "$bypath" -eq 0 ] && [ "$cmd" != new ] \
                 # Step 5: nothing knows this name, so "new session" and "typo"
                 # are indistinguishable. Refuse, and hand over both fixes.
                 echo "mux: nothing known as '$name'" >&2
-                near=$(mux_scan_near "$name" "${sock:-default}" | tr '\n' ' ')
-                [ -n "$near" ] && \
-                        echo "mux:   did you mean:      $near" >&2
+                if [ -z "$(mux_scan_roots)" ]; then
+                        # "I never looked" is a different failure from "I
+                        # looked and did not find it", and suggesting a typo
+                        # correction when discovery is off is misleading.
+                        echo "mux:   discovery is off for partition" \
+                                "'$MUX_CTX_PARTITION' (no scan roots)" >&2
+                        echo "mux:   configure one: a 'scan <dir>' line in" \
+                                "partitions/$MUX_CTX_PARTITION.partition" >&2
+                else
+                        near=$(mux_scan_near "$name" "$MUX_CTX_PARTITION" \
+                                | tr '\n' ' ')
+                        [ -n "$near" ] && \
+                                echo "mux:   did you mean:      $near" >&2
+                fi
                 echo "mux:   or create it here:  mux new $name" >&2
                 exit 1
         fi
@@ -2076,7 +2089,10 @@ if [ -n "$want_agent" ]; then
 		exit 1
 	}
 fi
-active_agent=${want_agent:-claude}
+# The context's agent, then mux's built-in. `agent` is a documented context
+# key; it did nothing until now, which is the asserted-vs-actual drift this
+# project exists to avoid.
+active_agent=${want_agent:-${MUX_CFG_agent:-claude}}
 
 # No `theme` in the profile: derive one from the session name, when
 # the resolved context says to (`derive hash`). A profile that pins a colour
