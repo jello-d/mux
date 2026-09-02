@@ -116,6 +116,13 @@ mux_ctx_resolve() {     # [PID]
 	MUX_CTX_ERR=
 
 	_cc=$(mux_ctx_conf context-command)
+	# A bare name resolves against $MUX_DIR before PATH. The config file is
+	# commonly shared between machines through a dotfiles repo, so it must
+	# not have to carry an absolute path that is only right on one of them.
+	case $_cc in
+	'' | */*) ;;
+	*) [ -x "$MUX_DIR/$_cc" ] && _cc=$MUX_DIR/$_cc ;;
+	esac
 	if [ -n "$_cc" ]; then
 		_t=$($_cc "${1:-$$}" 2>/dev/null | head -1 | tr -d '[:space:]') \
 			|| _t=
