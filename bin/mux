@@ -1531,27 +1531,60 @@ mux_attach() {
                 | awk -v n="$name" '$1==n{sub(/^[^ ]* /,""); print; exit}')
         mux_sess_add "$name" "$_sr" "${sock:-default}"
         if [ "$noattach" -eq 1 ]; then return 0; fi
-        _switch=0
+        # TWO independent questions, which used to be one and caused mux to
+        # build a session INSIDE a pane:
+        #
+        #   1. am I genuinely in a live tmux pane?
+        #   2. is the target on the socket I am already on?
+        #
+        # $TMUX alone cannot answer (1): it and TMUX_PANE LEAK into any
+        # terminal spawned from a pane, so a kitty opened from tmux claims to
+        # be inside one. The reliable signal is that a real in-pane shell's
+        # controlling tty IS that pane's tty. That test used to be nested
+        # inside the socket comparison, so a CROSS-socket target skipped it,
+        # fell through to the fresh-attach path, and that path deliberately
+        # unsets $TMUX -- which is exactly what defeats tmux's own "sessions
+        # should be nested with care" guard. Result: a session nested in a
+        # pane. Rare when the only other socket was a work one you seldom
+        # crossed; routine the moment the personal partition got a socket name
+        # of its own.
+        _inpane=0
         cur=${TMUX:-}                   # our client, if any: socket,pid,session
         cur=${cur%%,*}                  # -> just the socket path
-        if [ -n "$cur" ] && [ "${cur##*/}" = "${sock:-default}" ] \
-           && [ -n "${TMUX_PANE:-}" ]; then
+        if [ -n "$cur" ] && [ -n "${TMUX_PANE:-}" ]; then
                 _mytty=$(tty 2>/dev/null || true)
                 _panetty=$(tmux display-message -pt "$TMUX_PANE" \
                         '#{pane_tty}' 2>/dev/null || true)
-                [ -n "$_mytty" ] && [ "$_mytty" = "$_panetty" ] && _switch=1
+                [ -n "$_mytty" ] && [ "$_mytty" = "$_panetty" ] && _inpane=1
         fi
-        # exec the real tmux, not the tm() function (exec needs a binary), so
-        # mux is replaced by the client rather than lingering as its parent.
-        if [ "$_switch" = 1 ]; then
-                if [ -n "$sock" ]; then
-                        exec tmux -L "$sock" switch-client -t "=$name"
+
+        if [ "$_inpane" -eq 1 ]; then
+                if [ "${cur##*/}" = "${sock:-default}" ]; then
+                        # Same socket: switch this client's view. exec the real
+                        # tmux, not tm() (exec needs a binary), so mux is
+                        # replaced by the client rather than lingering.
+                        if [ -n "$sock" ]; then
+                                exec tmux -L "$sock" switch-client -t "=$name"
+                        fi
+                        exec tmux switch-client -t "=$name"
                 fi
-                exec tmux switch-client -t "=$name"
+                # Different socket, and switch-client cannot cross one. The
+                # only other move is a fresh attach, which from inside a pane
+                # NESTS -- so refuse and say how. Partitions are isolated on
+                # purpose; reaching across one is a thing to do deliberately,
+                # from outside.
+                echo "mux: '$name' is in partition" \
+                        "'${sock:-default}', you are in" \
+                        "'${cur##*/}'" >&2
+                echo "mux: attaching would nest a session inside this pane." \
+                        "Detach first (prefix d)," >&2
+                echo "mux: then:  mux go $name" >&2
+                exit 1
         fi
-        # Fresh attach. Clear any inherited $TMUX first, or tmux refuses
-        # ("sessions should be nested with care") -- exactly why the watcher
-        # scrubs it. exec replaces mux, so the unset only affects the client.
+
+        # Not in a pane. Any $TMUX here is LEAKED (a terminal spawned from one),
+        # and tmux would refuse to attach with it set, so scrub it. exec
+        # replaces mux, so the unset only affects the client.
         unset TMUX
         if [ -n "$sock" ]; then
                 exec tmux -L "$sock" attach-session -t "=$name"
