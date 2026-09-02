@@ -26,17 +26,12 @@
 # Insertion-ordered, so a restore rebuilds in the order you first opened them
 # and lands you on the oldest, which is usually the one you think of as primary.
 #
-# Keyed on the PARTITION (today: the tmux socket, which a partition owns), so
-# each isolated namespace restores only its own.
+# Keyed on the PARTITION, so each isolated namespace restores only its own.
 
 # The set file for a partition. KEY defaults to the ambient socket, matching
 # how the theme stamp and the agent-state dir are keyed.
-mux_sess_file() {       # [key]
-	_sk=${1:-}
-	if [ -z "$_sk" ]; then
-		_sk=default
-		[ -n "${TMUX:-}" ] && { _sk=${TMUX%%,*}; _sk=${_sk##*/}; }
-	fi
+mux_sess_file() {       # [partition]
+	_sk=${1:-${MUX_CTX_PARTITION:-global}}
 	printf '%s/sessions.%s' \
 		"${MUX_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/mux}" "$_sk"
 }

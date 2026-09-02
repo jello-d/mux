@@ -30,7 +30,11 @@ EOF
 chmod +x "$T/bin/tmux"
 TMUXLOG=$T/log; export TMUXLOG
 PATH=$T/bin:$PATH; export PATH
-printf '%s 3\n' "$T/tree" >"$T/conf/scan"
+# Scan roots live in the partition now, not $MUX_DIR/scan. Overriding the
+# SHIPPED global.partition matters: without this the test would scan the
+# developer's real ~/src.
+mkdir -p "$T/conf/partitions"
+printf 'scan %s 3\n' "$T/tree" >"$T/conf/partitions/global.partition"
 
 # mux DIR ARGS... -> run from DIR, echoing combined output.
 mux() {
@@ -41,7 +45,7 @@ mux() {
 }
 # rooted -> the -c directory of the new-session call in the last run.
 rooted() {
-	awk '/^new-session /{for(i=1;i<=NF;i++) if($i=="-c") print $(i+1)}' \
+	awk '/new-session /{for(i=1;i<=NF;i++) if($i=="-c") print $(i+1)}' \
 		"$TMUXLOG" | head -1
 }
 fails() {  # LABEL WANT DIR ARGS...

@@ -1,66 +1,144 @@
 #!/bin/sh
-# test/mux-context.t - the mux CONTEXT seam, mux_ctx_* in
-# libexec/mux-context.sh: the adapter mapping mux core onto an optional
-# $MUX_DIR/context hook. A fake hook stands in for the real one -- nothing on
-# the box is touched.
+# test/mux-context.t - the CONTEXT seam (libexec/mux-context.sh): one word in,
+# every setting out.
+#
+# The contract is deliberately tiny: an optional command prints a token, and
+# mux decides the partition, the socket, the theme, the banner and the scan
+# roots itself. What this guards:
+#
+#   - a token is VALIDATED before it becomes a socket name and a path
+#     component, and an invalid one is an error rather than a silent fall back
+#     to the baseline (which would put work sessions in the personal
+#     partition);
+#   - settings resolve built-in -> partition -> context, unconditionally, so
+#     there is no per-key scope rule to remember;
+#   - the built-in defaults carry NO location keys, which is what stops `scan`
+#     leaking from one partition into another.
+#
+# Pure file and string logic against a scratch $MUX_DIR; nothing is launched.
 set -eu
 _name=mux-context
 . "$(dirname "$0")/lib.sh"
 
-# Point the adapter at a hook we write per-case under $T, then source it fresh.
-MUX_CTX_HOOK=$T/context
-export MUX_CTX_HOOK
+MUX_DIR=$T/conf
+MUX_SHARE=$T/share
+export MUX_DIR MUX_SHARE
+mkdir -p "$MUX_DIR/partitions" "$MUX_DIR/contexts" "$MUX_SHARE/partitions"
 . "$HERE/libexec/mux-context.sh"
 
-# write_hook BODY : install $BODY as the executable hook.
-write_hook() {
-	printf '#!/bin/sh\n%s\n' "$1" > "$MUX_CTX_HOOK"
-	chmod +x "$MUX_CTX_HOOK"
-}
 eq() { [ "$2" = "$3" ] || fail "$1: got [$2] want [$3]"; }
+# cc BODY: install a context-command with that body.
+cc() {
+	printf '#!/bin/sh\n%s\n' "$1" >"$T/cc"
+	chmod +x "$T/cc"
+	printf 'context-command %s\n' "$T/cc" >"$MUX_DIR/config"
+}
 
-# --- a hook that emits a full (marked) context ------------------------------
-write_hook 'case "$1" in
-env) printf "socket wk\nside work\nlabel MARK: demo team\n"
-     printf "banner bold\ntheme orange\n" ;;
-side) case "$2" in
-      "") echo shared ;; /w/*) echo work ;; *) echo personal ;;
-      esac ;;
-sockets) echo wk ;;
-esac'
-mux_ctx_env
-eq env-socket "$MUX_CTX_SOCKET" wk
-eq env-side   "$MUX_CTX_SIDE"   work
-# a label with spaces must survive intact (value = rest of the line).
-eq env-label  "$MUX_CTX_LABEL"  "MARK: demo team"
-eq env-banner "$MUX_CTX_BANNER" bold
-eq env-theme  "$MUX_CTX_THEME"  orange
-eq side-root-w   "$(mux_ctx_side /w/x)"  work
-eq side-root-o   "$(mux_ctx_side /other)" personal
-eq side-rootless "$(mux_ctx_side '')"    shared
-eq sockets       "$(mux_ctx_sockets)"    wk
+# --- no command at all: the baseline ---------------------------------------
+rm -f "$MUX_DIR/config"
+mux_ctx_resolve || fail "resolve failed with no context-command"
+eq bare-token "$MUX_CTX_TOKEN" global
+eq bare-part  "$MUX_CTX_PARTITION" global
+# EMPTY, not purple: "a context set a theme" must be distinguishable from
+# "nobody did", which is what lets an explicit context theme beat the name
+# hash. The last-resort colour is a separate constant.
+eq bare-theme "$MUX_CFG_theme" ""
+eq fallback "$MUX_THEME_FALLBACK" purple
+eq bare-agent "$MUX_CFG_agent" claude
+eq bare-derive "$MUX_CFG_derive" hash
+# Built-ins carry BEHAVIOUR only. If a location ever creeps in here, every
+# partition silently inherits it and the missing-config signal disappears.
+eq builtin-no-scan "$MUX_CFG_scan" ""
+eq builtin-no-label "$MUX_CFG_label" ""
 
-# --- a minimal (single-side) hook: only `side` ------------------------------
-write_hook 'case "$1" in env) echo "side personal" ;; sockets) : ;; esac'
-mux_ctx_env
-eq min-side   "$MUX_CTX_SIDE"   personal
-eq min-socket "$MUX_CTX_SOCKET" ''
-eq min-label  "$MUX_CTX_LABEL"  ''
-eq min-sockets "$(mux_ctx_sockets)" ''
+# --- token validation -------------------------------------------------------
+for _bad in '../etc' 'Work' 'has space' '-lead' 'trail-' 'a/b'; do
+	mux_ctx_valid "$_bad" && fail "validator accepted [$_bad]"
+done
+for _good in manifest a acme-2 x9; do
+	mux_ctx_valid "$_good" || fail "validator rejected [$_good]"
+done
+# An invalid token is an ERROR, not a quiet fall back to global.
+cc 'echo ../../etc'
+mux_ctx_resolve && fail "an invalid token should fail resolution"
+case ${MUX_CTX_ERR:-} in
+*"invalid context token"*) ;; *) fail "no useful error: [${MUX_CTX_ERR:-}]" ;;
+esac
 
-# --- unknown keys are ignored, side falls back to default when empty --------
-write_hook 'case "$1" in env) printf "bogus xyz\nsocket s1\nside \n" ;; esac'
-mux_ctx_env
-eq wl-socket "$MUX_CTX_SOCKET" s1
-eq wl-side   "$MUX_CTX_SIDE"   default
+# --- a token with no files at all ------------------------------------------
+cc 'echo lonely'
+mux_ctx_resolve || fail "resolve failed for an unconfigured token"
+eq lonely-token "$MUX_CTX_TOKEN" lonely
+# The partition still applies -- that is the load-bearing part, and why an
+# unconfigured context is a warning rather than a refusal.
+eq lonely-part "$MUX_CTX_PARTITION" lonely
+eq lonely-unknown "$MUX_CTX_UNKNOWN" 1
+# ... and it gets no scan roots, so discovery is visibly off rather than
+# quietly pointed at somebody else's tree.
+eq lonely-scan "$MUX_CFG_scan" ""
 
-# --- no hook at all (the standalone default context) ------------------------
-rm -f "$MUX_CTX_HOOK"
-mux_ctx_env
-eq no-socket  "$MUX_CTX_SOCKET" ''
-eq no-side    "$MUX_CTX_SIDE"   default
-eq no-label   "$MUX_CTX_LABEL"  ''
-eq no-side-fn "$(mux_ctx_side /anything)" shared
-eq no-sockets "$(mux_ctx_sockets)"        ''
+# --- partition file supplies the settings ----------------------------------
+printf 'label Manifest\ntheme orange\nscan %s/w 3\n' "$T" \
+	>"$MUX_DIR/partitions/manifest.partition"
+cc 'echo manifest'
+mux_ctx_resolve || fail "resolve failed with a partition file"
+eq part-token "$MUX_CTX_TOKEN" manifest
+eq part-part  "$MUX_CTX_PARTITION" manifest
+eq part-label "$MUX_CFG_label" Manifest
+eq part-theme "$MUX_CFG_theme" orange
+eq part-scan  "$MUX_CFG_scan" "$T/w 3"
+eq part-known "$MUX_CTX_UNKNOWN" 0
+# A behaviour key it did not set still comes from the built-ins.
+eq part-inherit "$MUX_CFG_agent" claude
+# A .partition file with no .context file is NOT unknown: a context whose
+# settings are entirely partition-shared needs no file of its own.
+
+# --- a context may join another partition ----------------------------------
+printf 'scan %s/g 3\n' "$T" >"$MUX_DIR/partitions/global.partition"
+printf 'partition global\nagent gemini\n' >"$MUX_DIR/contexts/gpu.context"
+cc 'echo gpu'
+mux_ctx_resolve || fail "resolve failed for a shared partition"
+eq gpu-token "$MUX_CTX_TOKEN" gpu
+eq gpu-part  "$MUX_CTX_PARTITION" global
+eq gpu-agent "$MUX_CFG_agent" gemini
+# It inherits the GLOBAL partition's roots, because that is the partition it
+# joined -- which is the whole point of letting contexts share one.
+eq gpu-scan "$MUX_CFG_scan" "$T/g 3"
+
+# --- the context wins over its partition -----------------------------------
+printf 'partition global\ntheme cyan\nscan %s/own 2\n' "$T" \
+	>"$MUX_DIR/contexts/gpu.context"
+mux_ctx_resolve || fail "resolve failed with context overrides"
+eq ctx-over-part "$MUX_CFG_theme" cyan
+# A context's scan REPLACES the partition's rather than adding to it.
+eq ctx-scan-replaces "$MUX_CFG_scan" "$T/own 2"
+
+# --- repeatable scan within one file ---------------------------------------
+printf 'scan %s/a 1\nscan %s/b 2\n' "$T" "$T" \
+	>"$MUX_DIR/partitions/global.partition"
+printf 'partition global\n' >"$MUX_DIR/contexts/gpu.context"
+mux_ctx_resolve || fail "resolve failed with repeated scan keys"
+eq scan-repeat "$(printf '%s' "$MUX_CFG_scan" | tr '\n' '|')" "$T/a 1|$T/b 2"
+
+# --- an unknown key is ignored, not fatal ----------------------------------
+# These files are commonly generated; a newer mux writing a key this one does
+# not know must not break it.
+printf 'partition global\nfuture-key whatever\ntheme red\n' \
+	>"$MUX_DIR/contexts/gpu.context"
+mux_ctx_resolve || fail "an unknown key should not fail resolution"
+eq unknown-key-ok "$MUX_CFG_theme" red
+
+# --- the socket is derived, and global is an ordinary name -----------------
+eq socket-derived "$(mux_ctx_socket global)" global
+eq socket-named "$(mux_ctx_socket manifest)" manifest
+
+# --- every partition is discoverable, for reload and palette sync ----------
+_p=$(mux_ctx_partitions | tr '\n' ' ')
+case $_p in
+*global*) ;; *) fail "partitions omitted global: [$_p]" ;;
+esac
+case $_p in
+*manifest*) ;; *) fail "partitions omitted manifest: [$_p]" ;;
+esac
 
 pass

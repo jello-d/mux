@@ -23,10 +23,10 @@
 # `border` (INACTIVE pane borders), `select` (copy-mode selection / mode-style),
 # and `prompt` (the command prompt, message-command-style). Only bar/window/
 # accent are required; mux-style derives border/select/prompt when a theme omits
-# them (dim border, select = the window chip, prompt = the bar). themes/defaults
-# names the global default theme (`default <name>`), used when neither the
-# session nor its context picks one, and how an unset theme is DERIVED
-# (`derive hash|off`). Unknown keys fail loud.
+# them (dim border, select = the window chip, prompt = the bar). Which theme a
+# session gets is resolved by the front end from its context (see
+# mux-context.sh), not here: this only compiles the palette. Unknown keys fail
+# loud.
 # The per-socket stamp lives under mux's own cache dir; a content hash gates the
 # push so an unchanged palette is free. $MUX_CACHE overrides it so an integrator
 # can point it wherever it keeps runtime stamps.
@@ -57,7 +57,7 @@ fi
 # server the hook names. A stub yields none (only the default server) if absent.
 _ctx=$(dirname "$0")/mux-context.sh
 if [ -r "$_ctx" ]; then . "$_ctx"
-else mux_ctx_sockets() { :; }
+else mux_ctx_partitions() { echo global; }
 fi
 
 # Every file the palette is compiled FROM: the resolved fragments plus the
@@ -65,9 +65,6 @@ fi
 # twin rather than being pushed after it.
 theme_inputs() {
 	mux_data_files themes .theme
-	_td=$(mux_data_find themes defaults '')
-	[ -n "$_td" ] && printf '%s\n' "$_td"
-	return 0
 }
 
 # Content hash over that resolved set (paths and bytes, since sha256sum prints
@@ -116,19 +113,6 @@ push_palette() {
 		done <"$_ct"
 	done <"$_fl"
 	rm -f "$_fl"
-	_df=$(mux_data_find themes defaults '')
-	if [ -n "$_df" ]; then
-		mux_conf_clean < "$_df" > "$_ct"
-		while read -r _k _v; do
-			case $_k in
-			default) tmux "$@" set -g @theme-default "$_v" ;;
-			derive)  tmux "$@" set -g @theme-derive "$_v" ;;
-			*)
-				echo "mux-themes: defaults: bad key: $_k" >&2
-				exit 1 ;;
-			esac
-		done <"$_ct"
-	fi
 	rm -f "$_ct"
 }
 
@@ -159,12 +143,12 @@ load)
 	;;
 sync)
 	_h=$(themes_hash)
-	# The default socket is addressed as -L default (unambiguous -- never
-	# the ambient $TMUX server, which may be a non-default context's).
-	heal default "-L default" "$_h"
+	# The global partition is addressed as -L global (unambiguous -- never
+	# the ambient $TMUX server, which may be another partition's).
+	heal global "-L global" "$_h"
 	# Plus every non-default context server the hook names, each healed only
 	# if it is up.
-	for _s in $(mux_ctx_sockets); do
+	for _s in $(mux_ctx_partitions); do
 		heal "$_s" "-L $_s" "$_h"
 	done
 	;;
