@@ -94,7 +94,7 @@ set -eu
 # The ONE version string. The man page footer and `mux --version` both read it
 # from here, so they cannot drift apart the way a hardcoded "mux 0.1" in the
 # man page already had.
-MUX_VERSION=0.2
+MUX_VERSION=0.3
 
 MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
 TMUX_CONF=${XDG_CONFIG_HOME:-$HOME/.config}/tmux/tmux.conf
