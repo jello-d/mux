@@ -349,7 +349,7 @@ command for one word** and decides everything else itself.
 
 ```
 # $MUX_DIR/config
-context-command   severance mux-context
+context-command   severance current
 ```
 
 A bare name is looked up in `$MUX_DIR` before `$PATH`, so a config shared
