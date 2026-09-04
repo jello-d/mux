@@ -124,8 +124,16 @@ mux_ctx_resolve() {     # [PID]
 	*) [ -x "$MUX_DIR/$_cc" ] && _cc=$MUX_DIR/$_cc ;;
 	esac
 	if [ -n "$_cc" ]; then
-		_t=$($_cc "${1:-$$}" 2>/dev/null | head -1 | tr -d '[:space:]') \
-			|| _t=
+		# Capture RAW, then trim. A pipeline's status is its LAST
+		# command's, so piping straight into head/tr would report tr's
+		# success and silently trust the stdout of a command that
+		# FAILED. A context-command that exits non-zero has not
+		# answered, and its output is not an answer either.
+		if _raw=$($_cc "${1:-$$}" 2>/dev/null); then
+			_t=$(printf '%s' "$_raw" | head -1 | tr -d '[:space:]')
+		else
+			_t=
+		fi
 		if [ -n "$_t" ]; then
 			if mux_ctx_valid "$_t"; then
 				MUX_CTX_TOKEN=$_t

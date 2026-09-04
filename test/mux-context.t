@@ -65,6 +65,26 @@ case ${MUX_CTX_ERR:-} in
 *"invalid context token"*) ;; *) fail "no useful error: [${MUX_CTX_ERR:-}]" ;;
 esac
 
+# --- a FAILING context-command has not answered ----------------------------
+# Its stdout is not an answer either. The status has to be read before the
+# output is trimmed: a pipeline reports its LAST command's status, so piping
+# the command straight into head/tr would report tr's success and trust the
+# output of a command that failed.
+cc 'echo shouldbeignored; exit 1'
+mux_ctx_resolve || fail "a failing context-command should resolve to global"
+eq failed-token "$MUX_CTX_TOKEN" global
+
+# ...and it must not be mistaken for an INVALID token either: it said nothing.
+case ${MUX_CTX_ERR:-} in
+'') ;; *) fail "a failing command set an error: [${MUX_CTX_ERR:-}]" ;;
+esac
+
+# A command that fails while printing something INVALID is still just global,
+# not a validation error: there is no token to validate.
+cc 'echo ../../etc; exit 1'
+mux_ctx_resolve || fail "failing command with bad output should be global"
+eq failed-bad-token "$MUX_CTX_TOKEN" global
+
 # --- a token with no files at all ------------------------------------------
 cc 'echo lonely'
 mux_ctx_resolve || fail "resolve failed for an unconfigured token"
