@@ -13,7 +13,7 @@
 #
 # THE ENTIRE INTEGRATION SURFACE is one command, named in $MUX_DIR/config:
 #
-#     context-command   severance mux-context
+#     context-command   severance current
 #
 # It prints one line: a token. Empty output or a non-zero exit means `global`.
 # No sockets, no styles, no themes, no path classification -- the integrator

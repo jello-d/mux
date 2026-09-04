@@ -10,16 +10,29 @@
 #
 # Sessions are derived from the per-pane state FILES in the namespace dir, NOT
 # from `tmux list-sessions`, so this answers headless (from a tray daemon, over
-# ssh, at boot) with no tmux client. NS is the namespace (tmux socket
-# basename); with none it falls back to $TMUX, else 'default' -- the same
-# resolution mux-agent-state.sh uses.
+# ssh, at boot) with no tmux client. NS is the namespace -- a PARTITION name;
+# with none it resolves the caller's context, exactly as the front end does.
+#
+# That resolution matters precisely BECAUSE this is the headless caller. Every
+# other consumer of mux-agent-state.sh (the status strip, next-blocked) runs
+# inside tmux and gets its namespace from $TMUX. This one has no $TMUX, so it
+# used to fall back to a hardcoded 'default' -- the old tmux socket basename.
+# When the personal partition became `global` that name stopped existing, and
+# the tray indicator silently read an empty directory and reported "none 0"
+# forever.
 set -eu
 
 # Sibling libs in this script's own (colocated) libexec dir.
 _lib=$(dirname "$0")
 . "$_lib/mux-agent-state.sh"
 
-dir=$(mux_agent_dir "${1:-}")
+# No NS given: resolve the caller's partition rather than guessing a name.
+_ns=${1:-}
+if [ -z "$_ns" ] && [ -r "$_lib/mux-context.sh" ]; then
+	. "$_lib/mux-context.sh"
+	mux_ctx_resolve 2>/dev/null && _ns=$MUX_CTX_PARTITION
+fi
+dir=$(mux_agent_dir "$_ns")
 
 # The distinct sessions that have a tracked agent (field 2 of each state file).
 sessions=

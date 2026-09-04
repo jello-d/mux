@@ -23,7 +23,12 @@ mux_agent_dir() {
 	_rt=${XDG_RUNTIME_DIR:-/tmp/user-$(id -u)}
 	_ns=${1:-}
 	if [ -z "$_ns" ]; then
-		_ns=default
+		# `global` is the baseline PARTITION. It used to be `default`,
+		# the old tmux socket basename, which stopped existing when the
+		# personal partition took a name -- a stale default that made
+		# every headless reader silently see nothing. Callers inside
+		# tmux still get theirs from $TMUX.
+		_ns=global
 		[ -n "${TMUX:-}" ] && { _ns=${TMUX%%,*}; _ns=${_ns##*/}; }
 	fi
 	printf '%s/agent-state/%s' "$_rt" "$_ns"
