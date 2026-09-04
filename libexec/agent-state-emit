@@ -8,19 +8,22 @@ set -eu
 
 state=${1:?usage: agent-state-emit STATE}
 
-# Runtime dir, with a fallback for sessions where XDG_RUNTIME_DIR is unset.
-runtime=${XDG_RUNTIME_DIR:-/tmp/user-$(id -u)}
-
 # No tmux pane means nothing to track. Exit clean so the hook never fails.
 [ -n "${TMUX_PANE:-}" ] || exit 0
 
-# Namespace the state by tmux socket, so a work session and a personal one --
-# separate tmux servers sharing this runtime dir -- never collide on pane ids.
-# TMUX is socketpath,pid,session; its socket basename names the namespace
-# (default, work). agent-state-render derives the same namespace the same way.
-ns=default
-[ -n "${TMUX:-}" ] && { ns=${TMUX%%,*}; ns=${ns##*/}; }
-dir=$runtime/agent-state/$ns
+# Sibling libs in this script's own (colocated) libexec dir.
+_lib=$(dirname "$0")
+. "$_lib/mux-agent-state.sh"
+. "$_lib/mux-notify.sh"
+
+# The state dir, namespaced by tmux socket so a work session and a personal one
+# -- separate tmux servers sharing this runtime dir -- never collide on pane
+# ids. Derived by mux_agent_dir rather than open-coded here: this file used to
+# compute the namespace itself, with its own `default` fallback, which is a
+# second place for the baseline partition's name to be written down and so a
+# second place for it to go stale. The reader and the writer now take it from
+# one function.
+dir=$(mux_agent_dir)
 
 mkdir -p "$dir"
 
@@ -63,13 +66,12 @@ loc=$(tmux display-message -p -t "$TMUX_PANE" \
 
 # Clear a notification we raised for THIS pane once the agent leaves the state
 # that raised it -- you answered, restarted, or the turn moved on -- so a
-# critical "needs you" (which never times out in mako) does not sit stale for
-# manual dismissal. Carry the id across same-state re-emits; on any real change
-# drop it, dismissing any live one first (best effort: no makoctl just no-ops).
+# "needs you" does not sit stale for manual dismissal. Carry the id across
+# same-state re-emits; on any real change drop it, closing any live one first.
+# mux_notify_close is best effort on every platform and cannot fail.
 notif=$_pnotif
 if [ -n "$_pnotif" ] && [ "$state" != "$_pstate" ]; then
-        command -v makoctl >/dev/null 2>&1 \
-                && makoctl dismiss -n "$_pnotif" 2>/dev/null || true
+        mux_notify_close "$_pnotif"
         notif=
 fi
 
@@ -79,23 +81,28 @@ fi
 # not when you are already looking at this pane -- it is the active pane of the
 # active window of an attached session -- since the bar already shows it; a
 # session opts out with the `notify always` layout directive
-# (@mux-notify-always). -p keeps the id so the block above can clear it later.
-# Best effort: no daemon or no notify-send just no-ops.
-if [ "$_pstate" = working ] && [ "$state" != working ] \
-   && command -v notify-send >/dev/null 2>&1; then
+# (@mux-notify-always). mux_notify_send keeps the id so the block above can
+# clear it later, and no-ops on a box with no daemon.
+if [ "$_pstate" = working ] && [ "$state" != working ]; then
         _vf='#{&&:#{pane_active},#{&&:#{window_active},#{session_attached}}}'
         _vis=$(tmux display-message -p -t "$TMUX_PANE" "$_vf" \
                 2>/dev/null || true)
         _always=$(tmux display-message -p -t "$TMUX_PANE" \
                 '#{@mux-notify-always}' 2>/dev/null || true)
         if [ "$_always" = 1 ] || [ "$_vis" != 1 ]; then
+                # Both at NORMAL urgency. `blocked` used to be critical, which
+                # in mako and dunst alike means "never expire": the banner
+                # outlived the prompt it announced and had to be dismissed by
+                # hand, every time. Urgency is not how mux says which state
+                # this is -- the summary line says it, and the strip and the
+                # tray hold it persistently. See mux-notify.sh.
                 _sess=${loc%% *}
                 case $state in
-                blocked) notif=$(notify-send -u critical -p \
+                blocked) notif=$(mux_notify_send normal \
                                 "Claude needs you: $_sess" \
-                                "permission or input" 2>/dev/null || true) ;;
-                idle)    notif=$(notify-send -p "Claude finished: $_sess" \
-                                "your turn" 2>/dev/null || true) ;;
+                                "permission or input") ;;
+                idle)    notif=$(mux_notify_send normal \
+                                "Claude finished: $_sess" "your turn") ;;
                 esac
         fi
 fi

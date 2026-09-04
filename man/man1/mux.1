@@ -357,6 +357,43 @@ partition.
 .B mux only reflects a context; it enforces nothing.
 Whatever backs a boundary (a Unix group, an ACL, a namespace) lives in whatever
 supplies the token. The banner is a reminder, never permission.
+.SH NOTIFICATIONS
+A desktop notification fires when an agent stops needing the CPU and starts
+needing YOU: a real transition out of
+.BR working ,
+into
+.B blocked
+(a permission prompt) or
+.B idle
+(the turn finished). Not on a same-state repeat, not on the way INTO
+.B working
+\(em that transition is you \(em and not while you are already looking at the
+pane, unless the profile says
+.BR "notify always" .
+.PP
+The notification is raised at
+.B normal
+urgency, never
+.BR critical .
+critical means "never expire" to mako and dunst alike, so it produced a banner
+that outlived the prompt it announced and had to be dismissed by hand. The
+status strip and the tray already hold the state persistently; the notification
+only has to be the nudge that points at them.
+.PP
+mux clears its own banner once that state passes, and when a pane dies still
+holding one. Clearing calls the freedesktop
+.B org.freedesktop.Notifications.CloseNotification
+method rather than any one daemon's CLI, trying
+.BR gdbus ,
+.BR busctl ,
+.BR dbus\-send ,
+then
+.B makoctl
+last. So it cleans up under X11 and Wayland alike, wherever a spec-compliant
+daemon runs. Raising needs
+.BR notify\-send .
+Both halves are optional and best effort: a box with neither is one where mux
+notifies nobody, which is never an error.
 .SH TMUX INTEGRATION
 Source the shipped fragments from your
 .IR tmux.conf :
@@ -395,6 +432,20 @@ binary's prefix.
 .B MUX_CACHE
 Per-socket palette stamp directory. Default
 .IR $XDG_CACHE_HOME/mux .
+.TP
+.BR MUX_NOTIFY_SEND ", " MUX_NOTIFY_CLOSE
+Replace the built-in notification path, for a platform that is not freedesktop.
+.B MUX_NOTIFY_SEND
+is invoked as
+.RI "CMD " "URGENCY SUMMARY BODY"
+and should print an id on stdout;
+.B MUX_NOTIFY_CLOSE
+is invoked as
+.RI "CMD " ID
+with whatever send printed. The id is opaque to mux, so any token the pair
+agrees on works. Set both or neither;
+.B mux check
+reports which path is live.
 .SH FILES
 .TP
 .I $MUX_DIR/<name>.profile

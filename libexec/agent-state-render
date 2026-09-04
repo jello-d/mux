@@ -39,6 +39,11 @@ _lib=$(dirname "$0")
 # the strip's own look, which the picker does not share.
 . "$_lib/mux-agent-state.sh"
 
+# Closing a notification whose pane has died (the prune below) is the same
+# operation agent-state-emit performs when a state changes, so both take it
+# from one place rather than each knowing a daemon's CLI.
+. "$_lib/mux-notify.sh"
+
 # ---------------------------------------------------------------------------
 # LOOK & FEEL -- every colour knob for the strip in one place. Colours are tmux
 # colour names (colour0-255) or truecolor #rrggbb. The render logic below reads
@@ -98,16 +103,15 @@ dir=$(mux_agent_dir)
 # simple case-glob. Used only to prune phantom state files below.
 live=" $(tmux list-panes -a -F '#{pane_id}' 2>/dev/null | tr '\n' ' ')"
 
-# Prune phantoms once: drop any state file whose pane is gone, dismissing any
+# Prune phantoms once: drop any state file whose pane is gone, closing any
 # notification it still holds -- so a pane killed while blocked leaves no stale
-# "needs you" behind (best effort: no makoctl just no-ops).
+# "needs you" behind (best effort on any platform; see mux-notify.sh).
 if [ -d "$dir" ]; then
         for f in "$dir"/*; do
                 [ -e "$f" ] || continue
                 read -r st ss win pane ep nid <"$f" || continue
                 case "$live" in *" $pane "*) continue ;; esac
-                [ -n "$nid" ] && command -v makoctl >/dev/null 2>&1 \
-                        && makoctl dismiss -n "$nid" 2>/dev/null || true
+                mux_notify_close "$nid"
                 rm -f "$f"
         done
 fi
