@@ -159,6 +159,15 @@ directive is optional.
 | `notify always\|away` | when the agent notification fires |
 | `layout NAME` | the pane arrangement to build (default: `default`) |
 
+The agent notification fires when an agent stops needing the CPU and starts
+needing *you* — a real transition out of `working`, and only when you are not
+already looking at that pane (`notify always` overrides the second half). It is
+raised at **normal** urgency, never `critical`: critical means "never expire"
+to mako and dunst alike, which left every "needs you" banner sitting there
+after the prompt it announced was long answered. mux clears its own banner when
+the state passes, using the freedesktop `CloseNotification` call rather than
+any one daemon's CLI, so it cleans up under X11 and Wayland alike.
+
 A **layout** is the pane arrangement, and only that: `layouts/<name>.layout`,
 in your config or shipped in `$MUX_SHARE`. Two ship: `default` (yours | the
 agent, over a scratch shell) and `logs` (the same, plus a second window for
@@ -489,6 +498,10 @@ reads your override first, then the shipped default.
   `share/agents`, and select it with `agent <name>` in a layout.
 - **Mark a context:** make `$MUX_DIR/context` an executable implementing the
   three verbs above; mux picks it up automatically.
+- **Notify from a non-freedesktop platform:** set `MUX_NOTIFY_SEND` and
+  `MUX_NOTIFY_CLOSE`. Send is called `CMD URGENCY SUMMARY BODY` and prints an
+  id; close is called `CMD ID`. The id is opaque to mux, so any token the two
+  agree on works. `mux check` reports which path is live.
 
 ## Reference
 

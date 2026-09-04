@@ -18,7 +18,8 @@ MUX_SHARE=${MUX_SHARE:-$(dirname "$0")/../share}
 # The shared $MUX_DIR-over-$MUX_SHARE resolver (mux-data.sh), so the check
 # audits the data mux would ACTUALLY read -- a default theme or layout supplied
 # by the overlay counts, and one shadowed by it is judged on the overlay copy.
-for _l in mux-data.sh mux-context.sh mux-scan.sh mux-profiles.sh; do
+for _l in mux-data.sh mux-context.sh mux-scan.sh mux-profiles.sh \
+		mux-notify.sh; do
 	_lp=$(dirname "$0")/$_l
 	[ -r "$_lp" ] || {
 		printf '  [FAIL] %s missing (broken install)\n' "$_lp" >&2
@@ -55,6 +56,34 @@ else bad "tmux not found (mux's one runtime dependency)"; fi
 # actually happens.
 if _mp=$(command -v mux 2>/dev/null); then ok "mux on PATH ($_mp)"
 else bad "mux not on PATH -- the tmux fragment reaches it as \`mux <verb>\`"; fi
+
+# 1c. Desktop notifications: OPTIONAL, so a gap is a WARN, never a FAIL -- a
+# headless box or a bare tty is a perfectly healthy mux that simply nudges
+# nobody. Reported in TWO halves, because the second is the one that used to be
+# assumed. Raising needs notify-send. CLEARING a notification mux already
+# raised needs a way to call org.freedesktop.Notifications.CloseNotification;
+# without one, mux still nudges you, but a "needs you" whose pane has since
+# died stays on screen until swatted by hand. That asymmetry was invisible for
+# as long as the close was hardcoded to mako's own CLI.
+if [ -n "${MUX_NOTIFY_SEND:-}${MUX_NOTIFY_CLOSE:-}" ]; then
+	if [ -n "${MUX_NOTIFY_SEND:-}" ] && [ -n "${MUX_NOTIFY_CLOSE:-}" ]; then
+		ok "notifications overridden (MUX_NOTIFY_SEND/CLOSE)"
+	else
+		warn "notifications: set MUX_NOTIFY_SEND and MUX_NOTIFY_CLOSE" \
+			"together, or neither -- half an override leaves the" \
+			"other half on the built-in path"
+	fi
+elif command -v notify-send >/dev/null 2>&1; then
+	_ncl=$(_mux_notify_closer)
+	if [ "$_ncl" = none ]; then
+		warn "notifications raise but never clear: no gdbus, busctl," \
+			"dbus-send or makoctl to close one with"
+	else
+		ok "notifications (notify-send, cleared via $_ncl)"
+	fi
+else
+	warn "no notify-send: mux will not raise desktop notifications"
+fi
 
 # 2. package DATA (share): the dir plus the pieces mux reads at runtime.
 if [ -d "$MUX_SHARE" ]; then
