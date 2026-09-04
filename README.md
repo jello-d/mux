@@ -496,8 +496,10 @@ reads your override first, then the shipped default.
   `share/themes` (ship it), then `mux reload`.
 - **Add an agent:** drop `<name>.agent` (a `go` and a `resume` line) in
   `share/agents`, and select it with `agent <name>` in a layout.
-- **Mark a context:** make `$MUX_DIR/context` an executable implementing the
-  three verbs above; mux picks it up automatically.
+- **Mark a context:** put `context-command CMD` in `$MUX_DIR/config`. CMD is
+  run with the calling PID and prints ONE DNS-label token on stdout (or
+  nothing, for the baseline). A bare name resolves against `$MUX_DIR` before
+  `$PATH`, so the same config travels between machines.
 - **Notify from a non-freedesktop platform:** set `MUX_NOTIFY_SEND` and
   `MUX_NOTIFY_CLOSE`. Send is called `CMD URGENCY SUMMARY BODY` and prints an
   id; close is called `CMD ID`. The id is opaque to mux, so any token the two
