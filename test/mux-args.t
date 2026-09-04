@@ -73,4 +73,20 @@ no unknown-verb       "unknown verb: nosuchverb" nosuchverb
 ok positional go lay4 lay
 grep -q '^lay ' "$T/conf/profiles" || fail "positional: no row for lay"
 
+# --- `resume` is a VERB now, not a spelling of `go --resume` ----------------
+# It used to be an alias that set cmd=go and the --resume flag, and internally
+# the flag was ALSO carried as cmd=resume. Renaming the session rebuild onto
+# `resume` collided with both, so the flag now lives only in $resume. These
+# pin the two apart: the verb takes no arguments and owns --list, and the flag
+# is rejected everywhere except go.
+no resume-arity  "resume takes no arguments" resume foo
+no resume-flag   "--resume is only for go"   resume --resume
+no resume-flag2  "--resume is only for go"   new --resume lay5
+no list-gate     "--list is only for resume" kill --list lay4
+
+# The flag itself still works, in either position -- the old behaviour did not
+# go away with the verb, it just has one spelling now.
+ok go-resume-after  go --resume lay4
+ok go-resume-before --resume go lay4
+
 pass
