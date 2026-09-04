@@ -35,7 +35,7 @@ itself (`fzf` optional, for a nicer session picker).
 - [Install](#install)
 - [Quickstart](#quickstart)
 - [Concepts](#concepts)
-  - [Sessions: go and resume](#sessions-go-and-resume)
+  - [Sessions: go and go --resume](#sessions-go-and-go---resume)
   - [Profiles and layouts](#profiles-and-layouts)
   - [Agents](#agents)
   - [Themes](#themes)
@@ -126,7 +126,7 @@ mux go api
 
 ## Concepts
 
-### Sessions: go and resume
+### Sessions: go and go --resume
 
 A **session** is a running tmux session. mux builds it from a **profile** of
 the same name if there is one, and from its own defaults if there is not. Two
@@ -135,7 +135,8 @@ build verbs differ only in how the agent pane starts:
 - `mux go [NAME] [PROFILE]` — the agent **continues** its most recent
   conversation.
 - `mux go --resume [NAME]` — the agent **resumes**, prompting you to pick a
-  conversation (`mux resume` is kept as an alias).
+  conversation. (This was once the bare verb `mux resume`; that name now
+  belongs to the session rebuild below.)
 
 If the session is already up, both just attach or switch to it (idempotent —
 they never clobber a live session). `--no-agent` builds the same panes but a
@@ -241,7 +242,7 @@ Anything with a slash is a path, since a session name never contains one. A
 path is *evidence*, so it never reaches the unknown-name refusal below — and an
 exact-root claim wins over climbing to the git toplevel, so a subdirectory
 session resolves to itself rather than to its enclosing repo. That is what lets
-`mux restore` replay a command anyone could type instead of reaching into
+`mux resume` replay a command anyone could type instead of reaching into
 mux's internals.
 
 `mux go` resolves a NAME in this order: a live session, a breakout profile, a
@@ -314,8 +315,8 @@ The sessions you have open are recorded as you open them, per socket, in
 `$MUX_CACHE/sessions.<socket>` — one `NAME<TAB>ROOT` per line. After a reboot:
 
 ```sh
-mux restore          # rebuild them all, then attach the first
-mux restore --list   # just show what would be rebuilt
+mux resume           # rebuild them all, then attach the first
+mux resume --list    # just show what would be rebuilt
 ```
 
 It is **state, not config**: never in `$MUX_DIR`, never in git, and per
@@ -418,9 +419,9 @@ Full reference in **`man mux`**. The essentials:
 ```
 mux                          pick a session to attach (fzf or a menu)
 mux go [NAME|DIR] [PROFILE]   create/attach/switch; agent continues
-mux resume [NAME] [PROFILE]   same, but the agent resumes (choose a chat)
+mux go --resume [NAME]       same, but the agent resumes (choose a chat)
 mux --no-agent ...           build the panes, plain shell in the agent pane
-mux restore                  rebuild this partition's sessions (--list)
+mux resume                   rebuild this partition's sessions (--list)
 mux scan                     rebuild the project discovery map
 mux why [NAME]               show each resolved value and where it came from
 mux ls                       list sessions (with agent-state glyphs)

@@ -1,6 +1,6 @@
 #!/bin/sh
 # mux-sessions.sh - the SESSION SET: which sessions this partition had, so a
-# reboot is followed by `mux restore` and not by rebuilding five sessions by
+# reboot is followed by `mux resume` and not by rebuilding five sessions by
 # hand. Sourced (functions only).
 #
 # STATE, not config. It lives under $MUX_CACHE, never in $MUX_DIR and never in
@@ -15,7 +15,7 @@
 #
 # ADDITIVE on create and SUBTRACTIVE on kill, NOT a snapshot of what is live. A
 # snapshot would be clobbered by the first `mux go` after a reboot -- at which
-# point exactly one session is up -- destroying the very record being restored.
+# point exactly one session is up -- destroying the very record being rebuilt.
 #
 # Each line is NAME<TAB>ROOT. The root is not optional: the common session is a
 # bare `mux go` in a directory, which has no profile and no map entry, so the
@@ -23,10 +23,10 @@
 # an evidence source in its own right -- `mux go <name>` can resolve through it
 # exactly as it resolves through a profile or the discovery map.
 #
-# Insertion-ordered, so a restore rebuilds in the order you first opened them
+# Insertion-ordered, so a resume rebuilds in the order you first opened them
 # and lands you on the oldest, which is usually the one you think of as primary.
 #
-# Keyed on the PARTITION, so each isolated namespace restores only its own.
+# Keyed on the PARTITION, so each isolated namespace resumes only its own.
 
 # The set file for a partition. KEY defaults to the ambient socket, matching
 # how the theme stamp and the agent-state dir are keyed.

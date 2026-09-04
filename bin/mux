@@ -11,8 +11,13 @@
 #       create if missing, then attach (switch if already inside tmux). The
 #       claude pane runs `claude --continue || claude`: pick up where you left
 #       off, or start fresh when there is nothing to continue.
-#   mux resume [NAME] [LAYOUT]
-#       same, but `claude --resume` (choose a conversation).
+#   mux go --resume [NAME] [LAYOUT]
+#       same, but `claude --resume` (choose a conversation). This was once the
+#       bare verb `mux resume`; that name now belongs to the session rebuild
+#       below, which is the thing you reach for after a reboot.
+#   mux resume             rebuild every session this partition had (--list to
+#                          see them without building). The set is recorded as
+#                          you open sessions, so this needs no arguments.
 #   mux kill NAME          tear the named session down.
 #   mux kill-all           tear down EVERY session on this socket (prompts).
 #   mux reload             re-source tmux.conf on every running mux server.
@@ -395,7 +400,7 @@ usage: mux [OPTION] [VERB] [NAME] [PROFILE]  (OPTION may follow VERB too)
   theme [NAME|next|prev]     set/cycle/show the theme (remembered)
   rename [OLD] NEW           rename a session (and its matching layout)
   edit [NAME]                open a profile in $EDITOR
-  restore                    rebuild this partition's sessions (--list)
+  resume                     rebuild this partition's sessions (--list)
   why [NAME]                 show each resolved value and where it came from
   check                      audit mux's install: package data, deps, overlay
   migrate-profiles           convert pre-rename *.layout files (--apply)
@@ -462,24 +467,30 @@ if [ -z "$cmd" ]; then
 fi
 case $cmd in
         go|resume|kill|kill-all|reload|ls|hide|show|show-all) ;;
-        save|new|help|theme|rename|edit|why|restore) ;;
+        save|new|help|theme|rename|edit|why) ;;
         *) echo "mux: unknown verb: $cmd" >&2; usage ;;
 esac
 # The retired verbs are the flag forms spelled out. Kept as aliases rather than
 # removed: they are in muscle memory and in whatever scripts already call them,
 # and folding them here means exactly one code path below.
+#
+# `resume` is NOT one of them any more. It used to be a second spelling of
+# `go --resume` (the agent offers a conversation to pick up) and now names the
+# session rebuild that was briefly called `restore`. The FLAG is untouched, so
+# the old behaviour is still there as `mux go --resume`; only the bare verb
+# moved. Nothing may test `cmd = resume` to mean the flag now -- $resume does
+# that -- since under the rename the two meanings are the same string, and a
+# leftover test would silently give one of them the other's behaviour.
 case $cmd in
         kill-all)  cmd=kill; all=1 ;;
         show-all)  cmd=show; all=1 ;;
-        resume)    cmd=go;   resume=1 ;;
 esac
-[ "$resume" -eq 1 ] && [ "$cmd" = go ] && cmd=resume
 
 # Arity per verb. --bare is meaningful only where claude is launched. kill
 # requires an explicit NAME -- it is too destructive to run against an inferred
 # session; kill-all takes none (it hits the whole socket, behind a prompt).
 case $cmd in
-        reload|ls|restore) [ "$#" -eq 0 ] || {
+        reload|ls|resume) [ "$#" -eq 0 ] || {
                 echo "mux: $cmd takes no arguments" >&2; usage; } ;;
         kill|show) if [ "$all" -eq 1 ]; then
                 [ "$#" -eq 0 ] || { echo "mux: $cmd --all takes no NAME" >&2
@@ -491,7 +502,7 @@ case $cmd in
         hide) [ "$#" -eq 1 ] || {
                 echo "mux: hide needs a session NAME (see: mux ls)" >&2
                 usage; } ;;
-        go|resume) [ "$#" -le 2 ] || {
+        go) [ "$#" -le 2 ] || {
                 echo "mux: too many arguments" >&2; usage; } ;;
         save|theme|edit|why) [ "$#" -le 1 ] || {
                 echo "mux: $cmd takes at most a NAME" >&2; usage; } ;;
@@ -505,14 +516,19 @@ case $cmd in
                 usage; } ;;
 esac
 case $cmd in
-        go|resume|new) ;;
+        go|new) ;;
         *) [ "$bare" -eq 0 ] || {
                 echo "mux: --no-agent is only for go/new" >&2; usage; } ;;
 esac
 case $cmd in
-        go|resume) ;;
+        go) ;;
         *) [ "$attach" -eq 0 ] || {
-                echo "mux: --attach is only for go/resume" >&2; usage; } ;;
+                echo "mux: --attach is only for go" >&2; usage; } ;;
+esac
+case $cmd in
+        go) ;;
+        *) [ "$resume" -eq 0 ] || {
+                echo "mux: --resume is only for go" >&2; usage; } ;;
 esac
 case $cmd in
         kill|show) ;;
@@ -520,14 +536,14 @@ case $cmd in
                 echo "mux: --all is only for kill/show" >&2; usage; } ;;
 esac
 case $cmd in
-        restore) ;;
+        resume) ;;
         *) [ "$listing" -eq 0 ] || {
-                echo "mux: --list is only for restore" >&2; usage; } ;;
+                echo "mux: --list is only for resume" >&2; usage; } ;;
 esac
 case $cmd in
-        go|resume|new) ;;
+        go|new) ;;
         *) [ "$noattach" -eq 0 ] || {
-                echo "mux: --no-attach is only for go/resume/new" >&2
+                echo "mux: --no-attach is only for go/new" >&2
                 usage; } ;;
 esac
 case $cmd in
@@ -830,7 +846,7 @@ if [ -n "$name_arg" ] && _is_path "$name_arg"; then
         # Here an exact-root claim wins first, so a profile rooted below a
         # toplevel resolves to itself.
         #
-        # This is what lets `mux restore` replay a PUBLIC command rather than
+        # This is what lets `mux resume` replay a PUBLIC command rather than
         # reach into mux's internals: it knows each session's root, and a root
         # is an address.
         bypath=1
@@ -1618,7 +1634,9 @@ _find_agent() {   # <name>
 # Which of the agent profile's lines to run. `new` builds a session exactly as
 # `go` does -- it only differs in having bound a name first -- so it takes go's.
 agent_verb=go
-[ "$cmd" = resume ] && agent_verb=resume
+# $resume, not `cmd = resume`: `resume` is now the session-rebuild VERB, so the
+# flag has to be read from the flag.
+[ "$resume" -eq 1 ] && agent_verb=resume
 
 # agent_launch NAME -> the command NAME's pane runs for THIS verb (go/resume),
 # empty under --bare. An unknown agent (no profile) fails loud.
@@ -1838,8 +1856,8 @@ if [ "$cmd" = new ]; then
         base=$here
 fi
 
-# --- restore: bring back this partition's sessions --------------------------
-# The point of the session set: after a reboot, `mux restore` and the five
+# --- resume: bring back this partition's sessions ---------------------------
+# The point of the session set: after a reboot, `mux resume` and the five
 # sessions you had are back. It acts on the CURRENT partition only and takes no
 # way to name another -- if you want a different partition's sessions, you go to
 # that partition, which is what partitions are for.
@@ -1848,7 +1866,7 @@ fi
 # whole build path (profile resolution, layout, theme, agent) is reused exactly
 # rather than reimplemented here. Then we attach the first, which insertion
 # order makes the oldest -- usually the one you think of as primary.
-if [ "$cmd" = restore ]; then
+if [ "$cmd" = resume ]; then
         rs_key=${sock:-default}
         rs_set=$(mux_sess_list "$rs_key")
         if [ "$listing" -eq 1 ]; then
@@ -1858,7 +1876,7 @@ if [ "$cmd" = restore ]; then
         if [ -z "$rs_set" ]; then
                 echo "mux: no sessions recorded for this partition" >&2
                 echo "mux: they are recorded as you open them; nothing to" \
-                        "restore yet" >&2
+                        "resume yet" >&2
                 exit 1
         fi
         rs_built=0
@@ -1871,7 +1889,7 @@ if [ "$cmd" = restore ]; then
                 fi
                 # Replay a PUBLIC command, addressing the session by its ROOT.
                 # Nothing here reaches into mux's internals: `mux go <dir>` is
-                # a form anyone can type, so restore is a loop over it rather
+                # a form anyone can type, so resume is a loop over it rather
                 # than a private path through the resolver.
                 #
                 # Flag BEFORE the positional: the parser stops consuming
@@ -1888,7 +1906,7 @@ if [ "$cmd" = restore ]; then
                         rs_failed="$rs_failed $rs_n"
                 fi
         done
-        printf 'mux: restored %s, %s already up\n' "$rs_built" "$rs_up"
+        printf 'mux: resumed %s, %s already up\n' "$rs_built" "$rs_up"
         if [ -n "$rs_failed" ]; then
                 echo "mux: could NOT build:$rs_failed" >&2
                 echo "mux: see why with  mux go <name>" >&2
@@ -1945,8 +1963,9 @@ if tm has-session -t "=$name" 2>/dev/null; then
                         exit 1
                 fi
         fi
-        [ "$cmd" = resume ] && \
-                echo "mux: $name already up; resume applies only at build" >&2
+        [ "$resume" -eq 1 ] && \
+                echo "mux: $name already up; --resume applies only at" \
+                        "build" >&2
         mux_attach
         exit 0          # reached only under --no-attach; otherwise exec'd away
 fi
@@ -2025,7 +2044,7 @@ if [ -n "$name_arg" ] && [ "$bypath" -eq 0 ] && [ "$cmd" != new ] \
    && [ "$hasroot" -eq 0 ]; then
         # The session set first: a session you HAD is evidence at least as
         # good as a scanned repo, and it is the only source that knows where a
-        # profile-less `mux go` was rooted. Without it, restore could not
+        # profile-less `mux go` was rooted. Without it, resume could not
         # rebuild the common case at all.
         hits=$(mux_sess_root "$name" "${sock:-default}")
         [ -n "$hits" ] && [ -d "$hits" ] || hits=$(_map_lookup "$name")

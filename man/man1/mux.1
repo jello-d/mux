@@ -40,13 +40,16 @@ if it is not up. The agent
 .B continues
 its most recent conversation.
 .TP
-.B mux resume " [" \fINAME\fR "] [" \fILAYOUT\fR ]
+.B mux go \-\-resume " [" \fINAME\fR "] [" \fILAYOUT\fR ]
 As
 .BR go ,
 but the agent
 .B resumes
 \(em it prompts to choose a conversation. Only meaningful when the session is
-being built.
+being built. This was once the bare verb
+.BR "mux resume" ;
+that name now belongs to the session rebuild below, and the flag is the only
+spelling.
 .TP
 .B mux \-\-no\-agent " ..."
 Build the session but run neither the agent's
@@ -74,7 +77,7 @@ are identical. A row is written only when
 .I NAME
 is not what this directory already derives.
 .TP
-.B mux restore " [" \-\-list ]
+.B mux resume " [" \-\-list ]
 Rebuild every session this partition had recorded, then attach the first.
 Sessions are recorded automatically as you open them and forgotten on
 .BR "mux kill" ,
@@ -157,8 +160,8 @@ is a path, since a session name never contains one. A path is EVIDENCE, so it
 never reaches the unknown\-name refusal, and an exact\-root claim wins over
 climbing to the git toplevel \(em a subdirectory session resolves to itself,
 not to its enclosing repository. This is the form
-.B mux restore
-replays, so restoring is a loop over a public command rather than a private
+.B mux resume
+replays, so resuming is a loop over a public command rather than a private
 path through the resolver.
 .SH PROFILES AND LAYOUTS
 A
@@ -457,7 +460,7 @@ Name a session for a directory, then bring it up resuming a conversation:
 .nf
 .RS
 cd ~/src/api && mux new api
-mux resume api
+mux go \-\-resume api
 .RE
 .fi
 .PP

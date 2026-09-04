@@ -142,7 +142,7 @@ esac
 rm -f "$T/conf/config"
 
 # --- a session is addressable by its ROOT, not only by its name -------------
-# The public form `mux restore` replays, so restoring is a loop over a command
+# The public form `mux resume` replays, so resuming is a loop over a command
 # anyone can type rather than a private path through the resolver.
 : >"$TMUXLOG"
 mux "$T/elsewhere" go "$T/tree/solo" >/dev/null || fail "go <path> failed"

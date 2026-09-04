@@ -1,11 +1,11 @@
 #!/bin/sh
 # test/mux-sessions.t - the SESSION SET (libexec/mux-sessions.sh): which
-# sessions a partition had, so a reboot is followed by `mux restore`.
+# sessions a partition had, so a reboot is followed by `mux resume`.
 #
 # The two rules that matter and are easy to get wrong:
 #   - it is ADDITIVE on create and SUBTRACTIVE on kill, never a snapshot of
 #     what is live. A snapshot would be clobbered by the first `mux go` after
-#     a reboot, destroying the record being restored.
+#     a reboot, destroying the record being rebuilt.
 #   - each entry carries the ROOT, not just the name. The common session is a
 #     bare `mux go` in a directory, which has no profile and no map entry, so
 #     the name alone cannot rebuild it.
@@ -52,7 +52,7 @@ mux_sess_drop nosuch $K
 eq drop-absent "$(mux_sess_list $K | tr '\n' ' ')" "alpha charlie "
 
 # --- per partition ------------------------------------------------------
-# Each partition restores only its own; that is the whole point of keying on
+# Each partition resumes only its own; that is the whole point of keying on
 # it, so a work set must be invisible from a personal one.
 mux_sess_add delta "$T/d" other
 eq other-part "$(mux_sess_list other | tr '\n' ' ')" "delta "
