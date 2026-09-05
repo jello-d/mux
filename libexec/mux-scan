@@ -38,7 +38,33 @@ case "${1:-}" in
 		printf ' %s (depth %s)' "$_p" "$_d"
 	done
 	printf ' [partition %s]\n' "$_key"
-	mux_scan_build "$_key"
+	_ilog=$(mktemp 2>/dev/null || true)
+	mux_scan_build "$_key" "$_ilog"
+	# An `ignore` that matches nothing is almost always a typo, and a typo
+	# in a filter is invisible by construction -- the map just looks normal.
+	# So report the count, and say plainly when a configured pattern dropped
+	# nothing at all.
+	if [ -n "${MUX_CFG_ignore:-}" ]; then
+		# -s first: on an EMPTY log `grep -c .` prints 0 and exits 1,
+		# so a `|| echo 0` fallback fires as well and the count becomes
+		# two lines, which the -gt below then refuses as a number.
+		_ni=0
+		if [ -n "$_ilog" ] && [ -s "$_ilog" ]; then
+			_ni=$(grep -c . "$_ilog" 2>/dev/null || true)
+		fi
+		[ -n "$_ni" ] || _ni=0
+		_pl=$(printf '%s\n' "$MUX_CFG_ignore" | tr '\n' ' ' \
+			| sed 's/ *$//')
+		if [ "$_ni" -gt 0 ]; then
+			printf 'mux: ignored %s path(s) -- ignore: %s\n' \
+				"$_ni" "$_pl"
+		else
+			echo "mux: ignore matched NOTHING -- $_pl" >&2
+			echo "mux: (no slash matches a single path component;" \
+				"a slash globs the whole path)" >&2
+		fi
+	fi
+	if [ -n "$_ilog" ]; then rm -f "$_ilog"; fi
 	;;
 *) echo "usage: mux scan [--list]" >&2; exit 2 ;;
 esac
