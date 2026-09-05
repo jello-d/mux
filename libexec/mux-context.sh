@@ -72,6 +72,7 @@ mux_ctx_conf() {        # <key>
 _mux_ctx_merge() {      # <file>
 	[ -f "$1" ] || return 0
 	_first_scan=1
+	_first_ignore=1
 	while read -r _k _v; do
 		case $_k in
 		''|'#'*) continue ;;
@@ -93,6 +94,21 @@ _mux_ctx_merge() {      # <file>
 				MUX_CFG_scan="$MUX_CFG_scan
 $_v"
 			fi ;;
+		ignore)
+			# Same multiplicity rule as `scan`, deliberately: this
+			# file format already had ONE answer for "a key that is
+			# a list", and a second convention (CSV, say) would be
+			# a second thing to remember -- and would break on a
+			# path containing a comma. Repeatable within a file;
+			# a file that sets it REPLACES the inherited list, so a
+			# context can drop its partition's ignores rather than
+			# only add to them.
+			if [ "$_first_ignore" = 1 ]; then
+				MUX_CFG_ignore=$_v; _first_ignore=0
+			else
+				MUX_CFG_ignore="$MUX_CFG_ignore
+$_v"
+			fi ;;
 		esac
 	done <<EOF
 $(sed -e 's/\r$//' -e 's/[[:space:]]*$//' "$1")
@@ -112,6 +128,7 @@ mux_ctx_resolve() {     # [PID]
 	MUX_CFG_layout=default
 	MUX_CFG_host_chip=on
 	MUX_CFG_scan=
+	MUX_CFG_ignore=
 	MUX_CTX_TOKEN=global
 	MUX_CTX_ERR=
 	# How the token was arrived at, so a caller can report the PROVENANCE

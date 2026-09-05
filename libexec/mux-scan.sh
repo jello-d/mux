@@ -46,13 +46,67 @@ mux_scan_roots() {
 	done
 }
 
-# mux_scan_build [socket key] -> rescan every root and REPLACE the cache. Writes
-# via a temp and moves, so a concurrent reader never sees a half-written map.
-# Echoes nothing; the caller reports.
-mux_scan_build() {      # [socket key]
+# mux_scan_ignored PATH -> true when PATH matches an `ignore` pattern from the
+# resolved context ($MUX_CFG_ignore: repeatable `ignore PATTERN` keys, merged
+# exactly like `scan`).
+#
+# Two matching rules, and only two:
+#   - a pattern CONTAINING a slash is a glob against the whole absolute path
+#     (`*/athena-repos/*`), for pruning one specific region of a tree;
+#   - a pattern with NO slash is matched against each path COMPONENT, so
+#     `ignore node_modules` and `ignore vendor` mean the obvious thing rather
+#     than silently matching nothing, which is the footgun a whole-path-only
+#     rule would ship with.
+#
+# DISCOVERY ONLY. An explicit `mux go ~/some/ignored/repo` still works: a path
+# you typed is evidence, and ignore governs what mux VOLUNTEERS, never what you
+# can ask for by name. Ignoring a path you then hand over verbatim would be mux
+# arguing with you.
+_mux_scan_pat_hit() {   # <abs path> <pattern> -- one pattern, both rules
+	case $2 in
+	*/*)
+		case $1 in $2) return 0 ;; esac ;;
+	*)
+		_rest=$1
+		while [ -n "$_rest" ]; do
+			case ${_rest##*/} in $2) return 0 ;; esac
+			case $_rest in
+			*/*) _rest=${_rest%/*} ;;
+			*)   _rest= ;;
+			esac
+		done ;;
+	esac
+	return 1
+}
+
+mux_scan_ignored() {    # <abs path>
+	[ -n "${MUX_CFG_ignore:-}" ] || return 1
+	# Fed by a here-doc, NOT a pipe: a `while` behind a pipe runs in a
+	# subshell, where `return` cannot answer for this function and the
+	# loop's own status is 0 whether or not anything matched. Same shape
+	# _mux_ctx_merge uses to read a settings file.
+	while read -r _pat; do
+		[ -n "$_pat" ] || continue
+		_mux_scan_pat_hit "$1" "$_pat" && return 0
+	done <<EOF
+$MUX_CFG_ignore
+EOF
+	return 1
+}
+
+# mux_scan_build [socket key] [ignored-log] -> rescan every root and REPLACE the
+# cache. Writes via a temp and moves, so a concurrent reader never sees a
+# half-written map. Echoes nothing; the caller reports.
+#
+# IGNORED-LOG, if given, collects every path dropped by an `ignore` pattern, so
+# `mux scan` can report the count and call out a pattern that matched NOTHING.
+# Silent discarding is how a typo'd pattern looks exactly like a correct one.
+mux_scan_build() {      # [socket key] [ignored-log]
 	_sf=$(mux_scan_file "${1:-}")
 	mkdir -p "$(dirname "$_sf")"
 	_st=$_sf.tmp.$$
+	_ilog=${2:-}
+	[ -n "$_ilog" ] && : >"$_ilog" 2>/dev/null || _ilog=/dev/null
 	: >"$_st"
 	mux_scan_roots | while read -r _root _depth; do
 		[ -d "$_root" ] || continue
@@ -62,6 +116,13 @@ mux_scan_build() {      # [socket key]
 		find "$_root" -maxdepth "$_depth" -name .git -prune 2>/dev/null \
 		| while IFS= read -r _g; do
 			_p=${_g%/.git}
+			# Filtered here rather than pruned in find: building
+			# find's arguments from arbitrary patterns invites
+			# quoting bugs, and the walk is depth-bounded anyway.
+			if mux_scan_ignored "$_p"; then
+				printf '%s\n' "$_p" >>"$_ilog"
+				continue
+			fi
 			printf '%s\t%s\n' "${_p##*/}" "$_p"
 		done
 	done >>"$_st"

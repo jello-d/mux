@@ -334,7 +334,7 @@ mux's built\-in defaults \(em BEHAVIOUR only, never a location.
 .PP
 The same key set is legal in either file
 .RB ( label ", " theme ", " derive ", " agent ", " layout ", " scan ,
-.BR host\-chip ,
+.BR ignore ", " host\-chip ,
 plus
 .B partition
 in a context), so WHERE you put a key is the statement of its scope and there
@@ -348,6 +348,27 @@ wrong tree.
 .I $MUX_SHARE/partitions/global.partition
 ships with
 .RB ' "scan ~/src 3" '.
+.PP
+.PP
+.B ignore \fIPATTERN\fR
+prunes DISCOVERY, which is how two repositories sharing a basename stop being
+ambiguous without renaming either of them. A pattern CONTAINING a slash is a
+glob against the whole absolute path
+.RB ( "*/athena\-repos/*" );
+one with NO slash matches a single path COMPONENT, so
+.B ignore node_modules
+means the obvious thing rather than silently matching nothing. It takes
+.BR scan 's
+multiplicity rule exactly: repeatable within a file, and a file that sets it
+REPLACES the inherited list rather than extending it, so a context can drop
+what its partition ignores.
+.PP
+It governs only what mux VOLUNTEERS. An explicit
+.B mux go \fI~/some/ignored/repo\fR
+still resolves, because a path you typed is evidence. A pattern matching
+nothing is reported by
+.BR "mux scan" :
+a filter that silently does nothing is indistinguishable from one that works.
 .PP
 A token becomes a socket name and a path component and is validated as a DNS
 label. An invalid one is an error, never a silent fall back: a typo'd token

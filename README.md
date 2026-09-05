@@ -225,13 +225,29 @@ remember. A draft that will not parse is kept and named rather than discarded;
 
 `mux go <name>` reaches a project you have never configured and never have to
 `cd` to first, because mux keeps a **map** of the repositories under your source
-roots. Declare them in `$MUX_DIR/scan`, one `PATH [DEPTH]` per line (`~/src 3`
-is assumed if the file is absent):
+roots. Declare them with `scan PATH [DEPTH]` in the partition (or context) file
+— repeatable, and there is no built-in root, so a partition nobody configured
+gets no map rather than quietly indexing someone else's tree:
 
 ```
-~/src 3
-~/work 2
+scan   ~/src 3
+scan   ~/work 2
+ignore */vendor/*
+ignore node_modules
 ```
+
+`ignore PATTERN` prunes discovery, which is how two repos sharing a basename
+stop being ambiguous without renaming either. A pattern **with a slash** globs
+the whole absolute path; one **without** matches a single path component, so
+`ignore node_modules` means the obvious thing. It follows `scan`'s multiplicity
+rule exactly: repeatable within a file, and a file that sets it *replaces* the
+inherited list rather than extending it, so a context can drop what its
+partition ignores.
+
+It governs only what mux **volunteers**. An explicit
+`mux go ~/some/ignored/repo` still works, because a path you typed is
+evidence. And a pattern that matches nothing is reported by `mux scan` — a
+filter that silently does nothing looks exactly like one that works.
 
 The map is a cache, not config: it holds only derived facts, it is rewritten
 wholesale, and deleting it loses nothing. It rebuilds on exactly three triggers
@@ -391,8 +407,9 @@ Settings resolve in three levels, merged last-wins, with no conditions:
 ```
 
 The same key set is legal in either file — `label`, `theme`, `derive`, `agent`,
-`layout`, `scan`, `host-chip`, plus `partition` in a context — so **where you
-put a key is the statement of its scope**, and there is no per-key rule to
+`layout`, `scan`, `ignore`, `host-chip`, plus `partition` in a context — so
+**where you put a key is the statement of its scope**, and there is no per-key
+rule to
 learn. Drop-in files have owners: an integrator installs
 `partitions/manifest.partition` without ever editing a file you also edit.
 
@@ -401,6 +418,7 @@ learn. Drop-in files have owners: an integrator installs
 label   Manifest
 theme   orange
 scan    ~/src/manifest 3
+ignore  */athena-repos/*
 ```
 
 The built-in defaults carry **no location keys**. That is what stops `scan`
