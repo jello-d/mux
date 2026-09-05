@@ -338,6 +338,35 @@ _map_lookup() {   # <name> -> matching project paths, one per line
         printf '%s' "$_mp"
 }
 
+# Every candidate root for a TYPED name, one "SOURCE<TAB>ROOT" line each, in
+# the order `go` trusts them. A session you HAD outranks the map: it is the only
+# source that knows where a profile-less `mux go` was rooted. No lines means
+# nothing knows the name; more than one means the name is ambiguous.
+#
+# `go` and `why` share this ON PURPOSE. `why` used to derive a typed name's root
+# as the CURRENT DIRECTORY, consulting neither source, so `mux why NAME` cheerly
+# described a session `go` would have flatly refused to build -- reporting a
+# root for an ambiguous name, and for a name nothing knew at all. An explanation
+# that contradicts the thing it explains is worse than no explanation, and this
+# verb exists only to be trusted.
+#
+# Irrelevant when a profile DECLARES a root (`hasroot`): both callers skip the
+# map entirely then, because the declaration already answered.
+_typed_roots() {   # <name> -> SOURCE<TAB>ROOT lines
+        _tr=$(mux_sess_root "$1" "${sock:-default}")
+        if [ -n "$_tr" ] && [ -d "$_tr" ]; then
+                printf 'a session you had\t%s\n' "$_tr"
+                return 0
+        fi
+        # `|| [ -n "$_d" ]`: _map_lookup ends its last path with NO newline, and
+        # a bare `while read` discards an unterminated final line -- which would
+        # silently drop one candidate, turning an ambiguous name into a
+        # confidently wrong single hit.
+        _map_lookup "$1" | while IFS= read -r _d || [ -n "$_d" ]; do
+                [ -n "$_d" ] && printf 'the discovery map\t%s\n' "$_d"
+        done
+}
+
 # Work/personal (or any) filtering. A layout's SIDE is a property of its ROOT,
 # and which side the caller is on both come from the context hook (see
 # mux-context.sh); mux core just compares tokens. A layout shows when its side
@@ -1139,8 +1168,13 @@ fi
 # session green / rooted there / called that" is always a question with an
 # answer.
 if [ "$cmd" = why ]; then
+        # A PATH argument is not a session name: `go` derives a name from it
+        # exactly as it does for a bare `mux go`, so `why` must too, or it
+        # reports a whole filesystem path as the session's name.
+        w_bypath=0
+        [ -n "$name_arg" ] && _is_path "$name_arg" && w_bypath=1
         wh=$name_arg
-        if [ -z "$wh" ]; then
+        if [ -z "$wh" ] || [ "$w_bypath" -eq 1 ]; then
                 wh=$(mux_prof_by_root "$base")
                 [ -n "$wh" ] || wh=$(basename "$base")
                 wh=$(printf '%s' "$wh" | tr ':.' '--')
@@ -1149,7 +1183,8 @@ if [ "$cmd" = why ]; then
         w_file=$(_find_profile "$wh")
 
         # name
-        if [ -n "$name_arg" ]; then w_src="you typed it"
+        if [ "$w_bypath" -eq 1 ]; then w_src="derived from the path you gave"
+        elif [ -n "$name_arg" ]; then w_src="you typed it"
         elif [ -n "$(mux_prof_by_root "$base")" ]; then
                 w_src="a profile claims this directory"
         elif git rev-parse --show-toplevel >/dev/null 2>&1; then
@@ -1160,10 +1195,17 @@ if [ "$cmd" = why ]; then
         # not be the place they are standing.
         printf '%-9s %-26s %s\n' where "$(mux_fold_tilde "$base")" \
                 "the project you are in"
-        printf '%-9s %-26s %s\n' context "$MUX_CTX_TOKEN" \
-                "$([ -n "$(mux_ctx_conf context-command)" ] \
-                        && echo 'from context-command' \
-                        || echo 'no context-command; the baseline')"
+        # From MUX_CTX_SRC, which the resolver sets from what actually
+        # happened. Asking whether a context-command was merely CONFIGURED
+        # credited one that had failed, or declined to answer, for a token that
+        # came from the baseline -- the one lie this verb must never tell.
+        case ${MUX_CTX_SRC:-baseline} in
+        command)  w_csrc='from context-command' ;;
+        declined) w_csrc='context-command named none; the baseline' ;;
+        failed)   w_csrc='context-command FAILED; the baseline' ;;
+        *)        w_csrc='no context-command; the baseline' ;;
+        esac
+        printf '%-9s %-26s %s\n' context "$MUX_CTX_TOKEN" "$w_csrc"
         printf '%-9s %-26s %s\n' partition "$MUX_CTX_PARTITION" \
                 "$([ "$MUX_CTX_PARTITION" = "$MUX_CTX_TOKEN" ] \
                         && echo 'defaults to the context name' \
@@ -1213,7 +1255,33 @@ if [ "$cmd" = why ]; then
                         printf '%-9s %-26s %s\n' "$1" "$2" "$3"
                 fi
         }
-        w_field root "$(mux_fold_tilde "$base")" "the project you are in"
+        # The DERIVED root -- what `go` would use when no profile declares one.
+        # A bare `mux why` (or a path) answers about where you are standing. A
+        # TYPED name answers about what `mux go NAME` would RESOLVE, which is
+        # the session set and then the map. It used to answer "the project you
+        # are in" for every typed name, which was wrong whenever the name meant
+        # anywhere else -- that is, nearly always.
+        w_droot=$(mux_fold_tilde "$base")
+        w_rsrc="the project you are in"
+        [ "$w_bypath" -eq 1 ] && w_rsrc="the path you gave"
+        w_hits=; w_nhit=0
+        if [ -n "$name_arg" ] && [ "$w_bypath" -eq 0 ] \
+           && [ -z "$(w_get root)" ]; then
+                w_hits=$(_typed_roots "$wh")
+                w_nhit=$(printf '%s' "$w_hits" | grep -c . || true)
+                if [ "$w_nhit" -eq 1 ]; then
+                        w_droot=$(mux_fold_tilde \
+                                "$(printf '%s' "$w_hits" | cut -f2)")
+                        w_rsrc=$(printf '%s' "$w_hits" | cut -f1)
+                elif [ "$w_nhit" -gt 1 ]; then
+                        w_droot='(ambiguous)'
+                        w_rsrc="$w_nhit projects share this name"
+                else
+                        w_droot='(unknown)'
+                        w_rsrc='nothing here knows this name'
+                fi
+        fi
+        w_field root "$w_droot" "$w_rsrc"
         # theme: declared > context > hashed > global default.
         w_dth=; w_dsrc=
         if [ -n "$MUX_CFG_theme" ]; then
@@ -1226,6 +1294,41 @@ if [ "$cmd" = why ]; then
         w_field theme "$w_dth" "$w_dsrc" alt
         w_field layout "${MUX_CFG_layout:-default}" "the context's default"
         w_field agent "${MUX_CFG_agent:-claude}" "the context's default"
+
+        # A typed name `go` would REFUSE. Saying so is the whole point: every
+        # field above describes a session, and without this you would read them
+        # as a session mux is willing to build. The conditions mirror the two
+        # refusals in the go path exactly -- ambiguity outranks a profile (a
+        # rootless one cannot say WHICH project it meant), while an unknown name
+        # is a refusal only when no profile claims it at all.
+        if [ "$w_nhit" -gt 1 ]; then
+                echo
+                echo "note: \`mux go $wh\` REFUSES --" \
+                        "$w_nhit projects share this name:"
+                printf '%s\n' "$w_hits" | cut -f2 | while IFS= read -r _wd; do
+                        [ -n "$_wd" ] && \
+                                echo "        $(mux_fold_tilde "$_wd")"
+                done
+                echo "      Name one of them:  cd <dir> && mux new <alias>"
+        elif [ "$w_nhit" -eq 0 ] && [ -n "$name_arg" ] \
+             && [ "$w_bypath" -eq 0 ] && [ "$w_row" -eq 0 ] \
+             && [ -z "$w_file" ]; then
+                echo
+                echo "note: \`mux go $wh\` REFUSES -- nothing here knows that" \
+                        "name, and from"
+                echo "      the name alone a new session and a typo are" \
+                        "indistinguishable."
+                if [ -z "$(mux_scan_roots)" ]; then
+                        echo "      Discovery is off for partition" \
+                                "'$MUX_CTX_PARTITION' (no scan roots)."
+                else
+                        _wn=$(mux_scan_near "$wh" "$MUX_CTX_PARTITION" \
+                                | tr '\n' ' ')
+                        [ -n "$_wn" ] && \
+                                echo "      Did you mean:      $_wn"
+                fi
+                echo "      Or create it here: mux new $wh"
+        fi
 
         # If the name was DERIVED and the profile it landed on lives somewhere
         # else, say WHY plainly. The bare "NOT where you are" marker above
@@ -2042,12 +2145,9 @@ fi
 # directory is the answer, and there was no name to have mistyped.
 if [ -n "$name_arg" ] && [ "$bypath" -eq 0 ] && [ "$cmd" != new ] \
    && [ "$hasroot" -eq 0 ]; then
-        # The session set first: a session you HAD is evidence at least as
-        # good as a scanned repo, and it is the only source that knows where a
-        # profile-less `mux go` was rooted. Without it, resume could not
-        # rebuild the common case at all.
-        hits=$(mux_sess_root "$name" "${sock:-default}")
-        [ -n "$hits" ] && [ -d "$hits" ] || hits=$(_map_lookup "$name")
+        # The session set first, then the map -- the precedence lives in
+        # _typed_roots, which `mux why` reads too so the two cannot drift.
+        hits=$(_typed_roots "$name" | cut -f2)
         nhit=$(printf '%s\n' "$hits" | grep -c . || true)
         if [ "$nhit" -eq 1 ]; then
                 base=$hits

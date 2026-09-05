@@ -114,6 +114,17 @@ mux_ctx_resolve() {     # [PID]
 	MUX_CFG_scan=
 	MUX_CTX_TOKEN=global
 	MUX_CTX_ERR=
+	# How the token was arrived at, so a caller can report the PROVENANCE
+	# without re-deriving it (and getting it wrong). `mux why` used to decide
+	# this by asking whether a context-command was CONFIGURED, and so
+	# credited one that had failed or declined to answer for a token that
+	# actually came from the baseline below. Asserted and actual must not be
+	# separately computed. One of:
+	#   baseline  no context-command configured
+	#   command   it ran and named this token
+	#   declined  it ran, succeeded, and named nothing (the baseline stands)
+	#   failed    it exited non-zero, so it has not answered at all
+	MUX_CTX_SRC=baseline
 
 	_cc=$(mux_ctx_conf context-command)
 	# A bare name resolves against $MUX_DIR before PATH. The config file is
@@ -131,8 +142,11 @@ mux_ctx_resolve() {     # [PID]
 		# answered, and its output is not an answer either.
 		if _raw=$($_cc "${1:-$$}" 2>/dev/null); then
 			_t=$(printf '%s' "$_raw" | head -1 | tr -d '[:space:]')
+			[ -n "$_t" ] && MUX_CTX_SRC=command \
+				|| MUX_CTX_SRC=declined
 		else
 			_t=
+			MUX_CTX_SRC=failed
 		fi
 		if [ -n "$_t" ]; then
 			if mux_ctx_valid "$_t"; then
