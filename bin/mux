@@ -849,7 +849,7 @@ help_agents() {
         printf '  add a CLI by dropping in one; the state strip also needs'
         printf '\n  the agent to call `mux agent-emit` over its lifecycle.\n'
 }
-if [ "$cmd" = help ]; then
+cmd_help() {
         case ${1:-} in
         '')      usage 0 ;;
         agents)   help_agents ;;
@@ -861,7 +861,9 @@ if [ "$cmd" = help ]; then
            exit 2 ;;
         esac
         exit 0
-fi
+}
+
+if [ "$cmd" = help ]; then cmd_help; fi
 
 # Root and identity both derive from the project: the git toplevel if we are in
 # a repo, else the current directory. tmux forbids ':' and '.' in a session
@@ -1042,7 +1044,7 @@ fi
 # the default socket, plus every non-default context socket the hook names, if
 # their servers are up. All the same uid, so one can source another's server.
 # Guard on list-sessions so source-file never STARTS a server that was not up.
-if [ "$cmd" = reload ]; then
+cmd_reload() {
         [ -f "$TMUX_CONF" ] || {
                 echo "mux: no tmux.conf at $TMUX_CONF" >&2; exit 1; }
         did=
@@ -1058,13 +1060,15 @@ if [ "$cmd" = reload ]; then
         done
         echo "mux: reloaded${did:- (no running servers)}"
         exit 0
-fi
+}
+
+if [ "$cmd" = reload ]; then cmd_reload; fi
 
 # --- ls: sessions in the current context only ------------------------------
 # Prefix each line with the session's agent-state glyph (⚫ = no agent), so `mux
 # ls` reads like the status strip. Falls back to bare `tmux list-sessions` when
 # the shared state lib is absent, or when a session line has no name to key on.
-if [ "$cmd" = ls ]; then
+cmd_ls() {
         _ls=$(tm list-sessions 2>/dev/null || true)
         [ -n "$_ls" ] || { echo "mux: no sessions in this context"; exit 0; }
         if [ "$_have_astate" -eq 1 ]; then
@@ -1079,7 +1083,9 @@ if [ "$cmd" = ls ]; then
                 printf '%s\n' "$_ls"
         fi
         exit 0
-fi
+}
+
+if [ "$cmd" = ls ]; then cmd_ls; fi
 
 # --- theme: set / cycle / show the current session's colour theme -----------
 # `mux theme`             show the current theme and the available ones
@@ -1114,7 +1120,7 @@ _theme_cycle() {        # next|prev CURRENT "space list" -> neighbour stem
                 [ "$_i" -eq "$_j" ] && { printf '%s' "$_t"; return 0; }
         done
 }
-if [ "$cmd" = theme ]; then
+cmd_theme() {
         _themes=$(_stems_line themes .theme)
         if [ -z "$name_arg" ]; then
                 if [ -n "${TMUX:-}" ]; then
@@ -1173,7 +1179,9 @@ if [ "$cmd" = theme ]; then
                         || echo "mux: could not write $(mux_prof_file)" >&2 ;;
         esac
         exit 0
-fi
+}
+
+if [ "$cmd" = theme ]; then cmd_theme; fi
 
 # --- why: where every resolved value came from -----------------------------
 # Resolution now has five steps, the theme has four priority levels, and a name
@@ -1417,7 +1425,7 @@ if [ "$cmd" = why ]; then cmd_why; fi
 # `mux rename OLD NEW`   rename OLD to NEW from anywhere. tmux forbids ':' and
 # '.' in names, so they fold to '-'. A matching <OLD>.layout is renamed too if
 # <NEW>.layout is free, so the per-project layout keeps matching the session.
-if [ "$cmd" = rename ]; then
+cmd_rename() {
         if [ -z "$layout_arg" ]; then
                 [ -n "${TMUX:-}" ] || {
                         echo "mux: rename NEW needs a session (or: OLD NEW)" >&2
@@ -1437,30 +1445,36 @@ if [ "$cmd" = rename ]; then
                 echo "mux: renamed profile $_old -> $_new"
         fi
         exit 0
-fi
+}
+
+if [ "$cmd" = rename ]; then cmd_rename; fi
 
 # --- edit: open a layout in $EDITOR -----------------------------------------
 # `mux edit [NAME]` -- NAME defaults to the current session's layout.
-if [ "$cmd" = edit ]; then
+# --- edit: open a profile, and never eat the work ---------------------------
+# Shared state:
+#   _edit_target   _en (the profile name)
+#   _edit_draft    _dd _df (the deterministic draft path)
+#   _edit_parse    _pairs _promote _bad
+
+# Which profile to edit: the argument, else the session you are sitting in.
+_edit_target() {
         _en=$name_arg
-        if [ -z "$_en" ]; then
-                [ -n "${TMUX:-}" ] || {
-                        echo "mux: edit NAME (or run inside a session)" >&2
-                        exit 1; }
-                _en=$(tm display-message -p '#{session_name}')
-        fi
+        [ -n "$_en" ] && return 0
+        [ -n "${TMUX:-}" ] || {
+                echo "mux: edit NAME (or run inside a session)" >&2
+                exit 1; }
+        _en=$(tm display-message -p '#{session_name}')
+}
 
-        # A BREAKOUT profile is already a file in the right syntax; edit it in
-        # place. Everything else goes through a draft.
-        _bo=$(mux_data_find profiles.d "$_en" .profile)
-        # $EDITOR is word-split on purpose: it commonly carries flags, e.g.
-        # EDITOR="code -w" or "emacsclient -nw".
-        # shellcheck disable=SC2086
-        if [ -n "$_bo" ]; then exec ${EDITOR:-vi} "$_bo"; fi
-
-        # The draft lives at a DETERMINISTIC path, so recovering a botched edit
-        # needs no argument to be remembered or typed: `mux edit NAME` finds it
-        # and reopens it. Same idea as an interrupted `git commit`.
+# Open the draft in $EDITOR. The draft lives at a DETERMINISTIC path, so
+# recovering a botched edit needs no argument to be remembered or typed:
+# `mux edit NAME` finds it and reopens it. Same idea as an interrupted
+# `git commit`.
+#
+# $EDITOR is word-split on purpose: it commonly carries flags, e.g.
+# EDITOR="code -w" or "emacsclient -nw".
+_edit_draft() {
         _dd=${MUX_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/mux}/edit
         _df=$_dd/$_en.profile
         mkdir -p "$_dd"
@@ -1469,14 +1483,15 @@ if [ "$cmd" = edit ]; then
         else
                 mux_prof_directives "$_en" >"$_df" || exit 1
         fi
-
         # shellcheck disable=SC2086
         ${EDITOR:-vi} "$_df" || {
                 echo "mux: editor exited non-zero; draft kept at $_df" >&2
                 exit 1; }
+}
 
-        # Parse the draft back. Anything unparseable KEEPS the draft and says
-        # where it is -- the failure hands your work back rather than eating it.
+# Parse the draft back into pairs. Anything unparseable KEEPS the draft and
+# says where it is -- the failure hands your work back rather than eating it.
+_edit_parse() {
         _pairs=
         _promote=0
         _bad=
@@ -1508,30 +1523,48 @@ if [ "$cmd" = edit ]; then
                 exit 1
         fi
         _pairs=${_pairs# }
+}
 
+# Land the edit: as a breakout file when it has outgrown a one-line row,
+# otherwise back into the table.
+_edit_commit() {
         if [ "$_promote" -eq 1 ]; then
-                # Promote: the draft becomes the breakout verbatim (comments
-                # and all), and the row goes, so a name never lives in both.
+                # The draft becomes the breakout verbatim (comments and all),
+                # and the row goes, so a name never lives in both.
                 mkdir -p "$MUX_DIR/profiles.d"
                 mv -f "$_df" "$MUX_DIR/profiles.d/$_en.profile"
                 mux_prof_drop "$_en"
                 echo "mux: kept as $MUX_DIR/profiles.d/$_en.profile"
                 echo "mux: (a comment, or a value with a space, does not fit" \
                         "a one-line row)"
-        else
-                mux_prof_replace "$_en" "$_pairs" || {
-                        echo "mux: could not write $(mux_prof_file);" \
-                                "draft kept at $_df" >&2
-                        exit 1; }
-                rm -f "$_df"
-                if [ -n "$_pairs" ]; then
-                        echo "mux: $_en -> $_pairs"
-                else
-                        echo "mux: $_en has no deviations left; row removed"
-                fi
+                return 0
         fi
+        mux_prof_replace "$_en" "$_pairs" || {
+                echo "mux: could not write $(mux_prof_file);" \
+                        "draft kept at $_df" >&2
+                exit 1; }
+        rm -f "$_df"
+        if [ -n "$_pairs" ]; then
+                echo "mux: $_en -> $_pairs"
+        else
+                echo "mux: $_en has no deviations left; row removed"
+        fi
+}
+
+cmd_edit() {
+        _edit_target
+        # A BREAKOUT profile is already a file in the right syntax; edit it in
+        # place. Everything else goes through a draft.
+        _bo=$(mux_data_find profiles.d "$_en" .profile)
+        # shellcheck disable=SC2086
+        if [ -n "$_bo" ]; then exec ${EDITOR:-vi} "$_bo"; fi
+        _edit_draft
+        _edit_parse
+        _edit_commit
         exit 0
-fi
+}
+
+if [ "$cmd" = edit ]; then cmd_edit; fi
 
 # --- save: snapshot the CURRENT live session -------------------------------
 # Records the session the way everything else does: as a DEVIATION. It reads the
@@ -1549,7 +1582,16 @@ fi
 # So `mux save` on an untouched session can correctly write NOTHING. Pane
 # commands are best-effort -- review them. Runs inside a session; NAME defaults
 # to the session name.
-if [ "$cmd" = save ]; then
+# --- save: snapshot the live session ---------------------------------------
+# Shared state, in the order the steps below set it:
+#   _save_identify      sv_sess sv_name
+#   _save_capture       sv_tmp        (the arrangement, as directives)
+#   _save_match_layout  sv_layout     (an existing layout that already says it)
+#   _save_write_layout  sv_layout     (or the one it just wrote)
+#   _save_deltas        sv_pairs      (only what is NOT derivable)
+
+# Which live session this is, and what to call the saved profile.
+_save_identify() {
         [ -n "${TMUX:-}" ] || {
                 echo "mux: save must run inside a session" >&2; exit 1; }
         sv_sess=$(tm display-message -p '#{session_name}' 2>/dev/null || true)
@@ -1557,8 +1599,10 @@ if [ "$cmd" = save ]; then
                 echo "mux: could not identify the session" >&2; exit 1; }
         sv_name=${name_arg:-$sv_sess}
         sv_name=$(printf '%s' "$sv_name" | tr ':.' '--')
+}
 
-        # The arrangement, into a temp so it can be compared before it lands.
+# The arrangement, into a temp so it can be compared before it lands.
+_save_capture() {
         sv_tmp=$(mktemp) || { echo "mux: mktemp failed" >&2; exit 1; }
         trap 'rm -f "$sv_tmp"' EXIT
         tm list-windows -t "=$sv_sess" -F '#{window_index} #{window_name}' \
@@ -1568,9 +1612,11 @@ if [ "$cmd" = save ]; then
         done >"$sv_tmp"
         [ -s "$sv_tmp" ] || {
                 echo "mux: read no windows from $sv_sess" >&2; exit 1; }
+}
 
-        # Does an existing layout already say this? Compare NORMALIZED, so
-        # comments and spacing do not make a match look like a difference.
+# Does an existing layout already say this? Compared NORMALIZED, so comments
+# and spacing do not make a match look like a difference.
+_save_match_layout() {
         sv_layout=
         sv_norm=$(mux_conf_clean <"$sv_tmp")
         for _cand in $(mux_data_stems layouts .layout); do
@@ -1580,9 +1626,16 @@ if [ "$cmd" = save ]; then
                 sv_layout=$_cand
                 break
         done
+}
 
+# Write the captured arrangement, unless an existing layout already matched --
+# config never restates what mux can already point at.
+_save_write_layout() {
         sv_lfile=$MUX_DIR/layouts/$sv_name.layout
-        if [ -z "$sv_layout" ]; then
+        if [ -n "$sv_layout" ]; then
+                echo "mux: arrangement matches the '$sv_layout' layout;" \
+                        "no new one written"
+        else
                 [ "$force" -eq 1 ] || [ ! -e "$sv_lfile" ] || {
                         echo "mux: exists: $sv_lfile (use --force)" >&2
                         exit 1
@@ -1598,12 +1651,12 @@ if [ "$cmd" = save ]; then
                 } >"$sv_lfile"
                 sv_layout=$sv_name
                 echo "mux: wrote $sv_lfile"
-        else
-                echo "mux: arrangement matches the '$sv_layout' layout;" \
-                        "no new one written"
         fi
         rm -f "$sv_tmp"; trap - EXIT
+}
 
+# The profile row: ONLY what mux could not derive on its own.
+_save_deltas() {
         # Root: the session's own start directory, folded to ~. Dropped when
         # the name derives from it, which needs the root to BE a project base
         # (a git toplevel, or in no repo at all) -- a subdirectory of a repo
@@ -1630,7 +1683,10 @@ if [ "$cmd" = save ]; then
         fi
         [ "$sv_layout" = default ] || sv_pairs="$sv_pairs layout=$sv_layout"
         sv_pairs=${sv_pairs# }
+}
 
+# Record the deltas, or drop the row entirely when there are none.
+_save_record() {
         if [ -n "$sv_pairs" ]; then
                 mux_prof_replace "$sv_name" "$sv_pairs" || {
                         echo "mux: could not write $(mux_prof_file)" >&2
@@ -1641,8 +1697,19 @@ if [ "$cmd" = save ]; then
                 echo "mux: nothing to record -- $sv_name is entirely derivable"
         fi
         echo "mux: launch it with  mux go $sv_name"
+}
+
+cmd_save() {
+        _save_identify
+        _save_capture
+        _save_match_layout
+        _save_write_layout
+        _save_deltas
+        _save_record
         exit 0
-fi
+}
+
+if [ "$cmd" = save ]; then cmd_save; fi
 
 # --- hide / show / show-all: per-client session hiding ---------------------
 # Context-sensitive: must run INSIDE a session, so the client (its tty) can be
@@ -1928,7 +1995,7 @@ bottom_spec() {         # ARG
 # No name, and it hits the whole context (personal OR work -- whichever socket
 # you are on, never both), so it is guarded behind a typed confirmation and
 # lists what it will kill first. It must never fire by accident.
-if [ "$cmd" = kill ] && [ "$all" -eq 1 ]; then
+cmd_kill_all() {
         _all=$(tm list-sessions -F '#{session_name}' 2>/dev/null || true)
         if [ -z "$_all" ]; then
                 echo "mux: no sessions in this context"
@@ -1948,7 +2015,9 @@ if [ "$cmd" = kill ] && [ "$all" -eq 1 ]; then
         mux_sess_clear "$part"
         echo "mux: killed all sessions on \"${sock:-default}\""
         exit 0
-fi
+}
+
+if [ "$cmd" = kill ] && [ "$all" -eq 1 ]; then cmd_kill_all; fi
 
 # --- kill: tear down on whichever socket we resolved -----------------------
 # Killing is how you say you are done with a session, so the set forgets it.
@@ -1963,7 +2032,7 @@ fi
 # $MUX_CACHE. So a name that is merely RECORDED is killable too: there is
 # nothing to tear down, but saying "I am done with this" is exactly what you
 # mean, and it is the same sentence either way.
-if [ "$cmd" = kill ]; then
+cmd_kill() {
         if tm has-session -t "=$name" 2>/dev/null; then
                 tm kill-session -t "=$name"
                 mux_sess_drop "$name" "$part"
@@ -1978,7 +2047,9 @@ if [ "$cmd" = kill ]; then
         fi
         echo "mux: no such session: $name" >&2
         exit 1
-fi
+}
+
+if [ "$cmd" = kill ]; then cmd_kill; fi
 
 # --- new: bind a NAME to this project, then build it ------------------------
 # The ONE explicit creation verb. `mux go` creates implicitly whenever it can
@@ -1989,7 +2060,7 @@ fi
 #
 # It writes a row only when one is NEEDED: a name this directory would derive
 # anyway is already findable, and config never restates what mux can derive.
-if [ "$cmd" = new ]; then
+cmd_new() {
         if tm has-session -t "=$name" 2>/dev/null; then
                 echo "mux: $name is already up (attach it: mux go $name)" >&2
                 exit 1
@@ -2028,7 +2099,9 @@ if [ "$cmd" = new ]; then
                 echo "mux: $name -> $(mux_fold_tilde "$here")"
         fi
         base=$here
-fi
+}
+
+if [ "$cmd" = new ]; then cmd_new; fi
 
 # --- resume: bring back this partition's sessions ---------------------------
 # The point of the session set: after a reboot, `mux resume` and the five
@@ -2040,7 +2113,7 @@ fi
 # whole build path (profile resolution, layout, theme, agent) is reused exactly
 # rather than reimplemented here. Then we attach the first, which insertion
 # order makes the oldest -- usually the one you think of as primary.
-if [ "$cmd" = resume ]; then
+cmd_resume() {
         rs_key=$part
         rs_set=$(mux_sess_list "$rs_key")
         if [ "$listing" -eq 1 ]; then
@@ -2094,7 +2167,9 @@ if [ "$cmd" = resume ]; then
         done
         [ -n "$name" ] || { echo "mux: nothing to attach" >&2; exit 1; }
         mux_attach
-fi
+}
+
+if [ "$cmd" = resume ]; then cmd_resume; fi
 
 # Already running: attach. A live session needs no layout, so this comes before
 # any layout resolution. The claude flag shapes a session only as it is built,
