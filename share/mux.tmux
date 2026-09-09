@@ -151,6 +151,25 @@ set -g status-right '#(mux agent-render #S #{client_name}) '
 set-hook -g client-attached 'run-shell -b "mux pin"'
 set-hook -g client-resized  'run-shell -b "mux pin"'
 
+# ... except those two are NOT the whole story, and the gap was the reason a
+# session came up with the wrong proportions until it was re-pinned by hand.
+# Neither fires when an ALREADY attached client switches to a session built at
+# a different size: client-attached does not (the client was attached all
+# along) and client-resized does not (the CLIENT did not change size, the
+# session did). That is exactly `mux go NAME` from inside a session, and every
+# session but the first after `mux resume`.
+#
+# client-session-changed does fire there, but BEFORE the rescale -- it reports
+# the old height, so a pin from it computes against a window size that is about
+# to change. window-layout-changed fires AFTER, with the real geometry, which
+# is the one moment a pin can be right.
+#
+# Re-entrant by nature: mux-pin resizes a pane, which changes the layout, which
+# fires this again. It terminates because mux-pin does nothing when the size is
+# already what it wants, so the second pass resizes nothing and there is no
+# third.
+set-hook -g window-layout-changed 'run-shell -b "mux pin"'
+
 # status-left already re-runs mux-style every status-interval, which is what
 # catches a context being entered in the pane you are already looking at. These
 # two only make a new or newly attached session right immediately, rather than
