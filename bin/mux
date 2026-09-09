@@ -1182,7 +1182,26 @@ fi
 # from magic. This prints each field with its PROVENANCE, so "why is this
 # session green / rooted there / called that" is always a question with an
 # answer.
-if [ "$cmd" = why ]; then
+# --- why: where every resolved value came from -----------------------------
+# Resolution has five steps, the theme four priority levels, and a name may
+# come from a row, a map, or the directory. That is a lot of inference working
+# on your behalf, and inference you cannot inspect is indistinguishable from
+# magic. This prints each field with its PROVENANCE, so "why is this session
+# green / rooted there / called that" is always a question with an answer.
+#
+# The _why_* helpers share state through globals rather than arguments, which
+# is deliberate: they are one report split for legibility, not reusable parts.
+# The contract between them:
+#
+#   set by _why_resolve_name:   wh w_bypath w_row w_file w_src
+#   set by _why_derived_root:   w_droot w_rsrc w_hits w_nhit
+#   read throughout:            base name_arg and the MUX_CFG_* / MUX_CTX_*
+#
+# _why_get and _why_field are the only two that answer about a DECLARED value;
+# everything else reports what mux derived.
+
+# The session name this report is about, and where that name came from.
+_why_resolve_name() {
         # A PATH argument is not a session name: `go` derives a name from it
         # exactly as it does for a bare `mux go`, so `why` must too, or it
         # reports a whole filesystem path as the session's name.
@@ -1197,7 +1216,6 @@ if [ "$cmd" = why ]; then
         w_row=0; mux_prof_has "$wh" && w_row=1
         w_file=$(_find_profile "$wh")
 
-        # name
         if [ "$w_bypath" -eq 1 ]; then w_src="derived from the path you gave"
         elif [ -n "$name_arg" ]; then w_src="you typed it"
         elif [ -n "$(mux_prof_by_root "$base")" ]; then
@@ -1205,6 +1223,11 @@ if [ "$cmd" = why ]; then
         elif git rev-parse --show-toplevel >/dev/null 2>&1; then
                 w_src="the git toplevel's basename"
         else w_src="the current directory's basename"; fi
+}
+
+# The fixed head of the report: where you are, which context and partition
+# answered, the name, and which profile (if any) backs it.
+_why_header() {
         # `where` FIRST: every line below is an answer about a directory, and
         # without naming it the reader cannot tell that a profile's root may
         # not be the place they are standing.
@@ -1227,7 +1250,6 @@ if [ "$cmd" = why ]; then
                         || echo 'named by the context file')"
         printf '%-9s %-26s %s\n' name "$wh" "$w_src"
 
-        # where the profile itself lives
         if [ -n "$w_file" ]; then
                 printf '%-9s %-26s %s\n' profile '(breakout)' "$w_file"
         elif [ "$w_row" -eq 1 ]; then
@@ -1236,86 +1258,81 @@ if [ "$cmd" = why ]; then
                 printf '%-9s %-26s %s\n' profile '(none)' \
                         'everything below is derived'
         fi
+}
 
-        # one field: value, then where it came from
-        w_get() {   # <key>
-                if [ -n "$w_file" ]; then
-                        mux_conf_clean <"$w_file" \
-                                | awk -v k="$1" '$1==k{sub("^"k"[ \t]+","")
-                                        print; exit}'
-                elif [ "$w_row" -eq 1 ]; then mux_prof_get "$wh" "$1"
-                fi
-        }
-        # KEY, then either the declared value or the derived one, then where
-        # it came from. ALT is shown only where knowing the road not taken is
-        # useful -- the theme, where "why is it not the hashed one" is the
-        # question people actually ask.
-        w_field() { # <key> <derived> <derived source> [show-alt]
-                _v=$(w_get "$1")
-                case $1 in root) _v=$(mux_fold_tilde "$_v") ;; esac
-                if [ -n "$_v" ]; then
-                        _w=declared
-                        # Only worth showing the road not taken when it DIFFERS
-                        # -- "declared (x would give x)" reads like a bug.
-                        [ -n "${4:-}" ] && [ "$_v" != "$2" ] \
-                                && _w="declared ($3 would give $2)"
-                        # A profile's root is where its panes open, which need
-                        # not be where you are standing. Saying so is the whole
-                        # point of this verb: the name resolved to a profile,
-                        # and that profile lives somewhere else.
-                        [ "$1" = root ] && [ "$_v" != "$2" ] \
-                                && _w="$_w -- NOT where you are"
-                        printf '%-9s %-26s %s\n' "$1" "$_v" "$_w"
-                else
-                        printf '%-9s %-26s %s\n' "$1" "$2" "$3"
-                fi
-        }
-        # The DERIVED root -- what `go` would use when no profile declares one.
-        # A bare `mux why` (or a path) answers about where you are standing. A
-        # TYPED name answers about what `mux go NAME` would RESOLVE, which is
-        # the session set and then the map. It used to answer "the project you
-        # are in" for every typed name, which was wrong whenever the name meant
-        # anywhere else -- that is, nearly always.
+# One DECLARED value from the profile backing this name, or empty.
+_why_get() {   # <key>
+        if [ -n "$w_file" ]; then
+                mux_conf_clean <"$w_file" \
+                        | awk -v k="$1" '$1==k{sub("^"k"[ \t]+","")
+                                print; exit}'
+        elif [ "$w_row" -eq 1 ]; then mux_prof_get "$wh" "$1"
+        fi
+}
+
+# KEY, then either the declared value or the derived one, then where it came
+# from. ALT is shown only where knowing the road not taken is useful -- the
+# theme, where "why is it not the hashed one" is the question people ask.
+_why_field() { # <key> <derived> <derived source> [show-alt]
+        _v=$(_why_get "$1")
+        case $1 in root) _v=$(mux_fold_tilde "$_v") ;; esac
+        if [ -n "$_v" ]; then
+                _w=declared
+                # Only worth showing the road not taken when it DIFFERS --
+                # "declared (x would give x)" reads like a bug.
+                [ -n "${4:-}" ] && [ "$_v" != "$2" ] \
+                        && _w="declared ($3 would give $2)"
+                # A profile's root is where its panes open, which need not be
+                # where you are standing. Saying so is the whole point of this
+                # verb: the name resolved to a profile, and that profile lives
+                # somewhere else.
+                [ "$1" = root ] && [ "$_v" != "$2" ] \
+                        && _w="$_w -- NOT where you are"
+                printf '%-9s %-26s %s\n' "$1" "$_v" "$_w"
+        else
+                printf '%-9s %-26s %s\n' "$1" "$2" "$3"
+        fi
+}
+
+# The DERIVED root -- what `go` would use when no profile declares one -- and
+# the candidate list behind it. A bare `mux why` (or a path) answers about
+# where you are standing. A TYPED name answers about what `mux go NAME` would
+# RESOLVE, which is the session set and then the map. It used to answer "the
+# project you are in" for every typed name, which was wrong whenever the name
+# meant anywhere else -- that is, nearly always.
+_why_derived_root() {
         w_droot=$(mux_fold_tilde "$base")
         w_rsrc="the project you are in"
         [ "$w_bypath" -eq 1 ] && w_rsrc="the path you gave"
         w_hits=; w_nhit=0
-        if [ -n "$name_arg" ] && [ "$w_bypath" -eq 0 ] \
-           && [ -z "$(w_get root)" ]; then
-                w_hits=$(_typed_roots "$wh")
-                w_nhit=$(printf '%s' "$w_hits" | grep -c . || true)
-                if [ "$w_nhit" -eq 1 ]; then
-                        w_droot=$(mux_fold_tilde \
-                                "$(printf '%s' "$w_hits" | cut -f2)")
-                        w_rsrc=$(printf '%s' "$w_hits" | cut -f1)
-                elif [ "$w_nhit" -gt 1 ]; then
-                        w_droot='(ambiguous)'
-                        w_rsrc="$w_nhit projects share this name"
-                else
-                        w_droot='(unknown)'
-                        w_rsrc='nothing here knows this name'
-                fi
+        # Not applicable unless a NAME was typed and no profile already
+        # declared a root -- `go` skips the map in both those cases too.
+        if [ -z "$name_arg" ] || [ "$w_bypath" -eq 1 ] \
+           || [ -n "$(_why_get root)" ]; then
+                return 0
         fi
-        w_field root "$w_droot" "$w_rsrc"
-        # theme: declared > context > hashed > global default.
-        w_dth=; w_dsrc=
-        if [ -n "$MUX_CFG_theme" ]; then
-                w_dth=$MUX_CFG_theme; w_dsrc="this context's theme"
-        elif [ "${MUX_CFG_derive:-hash}" = hash ]; then
-                w_dth=$(_hash_theme "$wh"); w_dsrc="hashed from the name"
+        w_hits=$(_typed_roots "$wh")
+        w_nhit=$(printf '%s' "$w_hits" | grep -c . || true)
+        if [ "$w_nhit" -eq 1 ]; then
+                w_droot=$(mux_fold_tilde \
+                        "$(printf '%s' "$w_hits" | cut -f2)")
+                w_rsrc=$(printf '%s' "$w_hits" | cut -f1)
+        elif [ "$w_nhit" -gt 1 ]; then
+                w_droot='(ambiguous)'
+                w_rsrc="$w_nhit projects share this name"
         else
-                w_dth=$MUX_THEME_FALLBACK; w_dsrc="mux's fallback"
+                w_droot='(unknown)'
+                w_rsrc='nothing here knows this name'
         fi
-        w_field theme "$w_dth" "$w_dsrc" alt
-        w_field layout "${MUX_CFG_layout:-default}" "the context's default"
-        w_field agent "${MUX_CFG_agent:-claude}" "the context's default"
+}
 
-        # A typed name `go` would REFUSE. Saying so is the whole point: every
-        # field above describes a session, and without this you would read them
-        # as a session mux is willing to build. The conditions mirror the two
-        # refusals in the go path exactly -- ambiguity outranks a profile (a
-        # rootless one cannot say WHICH project it meant), while an unknown name
-        # is a refusal only when no profile claims it at all.
+# A typed name `go` would REFUSE. Saying so is the whole point: every field
+# above describes a session, and without this you would read them as a session
+# mux is willing to build. The conditions mirror the two refusals in the go
+# path exactly -- ambiguity outranks a profile (a rootless one cannot say WHICH
+# project it meant), while an unknown name is a refusal only when no profile
+# claims it at all.
+_why_note_refusal() {
         if [ "$w_nhit" -gt 1 ]; then
                 echo
                 echo "note: \`mux go $wh\` REFUSES --" \
@@ -1344,32 +1361,56 @@ if [ "$cmd" = why ]; then
                 fi
                 echo "      Or create it here: mux new $wh"
         fi
+}
 
-        # If the name was DERIVED and the profile it landed on lives somewhere
-        # else, say WHY plainly. The bare "NOT where you are" marker above
-        # flags the fact without explaining it, which is how you end up asking
-        # why mux is talking about a directory you did not mention.
-        if [ -z "$name_arg" ]; then
-                _wr=$(w_get root)
-                _wrx=$(readlink -f -- "$(mux_expand_tilde "${_wr:-$base}")" \
-                        2>/dev/null || true)
-                _wbx=$(readlink -f -- "$base" 2>/dev/null \
-                        || printf '%s' "$base")
-                if [ -n "$_wr" ] && [ -n "$_wrx" ] && [ "$_wrx" != "$_wbx" ]
-                then
-                        echo
-                        echo "note: '$wh' is this directory's basename," \
-                                "but it is also a"
-                        echo "      profile rooted at" \
-                                "$(mux_fold_tilde "$_wr")."
-                        echo "      \`mux go\` here refuses rather than" \
-                                "build the wrong one:"
-                        echo "      \`mux go $wh\` for that project," \
-                                "\`mux new <name>\` for this one."
-                fi
+# If the name was DERIVED and the profile it landed on lives somewhere else,
+# say WHY plainly. The bare "NOT where you are" marker above flags the fact
+# without explaining it, which is how you end up asking why mux is talking
+# about a directory you did not mention.
+_why_note_collision() {
+        # Only for a DERIVED name: a name you typed is one you chose.
+        if [ -n "$name_arg" ]; then return 0; fi
+        _wr=$(_why_get root)
+        _wrx=$(readlink -f -- "$(mux_expand_tilde "${_wr:-$base}")" \
+                2>/dev/null || true)
+        _wbx=$(readlink -f -- "$base" 2>/dev/null || printf '%s' "$base")
+        # Nothing to explain unless the profile's root is a real, DIFFERENT
+        # place. readlink resolves both sides so a symlinked root does not
+        # read as a collision.
+        if [ -z "$_wr" ] || [ -z "$_wrx" ] || [ "$_wrx" = "$_wbx" ]; then
+                return 0
         fi
+        echo
+        echo "note: '$wh' is this directory's basename, but it is also a"
+        echo "      profile rooted at $(mux_fold_tilde "$_wr")."
+        echo "      \`mux go\` here refuses rather than build the wrong one:"
+        echo "      \`mux go $wh\` for that project," \
+                "\`mux new <name>\` for this one."
+}
+
+cmd_why() {
+        _why_resolve_name
+        _why_header
+        _why_derived_root
+        _why_field root "$w_droot" "$w_rsrc"
+        # theme: declared > context > hashed > global default.
+        w_dth=; w_dsrc=
+        if [ -n "$MUX_CFG_theme" ]; then
+                w_dth=$MUX_CFG_theme; w_dsrc="this context's theme"
+        elif [ "${MUX_CFG_derive:-hash}" = hash ]; then
+                w_dth=$(_hash_theme "$wh"); w_dsrc="hashed from the name"
+        else
+                w_dth=$MUX_THEME_FALLBACK; w_dsrc="mux's fallback"
+        fi
+        _why_field theme "$w_dth" "$w_dsrc" alt
+        _why_field layout "${MUX_CFG_layout:-default}" "the context's default"
+        _why_field agent "${MUX_CFG_agent:-claude}" "the context's default"
+        _why_note_refusal
+        _why_note_collision
         exit 0
-fi
+}
+
+if [ "$cmd" = why ]; then cmd_why; fi
 
 # --- rename: rename a live session (and its matching layout) ----------------
 # `mux rename NEW`       rename the CURRENT session (needs to run in one)
