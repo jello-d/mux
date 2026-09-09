@@ -753,44 +753,31 @@ help_profiles() {
 }
 # The xterm 256-colour palette as swatches (bg=colourN, contrast fg) so a
 # theme's bg=/fg= number can be picked by eye. Meaningless without colour.
-help_palette() {        # [FG] | test BAR_FG BAR_BG ACT_FG ACT_BG
-        [ -n "$_RST" ] || { echo 'mux: palette needs a terminal' >&2
-                return 0; }
-        # test: a mock status bar in the given bar + active-chip colours, so a
-        # whole theme's clarity is judged in context. Colours: bar fg, bar bg,
-        # active-window fg, active-window bg.
-        if [ "${1:-}" = test ]; then
-                shift
-                [ "$#" -eq 4 ] || { echo \
-                        "mux: palette test BAR_FG BAR_BG ACT_FG ACT_BG" >&2
-                        exit 2; }
-                for _c in "$@"; do
-                        [ -n "$(_sgr_frag "$_c" 48)" ] || {
-                                echo "mux: bad colour: $_c" >&2; exit 2; }
-                done
-                _b=$(_sgr_color "$2" 48)$(_sgr_color "$1" 38)   # bar bg + fg
-                _a=$(_sgr_color "$4" 48)$(_sgr_color "$3" 38)$(printf '\033[1m')
-                printf 'status bar preview -- '
-                printf 'bar fg=%s bg=%s, active fg=%s bg=%s:\n\n' \
-                        "$1" "$2" "$3" "$4"
-                printf '  %s edit │ %s code %s logs   ⏳ · host 09:41 %s\n' \
-                        "$_b" "$_a" "$_b" "$_RST"
-                exit 0
-        fi
-        _fg=                            # empty => B&W contrast per cell
-        if [ -n "${1:-}" ]; then
-                _fg=$(_sgr_frag "$1" 38)
-                [ -n "$_fg" ] || { echo \
-                        "mux: palette fg: 0-255, colourN, #rrggbb, or 0x..." >&2
-                        exit 2; }
-        fi
-        if [ -n "$_fg" ]; then
-                printf 'palette -- fg %s over every bg:\n\n' "$1"
-        else
-                echo 'palette -- the 256 colours; any works as fg OR bg:'
-                echo
-        fi
-        awk -v fg="$_fg" '
+# palette test BAR_FG BAR_BG ACT_FG ACT_BG -- a mock status bar in the given
+# bar and active-chip colours, so a whole theme is judged IN CONTEXT rather
+# than one swatch at a time. Colours: bar fg, bar bg, active-window fg, bg.
+_palette_preview() {    # BAR_FG BAR_BG ACT_FG ACT_BG
+        [ "$#" -eq 4 ] || { echo \
+                "mux: palette test BAR_FG BAR_BG ACT_FG ACT_BG" >&2
+                exit 2; }
+        for _c in "$@"; do
+                [ -n "$(_sgr_frag "$_c" 48)" ] || {
+                        echo "mux: bad colour: $_c" >&2; exit 2; }
+        done
+        _b=$(_sgr_color "$2" 48)$(_sgr_color "$1" 38)   # bar bg + fg
+        _a=$(_sgr_color "$4" 48)$(_sgr_color "$3" 38)$(printf '\033[1m')
+        printf 'status bar preview -- '
+        printf 'bar fg=%s bg=%s, active fg=%s bg=%s:\n\n' \
+                "$1" "$2" "$3" "$4"
+        printf '  %s edit │ %s code %s logs   ⏳ · host 09:41 %s\n' \
+                "$_b" "$_a" "$_b" "$_RST"
+}
+
+# The 256-colour grid. FG is an SGR fragment applied to every cell; empty picks
+# black or white per cell by luminance, so each number stays legible on its own
+# background.
+_palette_grid() {       # [sgr-fg-fragment]
+        awk -v fg="$1" '
         function fgof(n,  i,r,g,b,l){
                 if(n<16) l=(n==0)?0:(n==7||n>=9)?200:90
                 else if(n<232){
@@ -819,6 +806,30 @@ help_palette() {        # [FG] | test BAR_FG BAR_BG ACT_FG ACT_BG
                 print "  cube 16-231:";       grid(16,231,18);  print ""
                 print "  grayscale 232-255:"; grid(232,255,12)
         }'
+}
+
+help_palette() {        # [FG] | test BAR_FG BAR_BG ACT_FG ACT_BG
+        [ -n "$_RST" ] || { echo 'mux: palette needs a terminal' >&2
+                return 0; }
+        if [ "${1:-}" = test ]; then
+                shift
+                _palette_preview "$@"
+                exit 0
+        fi
+        _fg=                            # empty => B&W contrast per cell
+        if [ -n "${1:-}" ]; then
+                _fg=$(_sgr_frag "$1" 38)
+                [ -n "$_fg" ] || { echo \
+                        "mux: palette fg: 0-255, colourN, #rrggbb, or 0x..." >&2
+                        exit 2; }
+        fi
+        if [ -n "$_fg" ]; then
+                printf 'palette -- fg %s over every bg:\n\n' "$1"
+        else
+                echo 'palette -- the 256 colours; any works as fg OR bg:'
+                echo
+        fi
+        _palette_grid "$_fg"
         [ -n "$_fg" ] || { printf \
                 '\n  tip: `palette N` renders colour N as fg here;\n'
                 printf '       `palette test FG BG FG BG` mocks a bar.\n'; }
@@ -1120,28 +1131,20 @@ _theme_cycle() {        # next|prev CURRENT "space list" -> neighbour stem
                 [ "$_i" -eq "$_j" ] && { printf '%s' "$_t"; return 0; }
         done
 }
-cmd_theme() {
-        _themes=$(_stems_line themes .theme)
-        if [ -z "$name_arg" ]; then
-                if [ -n "${TMUX:-}" ]; then
-                        _s=$(tm display-message -p '#{session_name}')
-                        _c=$(tm show-options -t "$_s" -qv @mux-theme || true)
-                        printf 'current: %s\n' "${_c:-<mode default>}"
-                fi
-                printf 'available: %s\n' "$_themes"
-                exit 0
+# With no argument, theme REPORTS: what this session is wearing and what else
+# is available. The only mode that works outside a session.
+_theme_show() {   # reads $_themes, set by cmd_theme
+        if [ -n "${TMUX:-}" ]; then
+                _s=$(tm display-message -p '#{session_name}')
+                _c=$(tm show-options -t "$_s" -qv @mux-theme || true)
+                printf 'current: %s\n' "${_c:-<mode default>}"
         fi
-        [ -n "${TMUX:-}" ] || {
-                echo "mux: theme must run in a session" >&2; exit 1; }
-        _s=$(tm display-message -p '#{session_name}')
-        _pp=$(tm display-message -p '#{pane_pid}')
-        _c=$(tm show-options -t "$_s" -qv @mux-theme || true)
-        case $name_arg in
-                next|prev) _t=$(_theme_cycle "$name_arg" "$_c" "$_themes") ;;
-                *)         _t=$name_arg ;;
-        esac
-        { [ -n "$_t" ] && [ -n "$(mux_data_find themes "$_t" .theme)" ]; } || {
-                echo "mux: unknown theme: ${_t:-$name_arg}" >&2; exit 1; }
+        printf 'available: %s\n' "$_themes"
+        exit 0
+}
+
+# Set the option, restyle, and force a full redraw.
+_theme_apply() {        # reads $_s, $_pp and $_t
         tm set-option -t "$_s" @mux-theme "$_t"
         [ -x "$LIBEXEC/mux-style" ] \
                 && "$LIBEXEC/mux-style" -q "$_s" "$_pp" >/dev/null 2>&1 \
@@ -1164,6 +1167,9 @@ cmd_theme() {
         fi
         tm refresh-client 2>/dev/null || true
         echo "mux: theme $_t"
+}
+
+_theme_remember() {     # reads $_s and $_t
         # REMEMBERED, not just applied. A theme set by hand is a decision, and
         # the file is the only place decisions live -- so it is written now
         # rather than behind a flag you have to remember. A breakout profile
@@ -1179,6 +1185,24 @@ cmd_theme() {
                         || echo "mux: could not write $(mux_prof_file)" >&2 ;;
         esac
         exit 0
+}
+
+cmd_theme() {
+        _themes=$(_stems_line themes .theme)
+        if [ -z "$name_arg" ]; then _theme_show; fi
+        [ -n "${TMUX:-}" ] || {
+                echo "mux: theme must run in a session" >&2; exit 1; }
+        _s=$(tm display-message -p '#{session_name}')
+        _pp=$(tm display-message -p '#{pane_pid}')
+        _c=$(tm show-options -t "$_s" -qv @mux-theme || true)
+        case $name_arg in
+                next|prev) _t=$(_theme_cycle "$name_arg" "$_c" "$_themes") ;;
+                *)         _t=$name_arg ;;
+        esac
+        { [ -n "$_t" ] && [ -n "$(mux_data_find themes "$_t" .theme)" ]; } || {
+                echo "mux: unknown theme: ${_t:-$name_arg}" >&2; exit 1; }
+        _theme_apply
+        _theme_remember
 }
 
 if [ "$cmd" = theme ]; then cmd_theme; fi
@@ -1761,46 +1785,51 @@ esac
 # by scrubbing $TMUX before it launches a restored window). The reliable signal:
 # a real in-pane shell's controlling tty IS that pane's tty; a leaked one's is
 # not. Across sockets switch-client cannot reach either, so we attach there too.
-mux_attach() {
-        # Record here rather than only after a build: every path that lands you
-        # in a session funnels through this one function, so recording is
-        # idempotent AND heals a set that predates the feature or a session made
-        # with raw tmux. --no-attach still records (it built the thing), it just
-        # does not take you there.
+# Record this session in the set. Done HERE rather than only after a build
+# because every path that lands you in a session funnels through mux_attach, so
+# recording is idempotent AND heals a set that predates the feature or a session
+# made with raw tmux. --no-attach still records (it built the thing), it just
+# does not take you there.
+_attach_record() {
         _sr=${root:-}
         [ -n "$_sr" ] || _sr=$(tm list-sessions \
                 -F '#{session_name} #{session_path}' 2>/dev/null \
                 | awk -v n="$name" '$1==n{sub(/^[^ ]* /,""); print; exit}')
         mux_sess_add "$name" "$_sr" "$part"
+}
+
+# Are we genuinely inside a live tmux pane?
+#
+# $TMUX alone cannot answer this: it and TMUX_PANE LEAK into any terminal
+# spawned from a pane, so a kitty opened from tmux claims to be inside one. The
+# reliable signal is that a real in-pane shell's controlling tty IS that pane's
+# tty.
+#
+# A SEPARATE question from "is the target on my socket", and keeping them
+# separate is the whole point. This test used to be nested inside the socket
+# comparison, so a CROSS-socket target skipped it, fell through to the
+# fresh-attach path, and that path deliberately unsets $TMUX -- which is exactly
+# what defeats tmux's own "sessions should be nested with care" guard. Result: a
+# session nested in a pane. Rare when the only other socket was a work one you
+# seldom crossed; routine the moment the personal partition got a socket name of
+# its own.
+_attach_in_pane() {
+        [ -n "${TMUX:-}" ] && [ -n "${TMUX_PANE:-}" ] || return 1
+        _mytty=$(tty 2>/dev/null || true)
+        _panetty=$(tmux display-message -pt "$TMUX_PANE" \
+                '#{pane_tty}' 2>/dev/null || true)
+        [ -n "$_mytty" ] && [ "$_mytty" = "$_panetty" ]
+}
+
+# Attach a fresh client, or switch THIS client's view when we are genuinely
+# inside a live client on the same socket. Across sockets switch-client cannot
+# reach either way, so from outside a pane we attach and from inside we refuse.
+mux_attach() {
+        _attach_record
         if [ "$noattach" -eq 1 ]; then return 0; fi
-        # TWO independent questions, which used to be one and caused mux to
-        # build a session INSIDE a pane:
-        #
-        #   1. am I genuinely in a live tmux pane?
-        #   2. is the target on the socket I am already on?
-        #
-        # $TMUX alone cannot answer (1): it and TMUX_PANE LEAK into any
-        # terminal spawned from a pane, so a kitty opened from tmux claims to
-        # be inside one. The reliable signal is that a real in-pane shell's
-        # controlling tty IS that pane's tty. That test used to be nested
-        # inside the socket comparison, so a CROSS-socket target skipped it,
-        # fell through to the fresh-attach path, and that path deliberately
-        # unsets $TMUX -- which is exactly what defeats tmux's own "sessions
-        # should be nested with care" guard. Result: a session nested in a
-        # pane. Rare when the only other socket was a work one you seldom
-        # crossed; routine the moment the personal partition got a socket name
-        # of its own.
-        _inpane=0
         cur=${TMUX:-}                   # our client, if any: socket,pid,session
         cur=${cur%%,*}                  # -> just the socket path
-        if [ -n "$cur" ] && [ -n "${TMUX_PANE:-}" ]; then
-                _mytty=$(tty 2>/dev/null || true)
-                _panetty=$(tmux display-message -pt "$TMUX_PANE" \
-                        '#{pane_tty}' 2>/dev/null || true)
-                [ -n "$_mytty" ] && [ "$_mytty" = "$_panetty" ] && _inpane=1
-        fi
-
-        if [ "$_inpane" -eq 1 ]; then
+        if _attach_in_pane; then
                 if [ "${cur##*/}" = "${sock:-default}" ]; then
                         # Same socket: switch this client's view. exec the real
                         # tmux, not tm() (exec needs a binary), so mux is
@@ -1810,11 +1839,11 @@ mux_attach() {
                         fi
                         exec tmux switch-client -t "=$name"
                 fi
-                # Different socket, and switch-client cannot cross one. The
-                # only other move is a fresh attach, which from inside a pane
-                # NESTS -- so refuse and say how. Partitions are isolated on
-                # purpose; reaching across one is a thing to do deliberately,
-                # from outside.
+                # Different socket, and switch-client cannot cross one. The only
+                # other move is a fresh attach, which from inside a pane NESTS
+                # -- so refuse and say how. Partitions are isolated on purpose;
+                # reaching across one is a thing to do deliberately, from
+                # outside.
                 echo "mux: '$name' is in partition" \
                         "'${sock:-default}', you are in" \
                         "'${cur##*/}'" >&2
@@ -2113,6 +2142,50 @@ if [ "$cmd" = new ]; then cmd_new; fi
 # whole build path (profile resolution, layout, theme, agent) is reused exactly
 # rather than reimplemented here. Then we attach the first, which insertion
 # order makes the oldest -- usually the one you think of as primary.
+# Rebuild every recorded session that is not already up, counting outcomes
+# into rs_built / rs_up / rs_failed.
+#
+# Each is rebuilt by re-running the front end with --no-attach, so the whole
+# build path (profile resolution, layout, theme, agent) is reused exactly
+# rather than reimplemented here. It replays a PUBLIC command, addressing the
+# session by its ROOT: `mux go <dir>` is a form anyone can type, so resume is a
+# loop over it rather than a private path through the resolver.
+_resume_rebuild() {     # <partition key> <recorded names>
+        _rk=$1; shift
+        rs_built=0
+        rs_up=0
+        rs_failed=
+        for rs_n in $*; do
+                if tm has-session -t "=$rs_n" 2>/dev/null; then
+                        rs_up=$((rs_up + 1))
+                        continue
+                fi
+                # Flag BEFORE the positional: the parser stops consuming
+                # options at the first positional, so `go DIR --no-attach`
+                # would leave --no-attach to be read as a PROFILE name.
+                rs_root=$(mux_sess_root "$rs_n" "$_rk")
+                if [ -n "$rs_root" ] && [ -d "$rs_root" ] \
+                   && "$_self" go --no-attach "$rs_root" >/dev/null 2>&1; then
+                        rs_built=$((rs_built + 1))
+                else
+                        # Keep going: one unbuildable session (a root that
+                        # moved, a profile since deleted) must not cost you the
+                        # other four.
+                        rs_failed="$rs_failed $rs_n"
+                fi
+        done
+}
+
+# The first recorded session that is actually up. Insertion order makes that
+# the oldest -- usually the one you think of as primary.
+_resume_landing() {     # <recorded names> -> a live session name, or empty
+        for _rn in $*; do
+                if tm has-session -t "=$_rn" 2>/dev/null; then
+                        printf '%s' "$_rn"; return 0
+                fi
+        done
+}
+
 cmd_resume() {
         rs_key=$part
         rs_set=$(mux_sess_list "$rs_key")
@@ -2126,45 +2199,15 @@ cmd_resume() {
                         "resume yet" >&2
                 exit 1
         fi
-        rs_built=0
-        rs_up=0
-        rs_failed=
-        for rs_n in $rs_set; do
-                if tm has-session -t "=$rs_n" 2>/dev/null; then
-                        rs_up=$((rs_up + 1))
-                        continue
-                fi
-                # Replay a PUBLIC command, addressing the session by its ROOT.
-                # Nothing here reaches into mux's internals: `mux go <dir>` is
-                # a form anyone can type, so resume is a loop over it rather
-                # than a private path through the resolver.
-                #
-                # Flag BEFORE the positional: the parser stops consuming
-                # options at the first positional, so `go DIR --no-attach`
-                # would leave --no-attach to be read as a PROFILE name.
-                rs_root=$(mux_sess_root "$rs_n" "$rs_key")
-                if [ -n "$rs_root" ] && [ -d "$rs_root" ] \
-                   && "$_self" go --no-attach "$rs_root" >/dev/null 2>&1; then
-                        rs_built=$((rs_built + 1))
-                else
-                        # Keep going: one unbuildable session (a root that
-                        # moved, a profile since deleted) must not cost you the
-                        # other four.
-                        rs_failed="$rs_failed $rs_n"
-                fi
-        done
+        # shellcheck disable=SC2086
+        _resume_rebuild "$rs_key" $rs_set
         printf 'mux: resumed %s, %s already up\n' "$rs_built" "$rs_up"
         if [ -n "$rs_failed" ]; then
                 echo "mux: could NOT build:$rs_failed" >&2
                 echo "mux: see why with  mux go <name>" >&2
         fi
-        # Land somewhere real: the first recorded session that is actually up.
-        name=
-        for rs_n in $rs_set; do
-                if tm has-session -t "=$rs_n" 2>/dev/null; then
-                        name=$rs_n; break
-                fi
-        done
+        # shellcheck disable=SC2086
+        name=$(_resume_landing $rs_set)
         [ -n "$name" ] || { echo "mux: nothing to attach" >&2; exit 1; }
         mux_attach
 }
