@@ -331,8 +331,11 @@ coincidence; `mux theme` fixes that in a keystroke. Priority is explicit >
 context > derived > global default. `mux themes`
 compiles the palette into tmux `@theme-*` options at server start and re-pushes
 it on drift, so a theme edit needs no manual step. `mux theme [NAME|next|prev]`
-switches a live session (`-p` persists it into the layout). A theme dropped in
-`$MUX_DIR/themes` overrides a shipped one of the same name.
+switches a live session and **remembers** it: a theme chosen by hand is a
+decision, so it is written to the profile immediately rather than behind a flag
+you have to recall. (`-p`/`--persist` is retired -- accepted and ignored, since
+it is the default now.) A theme dropped in `$MUX_DIR/themes` overrides a shipped
+one of the same name.
 
 ### Session sets
 
@@ -457,7 +460,7 @@ mux scan                     rebuild the project discovery map
 mux save [NAME]              snapshot this session (records only deltas)
 mux edit [NAME]              open a profile in $EDITOR
 mux rename [OLD] NEW         rename a session and its profile
-mux theme [NAME|next|prev]   set/cycle/show the theme (-p to persist)
+mux theme [NAME|next|prev]   set/cycle/show the theme (always remembered)
 mux next-blocked             jump to the session that has needed you longest
 mux hide/show SESSION        hide/unhide a session for this client
 mux show-all                 clear this client's hidden sessions

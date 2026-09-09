@@ -120,11 +120,13 @@ editing the same name resumes it.
 Rename a session and its matching layout.
 .TP
 .B mux theme " [" \fINAME\fR " | next | prev]"
-Show, set, or cycle the current session's colour theme. With
-.B \-p
-(or
-.BR \-\-persist ),
-also write the choice into the session's layout.
+Show, set, or cycle the current session's colour theme. Setting one REMEMBERS
+it: a theme chosen by hand is a decision, and the profile is the only place
+decisions live, so it is written immediately rather than behind a flag you have
+to recall. A breakout profile takes it in place; everything else becomes a table
+row.
+.RB ( \-p / \-\-persist
+is retired \(em accepted and ignored, since it is now the default.)
 .TP
 .B mux next-blocked
 Jump to the session whose agent has needed you longest \(em the loudest chip on
