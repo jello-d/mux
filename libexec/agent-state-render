@@ -270,7 +270,14 @@ build_collapse() {       # no age, runs of agentless sessions folded to ·N·
                 [ "$_run" -gt 0 ] && { _emit_cluster "$_run"; _run=0; }
                 _emit_session "$_c" "$_s" "$_a" "$_nm" 0
         done <"$recs"
-        [ "$_run" -gt 0 ] && _emit_cluster "$_run"
+        # if/then, NOT `[ ... ] && ...`: this is the function's LAST statement,
+        # so a false test would make build_collapse RETURN 1 -- and its caller
+        # is `[ fits ] || build_collapse`, where a non-zero final command trips
+        # set -e and kills the render. The status bar then goes BLANK for the
+        # whole client, which is what happened whenever the strip had to
+        # collapse and the last session was not agentless (_run == 0), i.e.
+        # almost always.
+        if [ "$_run" -gt 0 ]; then _emit_cluster "$_run"; fi
 }
 build_window() {         # last resort: a window around current + edge counters
         set --
