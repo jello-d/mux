@@ -327,7 +327,7 @@ _is_path() {   # <arg>
 # fails later at build), and a miss rebuilds the map once and asks again. Those
 # two checks are the whole staleness story -- no TTL, no timer.
 _map_lookup() {   # <name> -> matching project paths, one per line
-        _mk=${sock:-default}
+        _mk=$part
         _mp=$(mux_scan_lookup "$1" "$_mk" | while IFS= read -r _d; do
                 [ -n "$_d" ] && [ -d "$_d" ] && printf '%s\n' "$_d"
         done)
@@ -353,7 +353,7 @@ _map_lookup() {   # <name> -> matching project paths, one per line
 # Irrelevant when a profile DECLARES a root (`hasroot`): both callers skip the
 # map entirely then, because the declaration already answered.
 _typed_roots() {   # <name> -> SOURCE<TAB>ROOT lines
-        _tr=$(mux_sess_root "$1" "${sock:-default}")
+        _tr=$(mux_sess_root "$1" "$part")
         if [ -n "$_tr" ] && [ -d "$_tr" ]; then
                 printf 'a session you had\t%s\n' "$_tr"
                 return 0
@@ -910,6 +910,21 @@ name=$(printf '%s' "$name" | tr ':.' '--')
 # common path resolves the hook once.
 mux_ctx_resolve || { echo "mux: ${MUX_CTX_ERR:-context error}" >&2; exit 1; }
 sock=$(mux_ctx_socket)
+
+# The PARTITION KEY: what the session set, the scan map and the agent-state dir
+# are filed under. Identical in VALUE to $sock (a partition's socket is named
+# after it) but a different QUESTION: $sock answers "which tmux -L", $part
+# answers "whose records". Conflating them is how a stale name spread -- eleven
+# sites wrote ${sock:-default} as a partition key, naming a partition that
+# stopped existing when the personal one became `global`, while every library
+# fell back to `global`. Unreachable today (resolve either sets a partition or
+# exits), but this is the third sighting of that default and the first two were
+# live bugs: the tray indicator (15cc461) and agent-state-emit (6099078).
+#
+# The `default` left in the SOCKET comparisons below is a different string with
+# the same spelling, and is correct: with no -L, tmux's own socket really is
+# named `default`, so that is what a socket basename compares against.
+part=$MUX_CTX_PARTITION
 _cur_part=$MUX_CTX_PARTITION
 # Nothing knows this context. Say so ONCE, here in the front end -- never from
 # mux-context.sh, which mux-style and mux-agent-render call every status
@@ -994,7 +1009,7 @@ if [ "$pick" = 1 ]; then
                 # when the shared state lib is absent -- then it is plain names.
                 _menu=$_sessions
                 if [ "$_have_astate" -eq 1 ]; then
-                        _adir=$(mux_agent_dir "${sock:-default}")
+                        _adir=$(mux_agent_dir "$part")
                         _menu=$(printf '%s\n' "$_sessions" \
                           | while IFS= read -r _s; do
                                 [ -n "$_s" ] || continue
@@ -1053,7 +1068,7 @@ if [ "$cmd" = ls ]; then
         _ls=$(tm list-sessions 2>/dev/null || true)
         [ -n "$_ls" ] || { echo "mux: no sessions in this context"; exit 0; }
         if [ "$_have_astate" -eq 1 ]; then
-                _adir=$(mux_agent_dir "${sock:-default}")
+                _adir=$(mux_agent_dir "$part")
                 printf '%s\n' "$_ls" | while IFS= read -r _line; do
                         _s=${_line%%:*}
                         printf '%s %s\n' \
@@ -1648,7 +1663,7 @@ mux_attach() {
         [ -n "$_sr" ] || _sr=$(tm list-sessions \
                 -F '#{session_name} #{session_path}' 2>/dev/null \
                 | awk -v n="$name" '$1==n{sub(/^[^ ]* /,""); print; exit}')
-        mux_sess_add "$name" "$_sr" "${sock:-default}"
+        mux_sess_add "$name" "$_sr" "$part"
         if [ "$noattach" -eq 1 ]; then return 0; fi
         # TWO independent questions, which used to be one and caused mux to
         # build a session INSIDE a pane:
@@ -1889,7 +1904,7 @@ if [ "$cmd" = kill ] && [ "$all" -eq 1 ]; then
                 *) echo "mux: aborted"; exit 0 ;;
         esac
         tm kill-server 2>/dev/null || true
-        mux_sess_clear "${sock:-default}"
+        mux_sess_clear "$part"
         echo "mux: killed all sessions on \"${sock:-default}\""
         exit 0
 fi
@@ -1910,12 +1925,12 @@ fi
 if [ "$cmd" = kill ]; then
         if tm has-session -t "=$name" 2>/dev/null; then
                 tm kill-session -t "=$name"
-                mux_sess_drop "$name" "${sock:-default}"
+                mux_sess_drop "$name" "$part"
                 echo "mux: killed $name"
                 exit 0
         fi
-        if mux_sess_has "$name" "${sock:-default}"; then
-                mux_sess_drop "$name" "${sock:-default}"
+        if mux_sess_has "$name" "$part"; then
+                mux_sess_drop "$name" "$part"
                 echo "mux: $name was not running; forgotten (it will no" \
                         "longer be resumed)"
                 exit 0
@@ -1949,7 +1964,7 @@ if [ "$cmd" = new ]; then
                 # would silently change what `mux go $name` means elsewhere.
                 # Binding it to the directory it already means is a harmless
                 # no-op, so only a conflicting root is refused.
-                _other=$(mux_scan_lookup "$name" "${sock:-default}" \
+                _other=$(mux_scan_lookup "$name" "$part" \
                         | grep -vxF "$base" | head -1)
                 if [ -n "$_other" ]; then
                         echo "mux: '$name' already means $_other" >&2
@@ -1985,7 +2000,7 @@ fi
 # rather than reimplemented here. Then we attach the first, which insertion
 # order makes the oldest -- usually the one you think of as primary.
 if [ "$cmd" = resume ]; then
-        rs_key=${sock:-default}
+        rs_key=$part
         rs_set=$(mux_sess_list "$rs_key")
         if [ "$listing" -eq 1 ]; then
                 [ -n "$rs_set" ] && printf '%s\n' "$rs_set"
