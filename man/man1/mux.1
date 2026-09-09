@@ -149,6 +149,47 @@ takes effect without a restart.
 .TP
 .B mux kill " " \fINAME\fR ", " mux kill-all
 Tear down the named session, or (with a prompt) every session on this socket.
+Killing is also how the session set FORGETS a session, and it is the only thing
+that prunes it. A name that is merely RECORDED \(em its session already gone,
+its root moved or deleted \(em is killable too: there is nothing to tear down,
+but it stops
+.B mux resume
+reporting it as unbuildable on every run. A name that is neither live nor
+recorded is an error.
+.SS Diagnostics and maintenance
+.TP
+.B mux why " [" \fINAME\fR ]
+Print every value mux resolved and WHERE each came from: the directory you are
+in, the context token and its source, the partition, the session name, the
+profile backing it (a table row, a breakout file, or none), and the root, theme,
+layout and agent with the provenance of each.
+.IP
+It answers for what
+.B mux go
+would do with the same argument, which is the point of it. A typed NAME is
+resolved through the session set and then the discovery map \(em the same two
+sources go uses \(em so an AMBIGUOUS name reports as ambiguous and lists its
+candidates, and a name nothing knows reports as unknown, each saying that go
+would refuse rather than describing a session mux will not build.
+.TP
+.B mux check
+Audit the install: tmux, mux's own presence on PATH, the desktop notification
+path, the shipped package data, the config overlay, and the scan roots for this
+partition. One
+.BR [OK] / [WARN] / [FAIL]
+line per check and a non\-zero exit on any FAIL. The markers are a string
+convention, not shared code, so an integrator can style them with its own
+palette.
+.TP
+.B mux help " [" \fITOPIC\fR ]
+The usage summary, or a topic in depth:
+.BR agents ", " themes ", " profiles ", " palette .
+.TP
+.B mux migrate-profiles " [" \-\-apply ]
+Convert pre\-rename
+.I *.layout
+files to the profile table. Reports what it would do; \-\-apply performs it.
+Needed once, by a config predating the profile/layout split.
 .SS Addressing a session
 A session is named by its
 .I NAME
