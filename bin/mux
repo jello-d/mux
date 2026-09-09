@@ -2515,6 +2515,60 @@ fi
 
 # Pass 2: build. Everything is validated, so this only executes -- using the
 # now-final root for every pane's -c, wherever root sat in the source.
+# The geometry a session is BUILT at, as `-x W -y H` for new-session, or empty
+# when no terminal can be asked (a hook, a cron job, a headless script).
+#
+# tmux builds a detached session at `default-size`, which is 80x24. Every split
+# below is then sized against 24 rows -- a `bottom 5-10` pane takes 10 of them,
+# 42% of the window -- and when the session is finally shown at a real terminal
+# size tmux rescales every pane PROPORTIONALLY. A 10-row bottom becomes 22.
+#
+# `mux pin` exists to undo exactly that, but it only runs from the
+# client-attached and client-resized hooks. Neither fires when an ALREADY
+# attached client switches to a session built detached, which is what `mux go
+# NAME` does from inside a session and what every session but the first gets
+# after `mux resume`. So the layout stayed at its rescaled proportions until
+# something forced a re-pin by hand.
+#
+# Building at the right size means there is no rescale to undo.
+_session_geometry() {
+        # Inside tmux the current window's size is EXACT: tmux has already
+        # subtracted this client's status lines, so no guessing is needed.
+        if [ -n "${TMUX:-}" ]; then
+                _wh=$(tmux display-message \
+                        -p '#{window_width} #{window_height}' \
+                        2>/dev/null || true)
+                case $_wh in
+                [0-9]*' '[0-9]*) printf -- '-x %s -y %s' "${_wh%% *}" \
+                        "${_wh##* }" ;;
+                esac
+                return 0
+        fi
+        # Outside it, ask the terminal. stty reports "rows cols" and needs a
+        # tty on its INPUT, which mux's stdin may not be -- /dev/tty is the
+        # controlling terminal regardless of redirection.
+        _sz=$(stty size </dev/tty 2>/dev/null || true)
+        case $_sz in
+        [0-9]*' '[0-9]*) ;;
+        *) return 0 ;;
+        esac
+        _rows=${_sz%% *}; _cols=${_sz##* }
+        # A status line costs the window a row; tmux subtracts it on attach, so
+        # subtract it here too or the session is built one row too tall and
+        # rescales by that row. `status` is on/off or a count.
+        _st=$(tm show-options -gv status 2>/dev/null || echo on)
+        case $_st in
+        off) _st=0 ;;
+        on)  _st=1 ;;
+        [0-9]) ;;
+        *)   _st=1 ;;
+        esac
+        _rows=$((_rows - _st))
+        [ "$_rows" -ge 4 ] || return 0        # implausible; let tmux decide
+        printf -- '-x %s -y %s' "$_cols" "$_rows"
+}
+_geom=$(_session_geometry)
+
 have_session=0
 firstwin=
 firstpane=
@@ -2526,7 +2580,9 @@ while read -r verb rest; do
 	case $verb in
 	window)
 		if [ "$have_session" -eq 0 ]; then
-			tm new-session -d -s "$name" -n "$rest" -c "$root"
+			# shellcheck disable=SC2086
+			tm new-session -d $_geom -s "$name" -n "$rest" \
+				-c "$root"
 			have_session=1
 			win=$(tm display-message -p -t "$name:" \
 				'#{window_index}')
