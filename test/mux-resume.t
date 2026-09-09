@@ -114,6 +114,31 @@ _o=$(mux "$T/elsewhere" resume) || fail "resume with a dead root failed"
 case $_o in *"could NOT build"*) ;; *) fail "no report of the dead root" ;; esac
 [ "$(live)" = "bravo " ] || fail "the good session was lost: [$(live)]"
 
+# --- ... and a dead entry can be FORGOTTEN ----------------------------------
+# The set is pruned ONLY by `kill`, which used to require the session to be
+# LIVE. But an entry whose root has gone is already dead: it could not be
+# killed, so it could never be forgotten, and `resume` reported it as
+# unbuildable on every run with no way out short of editing $MUX_CACHE by hand.
+# Killing something already dead is still exactly what you mean.
+mux_recorded() { mux "$T/elsewhere" resume --list | grep -qxF "$1"; }
+mux_recorded alpha || fail "precondition: alpha should still be recorded"
+_o=$(mux "$T/elsewhere" kill alpha) || fail "kill of a dead record failed: $_o"
+case $_o in *forgotten*) ;; *) fail "kill of a dead record was silent: [$_o]" ;;
+esac
+mux_recorded alpha && fail "the dead entry survived kill"
+# ... so resume stops reporting it.
+: >"$LIVE"
+_o=$(mux "$T/elsewhere" resume) || fail "resume after forgetting failed"
+case $_o in
+*"could NOT build"*) fail "resume still reports the forgotten entry: [$_o]" ;;
+esac
+
+# Neither live nor recorded is still an ERROR. Forgetting is for something mux
+# actually remembers; a blanket success would make a typo look like a kill.
+_o=$(mux "$T/elsewhere" kill nosuchsession) \
+	&& fail "kill of an unknown name should exit non-zero"
+case $_o in *"no such session"*) ;; *) fail "unhelpful refusal: [$_o]" ;; esac
+
 # --- nothing recorded is a loud, non-zero answer ----------------------------
 rm -f "$T"/cache/sessions.*
 _o=$(mux "$T/elsewhere" resume) \

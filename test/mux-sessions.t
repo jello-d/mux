@@ -70,4 +70,21 @@ mux_sess_add spacey "$T/has space" $K
 eq spaced-root "$(mux_sess_root spacey $K)" "$T/has space"
 eq spaced-name "$(mux_sess_list $K | tr '\n' ' ')" "spacey "
 
+# --- membership is NOT "has a root" -------------------------------------
+# mux_sess_has answers whether a name is RECORDED. A record may legitimately
+# carry an EMPTY root (tmux could not report session_path when it was added),
+# so a non-empty-root test silently misses those entries -- and the caller
+# that needs this is `mux kill`, deciding whether there is a record to forget.
+# Getting it wrong there makes exactly those entries unforgettable.
+mux_sess_has spacey $K || fail "has: a recorded name reads as absent"
+mux_sess_has nosuch $K && fail "has: an unrecorded name reads as present"
+mux_sess_add rootless "" $K
+eq rootless-root "$(mux_sess_root rootless $K)" ""
+mux_sess_has rootless $K || fail "has: an empty-root record reads as absent"
+# ... and it stays idempotent through mux_sess_add, which shares the test.
+mux_sess_add rootless "" $K
+eq rootless-once "$(mux_sess_list $K | tr '\n' ' ')" "spacey rootless "
+mux_sess_has spacey other && fail "has: not scoped to its partition"
+mux_sess_has "" $K && fail "has: an empty name reads as present"
+
 pass

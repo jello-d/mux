@@ -50,6 +50,17 @@ mux_sess_root() {       # <name> [key]
 	awk -F'\t' -v n="$1" '$1==n{print $2; exit}' "$_sf"
 }
 
+# mux_sess_has NAME [key] -> is NAME recorded? MEMBERSHIP, which is not the
+# same question as mux_sess_root: a record may legitimately carry an EMPTY root
+# (tmux could not report session_path when it was added), so a non-empty root
+# is not a membership test and using one silently misses those entries.
+mux_sess_has() {        # <name> [key]
+	[ -n "${1:-}" ] || return 1
+	_sf=$(mux_sess_file "${2:-}")
+	[ -f "$_sf" ] || return 1
+	cut -f1 "$_sf" 2>/dev/null | grep -qxF "$1"
+}
+
 # mux_sess_add NAME ROOT [key] -> record NAME if it is not already there.
 # Idempotent, so recording on every attach (not just on build) heals a set that
 # predates this feature or a session someone made with raw tmux.
@@ -57,7 +68,7 @@ mux_sess_add() {        # <name> <root> [key]
 	[ -n "$1" ] || return 0
 	_sf=$(mux_sess_file "${3:-}")
 	mkdir -p "$(dirname "$_sf")" 2>/dev/null || return 0
-	cut -f1 "$_sf" 2>/dev/null | grep -qxF "$1" && return 0
+	mux_sess_has "$1" "${3:-}" && return 0
 	printf '%s\t%s\n' "$1" "$2" >>"$_sf" 2>/dev/null || true
 	return 0
 }
