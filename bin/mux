@@ -1895,14 +1895,29 @@ if [ "$cmd" = kill ] && [ "$all" -eq 1 ]; then
 fi
 
 # --- kill: tear down on whichever socket we resolved -----------------------
+# Killing is how you say you are done with a session, so the set forgets it.
+# Nothing else prunes -- that is the whole reason a snapshot of the live set
+# would be wrong.
+#
+# Which left a hole: the set is pruned ONLY here, and this used to require the
+# session to be LIVE. A recorded session whose root has since moved or been
+# deleted is already dead, so it could not be killed -- and therefore could
+# never be forgotten. `mux resume` reported it as unbuildable on every single
+# run while offering no way out, and the only real fix was hand-editing
+# $MUX_CACHE. So a name that is merely RECORDED is killable too: there is
+# nothing to tear down, but saying "I am done with this" is exactly what you
+# mean, and it is the same sentence either way.
 if [ "$cmd" = kill ]; then
         if tm has-session -t "=$name" 2>/dev/null; then
                 tm kill-session -t "=$name"
-                # Killing is how you say you are done with it, so the set
-                # forgets it. Nothing else prunes: that is the whole reason a
-                # snapshot of the live set would be wrong.
                 mux_sess_drop "$name" "${sock:-default}"
                 echo "mux: killed $name"
+                exit 0
+        fi
+        if mux_sess_has "$name" "${sock:-default}"; then
+                mux_sess_drop "$name" "${sock:-default}"
+                echo "mux: $name was not running; forgotten (it will no" \
+                        "longer be resumed)"
                 exit 0
         fi
         echo "mux: no such session: $name" >&2
