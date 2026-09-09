@@ -143,11 +143,20 @@ else warn "no config overlay at $MUX_DIR (using shipped defaults)"; fi
 # quietly stops finding half your projects, with no error anywhere -- the map
 # just comes back smaller. Cheap to check, invisible otherwise.
 if [ -n "${MUX_CFG_scan:-}" ]; then
-	printf '%s\n' "$MUX_CFG_scan" | while read -r _p _d; do
+	# Fed by a here-doc, NOT a pipe. A `while` behind a pipe runs in a
+	# SUBSHELL, so bad()'s RC=1 was set on a copy and thrown away: a missing
+	# scan root printed [FAIL] and mux check still exited 0. This file's
+	# whole contract is "non-zero on any FAIL", so the one check that could
+	# not honour it made the auditor itself the thing asserting something
+	# untrue -- and anything gating on the exit code saw a clean bill.
+	while read -r _p _d; do
 		[ -n "$_p" ] || continue
 		case $_p in "~") _p=$HOME ;; "~/"*) _p=$HOME/${_p#\~/} ;; esac
-		[ -d "$_p" ] && ok "scan root $_p" || bad "scan root missing: $_p"
-	done
+		if [ -d "$_p" ]; then ok "scan root $_p"
+		else bad "scan root missing: $_p"; fi
+	done <<EOF
+$MUX_CFG_scan
+EOF
 else
 	warn "no scan roots for partition '${MUX_CTX_PARTITION:-global}'"
 	warn "  discovery is off; \`mux go <name>\` cannot find projects"
