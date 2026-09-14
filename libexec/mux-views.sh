@@ -251,8 +251,15 @@ mux_view_state() {   # <client-name>
 # The chip itself: one styled, click-tagged glyph. Composed HERE so the status
 # strip and `mux views --chip` cannot disagree about what it looks like.
 mux_view_chip() {   # <client-name>
+	# clipped is PURE YELLOW on orange, the hazard-stripe pairing, rather
+	# than the near-black the blocked-agent chip uses on the same orange.
+	# Deliberately NOT sharing that look: the two mean different things and
+	# sit a few cells apart, so a shared style would invite reading one as
+	# the other. By raw contrast black wins (6.57 vs 2.84 against #ff5f00),
+	# but that threshold is for body text; this is one bold glyph, and the
+	# job is to be unmistakably an ALARM rather than merely legible.
 	case $(mux_view_state "${1:-}") in
-	clipped) _vs='#[fg=colour232,bg=colour202,bold]' ;;
+	clipped) _vs='#[fg=colour226,bg=colour202,bold]' ;;
 	slack)   _vs='#[fg=colour214]' ;;
 	fit)     _vs='#[fg=colour255,bold]' ;;
 	*)       _vs='#[fg=colour240]' ;;
