@@ -174,6 +174,39 @@ sources go uses \(em so an AMBIGUOUS name reports as ambiguous and lists its
 candidates, and a name nothing knows reports as unknown, each saying that go
 would refuse rather than describing a session mux will not build.
 .TP
+.B mux views " [" auto | floor | ceil | next "] [" \-\-detach " " \fICLIENT\fR ]
+Who is attached to this server, at what size, and what that costs.
+.IP
+tmux sizes a window to ONE client. With two attached at DIFFERENT dimensions
+there is no size that suits both, so windows resize as you cycle sessions and
+every mux layout is re-pinned each time \(em the usual cause being an ssh
+window left attached at another height. mux calls that VIEW TENSION, shows it
+on the status bar while it lasts, and names the ways out:
+.RS
+.TP
+.B auto
+The window follows the last client to use it. Every view is right for whoever
+is looking, and the price is that it moves. tmux's default
+.RB ( window\-size " " latest ).
+.TP
+.B floor
+Every window fits the SMALLEST client. Stable, nothing is ever clipped, and a
+bigger view carries dead rows
+.RB ( smallest ).
+.TP
+.B ceil
+Every window fits the LARGEST client. Stable, the big view is perfect, and a
+smaller one is clipped
+.RB ( largest ).
+.RE
+.IP
+No mode is correct in general; each buys stability with something. With no
+argument the current clients, their idle times and the mode are reported;
+.B next
+cycles, which is also what CLICKING the status chip does.
+.B \-\-detach
+removes a client, ending its claim on the size altogether.
+.TP
 .B mux check
 Audit the install: tmux, mux's own presence on PATH, the desktop notification
 path, the shipped package data, the config overlay, and the scan roots for this

@@ -9,6 +9,15 @@ set -eu
 
 range=${1:-}
 client=${2:-}
+
+# v: is the VIEW-TENSION chip, not a session. Clicking it cycles how the tension
+# is resolved (auto -> floor -> ceil), so the condition is both noticed and
+# settled on the bar without looking up a verb.
+case "$range" in
+v:*)
+        exec "$(dirname "$0")/mux-views" next ;;
+esac
+
 case "$range" in s:?*) ;; *) exit 0 ;; esac
 sess=${range#s:}
 

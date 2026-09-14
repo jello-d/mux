@@ -1,0 +1,136 @@
+#!/bin/sh
+# mux-views: who is looking at this server, and what that costs.
+#
+#   mux views                    list attached clients, the tension, the mode
+#   mux views auto|floor|ceil    set how the tension is resolved
+#   mux views next               cycle the mode (what clicking the chip does)
+#   mux views --detach CLIENT    detach one client, ending its claim on the size
+#   mux views --chip CLIENT      the status-bar chip (internal; empty when calm)
+#
+# See mux-views.sh for what tension IS and why the modes are named this way.
+set -eu
+
+_lib=$(dirname "$0")
+[ -r "$_lib/mux-views.sh" ] || {
+	echo "mux: mux-views.sh missing (incomplete install)" >&2; exit 1; }
+. "$_lib/mux-views.sh"
+
+# Outside a session there is no $TMUX to name the server, so resolve this
+# caller's partition and address that socket explicitly. Skipped when inside
+# tmux: $TMUX already answers, and the status chip runs this every interval.
+if [ -z "${TMUX:-}" ] && [ -r "$_lib/mux-context.sh" ]; then
+	MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
+	. "$_lib/mux-context.sh"
+	if mux_ctx_resolve 2>/dev/null; then
+		MUX_VIEW_SOCKET=$MUX_CTX_PARTITION
+		export MUX_VIEW_SOCKET
+	fi
+fi
+
+# --- the status chip -------------------------------------------------------
+# Drawn ONLY under tension, so the bar carries nothing at all in the ordinary
+# single-client case. It answers the two questions in the two orders you ask
+# them: something is fighting over my window size (⇕), and this is how it is
+# being settled (the mode).
+#
+# A `clipped` view is the one that costs you something you cannot see -- part
+# of the window is off screen -- so it alone wears the caution colours, the
+# same pairing the blocked-agent chip uses.
+#
+# Tagged #[range=user|v:mode] so a CLICK cycles the mode: the condition is
+# noticed on the bar, and fixed on the bar, without looking up a verb.
+if [ "${1:-}" = --chip ]; then
+	mux_view_tension || exit 0
+	_n=$(mux_view_sizes | grep -c .)
+	_mode=$(mux_view_mode)
+	_side=$(mux_view_side "${2:-}")
+	case $_side in
+	clipped) _mk='▴'; _sty='#[fg=colour232,bg=colour202,bold]' ;;
+	slack)   _mk='▾'; _sty='#[fg=colour244]' ;;
+	*)       _mk=' '; _sty='#[fg=colour244]' ;;
+	esac
+	printf '#[range=user|v:mode]%s ⇕%s %s%s#[default]#[norange] ' \
+		"$_sty" "$_n" "$_mode" "$_mk"
+	exit 0
+fi
+
+# --- mode switching --------------------------------------------------------
+case "${1:-}" in
+auto|floor|ceil)
+	mux_view_mode_set "$1" || exit $?
+	echo "mux: view mode $1"
+	exit 0 ;;
+next)
+	# Cycle in the order a person reasons about them: the default, then the
+	# two ways of buying stability.
+	case $(mux_view_mode) in
+	auto)  _nx=floor ;;
+	floor) _nx=ceil ;;
+	*)     _nx=auto ;;
+	esac
+	mux_view_mode_set "$_nx" || exit $?
+	# Silent on stdout: this is what a status-bar click runs, and tmux
+	# run-shell pops any output into a view-mode buffer over the pane.
+	_vt display-message "mux: view mode $_nx" 2>/dev/null || true
+	exit 0 ;;
+--detach)
+	[ -n "${2:-}" ] || { echo "mux: views --detach CLIENT" >&2; exit 2; }
+	mux_view_clients | awk '{print $1}' | grep -qxF "$2" || {
+		echo "mux: no such client: $2" >&2
+		echo "mux: see them with  mux views" >&2
+		exit 1; }
+	_vt detach-client -t "$2" 2>/dev/null || {
+		echo "mux: could not detach $2" >&2; exit 1; }
+	echo "mux: detached $2"
+	exit 0 ;;
+'') ;;
+*) echo "usage: mux views [auto|floor|ceil|next|--detach CLIENT]" >&2
+   exit 2 ;;
+esac
+
+# --- the report ------------------------------------------------------------
+_cl=$(mux_view_clients)
+if [ -z "$_cl" ]; then
+	echo "mux: no clients attached to this server"
+	exit 0
+fi
+
+# Age as a person says it, so "idle 10h" reads as a stale window rather than a
+# number to subtract.
+_age() {   # <seconds>
+	if   [ "$1" -lt 60 ];    then printf '%ss' "$1"
+	elif [ "$1" -lt 3600 ];  then printf '%sm' "$(($1 / 60))"
+	elif [ "$1" -lt 86400 ]; then printf '%sh' "$(($1 / 3600))"
+	else printf '%sd' "$(($1 / 86400))"; fi
+}
+
+_self_client=$(_vt display-message -p '#{client_name}' 2>/dev/null || true)
+printf '%s\n' "$_cl" | while read -r _n _d _s _idle; do
+	_mark='  '
+	[ "$_n" = "$_self_client" ] && _mark='* '
+	printf '%s%-14s %-10s %-14s idle %-5s %s\n' \
+		"$_mark" "$_n" "$_d" "$_s" "$(_age "$_idle")" \
+		"$(mux_view_side "$_n")"
+done
+
+_mode=$(mux_view_mode)
+echo
+if mux_view_tension; then
+	printf 'tension: %s sizes attached -- ' "$(mux_view_sizes | grep -c .)"
+	case $_mode in
+	auto)  echo "every window follows the last client to use it, so"
+	       echo "         they resize as you cycle. Mode: auto." ;;
+	floor) echo "every window fits the SMALLEST client, so a bigger"
+	       echo "         view carries dead rows. Mode: floor." ;;
+	ceil)  echo "every window fits the LARGEST client, so a smaller"
+	       echo "         view is clipped. Mode: ceil." ;;
+	esac
+	echo
+	echo "  settle it:   mux views floor   (stable, nothing clipped)"
+	echo "               mux views ceil    (stable, small views clipped)"
+	echo "               mux views auto    (tmux's default; moves)"
+	echo "  or end it:   mux views --detach <client>"
+else
+	printf 'no tension: every client is %s. Mode: %s.\n' \
+		"$(mux_view_sizes)" "$_mode"
+fi
