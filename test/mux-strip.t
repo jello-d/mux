@@ -34,6 +34,11 @@ case "$*" in
 *list-sessions*) cat "$SESSIONS" ;;
 *list-panes*)    cat "$PANES" ;;
 *show-options*)  printf '\n' ;;
+# The strip draws the view indicator at its right edge, so the probe behind
+# it has to answer deterministically or the tail would vary run to run.
+# One client, window matching it: calm, mode auto.
+*list-clients*)  printf '/dev/pts/0 161x64 alpha 1\n' ;;
+*client_width*)  printf '161x64 161x64 latest\n' ;;
 esac
 exit 0
 EOF
@@ -124,6 +129,35 @@ while [ "$_w" -le 400 ]; do
 	_prev=$_len
 	_w=$((_w + 40))
 done
+
+# --- the view indicator is FIXED FURNITURE at the right edge --------------
+# It is drawn by this script rather than as its own status-left segment so its
+# width comes out of the SAME budget the tiers spend -- a second #() appended
+# by tmux would be invisible to them and would silently push the strip past
+# status-right-length. Two things follow, and both are contract:
+#
+#   it is present at EVERY width, including the summary floor, so the bar never
+#   changes width as tension comes and goes; and
+#   reduction never eats it, because it is not a chip that may be dropped.
+#
+# (Below about ten columns the summary tier is already at its own floor and
+# cannot compress further, so the total exceeds a budget that small. That is
+# the pre-existing floor, not something the indicator introduced.)
+_w=400
+while [ "$_w" -ge 10 ]; do
+	_r=$(vis "$(render delta "$_w")")
+	case $_r in
+	*"⇕"*) ;;
+	*) fail "width $_w: the view indicator was dropped -- [$_r]" ;;
+	esac
+	_w=$((_w - 1))
+done
+# ... and it is the LAST thing on the strip, after a separator.
+_edge=$(vis "$(render delta 400)")
+case $_edge in
+*"│ ⇕") ;;
+*) fail "the indicator is not at the right edge: [$_edge]" ;;
+esac
 
 # --- the current session is the one marked ---------------------------------
 _o=$(render alpha 400)

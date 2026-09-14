@@ -44,6 +44,13 @@ _lib=$(dirname "$0")
 # from one place rather than each knowing a daemon's CLI.
 . "$_lib/mux-notify.sh"
 
+# The view indicator lives at the RIGHT END of this strip, so its width has to
+# come out of the same budget the reduction tiers spend. It is drawn from here
+# rather than as its own status-left segment precisely so that arithmetic
+# happens in ONE place -- a second #() appended by tmux would be invisible to
+# the tiers and would silently push the strip past status-right-length.
+. "$_lib/mux-views.sh"
+
 # ---------------------------------------------------------------------------
 # LOOK & FEEL -- every colour knob for the strip in one place. Colours are tmux
 # colour names (colour0-255) or truecolor #rrggbb. The render logic below reads
@@ -169,6 +176,13 @@ budget=${MUX_STRIP_WIDTH:-}
         2>/dev/null || true)
 [ -n "$budget" ] || budget=160
 budget=$((budget - 1))
+
+# Reserve the view indicator: " │ " plus the glyph. Taken off the top so every
+# tier below lays out inside what is left, and the indicator is never the thing
+# that overflows -- it is fixed furniture, not a chip that may be dropped.
+VIEW_TAIL_W=$((MUX_VIEW_W + 3))
+budget=$((budget - VIEW_TAIL_W))
+[ "$budget" -ge 1 ] || budget=1
 
 # The strip is BUILT into BS (the escape string) while BW tracks its VISIBLE
 # width, computed ARITHMETICALLY (a glyph is 2 cols, a name 1/char, the age a
@@ -366,4 +380,11 @@ build_plain 1
 [ "$BW" -le "$budget" ] || build_collapse
 [ "$BW" -le "$budget" ] || build_window
 [ "$BW" -le "$budget" ] || build_summary
+
+# The view indicator, always, after a separator: two dimensions in one cell --
+# SHAPE is the mode you chose, COLOUR is what is happening to this view. Fixed
+# furniture at the right edge, so the bar never changes width as tension comes
+# and goes, and the mode stays legible even when nothing is contending.
 printf '%s' "$BS"
+printf '#[default]#[fg=colour238] %s #[default]' "$SEP"
+mux_view_chip "${2:-}"
