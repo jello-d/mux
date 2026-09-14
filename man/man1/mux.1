@@ -209,17 +209,24 @@ That indicator is a single glyph at the right end of the status strip, always
 present so the bar never changes width and the mode stays legible when nothing
 is contending. It carries both dimensions at once:
 .B SHAPE
-is the mode you chose: an up\-down arrow for
+is the mode you chose: a bar with a stem, where the BAR is the pin and its
+position is the bound \(em below for
+.BR floor ,
+above for
+.BR ceil
+\(em and an up\-down arrow for
 .BR auto ,
-and the mathematical floor and ceiling symbols for
-.B floor
-and
-.BR ceil ,
-so the picture is the name. Meanwhile
+which is not pinned at all. Meanwhile
 .B COLOUR
 is what is happening to THIS view: grey when calm, white when it is the one
 setting the size, amber when it carries dead rows, and the caution pairing when
-it is CLIPPED and part of the window is off screen.
+it is CLIPPED and part of the window is off screen. The colour is PER CLIENT,
+not per session: two clients on one session see different colours, because the
+question it answers is what each of them is losing.
+.IP
+Note a client's reported HEIGHT includes its status line(s); the window gets
+what is left. mux accounts for that, so the client actually setting the size
+reads as fit rather than one row short.
 .B \-\-detach
 removes a client, ending its claim on the size altogether.
 .TP

@@ -125,26 +125,35 @@ mux_view_tension() {
 mux_view_probe() {      # [client-name]
 	[ -z "${MUX_VIEW_MODE:-}" ] || return 0
 	_pf='#{client_width}x#{client_height}'
-	_pf="$_pf #{window_width}x#{window_height} #{window-size}"
+	_pf="$_pf #{window_width}x#{window_height} #{window-size} #{status}"
 	if [ -n "${1:-}" ]; then
 		_pr=$(_vt display-message -c "$1" -p "$_pf" 2>/dev/null || true)
 	else
 		_pr=$(_vt display-message -p "$_pf" 2>/dev/null || true)
 	fi
-	MUX_VIEW_CW= MUX_VIEW_CH= MUX_VIEW_WW= MUX_VIEW_WH=
+	MUX_VIEW_CW= MUX_VIEW_CH= MUX_VIEW_WW= MUX_VIEW_WH= MUX_VIEW_ST=0
 	MUX_VIEW_MODE=auto
 	case $_pr in
-	*x*' '*x*' '*) ;;
+	*x*' '*x*' '*' '*) ;;
 	*) return 0 ;;
 	esac
 	_a=${_pr%% *}; _rest=${_pr#* }
-	_b=${_rest%% *}; _wz=${_rest#* }
+	_b=${_rest%% *}; _rest=${_rest#* }
+	_wz=${_rest%% *}; _st=${_rest#* }
 	MUX_VIEW_CW=${_a%%x*}; MUX_VIEW_CH=${_a##*x}
 	MUX_VIEW_WW=${_b%%x*}; MUX_VIEW_WH=${_b##*x}
 	case $_wz in
 	smallest) MUX_VIEW_MODE=floor ;;
 	largest)  MUX_VIEW_MODE=ceil ;;
 	*)        MUX_VIEW_MODE=auto ;;
+	esac
+	# Status lines, so the comparison below can take them off the client's
+	# height. `status` is on/off or a count.
+	case $_st in
+	off)   MUX_VIEW_ST=0 ;;
+	on)    MUX_VIEW_ST=1 ;;
+	[0-9]) MUX_VIEW_ST=$_st ;;
+	*)     MUX_VIEW_ST=1 ;;
 	esac
 }
 
@@ -164,10 +173,17 @@ mux_view_side() {   # <client-name>
 	case ${MUX_VIEW_CW:-}${MUX_VIEW_CH:-}${MUX_VIEW_WW:-}${MUX_VIEW_WH:-} in
 	''|*[!0-9]*) return 0 ;;
 	esac
-	if [ "$MUX_VIEW_WH" -gt "$MUX_VIEW_CH" ] \
+	# A client's HEIGHT includes its status line(s); the window gets what is
+	# left. So a perfectly fitted client is client_height - status, and
+	# comparing against the raw height made EVERY view read as one row of
+	# slack -- which is exactly what it did, on both clients, until two
+	# differently-sized clients were put side by side and both came back the
+	# same.
+	_eh=$((MUX_VIEW_CH - MUX_VIEW_ST))
+	if [ "$MUX_VIEW_WH" -gt "$_eh" ] \
 	   || [ "$MUX_VIEW_WW" -gt "$MUX_VIEW_CW" ]; then
 		printf clipped
-	elif [ "$MUX_VIEW_WH" -lt "$MUX_VIEW_CH" ] \
+	elif [ "$MUX_VIEW_WH" -lt "$_eh" ] \
 	     || [ "$MUX_VIEW_WW" -lt "$MUX_VIEW_CW" ]; then
 		printf slack
 	else
@@ -192,9 +208,15 @@ MUX_VIEW_W=1                    # visible columns, for the strip's width budget
 
 mux_view_glyph() {
 	mux_view_probe "${1:-}"
+	# Box-drawing, not the mathematical floor/ceiling marks: those are
+	# thin corner ticks that read as a bare pipe in most terminal fonts,
+	# and as each other. Here the BAR is the pin and its POSITION is the
+	# bound it pins to -- bar at the bottom is a floor to stand on, bar at
+	# the top is a ceiling to hit. auto keeps an arrow, deliberately a
+	# different family: it is the one that is not pinned at all.
 	case $MUX_VIEW_MODE in
-	floor) printf '\342\214\212' ;;   # U+230A  floor
-	ceil)  printf '\342\214\210' ;;   # U+2308  ceiling
+	floor) printf '\342\224\264' ;;   # U+2534  bar below, stem up
+	ceil)  printf '\342\224\254' ;;   # U+252C  bar above, stem down
 	*)     printf '\342\207\225' ;;   # U+21D5  up-down arrow: free to move
 	esac
 }
