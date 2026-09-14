@@ -203,7 +203,23 @@ smaller one is clipped
 No mode is correct in general; each buys stability with something. With no
 argument the current clients, their idle times and the mode are reported;
 .B next
-cycles, which is also what CLICKING the status chip does.
+cycles, which is also what CLICKING the indicator does.
+.IP
+That indicator is a single glyph at the right end of the status strip, always
+present so the bar never changes width and the mode stays legible when nothing
+is contending. It carries both dimensions at once:
+.B SHAPE
+is the mode you chose: an up\-down arrow for
+.BR auto ,
+and the mathematical floor and ceiling symbols for
+.B floor
+and
+.BR ceil ,
+so the picture is the name. Meanwhile
+.B COLOUR
+is what is happening to THIS view: grey when calm, white when it is the one
+setting the size, amber when it carries dead rows, and the caution pairing when
+it is CLIPPED and part of the window is off screen.
 .B \-\-detach
 removes a client, ending its claim on the size altogether.
 .TP

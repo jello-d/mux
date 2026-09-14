@@ -28,30 +28,13 @@ if [ -z "${TMUX:-}" ] && [ -r "$_lib/mux-context.sh" ]; then
 fi
 
 # --- the status chip -------------------------------------------------------
-# Drawn ONLY under tension, so the bar carries nothing at all in the ordinary
-# single-client case. It answers the two questions in the two orders you ask
-# them: something is fighting over my window size (⇕), and this is how it is
-# being settled (the mode).
-#
-# A `clipped` view is the one that costs you something you cannot see -- part
-# of the window is off screen -- so it alone wears the caution colours, the
-# same pairing the blocked-agent chip uses.
-#
-# Tagged #[range=user|v:mode] so a CLICK cycles the mode: the condition is
-# noticed on the bar, and fixed on the bar, without looking up a verb.
+# Composed in mux-views.sh so this and the status strip cannot disagree about
+# what it looks like; the strip is what actually draws it (it owns the width
+# budget). Kept here so the chip can be seen and tested without a live bar.
 if [ "${1:-}" = --chip ]; then
-	mux_view_tension || exit 0
-	_n=$(mux_view_sizes | grep -c .)
-	_mode=$(mux_view_mode)
-	_side=$(mux_view_side "${2:-}")
-	case $_side in
-	clipped) _mk='▴'; _sty='#[fg=colour232,bg=colour202,bold]' ;;
-	slack)   _mk='▾'; _sty='#[fg=colour244]' ;;
-	*)       _mk=' '; _sty='#[fg=colour244]' ;;
-	esac
-	printf '#[range=user|v:mode]%s ⇕%s %s%s#[default]#[norange] ' \
-		"$_sty" "$_n" "$_mode" "$_mk"
-	exit 0
+        mux_view_chip "${2:-}"
+        echo
+        exit 0
 fi
 
 # --- mode switching --------------------------------------------------------

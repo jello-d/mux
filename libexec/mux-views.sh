@@ -52,14 +52,13 @@ _vt() {
 	fi
 }
 
-# mux_view_mode -> the mode in mux's vocabulary, from tmux's window-size.
-mux_view_mode() {
-	case $(_vt show-options -gv window-size 2>/dev/null || echo latest) in
-	smallest) printf floor ;;
-	largest)  printf ceil ;;
-	latest)   printf auto ;;
-	*)        printf auto ;;   # manual, or a tmux that has grown a new one
-	esac
+# mux_view_mode -> the mode in mux's vocabulary. Read through the probe rather
+# than its own show-options call: the probe already fetches window-size (it is
+# a real format), and a second reader would be a second place for the same fact
+# to be derived -- and to disagree.
+mux_view_mode() {   # [client-name]
+	mux_view_probe "${1:-}"
+	printf '%s' "$MUX_VIEW_MODE"
 }
 
 # mux_view_mode_set MODE -> apply it. Rejects an unknown name rather than
@@ -74,6 +73,9 @@ mux_view_mode_set() {   # <auto|floor|ceil>
 	esac
 	_vt set-option -g window-size "$_wz" 2>/dev/null || {
 		echo "mux: could not set window-size" >&2; return 1; }
+	# The probe cached the OLD mode; anything reading it after this would
+	# report the value we just replaced.
+	MUX_VIEW_MODE=$1
 }
 
 # mux_view_clients -> "NAME WIDTHxHEIGHT SESSION IDLE_SECONDS" per attached
@@ -111,6 +113,41 @@ mux_view_tension() {
 	[ "$(mux_view_sizes | grep -c .)" -gt 1 ]
 }
 
+# Everything the chip needs, in ONE round trip: this client's size, the window
+# it is currently showing, and the mode. The status bar redraws every interval
+# for every client, so each extra tmux call is a cost paid forever --
+# and #{window-size} being a real FORMAT is what lets the mode ride along here
+# instead of costing a second call to show-options.
+#
+# Results land in MUX_VIEW_CW/CH/WW/WH and MUX_VIEW_MODE. Probing twice is a
+# no-op, so the small readers below can each be called without any of them
+# paying for a round trip the first already made.
+mux_view_probe() {      # [client-name]
+	[ -z "${MUX_VIEW_MODE:-}" ] || return 0
+	_pf='#{client_width}x#{client_height}'
+	_pf="$_pf #{window_width}x#{window_height} #{window-size}"
+	if [ -n "${1:-}" ]; then
+		_pr=$(_vt display-message -c "$1" -p "$_pf" 2>/dev/null || true)
+	else
+		_pr=$(_vt display-message -p "$_pf" 2>/dev/null || true)
+	fi
+	MUX_VIEW_CW= MUX_VIEW_CH= MUX_VIEW_WW= MUX_VIEW_WH=
+	MUX_VIEW_MODE=auto
+	case $_pr in
+	*x*' '*x*' '*) ;;
+	*) return 0 ;;
+	esac
+	_a=${_pr%% *}; _rest=${_pr#* }
+	_b=${_rest%% *}; _wz=${_rest#* }
+	MUX_VIEW_CW=${_a%%x*}; MUX_VIEW_CH=${_a##*x}
+	MUX_VIEW_WW=${_b%%x*}; MUX_VIEW_WH=${_b##*x}
+	case $_wz in
+	smallest) MUX_VIEW_MODE=floor ;;
+	largest)  MUX_VIEW_MODE=ceil ;;
+	*)        MUX_VIEW_MODE=auto ;;
+	esac
+}
+
 # Which side of the tension a client is on, as one word. Compares the client to
 # the WINDOW it is currently showing, because that is the consequence you can
 # actually see:
@@ -123,23 +160,61 @@ mux_view_tension() {
 #
 # Empty when it cannot be determined (no such client, no current window).
 mux_view_side() {   # <client-name>
-	_cs=$(_vt display-message -c "$1" -p \
-		'#{client_width}x#{client_height} #{window_width}x#{window_height}' \
-		2>/dev/null || true)
-	case $_cs in
-	*x*' '*x*) ;;
-	*) return 0 ;;
+	mux_view_probe "$1"
+	case ${MUX_VIEW_CW:-}${MUX_VIEW_CH:-}${MUX_VIEW_WW:-}${MUX_VIEW_WH:-} in
+	''|*[!0-9]*) return 0 ;;
 	esac
-	_cw=${_cs%%x*}
-	_ch=${_cs#*x}; _ch=${_ch%% *}
-	_ww=${_cs##* }; _ww=${_ww%%x*}
-	_wh=${_cs##*x}
-	case $_cw$_ch$_ww$_wh in *[!0-9]*) return 0 ;; esac
-	if [ "$_wh" -gt "$_ch" ] || [ "$_ww" -gt "$_cw" ]; then
+	if [ "$MUX_VIEW_WH" -gt "$MUX_VIEW_CH" ] \
+	   || [ "$MUX_VIEW_WW" -gt "$MUX_VIEW_CW" ]; then
 		printf clipped
-	elif [ "$_wh" -lt "$_ch" ] || [ "$_ww" -lt "$_cw" ]; then
+	elif [ "$MUX_VIEW_WH" -lt "$MUX_VIEW_CH" ] \
+	     || [ "$MUX_VIEW_WW" -lt "$MUX_VIEW_CW" ]; then
 		printf slack
 	else
 		printf fit
 	fi
+}
+
+# --- the one-glyph indicator -----------------------------------------------
+# TWO dimensions, TWO channels, assigned by what each is good at:
+#
+#   SHAPE  carries CONTROL -- the mode, which you chose. A small closed set is
+#          exactly what a shape distinguishes well, and the glyphs are the
+#          mathematical floor and ceiling symbols, so the picture IS the name.
+#   COLOUR carries RENDER  -- what is happening TO this view, which has one
+#          genuinely urgent value (clipped). Colour is what eyes catch, and
+#          mux already spends its loudest pairing on a blocked agent.
+#
+# Drawn even when calm, so the bar never changes width and the mode is legible
+# at all times: a `floor` pinned last week and forgotten is otherwise invisible
+# until it surprises you.
+MUX_VIEW_W=1                    # visible columns, for the strip's width budget
+
+mux_view_glyph() {
+	mux_view_probe "${1:-}"
+	case $MUX_VIEW_MODE in
+	floor) printf '\342\214\212' ;;   # U+230A  floor
+	ceil)  printf '\342\214\210' ;;   # U+2308  ceiling
+	*)     printf '\342\207\225' ;;   # U+21D5  up-down arrow: free to move
+	esac
+}
+
+# calm | fit | slack | clipped -- the render half, in one word.
+mux_view_state() {   # <client-name>
+	mux_view_tension || { printf calm; return 0; }
+	_st=$(mux_view_side "${1:-}")
+	printf '%s' "${_st:-fit}"
+}
+
+# The chip itself: one styled, click-tagged glyph. Composed HERE so the status
+# strip and `mux views --chip` cannot disagree about what it looks like.
+mux_view_chip() {   # <client-name>
+	case $(mux_view_state "${1:-}") in
+	clipped) _vs='#[fg=colour232,bg=colour202,bold]' ;;
+	slack)   _vs='#[fg=colour214]' ;;
+	fit)     _vs='#[fg=colour255,bold]' ;;
+	*)       _vs='#[fg=colour240]' ;;
+	esac
+	printf '#[range=user|v:mode]%s%s#[default]#[norange]' \
+		"$_vs" "$(mux_view_glyph "${1:-}")"
 }

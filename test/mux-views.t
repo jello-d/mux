@@ -28,17 +28,19 @@ cat >"$T/bin/tmux" <<'EOF'
 #!/bin/sh
 printf '%s\n' "$*" >>"$LOG"
 case "$*" in
-*"show-options -gv window-size"*) cat "$OPT" ;;
 *set-option*window-size*)         printf '%s\n' "${*##* }" >"$OPT" ;;
 *list-clients*)                   cat "$CLIENTS" ;;
-*client_width*x*client_height*window_width*) cat "$WINSZ" ;;
+# The probe: client size, window size and the mode in one round trip. The
+# mode comes from $OPT so a set-option above is visible to the next read.
+*client_width*window_width*window-size*)
+        printf '%s %s\n' "$(cat "$WINSZ")" "$(cat "$OPT")" ;;
 *"display-message -p"*)           printf '/dev/pts/0\n' ;;
 esac
 exit 0
 EOF
 chmod +x "$T/bin/tmux"
 printf 'latest\n' >"$OPT"
-printf '161x64 161x64\n' >"$WINSZ"
+printf '161x64 161x64' >"$WINSZ"
 : >"$LOG"
 
 # One client per line: NAME WxH SESSION ACTIVITY(epoch)
@@ -58,53 +60,59 @@ no_has() { case "$1" in *"$2"*) fail "$3: unwanted [$2] in [$1]" ;; esac; }
 # Three clients that agree are not tension; two that disagree are.
 calm
 _o=$(views); has "$_o" "no tension" "two same-size clients read as tension"
-_o=$(views --chip /dev/pts/0)
-[ -z "$_o" ] || fail "the chip must be EMPTY when there is no tension: [$_o]"
-
 tense
 _o=$(views); has "$_o" "tension" "two different sizes did not read as tension"
-_o=$(views --chip /dev/pts/0)
-[ -n "$_o" ] || fail "no chip drawn under tension"
 
-# --- the chip carries BOTH facts -------------------------------------------
-_v=$(printf '%s' "$_o" | sed 's/#\[[^]]*\]//g')
-has "$_v" "2" "chip: no count of the sizes in tension"
-has "$_v" "auto" "chip: no mode"
+# --- the chip is ALWAYS drawn ----------------------------------------------
+# Fixed furniture at the right edge: the bar must not change width as tension
+# comes and goes, and the MODE stays legible when nothing is contending -- a
+# floor pinned last week and forgotten is otherwise invisible until it
+# surprises you.
+calm
+_o=$(views --chip /dev/pts/0)
+[ -n "$_o" ] || fail "the chip vanished when calm; it is fixed furniture"
 has "$_o" "range=user|v:" "chip: not clickable (no range tag)"
+_v=$(printf '%s' "$_o" | sed 's/#\[[^]]*\]//g' | tr -d '\n')
+[ "$(printf '%s' "$_v" | wc -m)" -eq 1 ] \
+        || fail "the chip must be exactly ONE column: [$_v]"
 
-# --- WHICH SIDE this view is on --------------------------------------------
-# Compared against the WINDOW it is showing, because that is the consequence
-# you can see. `clipped` is the one that costs you something invisible -- part
-# of the window is off screen -- so it alone gets the caution colours.
-printf '161x64 161x64\n' >"$WINSZ"       # window matches the client
-_o=$(views --chip /dev/pts/0)
-no_has "$_o" "bg=colour202" "a fitting view wore the caution colour"
-
-printf '161x64 161x55\n' >"$WINSZ"       # window SMALLER: dead rows
-_o=$(views --chip /dev/pts/0)
-has "$(printf '%s' "$_o" | sed 's/#\[[^]]*\]//g')" "▾" "slack: no marker"
-no_has "$_o" "bg=colour202" "slack is harmless; it must not shout"
-
-printf '161x55 161x64\n' >"$WINSZ"       # window BIGGER: clipped, off screen
-_o=$(views --chip /dev/pts/0)
-has "$(printf '%s' "$_o" | sed 's/#\[[^]]*\]//g')" "▴" "clipped: no marker"
-has "$_o" "bg=colour202" "clipped must wear the caution colour"
-printf '161x64 161x64\n' >"$WINSZ"
-
-# --- the MODE is mux's vocabulary over tmux's window-size ------------------
-# auto/floor/ceil name the OUTCOME; latest/smallest/largest name tmux's
-# algorithm. The mapping is the only place the two meet.
-for _pair in 'latest auto' 'smallest floor' 'largest ceil'; do
-	printf '%s\n' "${_pair%% *}" >"$OPT"
-	_o=$(views --chip /dev/pts/0 | sed 's/#\[[^]]*\]//g')
-	has "$_o" "${_pair##* }" \
-		"window-size ${_pair%% *} should read as ${_pair##* }"
+# --- SHAPE carries control: the mode you chose ----------------------------
+# The glyphs are the mathematical floor and ceiling symbols, so the picture is
+# the name; auto is the one that moves.
+glyph() { views --chip /dev/pts/0 | sed 's/#\[[^]]*\]//g' | tr -d '\n'; }
+for _pair in 'latest ⇕' 'smallest ⌊' 'largest ⌈'; do
+        printf '%s\n' "${_pair%% *}" >"$OPT"
+        [ "$(glyph)" = "${_pair##* }" ] || fail \
+                "window-size ${_pair%% *} wants ${_pair##* }, drew $(glyph)"
 done
-# An unknown window-size (tmux's `manual`, or a future one) must not crash or
-# invent a mode -- it reports as auto rather than leaving the chip malformed.
+# An unknown window-size (tmux's `manual`, or a future one) must still draw
+# something legible rather than an empty cell.
 printf 'manual\n' >"$OPT"
-_o=$(views --chip /dev/pts/0 | sed 's/#\[[^]]*\]//g')
-has "$_o" "auto" "an unknown window-size broke the chip"
+[ "$(glyph)" = "⇕" ] || fail "an unknown window-size broke the glyph"
+printf 'latest\n' >"$OPT"
+
+# --- COLOUR carries render: what is happening to THIS view ----------------
+# Four states, four colours, and the shape must not move between them: that
+# separation is the whole design.
+style() { views --chip /dev/pts/0 | grep -o 'fg=colour[0-9]*' | head -1; }
+calm
+[ "$(style)" = "fg=colour240" ] || fail "calm: wrong colour ($(style))"
+[ "$(glyph)" = "⇕" ] || fail "calm changed the SHAPE; only colour may move"
+
+tense
+printf '161x64 161x64' >"$WINSZ"          # window matches the client
+[ "$(style)" = "fg=colour255" ] || fail "fit: wrong colour ($(style))"
+
+printf '161x64 161x55' >"$WINSZ"          # window SMALLER: dead rows
+[ "$(style)" = "fg=colour214" ] || fail "slack: wrong colour ($(style))"
+no_has "$(views --chip /dev/pts/0)" "bg=colour202" \
+        "slack is harmless; it must not wear the alarm"
+
+printf '161x55 161x64' >"$WINSZ"          # window BIGGER: content off screen
+has "$(views --chip /dev/pts/0)" "bg=colour202" \
+        "clipped must wear the caution colour -- it is the one that costs you"
+[ "$(glyph)" = "⇕" ] || fail "clipped changed the SHAPE; only colour may move"
+printf '161x64 161x64' >"$WINSZ"
 
 # --- setting the mode writes the tmux name, not mux's ----------------------
 for _pair in 'auto latest' 'floor smallest' 'ceil largest'; do
