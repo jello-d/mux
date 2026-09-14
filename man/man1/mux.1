@@ -214,12 +214,13 @@ its position is the bound \(em below for
 .BR floor ,
 above for
 .BR ceil
-\(em and a solid up\-down arrow for
+\(em and a heavy asterisk for
 .BR auto ,
-which is not pinned at all. All three are chosen to be present in a typical
-monospace face rather than reached by font fallback: bolder triangle\-headed
-arrows look better but arrive from a proportional font, which renders at other
-metrics and is absent entirely on some machines. Meanwhile
+which is not pinned at all. The asterisk is deliberate: every up\-down arrow
+actually present in a monospace face renders too small to read at a glance, and
+the bold ones arrive through font fallback at another face's metrics. The HEAVY
+one rather than the plain one because the plain asterisk is drawn near the cap
+line, floating above the glyphs beside it. Meanwhile
 .B COLOUR
 is what is happening to THIS view: grey when calm, white when it is the one
 setting the size, amber when it carries dead rows, and the caution pairing when

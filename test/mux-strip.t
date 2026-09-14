@@ -147,7 +147,7 @@ _w=400
 while [ "$_w" -ge 10 ]; do
 	_r=$(vis "$(render delta "$_w")")
 	case $_r in
-	*"⬍"*) ;;
+	*"✱"*) ;;
 	*) fail "width $_w: the view indicator was dropped -- [$_r]" ;;
 	esac
 	_w=$((_w - 1))
@@ -155,7 +155,7 @@ done
 # ... and it is the LAST thing on the strip, after a separator.
 _edge=$(vis "$(render delta 400)")
 case $_edge in
-*"│ ⬍") ;;
+*"│ ✱") ;;
 *) fail "the indicator is not at the right edge: [$_edge]" ;;
 esac
 
