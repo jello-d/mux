@@ -454,6 +454,7 @@ mux --no-agent ...           build the panes, plain shell in the agent pane
 mux resume                   rebuild this partition's sessions (--list)
 mux scan                     rebuild the project discovery map
 mux why [NAME]               show each resolved value and where it came from
+mux views [auto|floor|ceil]  who is attached, at what size, what it costs
 mux ls                       list sessions (with agent-state glyphs)
 mux new NAME                 create NAME here, binding the name if needed
 mux scan                     rebuild the project discovery map

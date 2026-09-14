@@ -19,7 +19,7 @@ MUX_SHARE=${MUX_SHARE:-$(dirname "$0")/../share}
 # audits the data mux would ACTUALLY read -- a default theme or layout supplied
 # by the overlay counts, and one shadowed by it is judged on the overlay copy.
 for _l in mux-data.sh mux-context.sh mux-scan.sh mux-profiles.sh \
-		mux-notify.sh; do
+		mux-notify.sh mux-views.sh; do
 	_lp=$(dirname "$0")/$_l
 	[ -r "$_lp" ] || {
 		printf '  [FAIL] %s missing (broken install)\n' "$_lp" >&2
@@ -160,6 +160,22 @@ EOF
 else
 	warn "no scan roots for partition '${MUX_CTX_PARTITION:-global}'"
 	warn "  discovery is off; \`mux go <name>\` cannot find projects"
+fi
+
+# 4b. view tension. Two clients of different SIZES attached to one server means
+# there is no window size that suits both, so tmux picks one and the windows
+# move as you cycle -- the "why did that redraw" question. Advisory, never a
+# FAIL: it is a normal consequence of attaching from a second place, and often
+# the second place is an ssh window you forgot rather than a fault.
+MUX_VIEW_SOCKET=${MUX_CTX_PARTITION:-}
+export MUX_VIEW_SOCKET
+if mux_view_tension 2>/dev/null; then
+	warn "$(mux_view_sizes | grep -c .) client sizes attached --" \
+		"windows resize as you cycle (mode: $(mux_view_mode))"
+	mux_view_clients | while read -r _vn _vd _vs _vi; do
+		warn "  $_vn $_vd on '$_vs', idle $((_vi / 60))m"
+	done
+	warn "  settle or end it:  mux views"
 fi
 
 # 5. unsaved edit drafts. A draft survives an unparseable save on purpose, so

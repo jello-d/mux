@@ -33,7 +33,7 @@ bind B switch-client -l
 # no press. Anything else on the bar (the window list on the left) keeps the
 # default -- switch to the target under the mouse. Needs `mouse on`.
 bind -n MouseDown1Status {
-  if -F '#{m:s:*,#{mouse_status_range}}' {
+  if -F '#{||:#{m:s:*,#{mouse_status_range}},#{m:v:*,#{mouse_status_range}}}' {
     run-shell "mux click '#{mouse_status_range}' '#{client_name}'"
   } {
     switch-client -t =
@@ -113,7 +113,7 @@ set -g set-titles-string '#{@mux-prefix}#S:#W⠀⠀⠀⠀[#{host_short}]'
 # coloured per host (data in $MUX_DIR/hosts), so no host-specific config is
 # needed. It also (re)applies the theme and title prefix as side effects every
 # status-interval and on the hooks below. Length allows for banner + host + #S.
-set -g status-left-length 100
+set -g status-left-length 116   # + room for the view-tension chip
 set -g status-left '#(mux style #S #{pane_pid})#[bold]#S#[default] '
 # A small orange marker on the left while a pane is zoomed (empty otherwise;
 # commas inside the #{?...} escaped as #,). The LOUD mode banners -- a bright
@@ -122,6 +122,16 @@ set -g status-left '#(mux style #S #{pane_pid})#[bold]#S#[default] '
 # which rebuilds status-format[0]. So prefix-held is unmissable and an
 # accidental zoom is obviously recoverable.
 set -ga status-left '#{?window_zoomed_flag,#[fg=16#,bg=214#] ⛶ #[default] ,}'
+# VIEW TENSION: drawn only when two clients of different sizes are attached, so
+# the bar carries nothing at all in the ordinary single-client case. It answers
+# the two questions in the order they occur to you -- something is fighting over
+# my window size (the count), and this is how it is being settled (the mode) --
+# plus a marker for which side THIS view is on: a clipped view wears the caution
+# colours, because part of its window is off screen and nothing else says so.
+#
+# It is a live condition that comes and goes with an ssh window, which is why it
+# belongs here and not only in `mux check`. Clicking it cycles the mode.
+set -ga status-left '#(mux views --chip #{client_name})'
 run-shell "mux status-banner"
 
 # status-right: one token per session, in switch-client -n/-p order (prev left,
