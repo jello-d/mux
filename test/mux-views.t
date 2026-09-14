@@ -80,7 +80,7 @@ _v=$(printf '%s' "$_o" | sed 's/#\[[^]]*\]//g' | tr -d '\n')
 # The glyphs are the mathematical floor and ceiling symbols, so the picture is
 # the name; auto is the one that moves.
 glyph() { views --chip /dev/pts/0 | sed 's/#\[[^]]*\]//g' | tr -d '\n'; }
-for _pair in 'latest ⬍' 'smallest ┻' 'largest ┳'; do
+for _pair in 'latest ✱' 'smallest ┻' 'largest ┳'; do
         printf '%s\n' "${_pair%% *}" >"$OPT"
         [ "$(glyph)" = "${_pair##* }" ] || fail \
                 "window-size ${_pair%% *} wants ${_pair##* }, drew $(glyph)"
@@ -88,7 +88,7 @@ done
 # An unknown window-size (tmux's `manual`, or a future one) must still draw
 # something legible rather than an empty cell.
 printf 'manual\n' >"$OPT"
-[ "$(glyph)" = "⬍" ] || fail "an unknown window-size broke the glyph"
+[ "$(glyph)" = "✱" ] || fail "an unknown window-size broke the glyph"
 printf 'latest\n' >"$OPT"
 
 # --- COLOUR carries render: what is happening to THIS view ----------------
@@ -97,7 +97,7 @@ printf 'latest\n' >"$OPT"
 style() { views --chip /dev/pts/0 | grep -o 'fg=colour[0-9]*' | head -1; }
 calm
 [ "$(style)" = "fg=colour240" ] || fail "calm: wrong colour ($(style))"
-[ "$(glyph)" = "⬍" ] || fail "calm changed the SHAPE; only colour may move"
+[ "$(glyph)" = "✱" ] || fail "calm changed the SHAPE; only colour may move"
 
 tense
 printf '161x64 161x63' >"$WINSZ"          # window == client minus status: fit
@@ -111,7 +111,7 @@ no_has "$(views --chip /dev/pts/0)" "bg=colour202" \
 printf '161x56 161x63' >"$WINSZ"          # window BIGGER: content off screen
 has "$(views --chip /dev/pts/0)" "bg=colour202" \
         "clipped must wear the caution colour -- it is the one that costs you"
-[ "$(glyph)" = "⬍" ] || fail "clipped changed the SHAPE; only colour may move"
+[ "$(glyph)" = "✱" ] || fail "clipped changed the SHAPE; only colour may move"
 printf '161x64 161x63' >"$WINSZ"
 
 # A client's HEIGHT includes its status line(s), and the window gets what is

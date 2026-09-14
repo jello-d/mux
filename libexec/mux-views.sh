@@ -214,16 +214,30 @@ mux_view_glyph() {
 	# bound it pins to -- bar at the bottom is a floor to stand on, bar at
 	# the top is a ceiling to hit. auto keeps an arrow, deliberately a
 	# different family: it is the one that is not pinned at all.
-	# HEAVY box-drawing for the pinned pair and a large solid arrow for the
-	# free one, all three chosen for weight AND for being present in the
-	# terminal font rather than reached by fallback. The bolder
-	# triangle-headed arrows (U+2B65, U+2B81) look better but are in neither
-	# DejaVu Sans Mono nor most monospace faces, so they arrive from a
-	# proportional fallback -- fine on one machine, tofu on the next.
+	# HEAVY box-drawing for the pinned pair: the BAR is the pin and its
+	# position is the bound. Both are present in the terminal font itself
+	# rather than reached by fallback, so they render at the right metrics.
+	#
+	# auto is an ASTERISK, not an arrow. Every up-down arrow actually present
+	# in a monospace face renders too small to read at a glance, and the
+	# bold triangle-headed ones (U+2B65, U+2B81) are in neither DejaVu Sans
+	# Mono nor most others -- they arrive from a proportional fallback, at
+	# another font's metrics, and are tofu where it is absent. An asterisk's
+	# wildcard sense -- any of these, whatever comes last -- happens to be
+	# exactly what auto means.
+	#
+	# The HEAVY asterisk, not the plain one. Measured against DejaVu Sans
+	# Mono's own outlines, U+002A is drawn 484 units ABOVE the x-height
+	# centre (the typographic raised asterisk), so it floats near the cap
+	# line while its neighbours sit mid-cell. U+2731 is 16 units off centre,
+	# and being heavy it also reads at the weight of the bars beside it.
+	# U+2733/U+2734 centre marginally better but are emoji-capable, so a
+	# terminal may give them a width-2 presentation and break the strip's
+	# width budget -- not a trade worth ten font units.
 	case $MUX_VIEW_MODE in
 	floor) printf '\342\224\273' ;;   # U+253B  heavy bar below, stem up
 	ceil)  printf '\342\224\263' ;;   # U+2533  heavy bar above, stem down
-	*)     printf '\342\254\215' ;;   # U+2B0D  large solid up-down arrow
+	*)     printf '\342\234\261' ;;   # U+2731  heavy asterisk: unpinned
 	esac
 }
 
