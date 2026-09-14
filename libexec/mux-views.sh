@@ -214,10 +214,16 @@ mux_view_glyph() {
 	# bound it pins to -- bar at the bottom is a floor to stand on, bar at
 	# the top is a ceiling to hit. auto keeps an arrow, deliberately a
 	# different family: it is the one that is not pinned at all.
+	# HEAVY box-drawing for the pinned pair and a large solid arrow for the
+	# free one, all three chosen for weight AND for being present in the
+	# terminal font rather than reached by fallback. The bolder
+	# triangle-headed arrows (U+2B65, U+2B81) look better but are in neither
+	# DejaVu Sans Mono nor most monospace faces, so they arrive from a
+	# proportional fallback -- fine on one machine, tofu on the next.
 	case $MUX_VIEW_MODE in
-	floor) printf '\342\224\264' ;;   # U+2534  bar below, stem up
-	ceil)  printf '\342\224\254' ;;   # U+252C  bar above, stem down
-	*)     printf '\342\207\225' ;;   # U+21D5  up-down arrow: free to move
+	floor) printf '\342\224\273' ;;   # U+253B  heavy bar below, stem up
+	ceil)  printf '\342\224\263' ;;   # U+2533  heavy bar above, stem down
+	*)     printf '\342\254\215' ;;   # U+2B0D  large solid up-down arrow
 	esac
 }
 

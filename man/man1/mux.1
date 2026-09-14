@@ -209,14 +209,17 @@ That indicator is a single glyph at the right end of the status strip, always
 present so the bar never changes width and the mode stays legible when nothing
 is contending. It carries both dimensions at once:
 .B SHAPE
-is the mode you chose: a bar with a stem, where the BAR is the pin and its
-position is the bound \(em below for
+is the mode you chose: a heavy bar with a stem, where the BAR is the pin and
+its position is the bound \(em below for
 .BR floor ,
 above for
 .BR ceil
-\(em and an up\-down arrow for
+\(em and a solid up\-down arrow for
 .BR auto ,
-which is not pinned at all. Meanwhile
+which is not pinned at all. All three are chosen to be present in a typical
+monospace face rather than reached by font fallback: bolder triangle\-headed
+arrows look better but arrive from a proportional font, which renders at other
+metrics and is absent entirely on some machines. Meanwhile
 .B COLOUR
 is what is happening to THIS view: grey when calm, white when it is the one
 setting the size, amber when it carries dead rows, and the caution pairing when
