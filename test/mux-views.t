@@ -109,8 +109,13 @@ no_has "$(views --chip /dev/pts/0)" "bg=colour202" \
         "slack is harmless; it must not wear the alarm"
 
 printf '161x56 161x63' >"$WINSZ"          # window BIGGER: content off screen
-has "$(views --chip /dev/pts/0)" "bg=colour202" \
+_c=$(views --chip /dev/pts/0)
+has "$_c" "bg=colour202" \
         "clipped must wear the caution colour -- it is the one that costs you"
+# The FOREGROUND is the half that makes it read as an alarm rather than a
+# label, and it is deliberately not the near-black the blocked chip uses on
+# this same orange -- the two must not be confusable at a glance.
+has "$_c" "fg=colour226" "clipped lost its hazard-yellow glyph"
 [ "$(glyph)" = "✱" ] || fail "clipped changed the SHAPE; only colour may move"
 printf '161x64 161x63' >"$WINSZ"
 
