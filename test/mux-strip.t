@@ -155,7 +155,7 @@ done
 # ... and it is the LAST thing on the strip, after a separator.
 _edge=$(vis "$(render delta 400)")
 case $_edge in
-*"│ ✱") ;;
+*"│✱") ;;
 *) fail "the indicator is not at the right edge: [$_edge]" ;;
 esac
 

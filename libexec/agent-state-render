@@ -177,10 +177,11 @@ budget=${MUX_STRIP_WIDTH:-}
 [ -n "$budget" ] || budget=160
 budget=$((budget - 1))
 
-# Reserve the view indicator: " │ " plus the glyph. Taken off the top so every
+# Reserve the view indicator: the separator plus the glyph, no padding. Taken
+# off the top so every
 # tier below lays out inside what is left, and the indicator is never the thing
 # that overflows -- it is fixed furniture, not a chip that may be dropped.
-VIEW_TAIL_W=$((MUX_VIEW_W + 3))
+VIEW_TAIL_W=$((MUX_VIEW_W + 1))
 budget=$((budget - VIEW_TAIL_W))
 [ "$budget" -ge 1 ] || budget=1
 
@@ -386,5 +387,5 @@ build_plain 1
 # furniture at the right edge, so the bar never changes width as tension comes
 # and goes, and the mode stays legible even when nothing is contending.
 printf '%s' "$BS"
-printf '#[default]#[fg=colour238] %s #[default]' "$SEP"
+printf '#[default]#[fg=colour238]%s' "$SEP"
 mux_view_chip "${2:-}"
