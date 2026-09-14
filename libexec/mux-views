@@ -18,7 +18,12 @@ _lib=$(dirname "$0")
 # Outside a session there is no $TMUX to name the server, so resolve this
 # caller's partition and address that socket explicitly. Skipped when inside
 # tmux: $TMUX already answers, and the status chip runs this every interval.
-if [ -z "${TMUX:-}" ] && [ -r "$_lib/mux-context.sh" ]; then
+# An explicitly set MUX_VIEW_SOCKET WINS, as every other MUX_* var does.
+# Overwriting it here made the variable look honoured while being ignored,
+# which is the worst of both: a caller aiming at one server is silently
+# answered about another.
+if [ -z "${TMUX:-}" ] && [ -z "${MUX_VIEW_SOCKET:-}" ] \
+   && [ -r "$_lib/mux-context.sh" ]; then
 	MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
 	. "$_lib/mux-context.sh"
 	if mux_ctx_resolve 2>/dev/null; then

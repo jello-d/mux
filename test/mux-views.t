@@ -32,15 +32,15 @@ case "$*" in
 *list-clients*)                   cat "$CLIENTS" ;;
 # The probe: client size, window size and the mode in one round trip. The
 # mode comes from $OPT so a set-option above is visible to the next read.
-*client_width*window_width*window-size*)
-        printf '%s %s\n' "$(cat "$WINSZ")" "$(cat "$OPT")" ;;
+*client_width*window_width*window-size*status*)
+        printf '%s %s on\n' "$(cat "$WINSZ")" "$(cat "$OPT")" ;;
 *"display-message -p"*)           printf '/dev/pts/0\n' ;;
 esac
 exit 0
 EOF
 chmod +x "$T/bin/tmux"
 printf 'latest\n' >"$OPT"
-printf '161x64 161x64' >"$WINSZ"
+printf '161x64 161x63' >"$WINSZ"
 : >"$LOG"
 
 # One client per line: NAME WxH SESSION ACTIVITY(epoch)
@@ -80,7 +80,7 @@ _v=$(printf '%s' "$_o" | sed 's/#\[[^]]*\]//g' | tr -d '\n')
 # The glyphs are the mathematical floor and ceiling symbols, so the picture is
 # the name; auto is the one that moves.
 glyph() { views --chip /dev/pts/0 | sed 's/#\[[^]]*\]//g' | tr -d '\n'; }
-for _pair in 'latest ⇕' 'smallest ⌊' 'largest ⌈'; do
+for _pair in 'latest ⇕' 'smallest ┴' 'largest ┬'; do
         printf '%s\n' "${_pair%% *}" >"$OPT"
         [ "$(glyph)" = "${_pair##* }" ] || fail \
                 "window-size ${_pair%% *} wants ${_pair##* }, drew $(glyph)"
@@ -100,19 +100,38 @@ calm
 [ "$(glyph)" = "⇕" ] || fail "calm changed the SHAPE; only colour may move"
 
 tense
-printf '161x64 161x64' >"$WINSZ"          # window matches the client
+printf '161x64 161x63' >"$WINSZ"          # window == client minus status: fit
 [ "$(style)" = "fg=colour255" ] || fail "fit: wrong colour ($(style))"
 
-printf '161x64 161x55' >"$WINSZ"          # window SMALLER: dead rows
+printf '161x64 161x50' >"$WINSZ"          # window SMALLER: dead rows
 [ "$(style)" = "fg=colour214" ] || fail "slack: wrong colour ($(style))"
 no_has "$(views --chip /dev/pts/0)" "bg=colour202" \
         "slack is harmless; it must not wear the alarm"
 
-printf '161x55 161x64' >"$WINSZ"          # window BIGGER: content off screen
+printf '161x56 161x63' >"$WINSZ"          # window BIGGER: content off screen
 has "$(views --chip /dev/pts/0)" "bg=colour202" \
         "clipped must wear the caution colour -- it is the one that costs you"
 [ "$(glyph)" = "⇕" ] || fail "clipped changed the SHAPE; only colour may move"
-printf '161x64 161x64' >"$WINSZ"
+printf '161x64 161x63' >"$WINSZ"
+
+# A client's HEIGHT includes its status line(s), and the window gets what is
+# left. Comparing against the RAW height made every view read as one row of
+# slack -- including the client actually setting the size -- which is invisible
+# until two differently-sized clients are put side by side and both come back
+# the same.
+tense
+printf '161x64 161x63' >"$WINSZ"
+[ "$(style)" = "fg=colour255" ] \
+        || fail "client 64 showing a 63-row window is FIT, not $(style)"
+
+# --- an explicit MUX_VIEW_SOCKET WINS over the resolved partition ----------
+# Overwriting it made the variable look honoured while being ignored, so a
+# caller aiming at one server was silently answered about another.
+: >"$LOG"
+env -u TMUX -u MUX_SHARE PATH="$T/bin:$PATH" MUX_DIR="$T/conf" \
+        MUX_VIEW_SOCKET=probe "$HERE/libexec/mux-views" --chip /dev/pts/0 \
+        >/dev/null 2>&1 || true
+has "$(cat "$LOG")" "-L probe" "an explicit MUX_VIEW_SOCKET was ignored"
 
 # --- setting the mode writes the tmux name, not mux's ----------------------
 for _pair in 'auto latest' 'floor smallest' 'ceil largest'; do

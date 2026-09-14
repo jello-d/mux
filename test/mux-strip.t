@@ -38,7 +38,7 @@ case "$*" in
 # it has to answer deterministically or the tail would vary run to run.
 # One client, window matching it: calm, mode auto.
 *list-clients*)  printf '/dev/pts/0 161x64 alpha 1\n' ;;
-*client_width*)  printf '161x64 161x64 latest\n' ;;
+*client_width*)  printf '161x64 161x63 latest on\n' ;;
 esac
 exit 0
 EOF
