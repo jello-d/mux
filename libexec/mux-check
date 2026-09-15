@@ -169,7 +169,7 @@ fi
 # the second place is an ssh window you forgot rather than a fault.
 MUX_VIEW_SOCKET=${MUX_CTX_PARTITION:-}
 export MUX_VIEW_SOCKET
-if mux_view_tension 2>/dev/null; then
+if mux_view_server_tension 2>/dev/null; then
 	warn "$(mux_view_sizes | grep -c .) client sizes attached --" \
 		"windows resize as you cycle (mode: $(mux_view_mode))"
 	mux_view_clients | while read -r _vn _vd _vs _vi; do

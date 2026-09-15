@@ -103,22 +103,40 @@ done
 
 _mode=$(mux_view_mode)
 echo
-if mux_view_tension; then
-	printf 'tension: %s sizes attached -- ' "$(mux_view_sizes | grep -c .)"
-	case $_mode in
-	auto)  echo "every window follows the last client to use it, so"
-	       echo "         they resize as you cycle. Mode: auto." ;;
-	floor) echo "every window fits the SMALLEST client, so a bigger"
-	       echo "         view carries dead rows. Mode: floor." ;;
-	ceil)  echo "every window fits the LARGEST client, so a smaller"
-	       echo "         view is clipped. Mode: ceil." ;;
-	esac
-	echo
-	echo "  settle it:   mux views floor   (stable, nothing clipped)"
-	echo "               mux views ceil    (stable, small views clipped)"
-	echo "               mux views auto    (tmux's default; moves)"
-	echo "  or end it:   mux views --detach <client>"
+if mux_view_server_tension; then
+        printf '%s sizes attached.\n' "$(mux_view_sizes | grep -c .)"
+        case $_mode in
+        auto)  echo "  mode auto:  a contended window follows the last"
+               echo "              client to use it, so it resizes as"
+               echo "              you cycle." ;;
+        floor) echo "  mode floor: a contended window fits the SMALLEST"
+               echo "              of its clients, so a bigger view"
+               echo "              carries dead rows." ;;
+        ceil)  echo "  mode ceil:  a contended window fits the LARGEST"
+               echo "              of its clients, so a smaller view"
+               echo "              is clipped." ;;
+        esac
+        echo
+        # WHERE it bites. tmux sizes a window from the clients attached to its
+        # SESSION, so two differently-sized clients on two different sessions
+        # contend over nothing -- and the mode changes nothing for either of
+        # them. Saying only "N sizes attached" invites the reasonable but wrong
+        # conclusion that pinning will move the window you are looking at.
+        if [ -n "$_self_client" ] && mux_view_tension "$_self_client"; then
+                echo "  THIS window IS contended, so the mode decides its"
+                echo "  size and changing the mode moves it."
+        elif [ -n "$_self_client" ]; then
+                echo "  But NOT for the window you are looking at: every other"
+                echo "  client is on a different session, so this window is"
+                echo "  simply its own client's size, and the mode changes"
+                echo "  nothing here until one of you switches sessions."
+        fi
+        echo
+        echo "  settle it:   mux views floor   (stable, nothing clipped)"
+        echo "               mux views ceil    (stable, small views clipped)"
+        echo "               mux views auto    (tmux's default; moves)"
+        echo "  or end it:   mux views --detach <client>"
 else
-	printf 'no tension: every client is %s. Mode: %s.\n' \
-		"$(mux_view_sizes)" "$_mode"
+        printf 'no tension: every client is %s. Mode: %s.\n' \
+                "$(mux_view_sizes)" "$_mode"
 fi
