@@ -113,7 +113,23 @@ live=" $(tmux list-panes -a -F '#{pane_id}' 2>/dev/null | tr '\n' ' ')"
 # Prune phantoms once: drop any state file whose pane is gone, closing any
 # notification it still holds -- so a pane killed while blocked leaves no stale
 # "needs you" behind (best effort on any platform; see mux-notify.sh).
-if [ -d "$dir" ]; then
+#
+# ONLY when the pane list is non-empty. An empty one does not mean every pane
+# died -- it means the QUERY failed, and the commonest way is a socket
+# mismatch: this uses a bare `tmux`, so it inherits the server from $TMUX, and
+# run from a shell that has none (over ssh, from a cron, by hand to see what
+# the strip says) it asks tmux's DEFAULT socket instead. That socket usually
+# has no server at all, so list-panes errors, `live` comes back empty, every
+# recorded pane looks dead, and the prune deletes EVERY agent's state on the
+# real server.
+#
+# Which is not hypothetical: it happened here, wiping four of five state files
+# on a live machine, from a single diagnostic run of `mux agent-render` over
+# ssh. Destroying state on a failed read is the worst available response to an
+# incoherent answer, so the answer is refused instead. The cost of refusing is
+# that a genuinely dead pane's file survives until the next render that CAN
+# see the server -- a stale chip, which the next real render clears.
+if [ -d "$dir" ] && [ -n "${live# }" ]; then
         for f in "$dir"/*; do
                 [ -e "$f" ] || continue
                 read -r st ss win pane ep nid <"$f" || continue
