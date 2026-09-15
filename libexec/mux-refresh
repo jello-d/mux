@@ -1,11 +1,13 @@
 #!/bin/sh
 # mux-refresh: unstick the layout.
 #
-#   (no arg)  perturb the mux bottom pane and re-pin -- the CLI equivalent of
-#             dragging the bottom border and letting it snap back. Clears the
-#             classic "half-height pane" wedge, a proportional-resize GEOMETRY
-#             glitch that mux-pin alone will not fix when it thinks the size is
-#             already right. Bound to prefix+r.
+#   (no arg)  even out the top row's pane WIDTHS, then perturb the mux bottom
+#             pane and re-pin its HEIGHT -- the CLI equivalent of dragging a
+#             border and letting it snap back. Clears the classic "half-height
+#             pane" wedge, a proportional-resize GEOMETRY glitch that mux-pin
+#             alone will not fix when it thinks the size is already right, and
+#             the width drift that leaves a row at 79|81 where the layout says
+#             80|80. Bound to prefix+r.
 #   --force   REBUILD the bottom pane: break it out and rejoin it full-width,
 #             forcing tmux to re-lay-out and re-emit that border's cells from
 #             SCRATCH. This clears a stuck RENDER state that a repaint or a
@@ -24,6 +26,54 @@ _lib=$(dirname "$0")
 force=0
 case "${1:-}" in --force|-f) force=1 ;; esac
 
+# Even out the widths of the panes in this window's TOP ROW -- every pane that
+# is not the mux bottom pane.
+#
+# mux builds a row of panes with `split-window -h` and then `select-layout
+# even-horizontal`, so even IS the canonical state; nothing in a layout can ask
+# for an uneven one. But tmux redistributes width proportionally on resize, and
+# rounding means a window that has been resized a few times drifts off even and
+# STAYS there -- 79|81 in a 161-column window that should be 80|80. With
+# border-drag unbound there is then no way to put it back by hand, which is
+# what makes this a refresh's job rather than a nicety.
+#
+# NOT done from the resize hooks, only on an explicit refresh: hooks fire on
+# every layout change, so balancing there would silently undo any pane resize
+# the moment you made it. mux pins the bottom pane's HEIGHT automatically
+# because a layout states it; nobody stated these widths, so they are restored
+# when asked for and not before.
+_balance() {
+        _bw=$(tmux display-message -p '#{window_width}' 2>/dev/null) || return 0
+        case $_bw in ''|*[!0-9]*) return 0 ;; esac
+        # Non-bottom panes, in order, with their heights.
+        _rows=$(tmux list-panes -F '#{pane_id} #{pane_height} #{@mux-bottom}' \
+                2>/dev/null | awk 'NF < 3 { print $1, $2 }')
+        _n=$(printf '%s\n' "$_rows" | grep -c .) || _n=0
+        [ "$_n" -gt 1 ] || return 0             # one pane balances itself
+        # Only a single ROW is safe to even out this way: if the non-bottom
+        # panes differ in height they are stacked, not side by side, and
+        # setting widths would mangle an arrangement this does not model.
+        # Refuse rather than guess.
+        _h=$(printf '%s\n' "$_rows" | awk 'NR==1 { print $2 }')
+        printf '%s\n' "$_rows" | awk -v h="$_h" '$2 != h { exit 1 }' || return 0
+        # Width less the one column each border costs, split as evenly as it
+        # goes; the remainder lands on the leftmost panes, which is what
+        # even-horizontal does too.
+        _avail=$((_bw - (_n - 1)))
+        _base=$((_avail / _n))
+        _rem=$((_avail % _n))
+        [ "$_base" -ge 1 ] || return 0
+        _i=0
+        printf '%s\n' "$_rows" | while read -r _pid _ph; do
+                _i=$((_i + 1))
+                [ "$_i" -lt "$_n" ] || break    # the last takes what is left
+                _want=$_base
+                [ "$_i" -le "$_rem" ] && _want=$((_base + 1))
+                tmux resize-pane -t "$_pid" -x "$_want" 2>/dev/null || true
+        done
+        return 0
+}
+
 # The mux bottom pane in the CURRENT window (mux tags it @mux-bottom). Target it
 # explicitly, not the active pane, so a refresh works from any focused pane.
 bottom=$(tmux list-panes -F '#{pane_id} #{@mux-bottom}' \
@@ -40,10 +90,15 @@ if [ "$force" -eq 1 ]; then
         # the existing layout does not. mux-pin restores the canonical height.
         tmux break-pane -d -s "$bottom" -n _muxrefresh 2>/dev/null || exit 0
         tmux join-pane -v -f -l "$max" -s "$bottom" -t "$win" 2>/dev/null || :
+        _balance
         "$_lib/mux-pin" 2>/dev/null || true
         tmux select-pane -t "$act" 2>/dev/null || true
         exit 0
 fi
+
+# Even the top row's widths first: proportional resize drifts them off even and
+# leaves them there, and with border-drag unbound nothing else puts them back.
+_balance
 
 # Perturb ("the drag"): grow the bottom pane a few rows so its height differs
 # from the pinned target, breaking the stuck proportional state.
