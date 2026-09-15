@@ -390,14 +390,28 @@ repeat to walk the urgency order.
 Toggle back to the last session.
 .TP
 .BR r ", " R
-Refresh a wedged pane layout; \fBR\fR rebuilds a stuck-render pane.
+Put the window's geometry back:
+.B r
+evens out the top row's pane WIDTHS and re-pins the bottom pane's HEIGHT;
+.B R
+additionally rebuilds the bottom pane, clearing a stuck RENDER state a repaint
+cannot.
+.IP
+Both matter because tmux redistributes size proportionally on every resize, so
+a window resized a few times drifts off the even split its layout asked for and
+stays there \(em and border\-drag is unbound (a copy drag across a divider
+would otherwise yank it), so nothing else puts it back.
+.IP
+Panes of differing HEIGHT are left alone: those are stacked rather than a single
+row, and it declines rather than rearranging a layout it does not model.
 .TP
 .B Space
 The explorer (\c
 .BR choose-tree ).
 .TP
 .B click " (status)"
-Click a session chip in the strip to jump straight to it.
+Click a session chip in the strip to jump straight to it, or the view
+indicator at the right end to cycle how view tension is resolved.
 .SH CONTEXTS AND PARTITIONS
 mux core knows nothing about any particular notion of "context" (a
 work/personal split, a namespace, a git host). It asks an OPTIONAL command for
