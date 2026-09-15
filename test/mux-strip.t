@@ -175,6 +175,50 @@ _o2=$(vis "$(env -u TMUX XDG_RUNTIME_DIR="$T/run" MUX_STRIP_WIDTH=400 \
 has "$_o2" charlie "hiding leaked to another client"
 rm -f "$T/run/mux-exclude/testclient"
 
+# --- a FAILED pane query must never read as "every pane died" --------------
+# This script uses a bare `tmux`, so it inherits its server from $TMUX. Run
+# from a shell without one -- over ssh, from a cron, or by hand to see what the
+# strip says -- it asks tmux's DEFAULT socket, which usually has no server, so
+# list-panes errors and returns nothing. Treating that as truth meant every
+# recorded pane looked dead and the prune deleted EVERY agent's state on the
+# real server. It did exactly that on a live machine, from one diagnostic run.
+#
+# Destroying state on a failed READ is the worst response available, so an
+# empty pane list is refused rather than believed.
+cat >"$T/bin/tmux.broken" <<'EOF'
+#!/bin/sh
+case "$*" in
+*list-panes*) echo "error connecting to /tmp/tmux-1000/default" >&2; exit 1 ;;
+*list-sessions*) cat "$SESSIONS" ;;
+*show-options*)  printf '\n' ;;
+*list-clients*)  printf '/dev/pts/0 161x64 alpha 1\n' ;;
+*client_width*)  printf '161x64 161x63 latest on alpha\n' ;;
+esac
+exit 0
+EOF
+chmod +x "$T/bin/tmux.broken"
+st %1 blocked alpha
+st %2 working delta
+_kept=$(ls "$T/run/agent-state/global" | tr '\n' ' ')
+cp "$T/bin/tmux.broken" "$T/bin/tmux"
+render delta 400 >/dev/null 2>&1 || true
+_after=$(ls "$T/run/agent-state/global" 2>/dev/null | tr '\n' ' ')
+[ "$_after" = "$_kept" ] \
+	|| fail "a failed pane query pruned state: had [$_kept] left [$_after]"
+# Put the working stub back for everything below.
+cat >"$T/bin/tmux" <<'EOF'
+#!/bin/sh
+case "$*" in
+*list-sessions*) cat "$SESSIONS" ;;
+*list-panes*)    cat "$PANES" ;;
+*show-options*)  printf '\n' ;;
+*list-clients*)  printf '/dev/pts/0 161x64 alpha 1\n' ;;
+*client_width*)  printf '161x64 161x63 latest on alpha\n' ;;
+esac
+exit 0
+EOF
+chmod +x "$T/bin/tmux"
+
 # --- a dead pane's state file is pruned ------------------------------------
 # A killed agent never fires its Stop hook, so nothing else removes these; a
 # phantom would keep reporting state for a pane that is gone.
