@@ -108,9 +108,37 @@ mux_view_sizes() {
 	mux_view_clients | awk '{print $2}' | LC_ALL=C sort -u | grep . || true
 }
 
-# mux_view_tension -> 0 when two or more DISTINCT sizes are attached.
-mux_view_tension() {
+# mux_view_server_tension -> 0 when two or more DISTINCT sizes are attached
+# ANYWHERE on this server. Latent: it says a disagreement exists, not that
+# anything is currently resolving it. The right question for an audit.
+mux_view_server_tension() {
 	[ "$(mux_view_sizes | grep -c .)" -gt 1 ]
+}
+
+# The distinct sizes contending for the window CLIENT is looking at -- i.e.
+# among the clients attached to ITS session.
+#
+# tmux sizes a window from the clients attached to that window's SESSION, not
+# from every client on the server. So two differently-sized clients sitting on
+# two different sessions contend over nothing: each window is its own client's
+# size and window-size has no second opinion to reconcile. Verified: with one
+# client per session, latest/smallest/largest all leave the windows untouched.
+mux_view_contenders() {   # [client-name]
+	mux_view_probe "${1:-}"
+	[ -n "${MUX_VIEW_SESS:-}" ] || { mux_view_sizes; return 0; }
+	mux_view_clients \
+	| awk -v s="$MUX_VIEW_SESS" '$3 == s { print $2 }' \
+	| LC_ALL=C sort -u | grep . || true
+}
+
+# mux_view_tension [client] -> 0 when the WINDOW this client is looking at is
+# actually contended. Scoped to the window on purpose: the colour half of the
+# indicator already describes this view, and testing tension server-wide while
+# colouring per-window meant the chip could report contention that changed
+# nothing here -- and that the mode glyph sat beside a state the mode could not
+# move.
+mux_view_tension() {   # [client-name]
+	[ "$(mux_view_contenders "${1:-}" | grep -c .)" -gt 1 ]
 }
 
 # Everything the chip needs, in ONE round trip: this client's size, the window
@@ -126,12 +154,14 @@ mux_view_probe() {      # [client-name]
 	[ -z "${MUX_VIEW_MODE:-}" ] || return 0
 	_pf='#{client_width}x#{client_height}'
 	_pf="$_pf #{window_width}x#{window_height} #{window-size} #{status}"
+	_pf="$_pf #{client_session}"
 	if [ -n "${1:-}" ]; then
 		_pr=$(_vt display-message -c "$1" -p "$_pf" 2>/dev/null || true)
 	else
 		_pr=$(_vt display-message -p "$_pf" 2>/dev/null || true)
 	fi
 	MUX_VIEW_CW= MUX_VIEW_CH= MUX_VIEW_WW= MUX_VIEW_WH= MUX_VIEW_ST=0
+	MUX_VIEW_SESS=
 	MUX_VIEW_MODE=auto
 	case $_pr in
 	*x*' '*x*' '*' '*) ;;
@@ -139,7 +169,13 @@ mux_view_probe() {      # [client-name]
 	esac
 	_a=${_pr%% *}; _rest=${_pr#* }
 	_b=${_rest%% *}; _rest=${_rest#* }
-	_wz=${_rest%% *}; _st=${_rest#* }
+	_wz=${_rest%% *}; _rest=${_rest#* }
+	# The session is LAST so it may contain spaces (tmux allows it, even if
+	# mux-derived names never do) and still be taken whole.
+	case $_rest in
+	*' '*) _st=${_rest%% *}; MUX_VIEW_SESS=${_rest#* } ;;
+	*)     _st=$_rest ;;
+	esac
 	MUX_VIEW_CW=${_a%%x*}; MUX_VIEW_CH=${_a##*x}
 	MUX_VIEW_WW=${_b%%x*}; MUX_VIEW_WH=${_b##*x}
 	case $_wz in
@@ -243,7 +279,7 @@ mux_view_glyph() {
 
 # calm | fit | slack | clipped -- the render half, in one word.
 mux_view_state() {   # <client-name>
-	mux_view_tension || { printf calm; return 0; }
+	mux_view_tension "${1:-}" || { printf calm; return 0; }
 	_st=$(mux_view_side "${1:-}")
 	printf '%s' "${_st:-fit}"
 }

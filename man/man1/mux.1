@@ -222,11 +222,19 @@ the bold ones arrive through font fallback at another face's metrics. The HEAVY
 one rather than the plain one because the plain asterisk is drawn near the cap
 line, floating above the glyphs beside it. Meanwhile
 .B COLOUR
-is what is happening to THIS view: grey when calm, white when it is the one
-setting the size, amber when it carries dead rows, and the caution pairing when
-it is CLIPPED and part of the window is off screen. The colour is PER CLIENT,
-not per session: two clients on one session see different colours, because the
-question it answers is what each of them is losing.
+is what is happening to THIS view: grey when nothing contends for this window,
+white when it is the one setting the size, amber when it carries dead rows, and
+the caution pairing when it is CLIPPED and part of the window is off screen. The
+colour is PER CLIENT: two clients on one session see different colours, because
+the question it answers is what each of them is losing.
+.IP
+Contention is scoped to the WINDOW, not the server. tmux sizes a window from
+the clients attached to its SESSION, so two differently\-sized clients sitting
+on two different sessions contend over nothing and the mode changes nothing for
+either \(em the indicator stays grey and says so.
+.B mux views
+reports the server\-wide picture as well, and says plainly whether it bites the
+window you are looking at.
 .IP
 Note a client's reported HEIGHT includes its status line(s); the window gets
 what is left. mux accounts for that, so the client actually setting the size

@@ -23,7 +23,8 @@ CLIENTS=$T/clients            # what list-clients reports
 WINSZ=$T/winsz                # "CWxCH WWxWH" for display-message -c
 OPT=$T/windowsize             # the window-size option's value
 LOG=$T/log
-export CLIENTS WINSZ OPT LOG
+SESS=$T/sess               # the session the probe client is on
+export CLIENTS WINSZ OPT LOG SESS
 cat >"$T/bin/tmux" <<'EOF'
 #!/bin/sh
 printf '%s\n' "$*" >>"$LOG"
@@ -33,19 +34,26 @@ case "$*" in
 # The probe: client size, window size and the mode in one round trip. The
 # mode comes from $OPT so a set-option above is visible to the next read.
 *client_width*window_width*window-size*status*)
-        printf '%s %s on\n' "$(cat "$WINSZ")" "$(cat "$OPT")" ;;
+        printf '%s %s on %s\n' "$(cat "$WINSZ")" "$(cat "$OPT")" \
+                "$(cat "$SESS" 2>/dev/null || echo alpha)" ;;
 *"display-message -p"*)           printf '/dev/pts/0\n' ;;
 esac
 exit 0
 EOF
 chmod +x "$T/bin/tmux"
 printf 'latest\n' >"$OPT"
+printf 'alpha\n' >"$SESS"
 printf '161x64 161x63' >"$WINSZ"
 : >"$LOG"
 
 # One client per line: NAME WxH SESSION ACTIVITY(epoch)
-calm() { printf '/dev/pts/0 161x64 alpha 100\n/dev/pts/1 161x64 bravo 100\n' \
+# calm: nothing else is on THIS client's session (alpha). The second client
+# differs in size but sits on bravo, so it contends over nothing -- tmux sizes
+# a window from the clients attached to ITS session, not from every client.
+calm() { printf '/dev/pts/0 161x64 alpha 100\n/dev/pts/1 161x56 bravo 100\n' \
 	>"$CLIENTS"; }
+# tense: two DIFFERENT sizes on the SAME session, which is the only shape in
+# which window-size decides anything.
 tense() { printf '/dev/pts/0 161x64 alpha 100\n/dev/pts/1 161x56 alpha 100\n' \
 	>"$CLIENTS"; }
 
@@ -59,9 +67,9 @@ no_has() { case "$1" in *"$2"*) fail "$3: unwanted [$2] in [$1]" ;; esac; }
 # --- tension is about the set of SIZES, not the number of clients ----------
 # Three clients that agree are not tension; two that disagree are.
 calm
-_o=$(views); has "$_o" "no tension" "two same-size clients read as tension"
+_o=$(views); has "$_o" "2 sizes attached" "server-wide sizes not reported"
 tense
-_o=$(views); has "$_o" "tension" "two different sizes did not read as tension"
+_o=$(views); has "$_o" "2 sizes attached" "server-wide sizes not reported"
 
 # --- the chip is ALWAYS drawn ----------------------------------------------
 # Fixed furniture at the right edge: the bar must not change width as tension
@@ -95,8 +103,16 @@ printf 'latest\n' >"$OPT"
 # Four states, four colours, and the shape must not move between them: that
 # separation is the whole design.
 style() { views --chip /dev/pts/0 | grep -o 'fg=colour[0-9]*' | head -1; }
+# calm is NOT "no other client" -- it is "nothing contends for THIS window".
+# The second client here is a different size, and irrelevant, because it sits
+# on another session: tmux sizes a window from the clients attached to ITS
+# session. Testing server-wide while colouring per-window made the chip report
+# contention that changed nothing here, and stood the mode glyph next to a
+# state the mode could not move.
 calm
-[ "$(style)" = "fg=colour240" ] || fail "calm: wrong colour ($(style))"
+[ "$(style)" = "fg=colour240" ] \
+        || fail "a differently-sized client on ANOTHER session read as \
+tension ($(style))"
 [ "$(glyph)" = "✱" ] || fail "calm changed the SHAPE; only colour may move"
 
 tense
