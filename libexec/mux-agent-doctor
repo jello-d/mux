@@ -1,0 +1,188 @@
+#!/bin/sh
+# mux-agent-doctor: does each session's RECORDED agent state match what its
+# agent is actually doing?
+#
+#   mux agent-doctor [NS]
+#
+# The status strip reports state from per-pane files written by an agent's
+# lifecycle hooks (see agent-state-emit). When a hook does not fire -- a turn
+# that ends without a Stop, a long generation with no tool call to trigger
+# PostToolUse, a hook that failed silently -- the file keeps saying whatever it
+# last said while the agent moves on. The strip then reports a finished session
+# that is busy, or a busy one that finished, and nothing on the bar can tell
+# you which because the bar IS the file.
+#
+# So this asks the other side: for every recorded session, is there an agent
+# process under that pane, and is it burning CPU? Disagreement is the bug.
+#
+# STRICTLY READ-ONLY, and deliberately so. The renderer prunes state files it
+# believes are orphaned, which makes it destructive when it cannot see the
+# server -- one diagnostic run of `mux agent-render` over ssh deleted four of
+# five live state files on another machine. Reaching for a renderer to inspect
+# state was the mistake; this exists so there is something safe to reach for.
+# It writes nothing, removes nothing, and never touches a notification.
+set -eu
+
+_lib=$(dirname "$0")
+for _l in mux-agent-state.sh mux-data.sh mux-context.sh; do
+	[ -r "$_lib/$_l" ] || {
+		echo "mux: $_l missing (incomplete install)" >&2; exit 1; }
+	. "$_lib/$_l"
+done
+
+# The namespace: an explicit argument, else this caller's resolved partition --
+# the same derivation agent-summary uses, so a headless run answers about the
+# partition it is in rather than guessing a name.
+MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
+_ns=${1:-}
+if [ -z "$_ns" ]; then
+	mux_ctx_resolve 2>/dev/null && _ns=$MUX_CTX_PARTITION
+fi
+_ns=${_ns:-global}
+
+# tmux, addressed at the right SERVER. Inside a session $TMUX names it; outside
+# one there is nothing to inherit, and a bare tmux would ask the DEFAULT socket
+# -- which is exactly how the renderer came to believe every pane was dead.
+_dt() {
+	if [ -n "${TMUX:-}" ]; then tmux "$@"; else tmux -L "$_ns" "$@"; fi
+}
+
+_dir=$(mux_agent_dir "$_ns")
+[ -d "$_dir" ] || { echo "mux: no agent state for partition '$_ns'"; exit 0; }
+
+# The agents mux knows, as a space-padded set: a descendant whose command is one
+# of these is THE agent for that pane. Taken from the shipped agent files rather
+# than hardcoded, so adding an agent teaches this too.
+_agents=" $(mux_data_stems agents .agent 2>/dev/null | tr '\n' ' ')"
+[ "$_agents" != "  " ] || _agents=" claude "
+
+# pane id -> pane pid, once.
+_panes=$(_dt list-panes -a -F '#{pane_id} #{pane_pid}' 2>/dev/null || true)
+
+# The whole process table, once: pid ppid comm. Walking it in shell beats one
+# ps per pane, and the table must be consistent across the walk anyway.
+_ps=$(ps -eo pid=,ppid=,comm= 2>/dev/null || true)
+
+# _agent_pid PANEPID -> the pid of the agent running under it, or empty.
+# Breadth-first over the process table, so an agent started through a wrapper
+# (a shell, a `claude --continue || claude`) is still found.
+_agent_pid() {
+	_gen=$1
+	_depth=0
+	while [ -n "$_gen" ] && [ "$_depth" -lt 6 ]; do
+		_next=
+		for _p in $_gen; do
+			_hit=$(printf '%s\n' "$_ps" \
+				| awk -v pp="$_p" -v set="$_agents" \
+				  '$2 == pp && index(set, " " $3 " ") { print $1; exit }')
+			[ -n "$_hit" ] && { printf '%s' "$_hit"; return 0; }
+			_kids=$(printf '%s\n' "$_ps" \
+				| awk -v pp="$_p" '$2 == pp { print $1 }' | tr '\n' ' ')
+			_next="$_next $_kids"
+		done
+		_gen=$_next
+		_depth=$((_depth + 1))
+	done
+}
+
+# Jiffies of CPU a pid has used (user + system), or empty when it is gone.
+# MUX_DOCTOR_PROC relocates /proc so the banding above can be exercised against
+# a fabricated process whose CPU moves on cue -- the alternative being to test
+# the thresholds by running something busy and hoping, which pins nothing.
+_cpu() {
+	_pr=${MUX_DOCTOR_PROC:-/proc}
+	[ -r "$_pr/$1/stat" ] || return 0
+	awk '{print $14 + $15}' "$_pr/$1/stat" 2>/dev/null || true
+}
+
+# --- gather, sample, then report -------------------------------------------
+# Every agent is sampled over ONE shared interval rather than a second each, so
+# a box with six sessions still answers in a second and every reading covers the
+# same window.
+_rows=
+for _f in "$_dir"/*; do
+	[ -e "$_f" ] || continue
+	read -r _st _sess _win _pane _ep _notif <"$_f" 2>/dev/null || continue
+	[ -n "${_sess:-}" ] || continue
+	_ppid=$(printf '%s\n' "$_panes" \
+		| awk -v p="$_pane" '$1 == p { print $2; exit }')
+	_apid=
+	[ -n "$_ppid" ] && _apid=$(_agent_pid "$_ppid")
+	_c1=
+	[ -n "$_apid" ] && _c1=$(_cpu "$_apid")
+	_rows="$_rows$_st|$_sess|$_pane|${_apid:-}|${_c1:-}
+"
+done
+[ -n "$_rows" ] || { echo "mux: no agent state recorded in '$_ns'"; exit 0; }
+
+# How long to watch, and how busy counts as busy. Both measured rather than
+# guessed: sampled across six live agents, a genuinely idle one sits at 0.1% of
+# a core while agents mid-turn ran 3.7% to 9.8%. A short window is noisy -- over
+# two seconds an idle agent's timers can spend a jiffy or two and look like
+# work -- so the window is seconds, not milliseconds, and the verdict is a
+# PERCENTAGE of it.
+#
+# Three bands, not two, because the middle one is real: between "clearly idle"
+# and "clearly working" sits a band this cannot call from CPU alone, and
+# reporting it as DRIFT would cry wolf. It is shown and not counted.
+_win=${MUX_DOCTOR_WINDOW:-3}
+_busy_pct=${MUX_DOCTOR_BUSY_PCT:-3}     # above this: working -- and so, drift
+# above _susp_pct: worth a look, but not a verdict
+_susp_pct=${MUX_DOCTOR_SUSPECT_PCT:-1}
+_hz=$(getconf CLK_TCK 2>/dev/null || echo 100)
+
+sleep "$_win"
+
+printf '%-14s %-9s %-6s %-9s %-6s %s\n' \
+	SESSION RECORDED PANE AGENT CPU VERDICT
+_drift=0
+printf '%s' "$_rows" | while IFS='|' read -r _st _sess _pane _apid _c1; do
+	[ -n "${_sess:-}" ] || continue
+	_used=-
+	_busy=0
+	if [ -n "$_apid" ] && [ -n "$_c1" ]; then
+		_c2=$(_cpu "$_apid")
+		if [ -n "$_c2" ]; then
+			# Percent of ONE core over the window: jiffies used
+			# against jiffies of wall time.
+			_pct=$(( ( (_c2 - _c1) * 100 ) / (_hz * _win) ))
+			_used="$_pct%"
+			if [ "$_pct" -gt "$_busy_pct" ]; then _busy=1
+			elif [ "$_pct" -gt "$_susp_pct" ]; then _busy=2; fi
+		fi
+	fi
+	# The verdicts, in the order they matter:
+	#   DRIFT   the reported bug -- the bar says finished, the agent is not
+	#   gone    recorded working, but no agent process is there at all
+	#   quiet   recorded working with the agent present but not on CPU. NOT
+	#           drift: an agent waiting on the model or on a slow tool is
+	#           genuinely mid-turn and idle on the CPU at the same time.
+	case "$_st:$_busy" in
+	idle:1|blocked:1) _v="*** DRIFT: reports $_st, agent is working ***" ;;
+	idle:2|blocked:2) _v="suspect: some CPU, below the working threshold" ;;
+	working:0)
+		if [ -z "$_apid" ]; then _v="gone: recorded working, no agent"
+		else _v="quiet (mid-turn, waiting)"; fi ;;
+	*) _v="agrees" ;;
+	esac
+	printf '%-14s %-9s %-6s %-9s %-6s %s\n' \
+		"$_sess" "$_st" "$_pane" "${_apid:--}" "$_used" "$_v"
+	case $_v in '*** DRIFT'*) echo x >>"$_dir/.doctor.$$" ;; esac
+done
+
+# The count crosses back out of the pipeline through a file, because the while
+# above runs in a subshell and an exit code set inside it would be discarded --
+# the same trap that let `mux check` print [FAIL] and exit 0.
+if [ -f "$_dir/.doctor.$$" ]; then
+	_drift=$(grep -c . "$_dir/.doctor.$$" 2>/dev/null || echo 1)
+	rm -f "$_dir/.doctor.$$"
+fi
+echo
+if [ "$_drift" -gt 0 ]; then
+	printf 'mux: %s session(s) report a finished agent that is working.\n' \
+		"$_drift" >&2
+	echo "mux: the state file is stale -- a lifecycle hook did not fire." >&2
+	echo "mux: it self-heals on the agent's next tool call (PostToolUse)." >&2
+	exit 1
+fi
+echo "mux: recorded state agrees with every agent."
