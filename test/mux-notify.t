@@ -208,4 +208,33 @@ has 'CloseNotification' "leaving blocked did not close the notification"
 has '4242' "closed some other id"
 [ -z "$(notif_of)" ] || fail "a cleared id is still on file: [$(notif_of)]"
 
+# The record is written ATOMICALLY: a reader never sees a torn or empty line.
+# Several hooks fire close together -- a tool finishing as a turn ends -- and a
+# plain redirect truncates before it writes, so a render landing in that gap
+# reads a session as having no agent at all.
+: >"$LOG"
+emit working || fail "emit working (atomicity) failed"
+[ "$(wc -l <"$_sf")" -eq 1 ] || fail "the record is not exactly one line"
+# No temp file may survive the write.
+_left=$(ls "$T/run/agent-state/global")
+case $_left in
+*.[0-9]*) fail "a temp file was left behind: $_left" ;;
+esac
+
+# The opt-in breadcrumb records the transition AND what it came from, which is
+# what makes a stuck state traceable to the hook that last wrote it.
+_bc=$T/emit.log
+: >"$_bc"
+env XDG_RUNTIME_DIR="$T/run" TMUX=/tmp/fake/global,1,0 TMUX_PANE=%5 \
+        PATH="$T/emitbin:$_saved" LOG="$LOG" MUX_EMIT_LOG="$_bc" \
+        "$HERE/libexec/agent-state-emit" idle >/dev/null 2>&1 || true
+case "$(cat "$_bc")" in
+*idle*was=working*) ;;
+*) fail "the breadcrumb did not record the transition: [$(cat "$_bc")]" ;;
+esac
+# Off by default: no log path, no file, no cost.
+_bc2=$T/never.log
+emit working >/dev/null 2>&1 || true
+[ ! -f "$_bc2" ] || fail "a breadcrumb was written without MUX_EMIT_LOG"
+
 pass
