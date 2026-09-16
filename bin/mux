@@ -152,6 +152,7 @@ next-blocked)  shift; exec "$LIBEXEC/mux-next-blocked" "$@" ;;
 migrate-profiles) shift; exec "$LIBEXEC/mux-migrate-profiles" "$@" ;;
 scan)          shift; exec "$LIBEXEC/mux-scan" "$@" ;;
 views)         shift; exec "$LIBEXEC/mux-views" "$@" ;;
+agent-doctor)  shift; exec "$LIBEXEC/mux-agent-doctor" "$@" ;;
 esac
 
 # The ONE comment/normalize rule (mux_conf_clean) for every config parse below
@@ -433,6 +434,7 @@ usage: mux [OPTION] [VERB] [NAME] [PROFILE]  (OPTION may follow VERB too)
   resume                     rebuild this partition's sessions (--list)
   why [NAME]                 show each resolved value and where it came from
   views [MODE]               who is attached, and what that costs
+  agent-doctor               does recorded agent state match reality?
   check                      audit mux's install: package data, deps, overlay
   migrate-profiles           convert pre-rename *.layout files (--apply)
   scan                       rebuild the project discovery map (--list)

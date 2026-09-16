@@ -242,6 +242,29 @@ reads as fit rather than one row short.
 .B \-\-detach
 removes a client, ending its claim on the size altogether.
 .TP
+.B mux agent-doctor " [" \fINS\fR ]
+Does each session's RECORDED agent state match what its agent is doing? The
+status strip reports state from per\-pane files written by an agent's lifecycle
+hooks; when a hook does not fire, the file keeps saying whatever it last said
+and nothing on the bar can contradict it, because the bar IS the file. This
+asks the other side \(em whether an agent process under that pane is burning
+CPU \(em and reports any disagreement. Non\-zero exit when a session reports a
+finished agent that is working.
+.IP
+STRICTLY READ\-ONLY. It writes nothing and removes nothing, unlike
+.BR "mux agent-render" ,
+which prunes state files it believes orphaned and so is destructive when it
+cannot see the server. Use this to inspect state, never the renderer.
+.IP
+CPU alone cannot settle every case, so there are three bands, not two: clearly
+idle, a middle band reported but not counted, and clearly working.
+.B MUX_DOCTOR_WINDOW
+sets the sampling seconds;
+.B MUX_DOCTOR_BUSY_PCT
+and
+.B MUX_DOCTOR_SUSPECT_PCT
+set the thresholds.
+.TP
 .B mux check
 Audit the install: tmux, mux's own presence on PATH, the desktop notification
 path, the shipped package data, the config overlay, and the scan roots for this
