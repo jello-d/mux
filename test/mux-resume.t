@@ -139,6 +139,31 @@ _o=$(mux "$T/elsewhere" kill nosuchsession) \
 	&& fail "kill of an unknown name should exit non-zero"
 case $_o in *"no such session"*) ;; *) fail "unhelpful refusal: [$_o]" ;; esac
 
+# --- a recorded name containing a SPACE is rebuilt whole --------------------
+# `for n in $set` word-split the recorded names, so a session called
+# `my project` was rebuilt as two phantoms -- `my` and `project` -- and the
+# real one never came back. The set is newline separated for exactly this
+# reason: a session name may contain a space, never a newline.
+rm -f "$T"/cache/sessions.*
+: >"$LIVE"
+mkdir -p "$T/tree/my project"
+git init -q "$T/tree/my project" 2>/dev/null || true
+# A BARE `go` from inside the directory: the directory is evidence, so the
+# name is derived from its basename. A typed name nothing knows is refused by
+# design, which is a different behaviour and not the one under test.
+mux "$T/tree/my project" go >/dev/null 2>&1 \
+	|| fail "opening a spaced-name session failed"
+_set=$(mux "$T/elsewhere" resume --list)
+printf '%s\n' "$_set" | grep -qxF 'my project' \
+	|| fail "the spaced name was not recorded whole: [$_set]"
+printf '%s\n' "$_set" | grep -qxF 'my' \
+	&& fail "the set holds a phantom 'my': [$_set]"
+: >"$LIVE"
+mux "$T/elsewhere" resume >/dev/null 2>&1 || true
+grep -q "^my project	" "$LIVE" \
+        || fail "the spaced session was not rebuilt: [$(cat "$LIVE")]"
+grep -q "^my	" "$LIVE" && fail "a phantom session 'my' was built"
+
 # --- nothing recorded is a loud, non-zero answer ----------------------------
 rm -f "$T"/cache/sessions.*
 _o=$(mux "$T/elsewhere" resume) \
