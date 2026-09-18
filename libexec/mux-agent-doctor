@@ -102,7 +102,13 @@ _cpu() {
 _rows=
 for _f in "$_dir"/*; do
 	[ -e "$_f" ] || continue
-	read -r _st _win _pane _ep _notif _sess <"$_f" 2>/dev/null || continue
+	# 2>/dev/null BEFORE the input redirect: redirections apply left to
+	# right, so with <"$_f" first a file pruned between the glob and this
+	# read fails the OPEN while stderr is still the terminal, and the
+	# shell prints "cannot open" itself -- read never runs, so read's own
+	# 2>/dev/null cannot cover it. That race is routine here: the doctor
+	# reads the same dir the renderer prunes.
+	read -r _st _win _pane _ep _notif _sess 2>/dev/null <"$_f" || continue
 	[ -n "${_sess:-}" ] || continue
 	_ppid=$(printf '%s\n' "$_panes" \
 		| awk -v p="$_pane" '$1 == p { print $2; exit }')

@@ -154,7 +154,7 @@ printf '%s %s %s %s %s %s\n' \
 if [ -n "${MUX_EMIT_LOG:-}" ]; then
         {
                 if [ -f "$MUX_EMIT_LOG" ] \
-                   && [ "$(wc -c <"$MUX_EMIT_LOG" 2>/dev/null || echo 0)" \
+                   && [ "$(wc -c 2>/dev/null <"$MUX_EMIT_LOG" || echo 0)" \
                         -gt 262144 ]; then
                         : >"$MUX_EMIT_LOG"
                 fi
