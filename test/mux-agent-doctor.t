@@ -68,7 +68,7 @@ no_has() { case "$1" in *"$2"*) fail "$3: unwanted [$2] in: $1" ;; esac; }
 burn() { ( sleep 0.3; setcpu "$1" "$2" ) & }
 
 # --- a busy agent whose file says idle is the reported bug ----------------
-printf 'idle alpha 0 %%1 1 \n' >"$T/run/agent-state/global/1"
+printf 'idle 0 %%1 1 - alpha\n' >"$T/run/agent-state/global/1"
 setcpu 101 0
 burn 101 40          # 40 jiffies in a 1s window = 40% of a core
 _rc=0; _o=$(doc) || _rc=$?
@@ -96,15 +96,15 @@ no_has "$_o" "DRIFT" "the middle band was counted as drift"
 [ "$_rc" -eq 0 ] || fail "a suspect reading must not fail the run"
 
 # --- recorded working with no agent at all -------------------------------
-printf 'working beta 0 %%2 1 \n' >"$T/run/agent-state/global/2"
+printf 'working 0 %%2 1 - beta\n' >"$T/run/agent-state/global/2"
 rm -f "$T/run/agent-state/global/1"
 _rc=0; _o=$(doc) || _rc=$?
 has "$_o" "gone" "a working record with no agent process was not surfaced"
 
 # --- READ-ONLY: it must not add, remove or alter a single state file -----
 # The property the renderer did not have.
-printf 'idle alpha 0 %%1 1 \n' >"$T/run/agent-state/global/1"
-printf 'working beta 0 %%2 1 \n' >"$T/run/agent-state/global/2"
+printf 'idle 0 %%1 1 - alpha\n' >"$T/run/agent-state/global/1"
+printf 'working 0 %%2 1 - beta\n' >"$T/run/agent-state/global/2"
 setcpu 101 0
 burn 101 40                                  # drift, the noisiest path
 _before=$(ls "$T/run/agent-state/global" | LC_ALL=C sort | tr '\n' ' ')

@@ -36,7 +36,10 @@ file=$dir/$key
 # state keep its start time.
 _pstate= _pepoch= _pnotif=
 if [ -f "$file" ]; then
-        read -r _pstate _ps _pw _pp _pepoch _pnotif \
+        # Same field order as the write below: session LAST. Read in the
+        # old order, _pnotif became the SESSION NAME -- so the next
+        # transition tried to close a notification whose id was `alpha`.
+        read -r _pstate _pw _pp _pepoch _pnotif _ps \
                 < "$file" 2>/dev/null || _pstate=
 fi
 
@@ -60,9 +63,15 @@ fi
 
 # Resolve session and window once, at emit time, so the renderer never has
 # to call back into tmux per entry. If tmux is gone, degrade gracefully.
+# Window FIRST, session LAST, because a session name may contain spaces and a
+# window index never can. Asking for them the other way round -- as this did --
+# made `#{session_name} #{window_index}` unsplittable for a session called
+# `my project`, and every field after it shifted.
 loc=$(tmux display-message -p -t "$TMUX_PANE" \
-        '#{session_name} #{window_index}' 2>/dev/null || true)
+        '#{window_index} #{session_name}' 2>/dev/null || true)
 [ -n "$loc" ] || loc="? ?"
+_win=${loc%% *}
+_sess=${loc#* }
 
 # Clear a notification we raised for THIS pane once the agent leaves the state
 # that raised it -- you answered, restarted, or the turn moved on -- so a
@@ -70,6 +79,8 @@ loc=$(tmux display-message -p -t "$TMUX_PANE" \
 # same-state re-emits; on any real change drop it, closing any live one first.
 # mux_notify_close is best effort on every platform and cannot fail.
 notif=$_pnotif
+# `-` is the absent marker, so it never reaches mux_notify_close as an id.
+[ "${_pnotif:-}" = - ] && _pnotif=
 if [ -n "$_pnotif" ] && [ "$state" != "$_pstate" ]; then
         mux_notify_close "$_pnotif"
         notif=
@@ -119,10 +130,18 @@ fi
 # This does NOT order the writers: if Stop lands after PostToolUse, idle wins,
 # which is the shape of the stale-idle bug. Atomicity keeps the record intact;
 # ordering is the hooks' to decide.
+# Fields: state window pane epoch notif SESSION -- the session LAST so a name
+# containing spaces is read back whole as "the rest of the line". A session
+# called `my project` previously produced a record nothing could parse: it got
+# no agent chip at all, and a session actually named `my` picked up its state.
+#
+# notif is `-` when absent, never empty. An empty field collapses in the
+# whitespace run and shifts everything after it, which would reintroduce the
+# same bug from the other end.
 _tmp=$file.$$
-printf '%s %s %s %s %s\n' \
-        "$state" "$loc" "$TMUX_PANE" "$epoch" "$notif" >"$_tmp" \
-        && mv -f "$_tmp" "$file" || rm -f "$_tmp"
+printf '%s %s %s %s %s %s\n' \
+        "$state" "$_win" "$TMUX_PANE" "$epoch" "${notif:--}" "$_sess" \
+        >"$_tmp" && mv -f "$_tmp" "$file" || rm -f "$_tmp"
 
 # An opt-in breadcrumb: with MUX_EMIT_LOG set, every transition is appended, so
 # a state that gets stuck can be traced to the hook that last wrote it -- or to
@@ -140,7 +159,7 @@ if [ -n "${MUX_EMIT_LOG:-}" ]; then
                         : >"$MUX_EMIT_LOG"
                 fi
                 printf '%s %s %s %s was=%s\n' \
-                        "$(date +%s)" "$state" "${loc%% *}" "$TMUX_PANE" \
+                        "$(date +%s)" "$state" "$_sess" "$TMUX_PANE" \
                         "${_pstate:-none}" >>"$MUX_EMIT_LOG"
         } 2>/dev/null || true
 fi

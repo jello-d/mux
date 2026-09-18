@@ -46,8 +46,12 @@ chmod +x "$T/bin/tmux"
 
 printf 'alpha\nbravo\ncharlie\ndelta\n' >"$SESSIONS"
 printf '%%1\n%%2\n%%3\n' >"$PANES"
-# "state session window pane epoch notif-id"; epoch 0 keeps ages stable/large.
-st() { printf '%s %s 0 %s 1 %s\n' "$2" "$3" "$1" "${4:-}" \
+# Record: state window pane epoch notif SESSION -- the session LAST, so a
+# name containing a space is read back whole. notif is `-` when absent,
+# never empty: an empty field collapses in the whitespace run and shifts
+# everything after it.
+# epoch 1 keeps ages stable and large.
+st() { printf '%s 0 %s 1 %s %s\n' "$2" "$1" "${4:--}" "$3" \
 	>"$T/run/agent-state/global/${1#%}"; }
 st %1 blocked alpha
 st %2 working delta
