@@ -123,7 +123,8 @@ esac
 
 # --- why does not print an alternative identical to the declared value ------
 # "declared (x would give x)" reads like a bug rather than an explanation.
-printf 'proj        theme=purple\n' "$T" >"$T/conf/profiles"
+printf 'proj        theme=purple
+' >"$T/conf/profiles"
 mkdir -p "$T/conf/partitions"
 printf 'theme purple\n' >"$T/conf/partitions/global.partition"
 _w=$(mux why)
@@ -144,5 +145,24 @@ mux go --attach >/dev/null || fail "--attach did not override the guard"
 # No mismatch, no guard.
 LIVEROOT=$T/proj
 mux go >/dev/null || fail "same-root attach should not be guarded"
+
+# --- `mux help TOPIC` must reach the TOPIC ---------------------------------
+# This was an inline block where $1 was the script's first POSITIONAL -- the
+# topic. Extracting it into cmd_help() without passing "$@" made $1 the
+# FUNCTION's own, which is unset, so every topic silently fell through to the
+# usage summary. Silently, because printing usage is a plausible thing for a
+# help verb to do, so nothing looked wrong.
+for _t in agents themes profiles; do
+	_o=$(mux help "$_t" 2>&1 | head -1)
+	case $_o in
+	"$_t"*) ;;
+	*) fail "mux help $_t did not reach the topic: [$_o]" ;;
+	esac
+done
+# ... and a bare `mux help` is still the usage summary.
+case "$(mux help 2>&1 | head -1)" in
+usage:*) ;;
+*) fail "bare 'mux help' should print usage" ;;
+esac
 
 pass
