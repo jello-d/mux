@@ -64,6 +64,8 @@ only() {
 	rm -rf "$T/only"; mkdir -p "$T/only"
 	for _b; do cp "$T/bin/$_b" "$T/only/$_b"; done
 	: >"$LOG"
+	# Deliberately REPLACING PATH: the point is a host with no backend.
+	# shellcheck disable=SC2123
 	PATH=$T/only MUX_NOTIFY_CLOSER=
 }
 # Pure shell, for the same reason: `cat` is not on the reduced PATH.

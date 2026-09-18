@@ -1,0 +1,56 @@
+# shellcheck configuration for mux. `sh test/run` lints the package with this,
+# skipping silently when shellcheck is not installed.
+#
+# The point of linting here is NOT a clean score. It is the class of defect a
+# parse check cannot see: `dash -n` is happy with `for s in $(tmux
+# list-sessions)`, which word-splits a session name containing a space and
+# which shipped in four separate places before shellcheck was pointed at it.
+#
+# So the bug-capable codes stay ON, and only the ones that are systematically
+# wrong ABOUT THIS CODEBASE are disabled -- each with the reason, so a future
+# reader can tell a considered exception from an inherited one. Anything
+# genuinely intentional but rare is disabled INLINE at the site instead, so it
+# is visible where it matters and a second accidental instance still fails.
+
+# Every library is sourced through a runtime-resolved path ($_lib/<name>.sh),
+# because mux self-locates rather than carrying an install prefix. shellcheck
+# cannot follow that and says so once per source site.
+disable=SC1090,SC1091
+
+# tmux format strings are single-quoted ON PURPOSE: '#{pane_id}' is tmux's
+# syntax, not the shell's, and expanding it would be the bug.
+disable=SC2016
+
+# `_a= _b=` initialises several variables empty on one line. shellcheck reads
+# the space as a failed assignment; it is not.
+disable=SC1007
+
+# Variables shared ACROSS the source boundary shellcheck cannot follow: the
+# MUX_CFG_* set written by the context fallback stub and read by the front end,
+# and positional placeholders in `read -r a b c d` where only some fields are
+# wanted. Both look unused from inside one file.
+disable=SC2034
+
+# ANSI escapes built as "$_e[1;32m", which shellcheck parses as an array
+# subscript. The quoting is correct as written and the alternative is worse.
+disable=SC1087
+
+# `[ -e X ] && ok "..." || bad "..."` in the check scripts. The C-runs-when-A-
+# succeeds trap needs B to be able to fail; ok() is a printf and cannot.
+disable=SC2015
+
+# String values that happen to spell a command: `derive=hash`, `SRC=command`.
+disable=SC2209
+
+# A literal tilde in a `case` PATTERN (matching the character, not a home
+# directory) and the tilde expansion mux performs itself rather than leaving to
+# the shell -- see mux_expand_tilde.
+disable=SC2088
+
+# Reading a temp file after writing it in a SEPARATE statement. shellcheck
+# warns as if they shared a pipeline; they are sequential passes.
+disable=SC2094
+
+# `ls` where the alternative is a find(1) that mux deliberately avoids -- the
+# sandbox that runs these cannot traverse some config dirs that globs can read.
+disable=SC2012

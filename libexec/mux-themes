@@ -124,6 +124,8 @@ stamp_write() {         # KEY HASH
 
 # Heal one server: KEY names it (for the stamp), ARGS addresses it. Skip when
 # its stamp already matches, or when no server is up on that socket.
+# $2 is the tmux socket ARGS -- `-L work`, two words -- so it must word-split.
+# shellcheck disable=SC2086
 heal() {                # KEY ARGS HASH
 	_stamp="$STAMPDIR/mux-themes.$1.sha"
 	[ "$(cat "$_stamp" 2>/dev/null || true)" = "$3" ] && return 0
