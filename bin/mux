@@ -319,7 +319,7 @@ _project_base() {   # [dir]
 # a slash, a leading ~, or a bare . / .. is unambiguous.
 _is_path() {   # <arg>
         case $1 in
-        */*|'~'|'~/'*|.|..) return 0 ;;
+        '~'|'~/'*|.|..|*/*) return 0 ;;
         esac
         return 1
 }
@@ -2576,7 +2576,14 @@ _session_geometry() {
         # Outside it, ask the terminal. stty reports "rows cols" and needs a
         # tty on its INPUT, which mux's stdin may not be -- /dev/tty is the
         # controlling terminal regardless of redirection.
-        _sz=$(stty size </dev/tty 2>/dev/null || true)
+        # 2>/dev/null comes FIRST, and that ordering is the whole point:
+        # redirections are applied left to right, so with </dev/tty first the
+        # OPEN is what fails, and it fails while stderr is still the terminal.
+        # The shell then prints "cannot open /dev/tty" itself -- stty never
+        # runs, so stty's own 2>/dev/null never covers it. Any context without
+        # a controlling terminal (a cron job, a systemd unit, the test suite)
+        # got a spurious error on a path that is designed to fall through.
+        _sz=$(stty size 2>/dev/null </dev/tty || true)
         case $_sz in
         [0-9]*' '[0-9]*) ;;
         *) return 0 ;;
