@@ -56,8 +56,10 @@ _dir=$(mux_agent_dir "$_ns")
 _agents=" $(mux_data_stems agents .agent 2>/dev/null | tr '\n' ' ')"
 [ "$_agents" != "  " ] || _agents=" claude "
 
-# pane id -> pane pid, once.
-_panes=$(_dt list-panes -a -F '#{pane_id} #{pane_pid}' 2>/dev/null || true)
+# pane id -> pane pid -> session, once. Session LAST so a name containing a
+# space reads back whole, the same rule the state record follows.
+_panes=$(_dt list-panes -a -F '#{pane_id} #{pane_pid} #{session_name}' \
+	2>/dev/null || true)
 
 # The whole process table, once: pid ppid comm. Walking it in shell beats one
 # ps per pane, and the table must be consistent across the walk anyway.
@@ -119,6 +121,35 @@ for _f in "$_dir"/*; do
 	_rows="$_rows$_st|$_sess|$_pane|${_apid:-}|${_c1:-}
 "
 done
+# --- agents with NO record at all ------------------------------------------
+# The reverse question, and the one this tool could not ask: everything above
+# audits a RECORD against reality, so it only ever sees a record that went
+# wrong. An agent with no record is invisible to it, and the summary then says
+# "recorded state agrees with every agent" -- which it did on a box where five
+# of seven sessions showed no agent on the strip while all seven had one
+# running. A clean bill of health is the worst possible answer there.
+#
+# This is the more damaging direction of the two. A stale record shows the
+# WRONG state and at least shows something; a missing record shows NO state,
+# which the strip draws identically to a session that has no agent -- so
+# nothing looks broken and the eye slides past it.
+#
+# Fed by a here-doc, not a pipe: a `while` behind a pipe runs in a subshell and
+# $_orph would not survive it.
+_recorded=" $(printf '%s' "$_rows" | cut -d'|' -f3 | tr '\n' ' ')"
+_orph=
+while read -r _pid _ppid _sess; do
+	[ -n "${_pid:-}" ] || continue
+	case $_recorded in *" $_pid "*) continue ;; esac
+	_apid=$(_agent_pid "$_ppid")
+	[ -n "$_apid" ] || continue
+	_orph="$_orph-|${_sess:-?}|$_pid|$_apid|$(_cpu "$_apid")
+"
+done <<EOF
+$_panes
+EOF
+_rows="$_rows$_orph"
+
 [ -n "$_rows" ] || { echo "mux: no agent state recorded in '$_ns'"; exit 0; }
 
 # How long to watch, and how busy counts as busy. Both measured rather than
@@ -164,6 +195,8 @@ printf '%s' "$_rows" | while IFS='|' read -r _st _sess _pane _apid _c1; do
 	#           drift: an agent waiting on the model or on a slow tool is
 	#           genuinely mid-turn and idle on the CPU at the same time.
 	case "$_st:$_busy" in
+	-:1) _v="*** ORPHAN: no state recorded, agent is WORKING ***" ;;
+	-:*) _v="*** ORPHAN: no state recorded, agent is present ***" ;;
 	idle:1|blocked:1) _v="*** DRIFT: reports $_st, agent is working ***" ;;
 	idle:2|blocked:2) _v="suspect: some CPU, below the working threshold" ;;
 	working:0)
@@ -173,22 +206,40 @@ printf '%s' "$_rows" | while IFS='|' read -r _st _sess _pane _apid _c1; do
 	esac
 	printf '%-14s %-9s %-6s %-9s %-6s %s\n' \
 		"$_sess" "$_st" "$_pane" "${_apid:--}" "$_used" "$_v"
-	case $_v in '*** DRIFT'*) echo x >>"$_dir/.doctor.$$" ;; esac
+	case $_v in
+	'*** DRIFT'*)  echo drift  >>"$_dir/.doctor.$$" ;;
+	'*** ORPHAN'*) echo orphan >>"$_dir/.doctor.$$" ;;
+	esac
 done
 
 # The count crosses back out of the pipeline through a file, because the while
 # above runs in a subshell and an exit code set inside it would be discarded --
 # the same trap that let `mux check` print [FAIL] and exit 0.
+_orphans=0
 if [ -f "$_dir/.doctor.$$" ]; then
-	_drift=$(grep -c . "$_dir/.doctor.$$" 2>/dev/null || echo 1)
+	# `grep -c` exits 1 on no match, which would trip set -e; it still
+	# prints 0, so `|| true` keeps the count and drops the status.
+	_drift=$(grep -c '^drift$'  "$_dir/.doctor.$$" 2>/dev/null || true)
+	_orphans=$(grep -c '^orphan$' "$_dir/.doctor.$$" 2>/dev/null || true)
 	rm -f "$_dir/.doctor.$$"
 fi
+: "${_drift:=0}" "${_orphans:=0}"
 echo
 if [ "$_drift" -gt 0 ]; then
 	printf 'mux: %s session(s) report a finished agent that is working.\n' \
 		"$_drift" >&2
 	echo "mux: the state file is stale -- a lifecycle hook did not fire." >&2
 	echo "mux: it self-heals on the agent's next tool call (PostToolUse)." >&2
+fi
+if [ "$_orphans" -gt 0 ]; then
+	printf 'mux: %s agent(s) are running with NO state recorded.\n' \
+		"$_orphans" >&2
+	echo "mux: those sessions draw as having no agent at all, which is" >&2
+	echo "mux: indistinguishable from a session you never started one in." >&2
+	echo "mux: each heals on its agent's next lifecycle hook -- but one" >&2
+	echo "mux: idle for days fires none until you interact with it." >&2
+fi
+if [ "$_drift" -gt 0 ] || [ "$_orphans" -gt 0 ]; then
 	exit 1
 fi
 echo "mux: recorded state agrees with every agent."

@@ -30,14 +30,21 @@ mkdir -p "$T/bin" "$T/run/agent-state/global" "$T/proc" "$T/share/agents"
 : >"$T/share/agents/claude.agent"
 
 # A fabricated process table and pane list. pane %1 -> pid 100 -> claude 101.
+# Both stubs read a FILE, so one case can change the world (add a pane, add a
+# process) without every other case inheriting it.
+PSTAB=$T/pstab; PANES=$T/panes; export PSTAB PANES
+printf '  100     1 ksh\n  101   100 claude\n  200     1 ksh\n' >"$PSTAB"
+# pane id, pane pid, then the SESSION -- session last, as everywhere else, so a
+# name with a space survives.
+printf '%%1 100 alpha\n%%2 200 beta\n' >"$PANES"
 cat >"$T/bin/ps" <<'EOF'
 #!/bin/sh
-printf '  100     1 ksh\n  101   100 claude\n  200     1 ksh\n'
+cat "$PSTAB"
 EOF
 cat >"$T/bin/tmux" <<'EOF'
 #!/bin/sh
 case "$*" in
-*list-panes*) printf '%%1 100\n%%2 200\n' ;;
+*list-panes*) cat "$PANES" ;;
 esac
 exit 0
 EOF
@@ -68,7 +75,7 @@ no_has() { case "$1" in *"$2"*) fail "$3: unwanted [$2] in: $1" ;; esac; }
 burn() { ( sleep 0.3; setcpu "$1" "$2" ) & }
 
 # --- a busy agent whose file says idle is the reported bug ----------------
-printf 'idle 0 %%1 1 - alpha\n' >"$T/run/agent-state/global/1"
+agent_rec "$T/run/agent-state/global/1" idle %1 1 alpha
 setcpu 101 0
 burn 101 40          # 40 jiffies in a 1s window = 40% of a core
 _rc=0; _o=$(doc) || _rc=$?
@@ -96,15 +103,15 @@ no_has "$_o" "DRIFT" "the middle band was counted as drift"
 [ "$_rc" -eq 0 ] || fail "a suspect reading must not fail the run"
 
 # --- recorded working with no agent at all -------------------------------
-printf 'working 0 %%2 1 - beta\n' >"$T/run/agent-state/global/2"
+agent_rec "$T/run/agent-state/global/2" working %2 1 beta
 rm -f "$T/run/agent-state/global/1"
 _rc=0; _o=$(doc) || _rc=$?
 has "$_o" "gone" "a working record with no agent process was not surfaced"
 
 # --- READ-ONLY: it must not add, remove or alter a single state file -----
 # The property the renderer did not have.
-printf 'idle 0 %%1 1 - alpha\n' >"$T/run/agent-state/global/1"
-printf 'working 0 %%2 1 - beta\n' >"$T/run/agent-state/global/2"
+agent_rec "$T/run/agent-state/global/1" idle %1 1 alpha
+agent_rec "$T/run/agent-state/global/2" working %2 1 beta
 setcpu 101 0
 burn 101 40                                  # drift, the noisiest path
 _before=$(ls "$T/run/agent-state/global" | LC_ALL=C sort | tr '\n' ' ')
@@ -115,6 +122,61 @@ _after=$(ls "$T/run/agent-state/global" | LC_ALL=C sort | tr '\n' ' ')
 	|| fail "state files changed: [$_before] -> [$_after]"
 [ "$_sum" = "$(cat "$T/run/agent-state/global"/* | md5sum)" ] \
 	|| fail "a state file's CONTENT was altered"
+
+# --- an agent with NO record at all --------------------------------------
+# The reverse of every check above. Those audit a RECORD against reality, so
+# they can only ever see a record that went wrong; an agent with no record was
+# invisible, and the summary said "recorded state agrees with every agent".
+#
+# That is not a hypothetical reading of the code. On a live box five of seven
+# sessions had a running agent and no state file -- the strip drew them as
+# having no agent at all, which looks exactly like a session you never started
+# one in -- and this verb called the box clean.
+#
+# It is the more damaging direction: a stale record shows the WRONG state but
+# shows something, so the eye catches it. A missing record shows nothing, and
+# nothing is indistinguishable from nothing-expected.
+printf '  100     1 ksh\n  101   100 claude\n  200     1 ksh\n' >"$PSTAB"
+printf '  300     1 ksh\n  301   300 claude\n' >>"$PSTAB"
+printf '%%1 100 alpha\n%%2 200 beta\n%%3 300 gamma\n' >"$PANES"
+rm -f "$T/run/agent-state/global"/*
+agent_rec "$T/run/agent-state/global/1" idle %1 1 alpha
+setcpu 101 0
+setcpu 301 0
+_rc=0; _o=$(doc) || _rc=$?
+has "$_o" "ORPHAN" "an agent with no state record was not surfaced"
+has "$_o" "gamma" "the orphaned session was not named"
+[ "$_rc" -ne 0 ] || fail "an orphaned agent must exit non-zero, got $_rc"
+# The recorded pane is NOT an orphan, and neither is a pane with no agent
+# under it (beta, %2 -> plain ksh); otherwise every shell pane would be
+# reported. Matched per LINE: a glob over the whole output spans rows, so
+# `*alpha*ORPHAN*` matches alpha's row followed by gamma's, which is a test
+# that fails on correct behaviour.
+if printf '%s\n' "$_o" | grep -q '^alpha .*ORPHAN'; then
+	fail "a recorded session was called an orphan"
+fi
+if printf '%s\n' "$_o" | grep -q '^beta .*ORPHAN'; then
+	fail "a pane with no agent was called an orphan"
+fi
+# READ-ONLY still holds on this path.
+_bf=$(ls "$T/run/agent-state/global" | LC_ALL=C sort | tr '\n' ' ')
+doc >/dev/null 2>&1 || true
+[ "$_bf" = "$(ls "$T/run/agent-state/global" | LC_ALL=C sort | tr '\n' ' ')" ] \
+	|| fail "the orphan pass changed state files"
+
+# Recording it clears the finding -- the verb must be satisfiable.
+agent_rec "$T/run/agent-state/global/3" idle %3 1 gamma
+_rc=0; _o=$(doc) || _rc=$?
+no_has "$_o" "ORPHAN" "a recorded agent was still called an orphan"
+[ "$_rc" -eq 0 ] || fail "with every agent recorded the run must pass"
+
+# Restore the two-pane world AND the exact file set the case below compares
+# against ($_before, captured in the read-only section above).
+printf '  100     1 ksh\n  101   100 claude\n  200     1 ksh\n' >"$PSTAB"
+printf '%%1 100 alpha\n%%2 200 beta\n' >"$PANES"
+rm -f "$T/run/agent-state/global"/*
+agent_rec "$T/run/agent-state/global/1" idle %1 1 alpha
+agent_rec "$T/run/agent-state/global/2" working %2 1 beta
 
 # --- a pane tmux cannot resolve is not an excuse to guess ----------------
 # With no pane list at all there is no agent to find, so nothing can be called
