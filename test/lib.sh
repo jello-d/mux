@@ -10,3 +10,26 @@ trap 'rm -rf "$T"' EXIT INT TERM
 _name=${_name:-$(basename -- "$0")}
 fail() { printf 'FAIL %s: %s\n' "$_name" "$1" >&2; exit 1; }
 pass() { printf 'ok   %s\n' "$_name"; exit 0; }
+
+# agent_rec FILE STATE PANE EPOCH SESSION [NOTIF] -- write ONE per-pane
+# agent-state record, in the current format, to FILE.
+#
+#     state window pane epoch notif SESSION
+#
+# The session comes LAST so a name containing a space reads back whole with a
+# single `read -r _st _w _p _e _nid _ss` (see libexec/mux-agent-state.sh).
+# notif is `-` when absent, never empty: an empty field collapses into the
+# whitespace run and shifts every field after it.
+#
+# CENTRALISED BECAUSE IT WAS NOT. When the session name moved to the last
+# field, the fixtures were hand-written in four test files and two were missed.
+# One went red on main and stayed red; the other kept PASSING, because its
+# stale record parsed as a session literally named `x` and the assertion only
+# counted sessions -- so it agreed with a format it no longer used. A fixture
+# that encodes the format independently of the code is a test that can drift
+# without going red, which is the failure this whole suite exists to prevent.
+# One writer here means the next format change breaks compilation, not silence.
+agent_rec() {   # FILE STATE PANE EPOCH SESSION [NOTIF]
+	mkdir -p -- "$(dirname -- "$1")"
+	printf '%s 0 %s %s %s %s\n' "$2" "$3" "$4" "${6:--}" "$5" >"$1"
+}

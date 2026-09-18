@@ -43,8 +43,8 @@ run() {
 
 # bravo blocked since epoch 200, charlie since 100 -- charlie has waited
 # LONGER, so charlie is the jump. (alpha is the client's own session.)
-printf 'blocked bravo 0 0 200 x\n'   >"$T/rt/agent-state/default/p1"
-printf 'blocked charlie 0 0 100 x\n' >"$T/rt/agent-state/default/p2"
+agent_rec "$T/rt/agent-state/default/p1" blocked %1 200 bravo x
+agent_rec "$T/rt/agent-state/default/p2" blocked %2 100 charlie x
 
 # An explicit CLIENT (how the `prefix b` binding calls it) must reach the
 # helper and be passed on to switch-client -c.

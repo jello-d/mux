@@ -23,16 +23,11 @@ export XDG_RUNTIME_DIR MUX_DIR MUX_CACHE
 mkdir -p "$XDG_RUNTIME_DIR/agent-state/global" \
 	"$XDG_RUNTIME_DIR/agent-state/work" "$MUX_DIR/partitions"
 
-# Record: state window pane epoch notif SESSION -- the session LAST, so a
-# name containing a space is read back whole. notif is `-` when absent,
-# never empty: an empty field collapses in the whitespace run and shifts
-# everything after it.
-printf 'blocked 0 %%1 100 x alpha\n' \
-	>"$XDG_RUNTIME_DIR/agent-state/global/p1"
-printf 'working 0 %%2 200 x bravo\n' \
-	>"$XDG_RUNTIME_DIR/agent-state/global/p2"
-printf 'idle 0 %%3 300 x wsess\n' \
-	>"$XDG_RUNTIME_DIR/agent-state/work/p1"
+# agent_rec writes the record; test/lib.sh owns the field order, so a format
+# change lands in one place instead of being re-typed in every fixture.
+agent_rec "$XDG_RUNTIME_DIR/agent-state/global/p1" blocked %1 100 alpha x
+agent_rec "$XDG_RUNTIME_DIR/agent-state/global/p2" working %2 200 bravo x
+agent_rec "$XDG_RUNTIME_DIR/agent-state/work/p1"   idle    %3 300 wsess x
 
 sum() {
 	env -u TMUX -u MUX_SHARE MUX_DIR="$MUX_DIR" MUX_CACHE="$MUX_CACHE" \
@@ -65,7 +60,7 @@ eq explicit-beats-ctx "$(sum global)" "blocked 1"
 rm -f "$MUX_DIR/config"
 
 # --- the worst state wins, and the count is of sessions in THAT state ------
-printf 'blocked charlie 0 0 150 x\n' >"$XDG_RUNTIME_DIR/agent-state/global/p3"
+agent_rec "$XDG_RUNTIME_DIR/agent-state/global/p3" blocked %3 150 charlie x
 eq worst-wins "$(sum global)" "blocked 2"
 
 pass

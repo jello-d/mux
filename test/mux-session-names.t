@@ -104,8 +104,7 @@ unhide
 # shared the word-splitting loop.
 # Record: state window pane epoch notif SESSION -- session LAST, which is the
 # whole point here: `my project` must come back whole.
-st() { printf '%s 0 %s 1 - %s\n' "$2" "$1" "$3" \
-	>"$T/run/agent-state/global/${1#%}"; }
+st() { agent_rec "$T/run/agent-state/global/${1#%}" "$2" "$1" 1 "$3"; }
 st %2 blocked 'my project'
 st %3 blocked zulu
 nb() {
