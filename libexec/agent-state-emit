@@ -107,7 +107,17 @@ if [ "$_pstate" = working ] && [ "$state" != working ]; then
                 # hand, every time. Urgency is not how mux says which state
                 # this is -- the summary line says it, and the strip and the
                 # tray hold it persistently. See mux-notify.sh.
-                _sess=${loc%% *}
+                #
+                # $_sess is the one computed at the top, deliberately NOT
+                # recomputed here. This block used to re-derive it as
+                # ${loc%% *}, correct back when the probe asked for
+                # `#{session_name} #{window_index}`. Flipping that order
+                # fixed the top copy and left this one reading the WINDOW
+                # INDEX -- so raising a notification overwrote $_sess with
+                # `0` and the record written below named a session `0`.
+                # The session then had NO state on the strip (it looked
+                # idle while the agent worked) and the banner said
+                # "Claude finished: 0". One value, one place.
                 case $state in
                 blocked) notif=$(mux_notify_send normal \
                                 "Claude needs you: $_sess" \

@@ -164,6 +164,73 @@ _stolen=$(env XDG_RUNTIME_DIR="$T/run" sh -c '
 	mux_agent_state "$(mux_agent_dir global)" "my"' _ "$HERE")
 [ -z "${_stolen%% *}" ] \
 	|| fail "a session named 'my' inherited 'my project' state: [$_stolen]"
+# --- raising a NOTIFICATION must not clobber the session -------------------
+# The emit path computes $_sess once, at the top, from `#{window_index}
+# #{session_name}`. The notification block used to RE-derive it as ${loc%% *},
+# which was correct only while the probe asked for session FIRST. Flipping that
+# order fixed the top copy and left this one reading the WINDOW INDEX, so any
+# emit that raised a banner wrote a record naming a session `0`.
+#
+# The damage was invisible where it happened and loud where it did not: the
+# real session showed NO agent state at all (it looked idle while the agent
+# worked), and the banner read "Claude finished: 0". Observed live on a
+# `vigilance` session; pane %4 held `idle 0 %4 <epoch> 460 0`.
+#
+# The existing emitter case above cannot catch it: its stub reports the pane as
+# VISIBLE, and a visible pane raises no banner, so it never enters this block.
+# This one forces the banner -- previous state `working`, new state `idle`,
+# pane not visible -- which is the only path that was broken.
+mkdir -p "$T/notifbin"
+cat >"$T/notifbin/tmux" <<'EOF'
+#!/bin/sh
+case "$*" in
+*window_index*session_name*) printf '0 my project
+' ;;
+*mux-notify-always*)         printf '
+' ;;
+*pane_active*)               printf '0
+' ;;   # NOT visible: raise the banner
+esac
+exit 0
+EOF
+chmod +x "$T/notifbin/tmux"
+# The notify seam, stubbed: log the summary, return an id.
+cat >"$T/notifbin/send" <<'EOF'
+#!/bin/sh
+printf '%s
+' "$2" >>"$NLOG"
+printf '777
+'
+EOF
+chmod +x "$T/notifbin/send"
+NLOG=$T/nlog; : >"$NLOG"; export NLOG
+
+rm -f "$T/run/agent-state/global"/*
+# Previous state must be `working` for the transition to fire.
+agent_rec "$T/run/agent-state/global/8" working %8 100 'my project'
+env XDG_RUNTIME_DIR="$T/run" TMUX=/tmp/fake/global,1,0 TMUX_PANE=%8 \
+	MUX_NOTIFY_SEND="$T/notifbin/send" PATH="$T/notifbin:$PATH" \
+	"$HERE/libexec/agent-state-emit" idle >/dev/null 2>&1 \
+	|| fail "emit with a notification failed"
+
+_rec=$(cat "$T/run/agent-state/global/8")
+# The session is the LAST field, and it must still be the real one.
+_got=$(printf '%s
+' "$_rec" | { read -r _a _b _c _d _e _f; printf '%s' "$_f"; })
+[ "$_got" = "my project" ] \
+	|| fail "notification clobbered the session: [$_rec]"
+# ... and it must be reachable by name, which is what the strip does.
+_found=$(env XDG_RUNTIME_DIR="$T/run" sh -c '
+	. "$1/libexec/mux-agent-state.sh"
+	mux_agent_state "$(mux_agent_dir global)" "my project"' _ "$HERE")
+[ -n "${_found%% *}" ] \
+	|| fail "no state after a notification: [$_rec]"
+# The BANNER names the session too -- it read "Claude finished: 0".
+grep -qF 'my project' "$NLOG" \
+	|| fail "banner did not name the session: [$(cat "$NLOG")]"
+grep -qxF 'Claude finished: 0' "$NLOG" \
+	&& fail "the banner named the window index"
+
 rm -f "$T/run/agent-state/global"/*
 st %2 blocked 'my project'
 st %3 blocked zulu
