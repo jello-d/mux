@@ -54,7 +54,43 @@ else bad "tmux not found (mux's one runtime dependency)"; fi
 # every key binding and every status-bar tick, while `mux check` run by its own
 # path would otherwise look perfectly healthy. This is the install failure that
 # actually happens.
-if _mp=$(command -v mux 2>/dev/null); then ok "mux on PATH ($_mp)"
+if _mp=$(command -v mux 2>/dev/null); then
+	ok "mux on PATH ($_mp)"
+
+	# TWO mux commands on PATH is the banned state (see the install-placement
+	# rule): the earlier entry silently shadows the later one, and then rots
+	# behind it -- a seam added this morning is inert because a day-old copy
+	# wins `command -v`. Nothing else in this check can see that, because
+	# everything else follows the copy it is already running from.
+	_dupes=
+	_oIFS=$IFS; IFS=:
+	for _pe in $PATH; do
+		[ -n "$_pe" ] || _pe=.
+		[ -x "$_pe/mux" ] || continue
+		case " $_dupes " in *" $_pe/mux "*) continue ;; esac
+		_dupes="$_dupes $_pe/mux"
+	done
+	IFS=$_oIFS
+	_dn=0
+	for _d in $_dupes; do _dn=$((_dn + 1)); done
+	if [ "$_dn" -gt 1 ]; then
+		bad "$_dn mux commands on PATH -- the first shadows the rest:"
+		for _d in $_dupes; do bad "    $_d"; done
+	fi
+
+	# Is the copy on PATH the same install this check is auditing? If not,
+	# every verdict below describes a tree that the key bindings and the
+	# status bar do NOT run. A WARN, not a FAIL: running a dev checkout's
+	# ./bin/mux check deliberately hits this, and crying wolf there would
+	# train the marker to be ignored.
+	_self=$(cd "$(dirname "$0")/.." 2>/dev/null && pwd) || _self=
+	_pathpfx=$(cd "$(dirname "$(readlink -f "$_mp")")/.." 2>/dev/null && pwd) \
+		|| _pathpfx=
+	if [ -n "$_self" ] && [ -n "$_pathpfx" ] && [ "$_self" != "$_pathpfx" ]; then
+		warn "checking $_self, but PATH runs $_pathpfx"
+		warn "  this verdict is about the tree you invoked, not the one"
+		warn "  your key bindings and status bar actually use"
+	fi
 else bad "mux not on PATH -- the tmux fragment reaches it as \`mux <verb>\`"; fi
 
 # 1c. Desktop notifications: OPTIONAL, so a gap is a WARN, never a FAIL -- a
@@ -189,6 +225,63 @@ if [ -d "$_ed" ]; then
 		warn "unsaved edit draft for '$_dn' at $_d"
 		warn "  resume it:  mux edit $_dn"
 	done
+fi
+
+# 6. Does the product actually WORK on the running server?
+#
+# Everything above this point is a PRESENCE check: files exist, commands
+# resolve, config parses. Asked the only question that matters -- what would
+# this say about a box that is fully installed and fully broken? -- the answer
+# was [OK] to every line. That is not hypothetical: a box ran for days with the
+# strip wrong about six of seven sessions while this check reported clean.
+#
+# So these ask tmux what it is actually configured to do. They are READ-ONLY
+# queries (list-keys, show-options) and deliberately do NOT run the renderer:
+# `mux agent-render` PRUNES state files it believes orphaned, and run against
+# the wrong socket it deletes every agent's state -- which has happened. A
+# check must never be able to damage what it inspects.
+_keys=$(_vt list-keys -T prefix 2>/dev/null || true)
+if [ -z "$_keys" ]; then
+	# No server for this partition. A perfectly healthy state (a fresh boot,
+	# a headless box), so it is not a WARN -- but it is said out loud, because
+	# a check that silently skips its only functional assertions is exactly
+	# the check this section exists to replace.
+	ok "no tmux server for '${MUX_CTX_PARTITION:-global}' -- tmux state unchecked"
+else
+	# share/mux.tmux carries no paths: every binding reaches a helper as
+	# `mux <verb>`. So a binding that exists but does not mention mux is a
+	# binding tmux kept from some other config, not mux's.
+	_bound() {   # <key> -- is prefix+<key> bound to a mux verb?
+		printf '%s\n' "$_keys" | awk -v k="$1" '
+			$1 == "bind-key" && $3 == "prefix" && $4 == k {
+				if (index($0, "mux ") > 0) found = 1 }
+			END { exit !found }'
+	}
+	_nb=
+	for _k in '(' ')' b r R; do
+		_bound "$_k" || _nb="$_nb $_k"
+	done
+	if [ -z "$_nb" ]; then
+		ok "key bindings live (prefix ( ) b r R)"
+	else
+		bad "key binding(s) not bound to mux:$_nb"
+		bad "  the fragment is not sourced: source-file .../share/mux.tmux"
+	fi
+
+	# The status bar is drawn by two #() jobs. If either is not mux's, the
+	# bar still renders -- just without the thing mux exists to show, which
+	# is why this fails silently and looks like "no agents are running".
+	_sr=$(_vt show-options -gv status-right 2>/dev/null || true)
+	case $_sr in
+	*"mux agent-render"*) ok "status-right draws the agent strip" ;;
+	"") bad "status-right is empty -- the agent strip cannot appear" ;;
+	*)  bad "status-right is not mux's renderer -- no agent strip" ;;
+	esac
+	_sl=$(_vt show-options -gv status-left 2>/dev/null || true)
+	case $_sl in
+	*"mux style"*) ok "status-left draws the session chip" ;;
+	*) warn "status-left is not mux's -- session chip styling is off" ;;
+	esac
 fi
 
 exit "$RC"

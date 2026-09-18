@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.14" "User Commands"
+.TH MUX 1 "" "mux 0.15" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -284,6 +284,34 @@ partition. One
 line per check and a non\-zero exit on any FAIL. The markers are a string
 convention, not shared code, so an integrator can style them with its own
 palette.
+.IP
+It also asks whether mux is WORKING, not merely installed, because everything
+above is a presence check and a presence check says
+.B [OK]
+to a box that is fully installed and fully broken. So it asks tmux what it is
+actually configured to do: that prefix
+.BR ( ", " ) ", " b ", " r " and " R
+are bound to mux verbs rather than to whatever tmux left there, and that
+.I status\-right
+and
+.I status\-left
+are still mux's own jobs. With no server for this partition these are skipped
+\(em a healthy state on a fresh boot or a headless box \(em and the skip is
+reported rather than passed over in silence.
+.IP
+These are READ\-ONLY queries. The check deliberately never runs
+.BR "mux agent-render" ,
+which prunes state files and, pointed at the wrong socket, has deleted every
+agent's state. An audit must not be able to damage what it inspects.
+.IP
+Two
+.B mux
+commands on PATH is a FAIL: the earlier entry shadows the later one and then
+rots behind it, and no other check here can see that, because every other check
+follows the copy it is already running from. Auditing a tree OTHER than the one
+PATH resolves to is a WARN, since running a development checkout's
+.I ./bin/mux check
+does exactly that on purpose.
 .TP
 .B mux help " [" \fITOPIC\fR ]
 The usage summary, or a topic in depth:
