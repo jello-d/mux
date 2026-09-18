@@ -248,8 +248,19 @@ status strip reports state from per\-pane files written by an agent's lifecycle
 hooks; when a hook does not fire, the file keeps saying whatever it last said
 and nothing on the bar can contradict it, because the bar IS the file. This
 asks the other side \(em whether an agent process under that pane is burning
-CPU \(em and reports any disagreement. Non\-zero exit when a session reports a
-finished agent that is working.
+CPU \(em and reports any disagreement.
+.IP
+It also asks the REVERSE question: is an agent running with no record at all?
+That case is the more damaging of the two and was long invisible here. A stale
+record shows the WRONG state, but it shows something; a MISSING one shows
+nothing, and the strip draws nothing exactly as it draws a session you never
+started an agent in. Such a session is reported as an
+.BR ORPHAN .
+It heals on that agent's next lifecycle hook, but a session idle for days fires
+none until you interact with it.
+.IP
+Non\-zero exit when a session reports a finished agent that is working, or when
+any agent is running unrecorded.
 .IP
 STRICTLY READ\-ONLY. It writes nothing and removes nothing, unlike
 .BR "mux agent-render" ,
