@@ -380,6 +380,7 @@ _ensure_side() {
         [ -n "$_cur_part" ] && return 0
         mux_ctx_resolve || :
         _cur_part=$MUX_CTX_PARTITION
+
 }
 
 # Layout stems for the caller's side plus the shared (rootless) ones -- the same
@@ -942,6 +943,12 @@ sock=$(mux_ctx_socket)
 # the same spelling, and is correct: with no -L, tmux's own socket really is
 # named `default`, so that is what a socket basename compares against.
 part=$MUX_CTX_PARTITION
+
+# A session name may contain a space but never a newline (tmux's own -F
+# output is line oriented), so newline is the only safe separator for a
+# LIST of them, and `for n in $set` is never safe for one.
+_RS_NL='
+'
 _cur_part=$MUX_CTX_PARTITION
 # Nothing knows this context. Say so ONCE, here in the front end -- never from
 # mux-context.sh, which mux-style and mux-agent-render call every status
@@ -2154,12 +2161,17 @@ if [ "$cmd" = new ]; then cmd_new; fi
 # rather than reimplemented here. It replays a PUBLIC command, addressing the
 # session by its ROOT: `mux go <dir>` is a form anyone can type, so resume is a
 # loop over it rather than a private path through the resolver.
-_resume_rebuild() {     # <partition key> <recorded names>
-        _rk=$1; shift
+_resume_rebuild() {     # <partition key> <recorded names, one per line>
+        _rk=$1
         rs_built=0
         rs_up=0
         rs_failed=
-        for rs_n in $*; do
+        # LINE by line. `for rs_n in $*` word-splits, so a recorded session
+        # named `my project` was rebuilt as two phantoms -- `my` and
+        # `project` -- and the real one never came back. A here-doc rather
+        # than a pipe: the counters are carried out of this loop.
+        while IFS= read -r rs_n; do
+                [ -n "$rs_n" ] || continue
                 if tm has-session -t "=$rs_n" 2>/dev/null; then
                         rs_up=$((rs_up + 1))
                         continue
@@ -2175,19 +2187,24 @@ _resume_rebuild() {     # <partition key> <recorded names>
                         # Keep going: one unbuildable session (a root that
                         # moved, a profile since deleted) must not cost you the
                         # other four.
-                        rs_failed="$rs_failed $rs_n"
+                        rs_failed="$rs_failed$rs_n$_RS_NL"
                 fi
-        done
+        done <<EOF
+$2
+EOF
 }
 
 # The first recorded session that is actually up. Insertion order makes that
 # the oldest -- usually the one you think of as primary.
 _resume_landing() {     # <recorded names> -> a live session name, or empty
-        for _rn in $*; do
+        while IFS= read -r _rn; do
+                [ -n "$_rn" ] || continue
                 if tm has-session -t "=$_rn" 2>/dev/null; then
                         printf '%s' "$_rn"; return 0
                 fi
-        done
+        done <<EOF
+$1
+EOF
 }
 
 cmd_resume() {
@@ -2203,15 +2220,14 @@ cmd_resume() {
                         "resume yet" >&2
                 exit 1
         fi
-        # shellcheck disable=SC2086
-        _resume_rebuild "$rs_key" $rs_set
+        _resume_rebuild "$rs_key" "$rs_set"
         printf 'mux: resumed %s, %s already up\n' "$rs_built" "$rs_up"
         if [ -n "$rs_failed" ]; then
-                echo "mux: could NOT build:$rs_failed" >&2
+                echo "mux: could NOT build:" >&2
+                printf '%s' "$rs_failed" | sed 's/^/mux:   /' >&2
                 echo "mux: see why with  mux go <name>" >&2
         fi
-        # shellcheck disable=SC2086
-        name=$(_resume_landing $rs_set)
+        name=$(_resume_landing "$rs_set")
         [ -n "$name" ] || { echo "mux: nothing to attach" >&2; exit 1; }
         mux_attach
 }
