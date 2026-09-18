@@ -879,7 +879,11 @@ cmd_help() {
         exit 0
 }
 
-if [ "$cmd" = help ]; then cmd_help; fi
+# "$@" matters: this was an inline block, where $1 was the script's first
+# POSITIONAL -- the topic. Extracting it into a function without passing
+# them made $1 the function's own, which is unset, so every
+# `mux help TOPIC` silently printed the usage summary instead.
+if [ "$cmd" = help ]; then cmd_help "$@"; fi
 
 # Root and identity both derive from the project: the git toplevel if we are in
 # a repo, else the current directory. tmux forbids ':' and '.' in a session
@@ -2485,7 +2489,12 @@ while read -r verb rest; do
 	esac
 done <"$flat"
 
-[ "$v_win" -eq 1 ] || { echo "mux: empty layout: $layout" >&2; exit 1; }
+# $plabel, not $layout: nothing ever assigned `layout`, so under set -u
+# this error path aborted with "layout: parameter not set" instead of
+# saying which profile was empty -- a broken message on an error path,
+# which is where a clear one matters most.
+[ "$v_win" -eq 1 ] || {
+	echo "mux: empty layout: $plabel" >&2; exit 1; }
 
 # An explicit `theme` overrides the per-mode default (cosmetic; mux-style
 # resolves the default otherwise). Validate before building, so a typo fails
