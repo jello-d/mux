@@ -35,22 +35,33 @@ fi
 dir=$(mux_agent_dir "$_ns")
 
 # The distinct sessions that have a tracked agent (field 2 of each state file).
+# The distinct sessions, NEWLINE separated and counted line by line. A session
+# name may contain a space, so neither joining them with spaces nor iterating
+# the result with a bare `for` is safe: one session called `my project` would
+# dedup against its own words and then be counted twice, as `my` and `project`.
+# A name cannot contain a newline (tmux escapes one in its -F output), so that
+# is the delimiter.
+_NL='
+'
 sessions=
 if [ -d "$dir" ]; then
 	for f in "$dir"/*; do
 		[ -e "$f" ] || continue
-		read -r st ss rest <"$f" || continue
+		# session LAST, so it survives containing a space.
+		read -r st win pane ep nid ss <"$f" || continue
 		[ -n "${ss:-}" ] || continue
-		case " $sessions " in
-		*" $ss "*) ;;
-		*) sessions="$sessions $ss" ;;
+		case "$_NL$sessions$_NL" in
+		*"$_NL$ss$_NL"*) ;;
+		*) sessions="$sessions$_NL$ss" ;;
 		esac
 	done
 fi
+sessions=${sessions#"$_NL"}
 
 # Worst state across sessions, and how many sessions sit in it.
 worst= wr=-1 count=0
-for s in $sessions; do
+while IFS= read -r s; do
+	[ -n "$s" ] || continue
 	state=$(mux_agent_state "$dir" "$s")
 	state=${state%% *}
 	[ -n "$state" ] || continue
@@ -60,7 +71,11 @@ for s in $sessions; do
 	elif [ "$r" -eq "$wr" ]; then
 		count=$((count + 1))
 	fi
-done
+# A here-doc, not a pipe: `worst` and `count` are carried out of this loop and
+# a pipe would run it in a subshell and discard both.
+done <<EOF
+$sessions
+EOF
 
 [ -n "$worst" ] || { echo "none 0"; exit 0; }
 printf '%s %s\n' "$worst" "$count"

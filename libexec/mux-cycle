@@ -17,11 +17,20 @@ dir=${1:?}; client=${2:?}; current=${3:-}
 excluded=$(mux_excluded "$client")
 
 # Visible sessions in tmux name order (the same order the status strip uses).
+# Read LINE by line, not word by word. `for _s in $(tmux list-sessions ...)`
+# splits on whitespace, so a session named `my project` became two phantom ring
+# entries and the real one was never reachable -- and since the target uses
+# tmux's exact-match `=`, the switch failed silently and these bindings simply
+# went dead. A here-doc, not a pipe: a pipe would run this loop in a subshell
+# and the ring built with `set --` would be discarded at `done`.
 set --
-for _s in $(tmux list-sessions -F '#{session_name}' 2>/dev/null); do
-        case " $excluded " in *" $_s "*) continue ;; esac
+while IFS= read -r _s; do
+        [ -n "$_s" ] || continue
+        mux_excluded_has "$excluded" "$_s" && continue
         set -- "$@" "$_s"
-done
+done <<EOF
+$(tmux list-sessions -F '#{session_name}' 2>/dev/null)
+EOF
 [ "$#" -gt 0 ] || exit 0                # nothing visible; nowhere to go
 n=$#
 

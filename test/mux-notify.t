@@ -182,8 +182,13 @@ emit() {
 		PATH="$T/emitbin:$_saved" LOG="$LOG" \
 		"$HERE/libexec/agent-state-emit" "$1"
 }
-# field 6 of the state line is the notification id it is holding.
-notif_of() { read -r _a _b _c _d _e _f <"$_sf" || true; printf '%s' "${_f:-}"; }
+# Record: state window pane epoch notif SESSION. The notif id is field 5 --
+# the session moved to the END so a name containing a space survives, and
+# notif is `-` rather than empty so an absent one cannot shift the fields.
+notif_of() {
+	read -r _a _b _c _d _e _f <"$_sf" || true
+	case ${_e:-} in -|'') printf '' ;; *) printf '%s' "$_e" ;; esac
+}
 
 # Starting work notifies nobody -- that transition is YOU, not the agent.
 : >"$LOG"

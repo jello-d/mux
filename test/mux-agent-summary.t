@@ -23,10 +23,16 @@ export XDG_RUNTIME_DIR MUX_DIR MUX_CACHE
 mkdir -p "$XDG_RUNTIME_DIR/agent-state/global" \
 	"$XDG_RUNTIME_DIR/agent-state/work" "$MUX_DIR/partitions"
 
-# state files are "state session window pane epoch notif-id"
-printf 'blocked alpha 0 0 100 x\n' >"$XDG_RUNTIME_DIR/agent-state/global/p1"
-printf 'working bravo 0 0 200 x\n' >"$XDG_RUNTIME_DIR/agent-state/global/p2"
-printf 'idle    wsess 0 0 300 x\n' >"$XDG_RUNTIME_DIR/agent-state/work/p1"
+# Record: state window pane epoch notif SESSION -- the session LAST, so a
+# name containing a space is read back whole. notif is `-` when absent,
+# never empty: an empty field collapses in the whitespace run and shifts
+# everything after it.
+printf 'blocked 0 %%1 100 x alpha\n' \
+	>"$XDG_RUNTIME_DIR/agent-state/global/p1"
+printf 'working 0 %%2 200 x bravo\n' \
+	>"$XDG_RUNTIME_DIR/agent-state/global/p2"
+printf 'idle 0 %%3 300 x wsess\n' \
+	>"$XDG_RUNTIME_DIR/agent-state/work/p1"
 
 sum() {
 	env -u TMUX -u MUX_SHARE MUX_DIR="$MUX_DIR" MUX_CACHE="$MUX_CACHE" \

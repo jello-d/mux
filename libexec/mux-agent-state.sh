@@ -54,7 +54,8 @@ mux_agent_state() {
 	[ -d "$_asdir" ] || { printf ' '; return; }
 	for _f in "$_asdir"/*; do
 		[ -e "$_f" ] || continue
-		read -r _st _ss _w _p _e _nid <"$_f" || continue
+		# session LAST: it may contain spaces, so it takes the rest.
+		read -r _st _w _p _e _nid _ss <"$_f" || continue
 		[ "$_ss" = "$_assess" ] || continue
 		_r=$(mux_agent_rank "$_st")
 		[ "$_r" -gt "$_br" ] && { _br=$_r; _best=$_st; _bestep=$_e; }

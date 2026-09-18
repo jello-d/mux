@@ -102,7 +102,7 @@ _cpu() {
 _rows=
 for _f in "$_dir"/*; do
 	[ -e "$_f" ] || continue
-	read -r _st _sess _win _pane _ep _notif <"$_f" 2>/dev/null || continue
+	read -r _st _win _pane _ep _notif _sess <"$_f" 2>/dev/null || continue
 	[ -n "${_sess:-}" ] || continue
 	_ppid=$(printf '%s\n' "$_panes" \
 		| awk -v p="$_pane" '$1 == p { print $2; exit }')

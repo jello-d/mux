@@ -132,7 +132,7 @@ live=" $(tmux list-panes -a -F '#{pane_id}' 2>/dev/null | tr '\n' ' ')"
 if [ -d "$dir" ] && [ -n "${live# }" ]; then
         for f in "$dir"/*; do
                 [ -e "$f" ] || continue
-                read -r st ss win pane ep nid <"$f" || continue
+                read -r st win pane ep nid ss <"$f" || continue
                 case "$live" in *" $pane "*) continue ;; esac
                 mux_notify_close "$nid"
                 rm -f "$f"
@@ -174,7 +174,7 @@ now=$(date +%s)          # one instant, so every age is measured the same
 nsess=0
 while read -r sess; do
         [ -n "$sess" ] || continue
-        case " $excluded " in *" $sess "*) continue ;; esac   # mux hide
+        mux_excluded_has "$excluded" "$sess" && continue     # mux hide
         _pair=$(mux_agent_state "$dir" "$sess")
         _st=${_pair%% *}; _ep=${_pair##* }
         [ -n "$_st" ] || _st=none

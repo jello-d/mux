@@ -44,16 +44,24 @@ if [ -r "$_lib/mux-exclude.sh" ]; then
 fi
 dir=$(mux_agent_dir)
 
+# LINE by line, and a here-doc rather than a pipe -- `best` is carried out of
+# this loop, and a pipe would run it in a subshell and discard it. Word
+# splitting here made a session named `my project` two phantom candidates and
+# hid the real one, in the feature whose whole job is "take me to whoever has
+# waited longest".
 best= bestep=
-for s in $(tmux list-sessions -F '#{session_name}' 2>/dev/null); do
-	case " $excluded " in *" $s "*) continue ;; esac    # mux hide
+while IFS= read -r s; do
+	[ -n "$s" ] || continue
+	mux_excluded_has "$excluded" "$s" && continue      # mux hide
 	[ "$s" = "$current" ] && continue
 	pair=$(mux_agent_state "$dir" "$s")
 	[ "${pair%% *}" = blocked ] || continue
 	ep=${pair##* }
 	[ -n "$ep" ] || ep=9999999999
 	if [ -z "$best" ] || [ "$ep" -lt "$bestep" ]; then best=$s; bestep=$ep; fi
-done
+done <<EOF
+$(tmux list-sessions -F '#{session_name}' 2>/dev/null)
+EOF
 
 [ -n "$best" ] || exit 0            # nothing blocked; nowhere to jump
 if [ -n "$client" ]; then
