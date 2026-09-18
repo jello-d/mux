@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.15" "User Commands"
+.TH MUX 1 "" "mux 0.16" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -275,6 +275,57 @@ sets the sampling seconds;
 and
 .B MUX_DOCTOR_SUSPECT_PCT
 set the thresholds.
+.TP
+.B mux agent-list " [" \fINS\fR ]
+Per\-session agent state, machine readable, one line each:
+.IP
+.EX
+<state> <age\-seconds> <SESSION>
+.EE
+.IP
+Where
+.B mux agent-summary
+collapses a namespace to a single worst\-state\-and\-count line for a tray icon,
+this keeps every session \(em what a tooltip, a right\-click menu, or a tray
+aggregating SEVERAL MACHINES needs. A session with more than one agent pane
+reports its worst state, so nothing hides behind an idle sibling.
+.IP
+SESSION comes last, the same rule the state record follows, so a name
+containing a space reads back whole with one
+.BR "read -r st age sess" .
+.IP
+An AGE, not an epoch, and that is deliberate. The intended caller is
+.BR "ssh " \fIhost\fR " mux agent-list" ,
+and a reader on another machine must never subtract a remote clock's timestamp
+from its own now: a box a few seconds out would misreport every duration, and
+one badly out would report negative ones. The age is resolved on the host that
+wrote the record, so what crosses the wire is already an answer. A record with
+no usable timestamp reports an age of
+.B \-
+rather than being dropped (which would hide a live agent) or given a fabricated
+zero.
+.IP
+THE EXIT STATUS IS PART OF THE CONTRACT. A host with no agents prints nothing
+and exits ZERO. This command has no failure of its own, so a non\-zero exit can
+only have come from the transport \(em an unreachable box, no
+.B mux
+on the remote PATH \(em and a presenter MUST render that as unknown rather than
+as calm. A host that is down but draws as idle is how you stop checking a
+machine that needed you.
+.IP
+Read\-only and headless: derived from the state files, never from
+.BR tmux ,
+so it answers with no server, no client and no
+.BR $TMUX .
+.TP
+.B mux agent-summary " [" \fINS\fR ]
+One line,
+.BR "<state> <count>" :
+the worst live state across the namespace and how many sessions sit in it, or
+.B "none 0"
+when nothing is tracked. The feed the tray indicator polls. Same derivation and
+same ranking as
+.BR "mux agent-list" .
 .TP
 .B mux check
 Audit the install: tmux, mux's own presence on PATH, the desktop notification

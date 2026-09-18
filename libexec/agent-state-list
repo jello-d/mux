@@ -1,0 +1,90 @@
+#!/bin/sh
+# agent-state-list: machine-readable PER-SESSION agent state across a namespace,
+# for an external presenter. Where agent-summary collapses the namespace to one
+# worst-state-and-count line, this keeps every session, which is what a tooltip,
+# a right-click menu, or a MULTI-HOST tray needs.
+#
+#   mux agent-list [NS]
+#
+# One line per session that has a tracked agent:
+#
+#   <state> <age-seconds> <SESSION>
+#
+# SESSION comes LAST, the same rule the state record itself follows, so a name
+# containing a space reads back whole with one `read -r st age sess`. A name
+# cannot contain a newline, so a line is always exactly one session.
+#
+# AGE, NOT AN EPOCH, and that is the load-bearing choice here. The obvious
+# design emits the epoch the state began, and it works perfectly until the
+# reader is on a DIFFERENT MACHINE: durations would then be computed by
+# subtracting a remote clock's timestamp from a local clock's now, so a box a
+# few seconds off shows "idle 4s" as "idle 2m", and one badly off shows a
+# negative age. Resolving the state's age HERE, against the clock that wrote
+# it, means a reader never does cross-host arithmetic on absolute time. The
+# transport carries a number that is already an answer.
+#
+# Sessions are derived from the state FILES, not from `tmux list-sessions`, so
+# this answers headless -- from a tray daemon, over ssh, at boot, with no tmux
+# client and no server attached. That is the whole point: the intended caller is
+# `ssh <host> mux agent-list`.
+#
+# READ-ONLY. It never writes, never prunes, and never contacts tmux. A reporter
+# that can damage what it reports is the mistake agent-render already made once,
+# deleting every agent's state when pointed at the wrong socket.
+#
+# EXIT STATUS is part of the contract, because the caller must be able to tell
+# "this host has no agents" from "I could not reach this host". No agents is an
+# empty list and exit 0. This command has no failure of its own, so a non-zero
+# exit can only have come from the transport (ssh unreachable, mux not on the
+# remote PATH, a dead box) -- and a multi-host presenter MUST render that as
+# unknown rather than as calm. An unreachable host that reads as idle is how you
+# stop checking a machine that needed you.
+set -eu
+
+# Sibling libs in this script's own (colocated) libexec dir.
+_lib=$(dirname "$0")
+. "$_lib/mux-agent-state.sh"
+
+# No NS given: resolve the caller's partition rather than guessing a name. The
+# same resolution agent-summary does, and for the same reason -- this is a
+# headless caller with no $TMUX to take a namespace from, and the hardcoded
+# fallback it used to have went stale and silently reported nothing.
+_ns=${1:-}
+if [ -z "$_ns" ] && [ -r "$_lib/mux-context.sh" ]; then
+	. "$_lib/mux-context.sh"
+	mux_ctx_resolve 2>/dev/null && _ns=$MUX_CTX_PARTITION
+fi
+dir=$(mux_agent_dir "$_ns")
+
+_now=$(date +%s 2>/dev/null || echo 0)
+
+# A here-doc, not a pipe: nothing needs to escape this loop today, but the
+# summary's own loop does, and keeping the shape identical is what stops the
+# next edit from reintroducing the subshell trap in one of the two.
+while IFS= read -r _s; do
+	[ -n "$_s" ] || continue
+	# "STATE EPOCH" for the most-urgent live agent in this session; a
+	# session with several agent panes reports its worst, so nothing hides.
+	_se=$(mux_agent_state "$dir" "$_s")
+	_st=${_se%% *}
+	_ep=${_se#* }
+	[ -n "$_st" ] || continue
+	# A record with no usable epoch still has a real STATE, so it is
+	# reported with an age of `-` rather than dropped or given a fabricated
+	# 0. Dropping it would hide a live agent; a 0 would assert it just
+	# changed, which is a claim this has no evidence for.
+	case ${_ep:-} in
+	''|*[!0-9]*) _age=- ;;
+	*)
+		_age=$((_now - _ep))
+		# Clamp rather than print a negative: a record stamped in the
+		# future means this host's clock moved, and "0s" is the honest
+		# floor for "it began no earlier than now".
+		[ "$_age" -lt 0 ] && _age=0 ;;
+	esac
+	printf '%s %s %s\n' "$_st" "$_age" "$_s"
+done <<EOF
+$(mux_agent_sessions "$dir")
+EOF
+
+exit 0

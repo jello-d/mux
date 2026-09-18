@@ -6,15 +6,23 @@
 # Functions and glyph constants only; source it, do not run it.
 #
 # State lives in per-pane files under $XDG_RUNTIME_DIR/agent-state/<ns>, a line
-# each: "state session window pane epoch notif-id" (see agent-state-emit). The
-# namespace <ns> is the tmux socket basename, so a work bar never shows personal
-# agents and vice versa.
+# each: "state window pane epoch notif SESSION" (see agent-state-emit). The
+# session comes LAST so a name containing a space reads back whole in one
+# `read`; this comment said the old order long after the code changed, which is
+# the same asserted-vs-actual drift that let a notification overwrite the
+# session name with the window index. The namespace <ns> is the tmux socket
+# basename, so a work bar never shows personal agents and vice versa.
 
 # Width-2 glyphs, so a caller that aligns columns (the strip) holds line. This
 # is the single source of the state->glyph mapping; the strip's colour STYLES
 # stay in agent-state-render, which owns the bar's look.
 MUX_GLYPH_BLOCKED='⚠️' ; MUX_GLYPH_WORKING='🧠' ; MUX_GLYPH_IDLE='✅'
 MUX_GLYPH_NONE='⚫'    ; MUX_GLYPH_UNKNOWN='❓'
+
+# A literal newline, as a constant: the one delimiter a session name cannot
+# contain, so it is what separates a set of them.
+MUX_AGENT_NL='
+'
 
 # mux_agent_dir [NS] -> the namespaced state directory. NS is $1 if given, else
 # the current tmux socket basename (from $TMUX), else 'default'. Callers outside
@@ -61,6 +69,34 @@ mux_agent_state() {
 		[ "$_r" -gt "$_br" ] && { _br=$_r; _best=$_st; _bestep=$_e; }
 	done
 	printf '%s %s' "$_best" "$_bestep"
+}
+
+# mux_agent_sessions DIR -> the distinct sessions with a tracked agent, ONE PER
+# LINE. Newline separated because a session name may contain a space but never a
+# newline (tmux escapes one in its -F output), so joining with spaces would let
+# `my project` dedup against its own words and then be counted twice, as `my`
+# and `project`.
+#
+# Centralised because it was already written twice -- in agent-state-summary and
+# in mux-agent-doctor -- and a third copy was about to be written for
+# agent-state-list. Every copy has to independently remember that the session is
+# the LAST field.
+mux_agent_sessions() {  # DIR
+	_asd=$1
+	[ -d "$_asd" ] || return 0
+	_seen=
+	for _f in "$_asd"/*; do
+		[ -e "$_f" ] || continue
+		# 2>/dev/null BEFORE the redirect: a file pruned between the glob
+		# and the read fails the OPEN while stderr is still the terminal.
+		read -r _st _w _p _e _nid _ss 2>/dev/null <"$_f" || continue
+		[ -n "${_ss:-}" ] || continue
+		case "$MUX_AGENT_NL$_seen$MUX_AGENT_NL" in
+		*"$MUX_AGENT_NL$_ss$MUX_AGENT_NL"*) continue ;;
+		esac
+		_seen="$_seen$MUX_AGENT_NL$_ss"
+		printf '%s\n' "$_ss"
+	done
 }
 
 # mux_agent_glyph STATE -> the width-2 glyph for a state word ('' -> none).
