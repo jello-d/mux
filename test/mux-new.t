@@ -51,7 +51,7 @@ rooted() {
 }
 
 # --- a NAME is required: `new` exists to name something ---------------------
-mux "$T/myrepo" new >/dev/null 2>&1 && fail "bare `mux new` should be refused"
+mux "$T/myrepo" new >/dev/null 2>&1 && fail 'bare `mux new` should be refused'
 
 # --- `new` names THIS directory, even inside a repo -------------------------
 # The one place it deliberately differs from bare `go`: without this a

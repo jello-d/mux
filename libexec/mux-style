@@ -55,6 +55,9 @@ fi
 # the LAST ')' and count from there: state ppid pgrp session tty_nr tpgid.
 fg=$pane_pid
 if [ -r "/proc/$pane_pid/stat" ]; then
+        # Word splitting is the POINT: these are /proc stat's space-separated
+        # fields, positioned onto $1..$n.
+        # shellcheck disable=SC2046
         set -- $(sed 's/.*)//' "/proc/$pane_pid/stat")
         case ${6:-} in
                 ''|*[!0-9]*) ;;         # no foreground group: keep the shell
@@ -170,7 +173,7 @@ if [ "$quiet" = 0 ] && [ "${MUX_CFG_host_chip:-on}" != off ]; then
                 # Deterministic: cksum of the name selects one of eight readable
                 # fg/bg pairs, so an unconfigured host is stable and legible.
                 _n=$(printf '%s' "$_host" | cksum \
-                        | { read _c _r; echo $((_c%8)); })
+                        | { read -r _c _r; echo $((_c%8)); })
                 case $_n in
                 0) _hstyle=fg=colour252,bg=colour236 ;;
                 1) _hstyle=fg=colour230,bg=colour238 ;;

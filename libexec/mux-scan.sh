@@ -63,12 +63,18 @@ mux_scan_roots() {
 # can ask for by name. Ignoring a path you then hand over verbatim would be mux
 # arguing with you.
 _mux_scan_pat_hit() {   # <abs path> <pattern> -- one pattern, both rules
+	# $2 is UNQUOTED on purpose in the two inner cases: it is a glob the
+	# user wrote (`*/vendor/*`) and must be matched as one. Quoting it, as
+	# SC2254 asks, would make every ignore pattern a literal string and
+	# silently match nothing.
 	case $2 in
 	*/*)
+			# shellcheck disable=SC2254
 		case $1 in $2) return 0 ;; esac ;;
 	*)
 		_rest=$1
 		while [ -n "$_rest" ]; do
+			# shellcheck disable=SC2254
 			case ${_rest##*/} in $2) return 0 ;; esac
 			case $_rest in
 			*/*) _rest=${_rest%/*} ;;
