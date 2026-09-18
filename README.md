@@ -40,6 +40,7 @@ itself (`fzf` optional, for a nicer session picker).
   - [Agents](#agents)
   - [Themes](#themes)
   - [Contexts and partitions](#contexts-and-partitions)
+  - [Views and tension](#views-and-tension)
 - [Commands](#commands)
 - [Key bindings](#key-bindings)
 - [Configuration](#configuration)
@@ -55,11 +56,11 @@ itself (`fzf` optional, for a nicer session picker).
 The whole point is the bar. A sketch of what you see (colour omitted):
 
 ```
-┌ status-left ─────────────┐            ┌──────────── status-right ───────────┐
-│ [[WORK: api]]  host  api ▸│ 1:code 2:… │ ⚠ api · 🧠 web · ✓ docs · ⚫ notes  │
-└──────────────────────────┘            └──────────────────────────────────────┘
-      context banner  host   current      per-session agent-state strip
-      (optional)      chip    session
+┌ status-left ─────────────┐          ┌────────── status-right ────────────┐
+│ [[WORK: api]]  host  api ▸│ 1:code 2:…│ ⚠ api · 🧠 web · ✓ docs · ⚫ notes│✱│
+└──────────────────────────┘          └────────────────────────────────────┘
+      context banner  host   current    per-session agent-state strip    view
+      (optional)      chip    session                                    state
 ```
 
 - **status-left** — an optional **context banner** (e.g. a work marker), a
@@ -69,6 +70,14 @@ The whole point is the bar. A sketch of what you see (colour omitted):
   agent-state glyph: `⚠` needs you, `🧠` working, `✓` just finished, `⚫` no
   agent. The session that has needed you **longest** is the loudest; `prefix b`
   jumps there.
+- **the right edge** — one glyph for [view tension](#views-and-tension), always
+  present: `✱` auto, `┻` floor, `┳` ceil. Shape is the mode you chose; colour is
+  what is happening to *this* view.
+
+The strip is measured against the bar's width and **degrades in tiers** rather
+than letting tmux truncate it — it drops the age, folds agentless sessions into
+a `·N·` cluster, then windows around the current session with edge counts. A
+session that needs you is never silently dropped.
 
 The text is the signal; colour is decoration.
 
@@ -442,6 +451,34 @@ banner is a reminder, never permission.
 `mux why` prints the resolved context, partition, and where every setting came
 from.
 
+### Views and tension
+
+tmux sizes a window from **the clients attached to its session** — so two
+clients of different sizes looking at the same session leave no size that suits
+both. tmux picks one, and by default it picks whichever looked last, so every
+window resizes as you cycle and mux re-pins each layout. That is usually an ssh
+window you forgot was attached.
+
+mux calls that **view tension**, shows it on the bar while it lasts, and names
+the ways out:
+
+| mode | glyph | the window | the cost |
+| --- | --- | --- | --- |
+| `auto` | `✱` | follows the last client | it moves as you cycle |
+| `floor` | `┻` | fits the **smallest** client | a bigger view has dead rows |
+| `ceil` | `┳` | fits the **largest** client | a smaller view is clipped |
+
+The colour says which side **this** view is on: grey when nothing contends for
+it, white when it is setting the size, amber when it carries dead rows, and the
+caution pairing when it is **clipped** and part of the window is off screen.
+
+No mode is right in general — each buys stability with something — so mux picks
+none for you. `mux views` reports every client, its size and how long it has
+been idle (which is what identifies the forgotten one), and says whether the
+tension actually reaches the window you are in. Clicking the glyph cycles the
+mode; `mux views --detach <client>` ends a claim outright.
+
+
 ## Commands
 
 Full reference in **`man mux`**. The essentials:
@@ -455,6 +492,7 @@ mux resume                   rebuild this partition's sessions (--list)
 mux scan                     rebuild the project discovery map
 mux why [NAME]               show each resolved value and where it came from
 mux views [auto|floor|ceil]  who is attached, at what size, what it costs
+mux agent-doctor             does recorded agent state match reality?
 mux ls                       list sessions (with agent-state glyphs)
 mux new NAME                 create NAME here, binding the name if needed
 mux scan                     rebuild the project discovery map
