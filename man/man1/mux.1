@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.16" "User Commands"
+.TH MUX 1 "" "mux 0.17" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -275,6 +275,46 @@ sets the sampling seconds;
 and
 .B MUX_DOCTOR_SUSPECT_PCT
 set the thresholds.
+.TP
+.B mux agent-emit " \fISTATE\fR [" \-\-beat ]
+Record this pane's agent state, called from an agent's lifecycle hooks, never by
+hand. STATE is
+.BR idle ", " working " or " blocked .
+Silent on stdout, because it runs inside a hook where output would be injected
+into the model's context.
+.IP
+.B \-\-beat
+marks the caller a HEARTBEAT rather than a turn start. A beat says "still
+going", which is meaningless if the heart already stopped: it may refresh an
+existing
+.B working
+but must never resurrect one out of
+.BR idle .
+.IP
+That distinction is load-bearing, and its absence was a live bug.
+.B idle
+means THE TURN ENDED, and only a turn start may leave it. Any event that fires
+AFTER a turn finishes \(em a trailing
+.BR PostToolUse ,
+a
+.BR SubagentStop ,
+a post-turn summary \(em otherwise writes
+.B working
+as a fresh transition, and since nothing fires again afterwards it sticks
+forever. The session then shows a working glyph while sitting at an empty
+prompt waiting for you, which is worse than the reverse: a session that looks
+BUSY is one you deliberately leave alone, so the wait is unbounded.
+.IP
+So a hook that means "a turn started" passes no flag, and a hook that only
+witnesses activity passes
+.BR \-\-beat .
+A
+.B blocked
+to
+.B working
+promotion is still allowed with
+.BR \-\-beat ,
+since approving a permission prompt genuinely resumes work.
 .TP
 .B mux agent-list " [" \fINS\fR ]
 Per\-session agent state, machine readable, one line each:
