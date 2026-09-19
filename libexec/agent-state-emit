@@ -6,7 +6,22 @@
 # noise into the model context.
 set -eu
 
-state=${1:?usage: agent-state-emit STATE}
+# STATE, plus an optional --beat. Parsed rather than taken as $1 so a
+# hook can pass them in either order.
+state= _beat=
+while [ $# -gt 0 ]; do
+	case $1 in
+	--beat) _beat=1 ;;
+	-*) echo "agent-state-emit: unknown option: $1" >&2; exit 2 ;;
+	*)
+		[ -z "$state" ] || {
+			echo "agent-state-emit: one STATE only" >&2; exit 2; }
+		state=$1 ;;
+	esac
+	shift
+done
+[ -n "$state" ] || {
+	echo "usage: agent-state-emit STATE [--beat]" >&2; exit 2; }
 
 # No tmux pane means nothing to track. Exit clean so the hook never fails.
 [ -n "${TMUX_PANE:-}" ] || exit 0
@@ -41,6 +56,31 @@ if [ -f "$file" ]; then
         # transition tried to close a notification whose id was `alpha`.
         read -r _pstate _pw _pp _pepoch _pnotif _ps \
                 < "$file" 2>/dev/null || _pstate=
+fi
+
+# --beat: this caller is a HEARTBEAT, not a turn start. A beat says "still
+# going", which is meaningless if the heart already stopped: it may refresh an
+# existing `working` but must never resurrect one out of `idle`.
+#
+# `idle` means THE TURN ENDED. Only a turn-start event (UserPromptSubmit) may
+# leave it. Without this, any event that fires after a turn finishes writes
+# `working` as a fresh transition and nothing ever fires again to correct it:
+# the session then shows a brain glyph forever while actually sitting at a
+# prompt waiting for you. That is the signal mux exists to carry, inverted, and
+# it is worse than the stale-idle direction because a busy-looking session is
+# one you deliberately leave alone.
+#
+# OBSERVED 2026-09-18 on the `vicus` session: the turn finished at 9:09 PM and
+# something emitted `working` at 9:12:25, three minutes later. Stop HAD fired;
+# the straggler overwrote it. Candidates were a trailing PostToolUse or the
+# post-turn recap; with no emit breadcrumb enabled, which one is unproven.
+#
+# Scoped deliberately to `idle` and nothing wider. A `blocked` -> `working`
+# promotion is LEGITIMATE (you approved a permission prompt and the tool ran),
+# and an absent record means the turn start was missed, where recording
+# something beats recording nothing.
+if [ -n "$_beat" ] && [ "$_pstate" = idle ]; then
+	exit 0
 fi
 
 # Claude Code fires Notification for TWO things: a permission prompt (mid-work),

@@ -257,4 +257,77 @@ case "$(render)" in
 *) fail "hiding took out other sessions: [$(render)]" ;;
 esac
 
+# --- a late straggler must not resurrect `working` out of `idle` -----------
+# OBSERVED on the `vicus` session, 2026-09-18: its turn finished at 9:09 PM and
+# a `working` record was written at 9:12:25, three minutes later, as a FRESH
+# transition (the file mtime equalled the new epoch). Stop had already fired.
+# Nothing fires after a turn ends, so the session showed a brain glyph for half
+# an hour while actually sitting at an empty prompt waiting for input.
+#
+# This direction is worse than stale-idle: a session that looks BUSY is one you
+# deliberately leave alone, so the wait is unbounded.
+#
+# The rule: `idle` means the turn ENDED, and only a turn-start event may leave
+# it. A heartbeat caller (PostToolUse, SubagentStop, a post-turn recap) passes
+# --beat and may refresh an existing `working`, never create one.
+mkdir -p "$T/lateb"
+cat >"$T/lateb/tmux" <<'EOF'
+#!/bin/sh
+case "$*" in
+*window_index*session_name*) printf '0 vicus
+' ;;
+*mux-notify-always*)         printf '
+' ;;
+*pane_active*)               printf '1
+' ;;
+esac
+exit 0
+EOF
+chmod +x "$T/lateb/tmux"
+emit() {
+	env XDG_RUNTIME_DIR="$T/run" TMUX=/tmp/fake/global,1,0 TMUX_PANE=%30 \
+	PATH="$T/lateb:$PATH" "$HERE/libexec/agent-state-emit" "$@" \
+	>/dev/null 2>&1
+}
+recstate() { cut -d' ' -f1 <"$T/run/agent-state/global/30"; }
+
+rm -f "$T/run/agent-state/global"/*
+# The turn ends.
+agent_rec "$T/run/agent-state/global/30" idle %30 100 vicus
+# A straggler fires. WITHOUT the flag this is the bug, and it is still allowed,
+# because an old hooks.json calls it exactly that way and must keep working.
+emit working
+[ "$(recstate)" = working ] \
+	|| fail "a bare 'working' should still be honoured (compatibility)"
+
+# WITH the flag it must be refused: the turn is over.
+agent_rec "$T/run/agent-state/global/30" idle %30 100 vicus
+emit working --beat
+[ "$(recstate)" = idle ] \
+	|| fail "--beat resurrected 'working' out of 'idle'"
+# ... and the record is untouched, not rewritten with a new epoch.
+_ep=$(cut -d' ' -f4 <"$T/run/agent-state/global/30")
+[ "$_ep" = 100 ] || fail "--beat rewrote the epoch: [$_ep]"
+
+# It must still REFRESH an agent that is genuinely working.
+agent_rec "$T/run/agent-state/global/30" working %30 100 vicus
+emit working --beat
+[ "$(recstate)" = working ] \
+	|| fail "--beat dropped a live 'working'"
+
+# And `blocked` -> `working` is a LEGITIMATE promotion: you approved a
+# permission prompt and the tool ran. Scoped to idle, nothing wider.
+agent_rec "$T/run/agent-state/global/30" blocked %30 100 vicus
+emit working --beat
+[ "$(recstate)" = working ] \
+	|| fail "--beat blocked a legitimate blocked->working"
+
+# Flag order must not matter.
+agent_rec "$T/run/agent-state/global/30" idle %30 100 vicus
+emit --beat working
+[ "$(recstate)" = idle ] || fail "flag order changed the outcome"
+rm -f "$T/run/agent-state/global"/*
+st %2 blocked 'my project'
+st %3 blocked zulu
+
 pass
