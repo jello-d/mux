@@ -8,5 +8,12 @@ for _t in "$_dir"/*.t; do
 	[ -f "$_t" ] || continue
 	sh "$_t" || _rc=1
 done
-[ "$_rc" -eq 0 ] && echo "all mux tests passed"
+if [ "$_rc" -eq 0 ]; then
+	echo "all mux tests passed"
+	# The corpus VALIDATOR ran above (test/mutants.t); the mutations
+	# themselves take minutes, so they stay an explicit command. Say so, or
+	# a green suite reads as "every guard is confirmed to bite" when only
+	# the corpus-vs-code agreement was checked.
+	echo "note: guards are confirmed by 'sh test/mutate' (slower, separate)"
+fi
 exit "$_rc"

@@ -1,0 +1,159 @@
+# test/mutants - the corpus: each record breaks ONE guard on purpose and names
+# the test that must notice.
+#
+# WHY A FILE AND NOT A HABIT. Every guard in this package was confirmed by hand
+# at some point, and the discipline failed repeatedly IN MY OWN HANDS rather
+# than in the code. On 2026-09-20 alone, five distinct ways a by-hand mutation
+# silently did nothing:
+#
+#   an anchor copied out of output that had been indented for display;
+#   an anchor containing a line-continuation backslash, which never matched;
+#   replacing the FIRST of two identical lines, where the other one was the
+#     guard the test covered;
+#   mutating to something accidentally FALSE ([ -f /dev/null ] is false, so a
+#     guard fired always instead of never and a different assertion died);
+#   restoring one of two files a mutation touched, so it leaked into the
+#     next case.
+#
+# Each of those produced a "passing" test that proved nothing. This file turns
+# confirming a guard from something to remember into something that fails.
+#
+# FORMAT, one record per block, blank line between:
+#
+#   = <name>
+#   f <file, repo-relative>
+#   t <test names, space separated, without the .t>
+#   - <the exact line to remove>
+#   + <the line to put in its place; omit the line entirely to just delete>
+#   m <optional: a fragment the failure MUST mention>
+#
+# Matching is EXACT, whole-line, and the target must be UNIQUE in the file: no
+# regex, no delimiters, nothing to clash with the `||`, `*`, `$` and trailing
+# backslashes these lines are full of. An absent line is a hard error, and so is
+# an ambiguous one.
+#
+# `m` is what makes `killed` mean killed BY THE INTENDED ASSERTION. Without it,
+# a mutation that happens to break an earlier, unrelated check counts as
+# coverage. That is not hypothetical; see the fourth bullet above.
+#
+# GENERATED CAREFULLY, NOT TYPED. The lines below were located by substring and
+# asserted unique, because hand-copying indentation is the first failure listed.
+
+
+= beat-guard-removed
+f libexec/agent-state-emit
+t mux-session-names
+- if [ -n "$_beat" ] && [ "$_pstate" = idle ]; then
++ if false; then
+m resurrected 'working'
+
+= notif-ttl-never-expires
+f libexec/agent-state-emit
+t mux-notify
+- _ttl=${MUX_NOTIF_TTL:-3600}
++ _ttl=999999999
+m was closed
+
+= prune-guard-removed
+f libexec/agent-state-render
+t mux-strip
+- if [ -d "$dir" ] && [ -n "${live# }" ]; then
++ if [ -d "$dir" ]; then
+
+= agent-list-negative-age
+f libexec/agent-state-list
+t mux-agent-list
+- 		[ "$_age" -lt 0 ] && _age=0 ;;
++ 		;;
+m clamp to 0
+
+= doctor-orphan-pass-removed
+f libexec/mux-agent-doctor
+t mux-agent-doctor
+- _rows="$_rows$_orph"
++ _orph=
+m no state record was not surfaced
+
+= doctor-stale-check-removed
+f libexec/mux-agent-doctor
+t mux-agent-doctor
+- 		elif _at_prompt "$_pane" "${_acomm:-}"; then
++ 		elif false; then
+m stale 'working' record was not surfaced
+
+= doctor-stale-not-counted
+f libexec/mux-agent-doctor
+t mux-agent-doctor
+- 	'*** STALE'*)  echo stale  >>"$_dir/.doctor.$$" ;;
++ 	'*** STALE'*)  echo drift  >>"$_dir/.doctor.$$" ;;
+m did not name its cause
+
+= kill-all-confirm-accepts-anything
+f bin/mux
+t mux-kill
+-                 *) echo "mux: aborted"; exit 0 ;;
++                 *) ;;
+m expected an abort
+
+= rename-forgets-the-set
+f bin/mux
+t mux-rename
+-                 mux_sess_add "$_new" "$_oroot" "$part"
++                 :
+m did not follow the rename
+
+= theme-persist-appends-always
+f bin/mux
+t mux-theme
+-         if grep -qE '^[[:space:]]*theme[[:space:]]' "$1"; then
++         if false; then
+m second theme line
+
+= theme-cycle-next-offby1
+f bin/mux
+t mux-theme
+-                 [ "$_idx" -eq 0 ] && _j=1 || _j=$((_idx % _n + 1))
++                 [ "$_idx" -eq 0 ] && _j=1 || _j=$((_idx % _n + 2))
+m next from aaa
+
+= reload-accepts-missing-conf
+f bin/mux
+t mux-ls
+-         [ -f "$TMUX_CONF" ] || {
++         true || {
+m exited 0
+
+= style-quiet-leaks-banner
+f libexec/mux-style
+t mux-style
+-         if [ "$quiet" = 0 ]; then
++         if true; then
+m wedge the pane
+
+= style-setopt-writes-always
+f libexec/mux-style
+t mux-style
+-         [ "$_c" = "$2" ] || tmux set-option -t "$session" "$1" "$2"
++ 	tmux set-option -t "$session" "$1" "$2"
+m still wrote
+
+= click-accepts-any-tag
+f libexec/mux-click
+t mux-click
+- case "$range" in s:?*) ;; *) exit 0 ;; esac
++ :
+m acted on a mis-click
+
+= banner-restashes-every-run
+f libexec/mux-status-banner
+t mux-click
+- if [ -z "$def" ]; then
++ if true; then
+m accumulated banners
+
+= check-bindings-not-asserted
+f libexec/mux-check
+t mux-check
+- 		_bound "$_k" || _nb="$_nb $_k"
++ 		_bound "$_k" || true
+m broken bindings
