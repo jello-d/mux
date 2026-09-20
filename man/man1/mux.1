@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.17" "User Commands"
+.TH MUX 1 "" "mux 0.18" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -747,6 +747,23 @@ with whatever send printed. The id is opaque to mux, so any token the pair
 agrees on works. Set both or neither;
 .B mux check
 reports which path is live.
+.TP
+.B MUX_NOTIF_TTL
+Seconds after which a recorded notification id is considered stale and dropped
+rather than closed. Default 3600.
+.IP
+A freedesktop id is a small integer the daemon assigns sequentially and REUSES
+after it restarts, so an id held long enough stops naming our banner and starts
+naming somebody else's. mux carries an id per STATE, not per notification, so a
+session that finishes and is never touched again keeps its id indefinitely
+\(em found on one holding an id for 32 hours, which the next transition would
+have dutifully closed.
+.IP
+Dropping a stale id costs nothing, and that is only true because mux sends
+.B normal
+urgency, which expires on its own. Were that ever changed back to
+.BR critical ,
+which never expires, this would become a leak instead of a safeguard.
 .SH FILES
 .TP
 .I $MUX_DIR/<name>.profile

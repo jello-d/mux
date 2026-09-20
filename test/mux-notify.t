@@ -244,4 +244,69 @@ _bc2=$T/never.log
 emit working >/dev/null 2>&1 || true
 [ ! -f "$_bc2" ] || fail "a breadcrumb was written without MUX_EMIT_LOG"
 
+# --- a notification id must AGE OUT, not be acted on years later ----------
+# FOUND LIVE on `charon`: an idle record holding notification id 522 for 32
+# HOURS. The carry is per-STATE, not per-notification, so a session that
+# finishes and is never touched again keeps its id indefinitely, and the next
+# transition would dutifully "close" it.
+#
+# By then the id names somebody else's banner. A freedesktop id is a small
+# integer the daemon assigns sequentially and REUSES after it restarts, so
+# closing a day-old id dismisses an unrelated notification.
+#
+# Dropping it loses nothing only because 0.14 moved to `normal` urgency, which
+# expires on its own. Under `critical` this would be a leak instead.
+mkdir -p "$T/ttlbin"
+cat >"$T/ttlbin/tmux" <<'EOF'
+#!/bin/sh
+case "$*" in
+*window_index*session_name*) printf '0 charon
+' ;;
+*mux-notify-always*)         printf '
+' ;;
+*pane_active*)               printf '1
+' ;;
+esac
+exit 0
+EOF
+chmod +x "$T/ttlbin/tmux"
+CLOSELOG=$T/closelog; export CLOSELOG
+cat >"$T/ttlbin/closer" <<'EOF'
+#!/bin/sh
+printf 'closed %s\n' "$1" >>"$CLOSELOG"
+EOF
+chmod +x "$T/ttlbin/closer"
+mkdir -p "$T/run/agent-state/global"
+ttlemit() {
+	: >"$CLOSELOG"
+	env XDG_RUNTIME_DIR="$T/run" TMUX=/tmp/fake/global,1,0 TMUX_PANE=%40 \
+	MUX_NOTIFY_CLOSE="$T/ttlbin/closer" PATH="$T/ttlbin:$PATH" \
+	"$HERE/libexec/agent-state-emit" "$@" >/dev/null 2>&1
+}
+
+# A FRESH id is still closed on a real state change. This is the behaviour the
+# TTL must not break.
+_now=$(date +%s)
+printf 'idle 0 %%40 %s 522 charon\n' "$_now" >"$T/run/agent-state/global/40"
+ttlemit working
+grep -qx 'closed 522' "$CLOSELOG" \
+	|| fail "a fresh id was not closed on a state change: [$(cat "$CLOSELOG")]"
+
+# A STALE id must be dropped silently, never handed to the closer.
+printf 'idle 0 %%40 %s 522 charon\n' "$((_now - 200000))" \
+	>"$T/run/agent-state/global/40"
+ttlemit working
+[ ! -s "$CLOSELOG" ] \
+	|| fail "a 55-hour-old id was closed: [$(cat "$CLOSELOG")]"
+# ... and it is not carried into the new record either.
+_n=$(cut -d' ' -f5 <"$T/run/agent-state/global/40")
+[ "$_n" = - ] || fail "a stale id survived into the record: [$_n]"
+
+# The window is configurable, and the boundary is respected.
+printf 'idle 0 %%40 %s 522 charon\n' "$((_now - 10))" \
+	>"$T/run/agent-state/global/40"
+MUX_NOTIF_TTL=5 ttlemit working
+[ ! -s "$CLOSELOG" ] \
+	|| fail "MUX_NOTIF_TTL was ignored: [$(cat "$CLOSELOG")]"
+
 pass
