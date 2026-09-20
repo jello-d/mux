@@ -150,9 +150,14 @@ sync)
 	heal global "-L global" "$_h"
 	# Plus every non-default context server the hook names, each healed only
 	# if it is up.
-	for _s in $(mux_ctx_partitions); do
+	# Line by line: a partition name may contain a space, and splitting it
+	# would heal two servers that do not exist while missing the real one.
+	while IFS= read -r _s; do
+		[ -n "$_s" ] || continue
 		heal "$_s" "-L $_s" "$_h"
-	done
+	done <<EOF
+$(mux_ctx_partitions)
+EOF
 	;;
 ''|list)
 	# Bare `mux themes` LISTS them. It used to print an internal usage
