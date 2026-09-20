@@ -1,0 +1,196 @@
+#!/bin/sh
+# test/mutate - break each guard on purpose and assert a test NOTICES.
+#
+# The suite proves the code does what the tests say. This proves the TESTS say
+# anything at all: a guard no mutation can kill is decorative, and a decorative
+# guard is how "the suite is green" and "nothing is checked" become the same
+# sentence. That has happened here more than once.
+#
+# Ported from vigilance's test/mutate, which was written for the same reason and
+# solves the same problem. Two additions, both for failures seen HERE:
+#
+#   AN AMBIGUOUS TARGET IS AN ERROR. If the line occurs more than once, this
+#   refuses rather than mutating the first. bin/mux has two identical
+#   `if [ "$_have_astate" -eq 1 ]` lines and only one of them is in cmd_ls; a
+#   by-hand mutation hit the picker's copy, the ls test passed, and that read as
+#   "the guard is not covered" when the guard had never been touched.
+#
+#   AN OPTIONAL EXPECTED MESSAGE. A record may name a fragment the failure must
+#   contain, so `killed` means killed BY THE INTENDED ASSERTION. Without it a
+#   mutation that breaks some earlier, unrelated assertion counts as coverage --
+#   which happened: a guard mutated to `[ -f /dev/null ]` is FALSE (a character
+#   device is not a regular file), so it fired always instead of never and the
+#   test died on a different line entirely.
+#
+# EVERY failure of this discipline here has been in the instrument, never the
+# subject. So the driver asserts the mutation LANDED, that the target was
+# UNAMBIGUOUS, that the result still PARSES, that the named tests pass BEFORE
+# it, and only then that one dies for the stated reason.
+#
+# Usage: sh test/mutate [name ...]      (default: the whole corpus)
+set -eu
+
+HERE=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+CORPUS=$HERE/test/mutants
+T=$(mktemp -d)
+trap 'rm -rf "$T"' EXIT INT HUP TERM
+
+PASS=0; FAIL=0; ERR=0
+
+# Parse under the shell the file actually declares. mux is dash-clean by rule,
+# but the check follows the shebang rather than assuming.
+_parses() {   # <file>
+	case "$(head -1 "$1")" in
+	*bash) bash -n "$1" 2>/dev/null ;;
+	*)     dash -n "$1" 2>/dev/null ;;
+	esac
+}
+
+# How many times the exact line appears. Fixed-string, whole-line: the same
+# comparison the edit below makes, so the count cannot disagree with it.
+_occurrences() {   # <file> <line>
+	grep -Fxc -- "$2" "$1" 2>/dev/null || true
+}
+
+# Exact whole-line replace of the FIRST match, via awk so there is no pattern
+# syntax at all: `||`, `*`, `/`, `$` and a trailing backslash are characters.
+_edit() {   # <file> <old> <new> -> 0 if a line changed
+	awk -v old="$2" -v new="$3" '
+		!done && $0 == old { done = 1; if (new != "") print new; next }
+		{ print }
+		END { exit(done ? 0 : 1) }' "$1" >"$1.mut" || return 1
+	# Copy the CONTENT back rather than moving the temp over the original:
+	# a fresh file is created 0644, and `mv` would carry that mode across,
+	# leaving a mutated PROGRAM that cannot execute. Every test invoking it
+	# directly then died on a permission error and the driver reported the
+	# guard as broken-for-the-wrong-reason -- which is how this was found,
+	# on the very first run. Found by the instrument, in the instrument.
+	cat "$1.mut" >"$1" && rm -f "$1.mut"
+}
+
+_err() { printf 'ERROR    %s\n' "$1"; shift
+	for _l in "$@"; do printf '         %s\n' "$_l"; done
+	ERR=$((ERR + 1)); }
+
+_run_one() {   # name file tests old new msg
+	_n=$1; _f=$2; _ts=$3; _old=$4; _new=$5; _msg=$6
+
+	[ -f "$HERE/$_f" ] || { _err "$_n: $_f does not exist"; return; }
+	_cnt=$(_occurrences "$HERE/$_f" "$_old")
+	if [ "$_cnt" = 0 ]; then
+		_err "$_n: the line is not in $_f" \
+		  "looked for: [$_old]" \
+		  "A stale record leaves the file UNTOUCHED, so every named" \
+		  "test passes and that reads as 'the guard does not bite'."
+		return
+	fi
+	if [ "$_cnt" -gt 1 ]; then
+		_err "$_n: the line appears $_cnt times in $_f" \
+		  "looked for: [$_old]" \
+		  "Mutating the first occurrence may not touch the guard the" \
+		  "named test covers, and a pass would then be meaningless." \
+		  "Make the record target a line that is unique."
+		return
+	fi
+
+	# A COPY, never an in-place edit with a restore. An interrupted run must
+	# not be able to leave a deliberately broken mux in the working tree,
+	# and a restore that misses one of two touched files leaks the mutation
+	# into the next record -- which is exactly what happened by hand.
+	rm -rf "$T/tree"; mkdir -p "$T/tree"
+	( cd "$HERE" && tar cf - --exclude=.git . ) | ( cd "$T/tree" && tar xf - )
+
+	_edit "$T/tree/$_f" "$_old" "$_new" || {
+		_err "$_n: the edit did not apply to the copy"; return; }
+	_parses "$T/tree/$_f" || {
+		_err "$_n: mutated $_f no longer parses" \
+		  "Invalid shell kills every test it touches on a syntax" \
+		  "error, which proves nothing about the guard."
+		return; }
+
+	_killed=0
+	for _t in $_ts; do
+		[ -f "$HERE/test/$_t.t" ] || {
+			_err "$_n: names test '$_t', which does not exist"
+			return; }
+		# BASELINE FIRST. "The test failed" only means the mutation did
+		# it if the test passed before; otherwise a pre-existing
+		# failure is counted as coverage.
+		if ! sh "$HERE/test/$_t.t" >/dev/null 2>&1; then
+			_err "$_n: test '$_t' FAILS on the unmutated tree" \
+			  "A test that is already red cannot tell you anything" \
+			  "about this guard. Fix the baseline first."
+			return
+		fi
+		_out=$(sh "$T/tree/test/$_t.t" 2>&1) && continue
+		# It died. If the record says WHY, hold it to that, or a
+		# mutation that breaks an unrelated assertion counts as cover.
+		if [ -n "$_msg" ]; then
+			case $_out in
+			*"$_msg"*) _killed=1 ;;
+			*) _err "$_n: '$_t' died for the WRONG reason" \
+			     "wanted a failure mentioning: [$_msg]" \
+			     "got: $(printf '%s' "$_out" | head -1)" \
+			     "So the mutation broke something other than the" \
+			     "assertion this record claims to exercise."
+			   return ;;
+			esac
+		else
+			_killed=1
+		fi
+	done
+
+	if [ "$_killed" = 1 ]; then
+		printf 'killed   %s\n' "$_n"; PASS=$((PASS + 1))
+	else
+		printf 'SURVIVED %s (%s)\n' "$_n" "$_ts"
+		printf '         Nothing noticed this guard being removed, so\n'
+		printf '         the test that claims it does not cover it.\n'
+		FAIL=$((FAIL + 1))
+	fi
+}
+
+[ -f "$CORPUS" ] || { echo "mutate: no corpus at $CORPUS" >&2; exit 2; }
+
+# Records are blocks dispatched on a two-character prefix. Read with IFS empty
+# and -r so leading whitespace survives exactly: the indentation IS part of an
+# exact whole-line match, and getting that wrong is the commonest way a record
+# silently stops matching.
+ARGC=$#; ARGV="$*"
+M_N=; M_F=; M_T=; M_O=; M_P=; M_M=
+_flush() {
+	[ -n "$M_N" ] || return 0
+	_sel=1
+	if [ "$ARGC" -gt 0 ]; then
+		_sel=0
+		for _a in $ARGV; do [ "$_a" = "$M_N" ] && _sel=1; done
+	fi
+	[ "$_sel" = 1 ] && _run_one "$M_N" "$M_F" "$M_T" "$M_O" "$M_P" "$M_M"
+	M_N=; M_F=; M_T=; M_O=; M_P=; M_M=
+}
+while IFS= read -r _line; do
+	case "$_line" in
+	'= '*) _flush; M_N=${_line#??} ;;
+	'f '*) M_F=${_line#??} ;;
+	't '*) M_T=${_line#??} ;;
+	'- '*) M_O=${_line#??} ;;
+	'+ '*) M_P=${_line#??} ;;
+	'm '*) M_M=${_line#??} ;;
+	esac
+done <"$CORPUS"
+_flush
+
+echo ""
+printf '%d killed, %d SURVIVED, %d corpus error(s)\n' "$PASS" "$FAIL" "$ERR"
+if [ "$FAIL" != 0 ] || [ "$ERR" != 0 ]; then
+	echo "mutate: FAILED -- a guard nothing kills is not a guard"
+	exit 1
+fi
+if [ "$PASS" = 0 ]; then
+	# The rule the suite already applies to itself: a run that reached no
+	# verdict is a failure, not a pass. Otherwise an empty corpus, or a
+	# filter that matched nothing, reports success.
+	echo "mutate: FAILED -- no mutations ran at all"
+	exit 1
+fi
+echo "mutate: ok"
