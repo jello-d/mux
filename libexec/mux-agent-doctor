@@ -112,7 +112,7 @@ _cpu() {
 _busy_pat() {   # <agent command name>
 	_bf=$(mux_data_find agents "$1" .agent 2>/dev/null) || return 0
 	[ -n "$_bf" ] && [ -r "$_bf" ] || return 0
-	mux_conf_clean <"$_bf" 2>/dev/null \
+	mux_conf_clean 2>/dev/null <"$_bf" \
 		| awk '$1 == "busy" { $1 = ""; sub(/^[ \t]+/, ""); print; exit }'
 }
 

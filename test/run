@@ -8,6 +8,14 @@ for _t in "$_dir"/*.t; do
 	[ -f "$_t" ] || continue
 	sh "$_t" || _rc=1
 done
+if [ "$_rc" -ne 0 ]; then
+	# A FAILURE SUMMARY AT THE END, because the per-test lines scroll and a
+	# failure is printed FIRST when the failing test sorts early. `lint`
+	# sorts first, and eight releases went out red while `test/run | tail`
+	# showed a reassuring `ok setup`. The verdict has to be the last thing
+	# on screen, not the first.
+	printf 'SOME MUX TESTS FAILED -- scroll up, or: sh test/run | grep FAIL\n'
+fi
 if [ "$_rc" -eq 0 ]; then
 	echo "all mux tests passed"
 	# The corpus VALIDATOR ran above (test/mutants.t); the mutations
