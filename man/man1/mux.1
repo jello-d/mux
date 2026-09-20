@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.22" "User Commands"
+.TH MUX 1 "" "mux 0.23" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -769,6 +769,19 @@ with whatever send printed. The id is opaque to mux, so any token the pair
 agrees on works. Set both or neither;
 .B mux check
 reports which path is live.
+.TP
+.B MUX_STYLE_PROC
+Relocate
+.I /proc
+for
+.BR mux-style ,
+which reads the pane's foreground process group from
+.IR /proc/<pid>/stat .
+A TEST SEAM. Without it that arithmetic is unreachable under test: a test shell
+has no controlling terminal, so tpgid is \-1, the non\-numeric guard fires and
+the field is never read \(em so a wrong field index passes unnoticed, which it
+did. Same seam, and the same reason, as
+.BR MUX_DOCTOR_PROC .
 .TP
 .B MUX_NOTIF_TTL
 Seconds after which a recorded notification id is considered stale and dropped
