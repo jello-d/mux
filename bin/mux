@@ -99,7 +99,7 @@ set -eu
 # The ONE version string. The man page footer and `mux --version` both read it
 # from here, so they cannot drift apart the way a hardcoded "mux 0.1" in the
 # man page already had.
-MUX_VERSION=0.24
+MUX_VERSION=0.25
 
 MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
 TMUX_CONF=${XDG_CONFIG_HOME:-$HOME/.config}/tmux/tmux.conf
@@ -1080,11 +1080,18 @@ cmd_reload() {
         fi
         # Plus every non-default context server the hook knows, so a reload
         # reaches them regardless of the caller's side.
-        for _s in $(mux_ctx_partitions); do
+        # A here-doc, not `for _x in $(...)`: this producer emits one entry per
+        # LINE and a name may contain a SPACE, so word splitting turns one entry
+        # into two. Fifth instance of that class in this package; the earlier
+        # four were session names.
+        while IFS= read -r _s; do
+                [ -n "$_s" ] || continue
                 if tmux -L "$_s" list-sessions >/dev/null 2>&1; then
                         tmux -L "$_s" source-file "$TMUX_CONF" && did="$did $_s"
                 fi
-        done
+        done <<EOF
+$(mux_ctx_partitions)
+EOF
         echo "mux: reloaded${did:- (no running servers)}"
         exit 0
 }
@@ -1673,13 +1680,18 @@ _save_capture() {
 _save_match_layout() {
         sv_layout=
         sv_norm=$(mux_conf_clean <"$sv_tmp")
-        for _cand in $(mux_data_stems layouts .layout); do
+        # Line by line: a layout file may be named with a space, and
+        # splitting it would look for two layouts that do not exist.
+        while IFS= read -r _cand; do
+                [ -n "$_cand" ] || continue
                 _cf=$(mux_data_find layouts "$_cand" .layout)
                 [ -n "$_cf" ] || continue
                 [ "$(mux_conf_clean <"$_cf")" = "$sv_norm" ] || continue
                 sv_layout=$_cand
                 break
-        done
+        done <<EOF
+$(mux_data_stems layouts .layout)
+EOF
 }
 
 # Write the captured arrangement, unless an existing layout already matched --
