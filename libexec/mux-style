@@ -53,12 +53,18 @@ fi
 # The pane's foreground process group is tpgid, field 8 of /proc/<pid>/stat.
 # comm sits in field 2 and may itself contain spaces and parens, so split on
 # the LAST ')' and count from there: state ppid pgrp session tty_nr tpgid.
+# MUX_STYLE_PROC relocates /proc so the field arithmetic below can be exercised
+# against a stat line with a KNOWN foreground group. Without it that branch is
+# unreachable in a test: a test shell has no controlling terminal, so tpgid is
+# -1, the non-numeric guard fires, and $6 is never read -- a wrong field index
+# would go unnoticed. Same seam, and the same reason, as MUX_DOCTOR_PROC.
+_proc=${MUX_STYLE_PROC:-/proc}
 fg=$pane_pid
-if [ -r "/proc/$pane_pid/stat" ]; then
+if [ -r "$_proc/$pane_pid/stat" ]; then
         # Word splitting is the POINT: these are /proc stat's space-separated
         # fields, positioned onto $1..$n.
         # shellcheck disable=SC2046
-        set -- $(sed 's/.*)//' "/proc/$pane_pid/stat")
+        set -- $(sed 's/.*)//' "$_proc/$pane_pid/stat")
         case ${6:-} in
                 ''|*[!0-9]*) ;;         # no foreground group: keep the shell
                 *) fg=$6 ;;
