@@ -6,3 +6,15 @@
 # one for the verb (go/resume) as the agent pane's process. --bare runs neither.
 go      claude --continue || claude
 resume  claude --resume
+
+# busy: a string that appears in the pane ONLY while a turn is in progress.
+# `mux agent-doctor` uses it to settle the one case CPU cannot: a record saying
+# `working` while the agent actually sits at a prompt. Claude Code shows an
+# interrupt affordance in its footer for exactly the duration of a turn.
+#
+# Validated against 12 live panes across two machines: present on every pane
+# whose record said `working`, absent on every `idle` one, no exceptions.
+#
+# OPTIONAL. An agent with no `busy` line simply leaves the doctor where it was,
+# reporting a quiet working agent as mid-turn rather than calling it stale.
+busy    esc to interrupt

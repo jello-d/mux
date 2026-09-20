@@ -10,3 +10,7 @@
 # Install: the `gemini` command must be on PATH (@google/gemini-cli, via npm).
 go      gemini -r latest || gemini
 resume  gemini -r latest || gemini
+
+# No `busy` line: Gemini's in-turn footer text has not been verified on this
+# fleet, and a guessed marker would make agent-doctor assert that a working
+# agent is stale. Absent is the honest value; see claude.agent for the key.
