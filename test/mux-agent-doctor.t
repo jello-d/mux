@@ -158,6 +158,14 @@ _rc=0; _o=$(doc) || _rc=$?
 has "$_o" "STALE" "a stale 'working' record was not surfaced"
 has "$_o" "alpha" "the stale session was not named"
 [ "$_rc" -ne 0 ] || fail "a stale record must exit non-zero, got $_rc"
+# The REMEDY must match the cause. This direction reused the drift summary at
+# first, which was wrong in both halves: it said a hook failed to fire when one
+# fired that should not have, and it promised self-healing on the next tool call
+# when nothing fires at all until a new turn starts.
+has "$_o" "after the turn ENDED" "the stale summary did not name its cause"
+has "$_o" "--beat" "the stale summary did not name the fix"
+no_has "$_o" "self-heals on the agent's next tool call" \
+	"the stale summary promised a recovery that cannot happen"
 
 # An agent that declares NO marker leaves the verdict exactly where it was.
 # Guessing one would make the doctor confidently wrong about a working agent.

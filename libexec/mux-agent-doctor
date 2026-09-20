@@ -270,7 +270,7 @@ printf '%s' "$_rows" \
 		"$_sess" "$_st" "$_pane" "${_apid:--}" "$_used" "$_v"
 	case $_v in
 	'*** DRIFT'*)  echo drift  >>"$_dir/.doctor.$$" ;;
-	'*** STALE'*)  echo drift  >>"$_dir/.doctor.$$" ;;
+	'*** STALE'*)  echo stale  >>"$_dir/.doctor.$$" ;;
 	'*** ORPHAN'*) echo orphan >>"$_dir/.doctor.$$" ;;
 	esac
 done
@@ -283,16 +283,30 @@ if [ -f "$_dir/.doctor.$$" ]; then
 	# `grep -c` exits 1 on no match, which would trip set -e; it still
 	# prints 0, so `|| true` keeps the count and drops the status.
 	_drift=$(grep -c '^drift$'  "$_dir/.doctor.$$" 2>/dev/null || true)
+	_stale=$(grep -c '^stale$'  "$_dir/.doctor.$$" 2>/dev/null || true)
 	_orphans=$(grep -c '^orphan$' "$_dir/.doctor.$$" 2>/dev/null || true)
 	rm -f "$_dir/.doctor.$$"
 fi
-: "${_drift:=0}" "${_orphans:=0}"
+: "${_drift:=0}" "${_stale:=0}" "${_orphans:=0}"
 echo
 if [ "$_drift" -gt 0 ]; then
 	printf 'mux: %s session(s) report a finished agent that is working.\n' \
 		"$_drift" >&2
 	echo "mux: the state file is stale -- a lifecycle hook did not fire." >&2
 	echo "mux: it self-heals on the agent's next tool call (PostToolUse)." >&2
+fi
+# The OPPOSITE cause, and so the opposite recovery. Reusing the message above
+# was wrong in both halves: here a hook DID fire when it should not have, and
+# waiting for a tool call cannot help, because the turn is already over and
+# nothing else will run until you start a new one.
+if [ "$_stale" -gt 0 ]; then
+	printf 'mux: %s session(s) report working after the turn ENDED.\n' \
+		"$_stale" >&2
+	echo "mux: a late event re-asserted working once the turn was over." >&2
+	echo "mux: it does NOT self-heal -- nothing fires until you start a" >&2
+	echo "mux: new turn there, so the session looks busy until you do." >&2
+	echo "mux: the fix is the agent hook passing --beat (see agent-emit);" >&2
+	echo "mux: a hook that only witnesses activity must not promote." >&2
 fi
 if [ "$_orphans" -gt 0 ]; then
 	printf 'mux: %s agent(s) are running with NO state recorded.\n' \
@@ -302,7 +316,7 @@ if [ "$_orphans" -gt 0 ]; then
 	echo "mux: each heals on its agent's next lifecycle hook -- but one" >&2
 	echo "mux: idle for days fires none until you interact with it." >&2
 fi
-if [ "$_drift" -gt 0 ] || [ "$_orphans" -gt 0 ]; then
+if [ "$_drift" -gt 0 ] || [ "$_stale" -gt 0 ] || [ "$_orphans" -gt 0 ]; then
 	exit 1
 fi
 echo "mux: recorded state agrees with every agent."
