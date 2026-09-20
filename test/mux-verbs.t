@@ -165,4 +165,101 @@ usage:*) ;;
 *) fail "bare 'mux help' should print usage" ;;
 esac
 
+# --- `help palette` renders the 256-colour grid --------------------------
+# The last functions the suite never reached: help_palette (the one function in
+# bin/mux over the 50-line guideline), _palette_grid, _palette_preview and
+# _sgr_frag. They need a TERMINAL, so without a pty the verb refuses and the
+# whole grid is unreachable -- which is why it stayed dark.
+#
+# script(1) supplies the pty. Skipped rather than failed where it is absent: the
+# package's stated floor is a shell and a checkout.
+if command -v script >/dev/null 2>&1; then
+	_pal=$(script -qc "env -u TMUX $HERE/bin/mux help palette" /dev/null \
+		</dev/null 2>&1 || true)
+	case $_pal in
+	*"needs a terminal"*) fail "script(1) did not provide a pty" ;;
+	esac
+	# All three bands of the 256-colour space are labelled, so a truncated
+	# grid is visible rather than merely shorter.
+	for _band in "system 0-15" "cube 16-231" "grayscale 232-255"; do
+		case $_pal in
+		*"$_band"*) ;;
+		*) fail "the palette is missing the $_band band" ;;
+		esac
+	done
+	# Every colour is present, and each cell carries a real SGR pair (fg AND
+	# bg), since the whole point is that any colour works as either.
+	for _n in 0 15 16 231 232 255; do
+		case $_pal in
+		*"48;5;${_n}m"*) ;;
+		*) fail "colour $_n has no background SGR in the grid" ;;
+		esac
+	done
+	case $_pal in
+	*"38;5;"*) ;;
+	*) fail "the grid sets no foreground, so a dark cell is unreadable" ;;
+	esac
+	# And it resets: a grid that leaks its last background would tint the
+	# rest of the terminal.
+	case $_pal in
+	*"[0m"*) ;;
+	*) fail "the palette never resets its styling" ;;
+	esac
+
+	# An explicit FG applies to every cell, rather than the per-cell black
+	# and white contrast the bare form picks.
+	_pf=$(script -qc "env -u TMUX $HERE/bin/mux help palette 226" \
+		/dev/null </dev/null 2>&1 || true)
+	case $_pf in
+	*"fg 226 over every bg"*) ;;
+	*) fail "an explicit palette fg was not honoured: [$_pf]" ;;
+	esac
+	case $_pf in
+	*"38;5;226m"*) ;;
+	*) fail "the requested fg never reached a cell" ;;
+	esac
+
+	# The status-bar PREVIEW form, which renders four chosen colours as the
+	# bar would actually draw them. Reachable only through `test`, so it was
+	# the last unexercised path in the file.
+	_pt=$(script -qc \
+		"env -u TMUX $HERE/bin/mux help palette test 231 54 16 214" \
+		/dev/null </dev/null 2>&1 || true)
+	case $_pt in
+	*"bar fg=231 bg=54"*) ;;
+	*) fail "the preview did not echo the bar colours: [$_pt]" ;;
+	esac
+	case $_pt in
+	*"active fg=16 bg=214"*) ;;
+	*) fail "the preview did not echo the active colours" ;;
+	esac
+	# It draws a real chip, not just a description.
+	case $_pt in
+	*"48;5;54m"*) ;;
+	*) fail "the preview rendered no bar background" ;;
+	esac
+fi
+
+# An unusable fg spec is refused with the accepted forms named, and exit 2 --
+# not silently ignored, which would render a grid that answers a question you
+# did not ask.
+if command -v script >/dev/null 2>&1; then
+	_bad=$(script -qec "env -u TMUX $HERE/bin/mux help palette notacolour" \
+		/dev/null </dev/null 2>&1 || true)
+	case $_bad in
+	*"0-255, colourN, #rrggbb"*) ;;
+	*) fail "a bad palette fg was not explained: [$_bad]" ;;
+	esac
+else
+	printf 'note: %s palette grid unchecked (no script(1))\n' "$_name"
+fi
+
+# Without a terminal it refuses cleanly rather than emitting escapes into a
+# pipe, which is what would happen if a caller redirected it.
+_o=$(env -u TMUX "$HERE/bin/mux" help palette 2>&1)
+case $_o in
+*"needs a terminal"*) ;;
+*) fail "help palette did not refuse without a tty: [$_o]" ;;
+esac
+
 pass
