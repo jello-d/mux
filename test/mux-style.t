@@ -53,7 +53,9 @@ case "$*" in
 	# set-option -t SESSION NAME VALUE
 	shift 3; _n=$1; shift; _v=$*
 	printf 'set %s\n' "$_n" >>"$SETLOG"
-	grep -v "^$_n	" "$OPTS" >"$OPTS.t" 2>/dev/null || :
+	# Exact field compare, not a grep pattern: an option name with a regex
+	# metacharacter would otherwise never be replaced (see mux-click.t).
+	awk -F'\t' -v k="$_n" '$1 != k' "$OPTS" >"$OPTS.t" 2>/dev/null || :
 	mv -f "$OPTS.t" "$OPTS"
 	printf '%s\t%s\n' "$_n" "$_v" >>"$OPTS" ;;
 esac
