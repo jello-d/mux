@@ -41,10 +41,12 @@ cat >"$T/bin/ps" <<'EOF'
 #!/bin/sh
 cat "$PSTAB"
 EOF
+PANE_TXT=$T/panetxt; export PANE_TXT
 cat >"$T/bin/tmux" <<'EOF'
 #!/bin/sh
 case "$*" in
-*list-panes*) cat "$PANES" ;;
+*list-panes*)   cat "$PANES" ;;
+*capture-pane*) [ -f "$PANE_TXT" ] && cat "$PANE_TXT" ;;
 esac
 exit 0
 EOF
@@ -122,6 +124,58 @@ _after=$(ls "$T/run/agent-state/global" | LC_ALL=C sort | tr '\n' ' ')
 	|| fail "state files changed: [$_before] -> [$_after]"
 [ "$_sum" = "$(cat "$T/run/agent-state/global"/* | md5sum)" ] \
 	|| fail "a state file's CONTENT was altered"
+
+# --- `working` with no CPU: stale record vs genuinely mid-turn -----------
+# The one case CPU cannot settle, and the bug it hid. An agent waiting on the
+# model or on a slow build is genuinely mid-turn AND idle on the CPU, so this
+# was always reported as "quiet" rather than risk crying wolf. But a record left
+# saying `working` after the turn ENDED looks identical from CPU alone.
+#
+# It is not hypothetical: seen twice in one day on two machines. A session that
+# looks BUSY is one you deliberately leave alone, so the wait is unbounded --
+# worse than the reverse direction, where a finished-looking session at least
+# invites a glance.
+#
+# The tiebreaker is the AGENT's own UI, and the pattern comes from the agent
+# DEFINITION so mux never learns what any particular agent's footer says.
+printf 'busy    esc to interrupt\n' >"$T/share/agents/claude.agent"
+agent_rec "$T/run/agent-state/global/1" working %1 1 alpha
+rm -f "$T/run/agent-state/global/2"
+setcpu 101 0
+burn 101 0                                   # no CPU at all
+
+# Marker PRESENT -> a turn is running. Must stay "quiet", never stale.
+printf 'some output\n  auto mode on . esc to interrupt . for agents\n' \
+	>"$PANE_TXT"
+_rc=0; _o=$(doc) || _rc=$?
+has "$_o" "quiet" "a genuinely mid-turn agent was not reported quiet"
+no_has "$_o" "STALE" "a mid-turn agent was wrongly called stale"
+[ "$_rc" -eq 0 ] || fail "a mid-turn agent must not fail the run"
+
+# Marker ABSENT -> the turn is over and the record outlived it.
+printf 'some output\n  auto mode on . for agents\n' >"$PANE_TXT"
+_rc=0; _o=$(doc) || _rc=$?
+has "$_o" "STALE" "a stale 'working' record was not surfaced"
+has "$_o" "alpha" "the stale session was not named"
+[ "$_rc" -ne 0 ] || fail "a stale record must exit non-zero, got $_rc"
+
+# An agent that declares NO marker leaves the verdict exactly where it was.
+# Guessing one would make the doctor confidently wrong about a working agent.
+: >"$T/share/agents/claude.agent"
+_rc=0; _o=$(doc) || _rc=$?
+no_has "$_o" "STALE" "a stale verdict was reached with no declared marker"
+has "$_o" "quiet" "with no marker it should fall back to quiet"
+[ "$_rc" -eq 0 ] || fail "no marker must not fail the run"
+printf 'busy    esc to interrupt\n' >"$T/share/agents/claude.agent"
+
+# A pane it cannot capture is not evidence either.
+rm -f "$PANE_TXT"
+_rc=0; _o=$(doc) || _rc=$?
+no_has "$_o" "STALE" "an uncapturable pane produced a stale verdict"
+[ "$_rc" -eq 0 ] || fail "a failed capture must not fail the run"
+printf 'some output\n  auto mode on . esc to interrupt . for agents\n' \
+	>"$PANE_TXT"
+: >"$T/share/agents/claude.agent"
 
 # --- an agent with NO record at all --------------------------------------
 # The reverse of every check above. Those audit a RECORD against reality, so

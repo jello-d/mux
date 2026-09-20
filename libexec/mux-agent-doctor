@@ -24,7 +24,12 @@
 set -eu
 
 _lib=$(dirname "$0")
-for _l in mux-agent-state.sh mux-data.sh mux-context.sh; do
+# mux-conf.sh for mux_conf_clean: the `busy` marker is read through the same
+# comment-and-whitespace cleaner every other mux config file uses, rather
+# than a private parser. Omitting it made _busy_pat silently return nothing,
+# which degraded to the old verdict instead of failing loudly -- a graceful
+# fallback hiding a missing dependency.
+for _l in mux-agent-state.sh mux-data.sh mux-context.sh mux-conf.sh; do
 	[ -r "$_lib/$_l" ] || {
 		echo "mux: $_l missing (incomplete install)" >&2; exit 1; }
 	. "$_lib/$_l"
@@ -74,9 +79,13 @@ _agent_pid() {
 	while [ -n "$_gen" ] && [ "$_depth" -lt 6 ]; do
 		_next=
 		for _p in $_gen; do
+			# Prints "PID COMM": the caller needs the command name to
+			# find that agent's own `busy` marker, and only this walk
+			# knows which of $_agents actually matched.
 			_hit=$(printf '%s\n' "$_ps" \
 				| awk -v pp="$_p" -v set="$_agents" \
-				  '$2 == pp && index(set, " " $3 " ") { print $1; exit }')
+				  '$2 == pp && index(set, " " $3 " ") {
+					print $1, $3; exit }')
 			[ -n "$_hit" ] && { printf '%s' "$_hit"; return 0; }
 			_kids=$(printf '%s\n' "$_ps" \
 				| awk -v pp="$_p" '$2 == pp { print $1 }' | tr '\n' ' ')
@@ -97,6 +106,40 @@ _cpu() {
 	awk '{print $14 + $15}' "$_pr/$1/stat" 2>/dev/null || true
 }
 
+# _busy_pat AGENT -> the `busy` string from that agent's own definition, or
+# empty. OPTIONAL by design: an agent that does not declare one leaves the
+# verdict exactly where it was.
+_busy_pat() {   # <agent command name>
+	_bf=$(mux_data_find agents "$1" .agent 2>/dev/null) || return 0
+	[ -n "$_bf" ] && [ -r "$_bf" ] || return 0
+	mux_conf_clean <"$_bf" 2>/dev/null \
+		| awk '$1 == "busy" { $1 = ""; sub(/^[ \t]+/, ""); print; exit }'
+}
+
+# _at_prompt PANE AGENT -> true when that agent's busy marker is ABSENT from the
+# pane, i.e. no turn is in progress.
+#
+# This settles the one case CPU cannot. `working` with no CPU is ambiguous: an
+# agent waiting on the model or on a slow build is genuinely mid-turn, so the
+# doctor has always reported it as "quiet" rather than risk crying wolf. But a
+# record left saying `working` after a turn ENDED looks identical, and that is a
+# real bug seen twice in one day, on two machines.
+#
+# The agent's own UI is the tiebreaker, and asking the AGENT DEFINITION for the
+# string keeps this neutral: mux does not learn what Claude Code's footer says,
+# claude.agent declares it. No marker declared, or capture fails, and this
+# returns false, so the verdict is unchanged.
+_at_prompt() {  # <pane id> <agent command name>
+	_bp=$(_busy_pat "$2")
+	[ -n "$_bp" ] || return 1
+	_pc=$(_dt capture-pane -p -t "$1" 2>/dev/null) || return 1
+	[ -n "$_pc" ] || return 1
+	case $_pc in
+	*"$_bp"*) return 1 ;;   # marker present: a turn IS running
+	esac
+	return 0
+}
+
 # --- gather, sample, then report -------------------------------------------
 # Every agent is sampled over ONE shared interval rather than a second each, so
 # a box with six sessions still answers in a second and every reading covers the
@@ -114,11 +157,18 @@ for _f in "$_dir"/*; do
 	[ -n "${_sess:-}" ] || continue
 	_ppid=$(printf '%s\n' "$_panes" \
 		| awk -v p="$_pane" '$1 == p { print $2; exit }')
-	_apid=
-	[ -n "$_ppid" ] && _apid=$(_agent_pid "$_ppid")
+	# `_x=$(cond && cmd)` ABORTS under set -e when cond is false, so the
+	# || true is load-bearing, not decoration. _agent_pid prints "PID COMM";
+	# with no match the whole thing is empty and both fields end up empty.
+	_apid= _acomm= _ares=
+	[ -n "$_ppid" ] && _ares=$(_agent_pid "$_ppid" || true)
+	if [ -n "$_ares" ]; then
+		_apid=${_ares%% *}
+		_acomm=${_ares##* }
+	fi
 	_c1=
 	[ -n "$_apid" ] && _c1=$(_cpu "$_apid")
-	_rows="$_rows$_st|$_sess|$_pane|${_apid:-}|${_c1:-}
+	_rows="$_rows$_st|$_sess|$_pane|${_apid:-}|${_c1:-}|${_acomm:-}
 "
 done
 # --- agents with NO record at all ------------------------------------------
@@ -141,9 +191,10 @@ _orph=
 while read -r _pid _ppid _sess; do
 	[ -n "${_pid:-}" ] || continue
 	case $_recorded in *" $_pid "*) continue ;; esac
-	_apid=$(_agent_pid "$_ppid")
-	[ -n "$_apid" ] || continue
-	_orph="$_orph-|${_sess:-?}|$_pid|$_apid|$(_cpu "$_apid")
+	_ares=$(_agent_pid "$_ppid" || true)
+	[ -n "$_ares" ] || continue
+	_apid=${_ares%% *}
+	_orph="$_orph-|${_sess:-?}|$_pid|$_apid|$(_cpu "$_apid")|${_ares##* }
 "
 done <<EOF
 $_panes
@@ -173,7 +224,8 @@ sleep "$_win"
 printf '%-14s %-9s %-6s %-9s %-6s %s\n' \
 	SESSION RECORDED PANE AGENT CPU VERDICT
 _drift=0
-printf '%s' "$_rows" | while IFS='|' read -r _st _sess _pane _apid _c1; do
+printf '%s' "$_rows" \
+| while IFS='|' read -r _st _sess _pane _apid _c1 _acomm; do
 	[ -n "${_sess:-}" ] || continue
 	_used=-
 	_busy=0
@@ -200,14 +252,25 @@ printf '%s' "$_rows" | while IFS='|' read -r _st _sess _pane _apid _c1; do
 	idle:1|blocked:1) _v="*** DRIFT: reports $_st, agent is working ***" ;;
 	idle:2|blocked:2) _v="suspect: some CPU, below the working threshold" ;;
 	working:0)
-		if [ -z "$_apid" ]; then _v="gone: recorded working, no agent"
-		else _v="quiet (mid-turn, waiting)"; fi ;;
+		if [ -z "$_apid" ]; then
+			_v="gone: recorded working, no agent"
+		elif _at_prompt "$_pane" "${_acomm:-}"; then
+			# The agent's own busy marker is absent, so no turn is
+			# running and this record outlived the turn it described.
+			# Reported as DRIFT because a session that looks BUSY is
+			# one you deliberately leave alone, so the wait is
+			# unbounded -- worse than the reverse.
+			_v="*** STALE: reports working, agent is at a prompt ***"
+		else
+			_v="quiet (mid-turn, waiting)"
+		fi ;;
 	*) _v="agrees" ;;
 	esac
 	printf '%-14s %-9s %-6s %-9s %-6s %s\n' \
 		"$_sess" "$_st" "$_pane" "${_apid:--}" "$_used" "$_v"
 	case $_v in
 	'*** DRIFT'*)  echo drift  >>"$_dir/.doctor.$$" ;;
+	'*** STALE'*)  echo drift  >>"$_dir/.doctor.$$" ;;
 	'*** ORPHAN'*) echo orphan >>"$_dir/.doctor.$$" ;;
 	esac
 done

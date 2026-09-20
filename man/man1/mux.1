@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.18" "User Commands"
+.TH MUX 1 "" "mux 0.19" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -259,8 +259,30 @@ started an agent in. Such a session is reported as an
 It heals on that agent's next lifecycle hook, but a session idle for days fires
 none until you interact with it.
 .IP
-Non\-zero exit when a session reports a finished agent that is working, or when
-any agent is running unrecorded.
+It also settles the case CPU alone cannot. A record saying
+.B working
+with no CPU is ambiguous: an agent waiting on the model or on a slow build is
+genuinely mid\-turn AND idle on the processor, so that has always been reported
+as
+.B quiet
+rather than risk crying wolf. But a record left saying
+.B working
+after the turn ENDED looks identical from CPU alone, and that is a real bug seen
+twice in one day on two machines. Such a session is reported
+.BR STALE .
+.IP
+The tiebreaker is the agent's own interface. An
+.I agents/<name>.agent
+definition may declare a
+.B busy
+line: a string that appears in the pane only while a turn runs. Asking the AGENT
+DEFINITION keeps mux neutral, since mux never learns what any particular agent's
+interface says. An agent that declares no marker, or a pane that cannot be
+captured, leaves the verdict exactly where it was \(em guessing would make this
+confidently wrong about a working agent.
+.IP
+Non\-zero exit when a session reports a finished agent that is working, when a
+record outlives the turn it described, or when any agent is running unrecorded.
 .IP
 STRICTLY READ\-ONLY. It writes nothing and removes nothing, unlike
 .BR "mux agent-render" ,
