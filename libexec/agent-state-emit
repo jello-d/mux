@@ -121,6 +121,32 @@ _sess=${loc#* }
 notif=$_pnotif
 # `-` is the absent marker, so it never reaches mux_notify_close as an id.
 [ "${_pnotif:-}" = - ] && _pnotif=
+
+# AGE THE ID OUT. A freedesktop notification id is a small integer the daemon
+# assigns sequentially and REUSES after it restarts, so an id kept long enough
+# stops referring to our banner and starts referring to somebody else's.
+# Closing it then dismisses an unrelated notification.
+#
+# The carry above is per-state, not per-notification, so a session that finishes
+# and is never touched again holds its id forever: found on `charon` holding id
+# 522 for 32 HOURS, which the next transition would have "closed".
+#
+# Dropping a stale id loses nothing, and that is only true because of the 0.14
+# change to `normal` urgency: a normal notification EXPIRES on its own, so an id
+# older than any plausible expiry window names a banner that is already gone.
+# Under the old `critical` (never expires) this would have been a real leak
+# instead, which is worth knowing if that urgency is ever reconsidered.
+_ttl=${MUX_NOTIF_TTL:-3600}
+if [ -n "$_pnotif" ] && [ -n "${_pepoch:-}" ]; then
+        case $_pepoch in
+        ''|*[!0-9]*) ;;
+        *)
+                if [ "$(( $(date +%s) - _pepoch ))" -gt "$_ttl" ]; then
+                        _pnotif= notif=
+                fi ;;
+        esac
+fi
+
 if [ -n "$_pnotif" ] && [ "$state" != "$_pstate" ]; then
         mux_notify_close "$_pnotif"
         notif=
