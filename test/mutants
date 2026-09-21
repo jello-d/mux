@@ -157,3 +157,17 @@ t mux-check
 - 		_bound "$_k" || _nb="$_nb $_k"
 + 		_bound "$_k" || true
 m broken bindings
+
+= exit-unknown-verb-not-2
+f bin/mux
+t mux-exit
+-         *) echo "mux: unknown verb: $cmd" >&2; usage ;;
++         *) echo "mux: unknown verb: $cmd" >&2; exit 0 ;;
+m an unknown verb
+
+= exit-reload-refusal-silent
+f bin/mux
+t mux-exit
+-                 echo "mux: no tmux.conf at $TMUX_CONF" >&2; exit 1; }
++                 echo "" >&2; exit 1; }
+m did not name the missing file

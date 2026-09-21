@@ -76,7 +76,7 @@ _check
 
 # A corpus that silently emptied would validate perfectly. Same rule the rest of
 # the suite applies to itself: a run that reached no verdict is a failure.
-[ "$_n" -ge 15 ] || fail "the corpus holds only $_n record(s). It covered 17
+[ "$_n" -ge 17 ] || fail "the corpus holds only $_n record(s). It covered 19
 guards when written, so this has lost coverage rather than gained it"
 
 # EVERY GUARDED FILE MUST BE ONE THE PACKAGE SHIPS. A record pointing at a
@@ -98,7 +98,7 @@ done <"$CORPUS"
 # requirement, because a couple of records legitimately have no stable message
 # to match, but the count is held so it cannot quietly erode.
 _m=$(grep -c '^m ' "$CORPUS" 2>/dev/null || true)
-[ "$_m" -ge 14 ] || fail "only $_m of $_n records name the failure they expect.
+[ "$_m" -ge 16 ] || fail "only $_m of $_n records name the failure they expect.
 Without that, a mutation breaking an unrelated assertion still reports killed"
 
 pass
