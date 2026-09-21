@@ -389,6 +389,49 @@ case "$(seq_of)" in
 esac
 rm -rf "$T/conf/latch"
 
+# --- NO SESSION NAMED MEANS `mux resume`, NOT A GUESSED NAME ---------
+# `mux latch manifestor` used to send `mux go manifestor`, using the HOSTNAME as
+# a session name. It succeeds, hands you a session that is not yours, and on
+# retry asks attach-only for a name that never existed and reports `gone`. A
+# wrong answer wearing the shape of a right one, and the reason this asserts the
+# exact command rather than just "it attached".
+#
+# resume is correct BECAUSE of how it creates: it rebuilds what that box
+# actually had, which is the rebooted-host case handled properly.
+cat >"$T/bin/echocmd" <<'EOF'
+#!/bin/sh
+for _a in "$@"; do :; done
+printf '%s\n' "$_a" >>"$CMDS"
+exit 0
+EOF
+chmod +x "$T/bin/echocmd"
+CMDS=$T/cmds; export CMDS
+
+sent() {   # <target> -> the remote command latch composed
+	: >"$CMDS"
+	env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
+		CMDS="$CMDS" \
+		MUX_LATCH_TRANSPORT="$T/bin/echocmd %h sh -lc %c" \
+		MUX_LATCH_AUTH=/bin/true MUX_LATCH_SLEEP="$T/bin/nosleep" \
+		MUX_LATCH_MAX_TRIES=1 \
+		"$HERE/libexec/mux-latch" "$1" >/dev/null 2>&1 || true
+	head -1 "$CMDS"
+}
+
+[ "$(sent box)" = 'mux resume' ] \
+	|| fail "with no session named, latch must send 'mux resume', got
+[$(sent box)]. Sending a go at the HOSTNAME attaches a session that is not
+yours and looks like it worked."
+[ "$(sent box:)" = 'mux resume' ] \
+	|| fail "a trailing colon names no session either, got [$(sent box:)]"
+[ "$(sent box:proj)" = 'mux go proj' ] \
+	|| fail "a named session must be a plain go, got [$(sent box:proj)]"
+# A name containing a colon belongs to the SESSION: the host is the first field
+# only, so everything after the first colon is the name.
+[ "$(sent box:a:b)" = 'mux go a:b' ] \
+	|| fail "only the FIRST colon splits host from session, got
+[$(sent box:a:b)]"
+
 # --- ATTACH-ONLY IS NEGOTIATED, NOT ASSUMED --------------------------
 # The first attempt may CREATE (you asked to latch onto something). Every
 # attempt after it must ask for --attach-only, so a rebooted host is reported

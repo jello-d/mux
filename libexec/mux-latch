@@ -254,7 +254,8 @@ _classify_state() {   # <exit> <stderr file>
 # word-splitting it would hand `go` and `NAME` to the inner shell as $0 and $1.
 #
 #   %h  the host
-#   %s  the session (defaulting to the host)
+#   %s  the session, or the HOST when none was named (see _remote_cmd,
+#       which is what %c and %q use and is the better token)
 #   %c  the remote mux command, as ONE argv element, composed by latch
 #   %q  the same command, additionally SHELL-QUOTED
 #   %%  a literal %
@@ -373,11 +374,31 @@ _remote_can_attach_only() {
 # state machine, and a `blocked` wait is one of those without ever touching the
 # transport -- so using it here made the very first attach ask for attach-only
 # after any wait at all, which is precisely the case that must CREATE.
+#
+# WITH NO SESSION NAMED, the command is `mux resume`, NOT a `go` at some guessed
+# name. It used to fall back to the HOSTNAME, so `mux latch manifestor` asked
+# the far side for a session literally called `manifestor` -- which succeeds,
+# hands you a session that is not yours, and on retry asks attach-only for a
+# name that never existed and reports `gone`. A wrong answer that looks like a
+# right one.
+#
+# `resume` is the correct verb precisely BECAUSE of how it creates: it rebuilds
+# the sessions that box actually had, which is the rebooted-host case handled
+# properly, where `go` would build one empty stranger. It is deterministic, so a
+# retry lands in the same place, and idempotent, so retrying costs nothing.
+#
+# attach-only therefore applies only to the NAMED form. Nothing is lost: resume
+# is already the "do not invent anything" verb, since it only ever rebuilds what
+# was recorded.
 _remote_cmd() {   # -> sets $_cmd
+	if [ -z "$_sess" ]; then
+		_cmd='mux resume'
+		return 0
+	fi
 	if [ "$_attempts" -gt 0 ] && _remote_can_attach_only; then
-		_cmd="mux go --attach-only ${_sess:-$_host}"
+		_cmd="mux go --attach-only $_sess"
 	else
-		_cmd="mux go ${_sess:-$_host}"
+		_cmd="mux go $_sess"
 	fi
 }
 
