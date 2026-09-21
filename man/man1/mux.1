@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.29" "User Commands"
+.TH MUX 1 "" "mux 0.30" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -87,6 +87,15 @@ partition and takes no way to name another. The set is state, not config:
 one
 .RI NAME <TAB> ROOT
 per line, per machine and never in git.
+.TP
+.B mux latch " " \fIHOST\fR [: \fISESSION\fR ]
+Hold an attachment to a mux session on another machine open across network
+drops, bringing your own transport. It reports what it is waiting on rather
+than retrying in silence, and refuses to retry the two cases where retrying is
+wrong: a session the human deliberately quit, and a credential the far side
+rejected. See
+.B LATCH
+for the state machine and the seams.
 .TP
 .B mux scan " [" \-\-list ]
 Rebuild the project discovery map for this context, or print it. The map is a
@@ -746,7 +755,7 @@ It always exits 0: it is a pure report, and a non\-zero exit would be
 indistinguishable from the transport.
 .PP
 .EX
-mux 0.28
+mux 0.30
 capabilities 1
 agent\-list 1
 agent\-summary 1
@@ -754,7 +763,8 @@ agent\-doctor 1
 check 1
 notify 1 unavailable
 context 1
-latch no
+latch 1
+attach\-only no
 .EE
 .PP
 THE WHOLE KNOWN SET IS ENUMERATED, including what this build does not implement.
@@ -781,7 +791,13 @@ with no
 configured. A later call may answer differently.
 .TP
 .B no
-This build does not have it at all.
+This build does not have it at all. It is a FORWARD declaration, not padding:
+.B attach\-only
+is listed because
+.B mux latch
+needs an attach\-that\-refuses\-to\-create form to handle a rebooted host and
+mux does not have one yet, so a latch running against a newer mux can ASK
+instead of discovering by failure.
 .PP
 For a mux too old to know the verb, the answer is exit 2 (see EXIT STATUS): a
 caller should then assume only what it can see. That is the case this verb
@@ -796,6 +812,123 @@ CLASSIFIED in the manifest, and
 asserts every dispatchable verb appears there. So a new verb nobody classified
 fails the suite rather than quietly never being advertised \(em omission is the
 one failure a curated list cannot catch.
+.SH LATCH
+.B mux latch " " \fIHOST\fR [: \fISESSION\fR ]
+keeps an attachment to a remote mux session alive as the network allows.
+.PP
+BRING YOUR OWN TRANSPORT. mux owns the state machine and the attach semantics;
+ssh, mosh, Eternal Terminal or anything else supplies the pipe. latch never
+carries a keystroke and knows nothing about hosts, addresses or MTUs \(em it
+decides WHEN to re\-establish an attachment and says WHY it has not, which is
+what keeps it from growing into a transport project.
+.SS The state machine
+The question that partitions it is not which exit code came back, but: does
+resolving this need a HUMAN, or PATIENCE? Retrying is right in every state
+except one, where it is actively harmful.
+.TP
+.B probing
+Down, recoverable with no human action. Retried on a backoff.
+.TP
+.B blocked
+No credential is live YET \(em an empty agent, a key not added, a hardware key
+waiting for a touch. latch DOES NOT ATTEMPT, because every attempt is a prompt
+and a loop here is a prompt storm. It polls the CREDENTIAL instead, which costs
+nothing (\c
+.B ssh\-add \-l
+answers in about 12ms), raises no prompt while it waits, and moves on by itself
+the moment a key appears. So it is a waiting state, not a dead end.
+.TP
+.B denied
+A credential WAS offered and the far side rejected it. The opposite handling:
+TERMINAL. latch cannot observe a human fixing
+.IR authorized_keys ,
+so there is no condition on which to retry, and retrying a rejected credential
+forever is the same storm wearing a backoff. A HOST KEY refusal lands here too:
+it is the same refusal pointing the other way \(em a rebuilt host presents a new
+key and mux rejects it \(em and no amount of patience resolves it either.
+.TP
+.B unknown
+Cannot be determined. Never reported as usable and never as blocked; retried
+with more patience. On a real fleet this is common rather than exotic: an MTU
+blackhole passes every cheap liveness probe there is.
+.TP
+.B ended
+The human detached or quit. TERMINAL, and latch exits 0 \(em retrying would
+resurrect the session they just closed.
+.TP
+.B gone
+The far side no longer has that session. Reported loudly, never silently
+recreated.
+.TP
+.B refused
+The far side answered, but its mux does not know the verb (exit 2). A version
+answer, not a transport failure, so retrying cannot help.
+.PP
+Only one latch runs per target at a time. A network flap can fire several
+attempts at once \(em a hook, a key binding, a human \(em and N loops against
+one target is N credential prompts and N reconnect races. A stale lock from a
+killed run is reclaimed by checking the recorded pid.
+.SS Seams
+Five, each a command, each overridable by environment or by a
+.IR MUX_DIR /config
+key, because every one of them encodes transport\-specific knowledge that does
+not belong in mux.
+.TP
+.BR MUX_LATCH_TRANSPORT " (" latch\-transport )
+Stand the pipe up.
+.B %h
+and
+.B %s
+are the host and session,
+.B %%
+a literal percent. Default
+.BR "ssh \-t %h mux go %s" .
+.TP
+.BR MUX_LATCH_AUTH " (" latch\-auth )
+Is a credential live? Answers 0 yes, 1 needs a human, 78 cannot tell. With no
+seam configured and an ssh\-shaped transport, a built\-in check is used that
+consults a live control master and then
+.BR ssh\-add ;
+neither connects.
+.TP
+.BR MUX_LATCH_PROBE " (" latch\-probe )
+Is the target usable? Same three answers. NO PROBE MEANS NO OPINION, which is
+the default: latch just attempts, and the attempt is the probe. That is a
+different instruction from a probe that ran and could not tell, which waits, and
+conflating the two once made a stock latch wait forever and never attach.
+.TP
+.BR MUX_LATCH_CLASSIFY " (" latch\-classify )
+Given
+.I "<exit> <stderr\-file>"
+print one state word. The built\-in classifier is ssh\-specific by necessity:
+ssh exits 255 for a refused credential, an unreachable host and a killed
+connection alike, so the discriminator is stderr.
+.TP
+.BR MUX_LATCH_STATUS " (" latch\-status )
+Called with
+.IR "<state> <detail>" ,
+fire and forget. Milestones also go to the terminal unconditionally, because
+"why is my terminal dead" is the actual daily complaint and silence is the thing
+being fixed.
+.PP
+78 means CANNOT ANSWER, and any other unrecognised code is read the same way.
+A hook that failed in a way it did not anticipate has not answered, and guessing
+on its behalf is how an edge nobody checked gets reported as fine.
+.PP
+ONE TRANSPORT AT A TIME, deliberately. State is tracked per transport, so an
+ordered fallback list is a later refactor rather than a rewrite:
+.B blocked
+is a per\-transport verdict, and across several transports the aggregate is
+blocked only when every one of them is.
+.SS What it does not do yet
+A REATTACH THAT REFUSES TO CREATE. The first attempt may create, since you asked
+to latch onto something, but a reattach finding nothing means the host rebooted,
+and handing over a fresh empty session where the work was is the worst available
+answer. It needs a mux\-side attach\-only form to express, because the transport
+template belongs to the caller and latch must not rewrite the verb inside it.
+Until then the template is used verbatim on every attempt. The manifest declares
+.B "attach\-only no"
+so a caller can see this rather than discover it.
 .SH EXIT STATUS
 mux uses exactly three codes, and the absence of every other one is part of the
 contract.
@@ -908,6 +1041,27 @@ Dropping a stale id costs nothing, and that is only true because mux sends
 urgency, which expires on its own. Were that ever changed back to
 .BR critical ,
 which never expires, this would become a leak instead of a safeguard.
+.TP
+.BR MUX_LATCH_TRANSPORT ", " MUX_LATCH_AUTH ", " MUX_LATCH_PROBE ", " \
+MUX_LATCH_CLASSIFY ", " MUX_LATCH_STATUS
+The five
+.B mux latch
+seams, each a command and each also settable as a
+.IR latch\- *
+key in
+.IR $MUX_DIR/config ,
+where the environment wins. Described under
+.BR LATCH .
+.BR MUX_LATCH_BACKOFF ,
+.BR MUX_LATCH_BACKOFF_MAX ,
+.B MUX_LATCH_BLOCKED_WAIT
+and
+.B MUX_LATCH_MAX_TRIES
+bound the retry loop (0 tries means forever), and
+.B MUX_LATCH_SLEEP
+replaces
+.BR sleep (1),
+which is what lets the state machine be tested without waiting.
 .SH FILES
 .TP
 .I $MUX_DIR/<name>.profile

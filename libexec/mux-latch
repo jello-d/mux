@@ -1,0 +1,398 @@
+#!/bin/sh
+# mux-latch: keep an attachment to a remote mux session alive as the network
+# allows. BRING YOUR OWN TRANSPORT: mux owns the state machine and the attach
+# semantics; ssh, mosh, Eternal Terminal or anything else supplies the pipe, and
+# nothing here knows what a host, an IP or an MTU is.
+#
+#   mux latch [HOST[:SESSION]]
+#
+# IT IS NOT A TRANSPORT. It never carries a keystroke. It decides WHEN to
+# (re)establish an attachment and reports WHY it has not, which is what keeps it
+# small and stops it growing into a transport project.
+#
+# THE MODEL IS A STATE MACHINE, and the question that partitions it is not which
+# exit code came back but: does resolving this need a HUMAN, or PATIENCE?
+# Retrying is right in every state except one, where it is actively harmful.
+#
+#   probing   down, recoverable with no human action. Retry on a backoff.
+#   blocked   no credential is live YET (empty agent, a key not added, a
+#             hardware key wanting a touch). DO NOT ATTEMPT: every attempt is a
+#             prompt and a loop here is the storm. Poll the CREDENTIAL instead,
+#             which costs nothing and self-heals the moment a key appears.
+#   denied    a credential WAS offered and the far side rejected it, OR a host
+#             key was rejected (the same refusal pointing the other way).
+#             Different problem, opposite handling: TERMINAL. latch cannot
+#             observe a human fixing authorized_keys or a known_hosts entry, so
+#             there is no condition on which to retry, and retrying a rejected
+#             credential forever is the storm wearing a backoff. Say what to fix
+#             and stop.
+#             (These two were one state at first. The test for the storm is what
+#             separated them: with auth live and the far side refusing, a single
+#             `blocked` state oscillates.)
+#   unknown   cannot determine. Never reported as usable and never as blocked;
+#             retried with more patience. On a real fleet this is COMMON, not
+#             exotic: an MTU blackhole passes every cheap liveness probe.
+#   ended     the human detached or quit. TERMINAL; retrying resurrects what
+#             they just closed.
+#   gone      the far side no longer has the session. Reported loudly, never
+#             silently recreated.
+#
+# WHY `blocked` IS NOT A DEAD END, which is the good part: auth liveness is
+# observable WITHOUT connecting (`ssh-add -l` answers in 12ms). So latch waits
+# for you by polling the credential rather than the connection, raises no prompt
+# while it waits, and moves on by itself the moment a key is added.
+#
+# FIVE SEAMS, each a command, each overridable, because every one of them
+# encodes transport-specific knowledge that does not belong in mux:
+#
+#   MUX_LATCH_TRANSPORT  stand the pipe up. %h and %s are host and session.
+#   MUX_LATCH_AUTH       credential live? 0 yes / 1 needs a human / 78 no idea
+#   MUX_LATCH_PROBE      is the target usable? 0 yes / 1 no / 78 no idea.
+#                        Unset means no opinion: just attempt.
+#   MUX_LATCH_CLASSIFY   <exit> <stderr-file> -> one state word
+#   MUX_LATCH_STATUS     <state> <detail>, fire and forget
+#
+# 78 is "cannot answer", borrowed from vigilance's HOOK_NA, and the rule with it
+# is the one this fleet keeps rediscovering: AN EDGE NOBODY CAN CHECK MUST NOT
+# REPORT SUCCESS. A hook that cannot tell must never be read as "fine".
+#
+# ONE TRANSPORT FOR NOW, deliberately. The state is tracked per transport so an
+# ordered fallback list is a later refactor and not a rewrite: `blocked` is a
+# per-transport verdict, and with several transports the aggregate is blocked
+# only when every one of them is.
+set -eu
+
+_lib=$(dirname "$0")
+. "$_lib/mux-conf.sh"
+
+MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
+
+# A seam's value: the environment wins, then a key in $MUX_DIR/config, then the
+# built-in default. Same precedence the context seam uses.
+_seam() {   # <env value> <config key> [default]
+	[ -n "$1" ] && { printf '%s' "$1"; return 0; }
+	if [ -r "$MUX_DIR/config" ]; then
+		_sv=$(mux_conf_clean 2>/dev/null <"$MUX_DIR/config" \
+			| awk -v k="$2" '$1 == k { $1 = ""
+				sub(/^[ \t]+/, ""); print; exit }')
+		[ -n "${_sv:-}" ] && { printf '%s' "$_sv"; return 0; }
+	fi
+	printf '%s' "${3:-}"
+}
+
+# The DEFAULT transport is ssh, because it is the only one that needs no daemon
+# and no new listening port, and because the fleet's conventions already depend
+# on its agent forwarding. It is still only a default: the seam takes anything.
+_DEF_TRANSPORT='ssh -t %h mux go %s'
+
+TRANSPORT=$(_seam "${MUX_LATCH_TRANSPORT:-}" latch-transport "$_DEF_TRANSPORT")
+AUTH=$(_seam "${MUX_LATCH_AUTH:-}" latch-auth '')
+PROBE=$(_seam "${MUX_LATCH_PROBE:-}" latch-probe '')
+CLASSIFY=$(_seam "${MUX_LATCH_CLASSIFY:-}" latch-classify '')
+STATUS=$(_seam "${MUX_LATCH_STATUS:-}" latch-status '')
+
+# Backoff, and every bound is overridable so a test does not have to sleep.
+BACKOFF=${MUX_LATCH_BACKOFF:-2}
+BACKOFF_MAX=${MUX_LATCH_BACKOFF_MAX:-60}
+BLOCKED_WAIT=${MUX_LATCH_BLOCKED_WAIT:-5}
+MAX_TRIES=${MUX_LATCH_MAX_TRIES:-0}         # 0 = forever
+SLEEP=${MUX_LATCH_SLEEP:-sleep}
+
+_target=${1:-}
+[ -n "$_target" ] || {
+	echo "mux: latch needs a target: HOST[:SESSION]" >&2; exit 2; }
+_host=${_target%%:*}
+_sess=${_target#*:}
+[ "$_sess" = "$_target" ] && _sess=
+[ -n "$_host" ] || { echo "mux: latch: empty host in '$_target'" >&2; exit 2; }
+
+# SINGLE FLIGHT. A network flap can fire several attach attempts at once (a
+# dispatcher hook, a key binding, a human), and N loops against one target is N
+# credential prompts and N reconnect races. The lock is per target, and a stale
+# one from a killed run is reclaimed by checking the recorded pid.
+_run=${XDG_RUNTIME_DIR:-/tmp}/mux-latch
+mkdir -p "$_run" 2>/dev/null || true
+_lock=$_run/$(printf '%s' "$_target" | tr -c 'A-Za-z0-9_.-' '_').lock
+if [ -f "$_lock" ]; then
+	_other=$(cat "$_lock" 2>/dev/null || true)
+	case ${_other:-} in
+	''|*[!0-9]*) ;;
+	*) if kill -0 "$_other" 2>/dev/null; then
+			echo "mux: latch already running for $_target (pid" \
+				"$_other)" >&2
+			exit 1
+		fi ;;
+	esac
+fi
+printf '%s\n' "$$" >"$_lock"
+trap 'rm -f "$_lock"' EXIT INT HUP TERM
+
+# say STATE DETAIL: to the terminal AND to the status seam. The terminal copy is
+# the point -- "why is my terminal dead" is the actual daily complaint, and
+# autossh's silence is the thing being fixed.
+#
+# EVERY remaining argument is the detail, joined. With `"$2"` only, a call
+# wrapped across lines to stay inside 80 columns silently lost everything after
+# the first fragment, and the terminal printed "this needs a human: latch cannot
+# see when a" and stopped mid-sentence. The wrapping is unavoidable here, so the
+# function has to tolerate it.
+_say() {   # <state> <detail...>
+	_ss=$1; shift
+	_sd=$*
+	printf 'mux latch: %s%s\n' "$_ss" "${_sd:+ -- $_sd}" >&2
+	[ -n "$STATUS" ] || return 0
+	$STATUS "$_ss" "$_sd" >/dev/null 2>&1 || true
+}
+
+# A hook's three-state answer, normalised. Anything other than 0, 1 or 78 is
+# treated as CANNOT TELL rather than as a verdict: a hook that failed in a way
+# it did not anticipate has not answered, and guessing on its behalf is how an
+# edge nobody checked gets reported as fine.
+_ask() {   # <command...> -> 0 yes, 1 no, 2 cannot tell
+	# No hook configured answers 2 as well, so a CALLER that means "then
+	# proceed" has to test for the hook itself. Those are opposite
+	# instructions and 2 cannot carry both; the probe site does the test.
+	[ -n "$1" ] || return 2
+	# INTENTIONAL word split, and "$@" would be wrong here: a hook is a
+	# command LINE supplied as one string, with the host appended as its
+	# argument. Quoting it would look for a program literally named
+	# `ssh-add -l`.
+	# (The directive sits on its own line because it binds to the NEXT
+	# command, and `_ar=0; $*` would have bound it to the assignment.)
+	_ar=0
+	# shellcheck disable=SC2048,SC2086
+	$* >/dev/null 2>&1 || _ar=$?
+	case $_ar in
+	0)  return 0 ;;
+	1)  return 1 ;;
+	78) return 2 ;;
+	*)  return 2 ;;
+	esac
+}
+
+# The BUILT-IN ssh auth check, used when no auth seam is configured and the
+# transport still looks like ssh. Both halves are ~12ms and neither connects:
+# a live control master means no credential is needed at all, and `ssh-add -l`
+# distinguishes keys-loaded from agent-empty from no-agent.
+_auth_default() {
+	case $TRANSPORT in *ssh*) ;; *) return 2 ;; esac
+	command -v ssh >/dev/null 2>&1 || return 2
+	if ssh -O check "$_host" >/dev/null 2>&1; then return 0; fi
+	command -v ssh-add >/dev/null 2>&1 || return 2
+	_sr=0; ssh-add -l >/dev/null 2>&1 || _sr=$?
+	case $_sr in
+	0) return 0 ;;                     # keys loaded
+	1) return 1 ;;                     # agent running, empty: needs a human
+	*) return 2 ;;                     # no agent at all: cannot tell
+	esac
+}
+
+_auth_state() {
+	if [ -n "$AUTH" ]; then _ask "$AUTH" "$_host"; return $?; fi
+	_auth_default
+}
+
+# The BUILT-IN ssh classifier. All of auth-denied, unreachable and unresolvable
+# exit 255, so the discriminator is stderr, and it is ssh-specific knowledge
+# which is exactly why this is a seam: ssh prefixes ITS OWN failures with
+# `ssh: `, while an auth denial is prefixed `user@host`.
+_classify_default() {   # <exit> <stderr file>
+	case $1 in
+	0)   printf 'ended' ;;             # the human detached or quit
+	2)   printf 'refused' ;;           # the remote mux does not know the verb
+	255)
+		# ssh prefixes ITS OWN failures with `ssh: `, while an auth
+		# denial is prefixed `user@host`. All three exit 255, so stderr
+		# is the only discriminator, and it is ssh-specific knowledge --
+		# which is exactly why classify is a seam.
+		# HOST KEY VERIFICATION belongs here too, and finding that took a
+		# live run: a rebuilt host presents a new key, ssh exits 255, and
+		# nothing in the message says "denied", so it classified as
+		# `probing` and latch would have retried a problem only a human
+		# can fix, forever. It is the refusal pointing the other way --
+		# we rejected THEM -- but the handling is identical, which is why
+		# it is this state rather than a seventh one.
+		if grep -qi \
+			'permission denied\|authenticat\|host key verification' \
+			"$2" 2>/dev/null
+		then printf 'denied'
+		else printf 'probing'; fi ;;
+	1)
+		# The remote mux refused. `gone` is the case worth separating:
+		# attaching found no such session, so the host rebooted and the
+		# work is not there. Anything else is a refusal to report.
+		if grep -qi 'no such session' "$2" 2>/dev/null
+		then printf 'gone'
+		else printf 'refused'; fi ;;
+	*)   printf 'unknown' ;;
+	esac
+}
+
+_classify_state() {   # <exit> <stderr file>
+	if [ -n "$CLASSIFY" ]; then
+		_cs=$($CLASSIFY "$1" "$2" 2>/dev/null || true)
+		case ${_cs:-} in
+		probing|blocked|denied|unknown|ended|gone|refused)
+			printf '%s' "$_cs"
+			return 0 ;;
+		esac
+		# A classifier that answered with something meaningless has not
+		# answered. `unknown` is the honest state, not a guess.
+		printf 'unknown'; return 0
+	fi
+	_classify_default "$1" "$2"
+}
+
+# Substitute the target into the transport template. %% is a literal %.
+_transport_cmd() {
+	printf '%s' "$TRANSPORT" \
+		| sed -e "s|%h|$_host|g" -e "s|%s|${_sess:-$_host}|g" \
+		      -e 's|%%|%|g'
+}
+
+_errf=$(mktemp)
+trap 'rm -f "$_lock" "$_errf"' EXIT INT HUP TERM
+
+# ATTACH-ONLY ON RETRY IS NOT IMPLEMENTED YET, and saying so is better than a
+# comment claiming otherwise. The design calls for it: the first attempt may
+# create, since you asked to latch onto something, but a REattach that finds
+# nothing means the host rebooted, and handing over a fresh empty session where
+# the work was is the worst available answer.
+#
+# It needs a mux-side attach-only form to express, because the transport
+# template belongs to the caller and latch must not rewrite the verb inside it.
+# Until then the template is used verbatim on every attempt, so a rebooted host
+# gets a NEW session rather than the `gone` report. The classifier already
+# recognises `gone` from the far side's own refusal, so only the
+# create-by-default half is missing.
+_state=probing
+_tries=0
+_delay=$BACKOFF
+
+_wait() {   # <seconds> <state> <why>
+	_say "$2" "$3, retrying in ${1}s"
+	$SLEEP "$1" || true
+}
+
+# The transport's operative complaint: its LAST non-empty stderr line, not its
+# first. `head -1` looked obvious and was wrong on the very first live run --
+# `ssh -t` from a non-tty leads with "Pseudo-terminal will not be allocated
+# because stdin is not a terminal.", so every report named a harmless warning
+# and buried "Could not resolve hostname" underneath it. The same would have hit
+# the denied, refused and gone reports, which is the half that matters: they are
+# what a human reads to decide what to fix.
+_errline() {
+	awk 'NF { l = $0 } END { print l }' "$_errf" 2>/dev/null || true
+}
+
+# Doubled per attempt, capped. One place, so the two retrying paths cannot
+# drift: they were written with the doubling on opposite sides of the wait, so
+# one of them slept BACKOFF first and the other 2*BACKOFF.
+_backoff() {
+	_delay=$(( _delay * 2 > BACKOFF_MAX ? BACKOFF_MAX : _delay * 2 ))
+}
+
+while :; do
+	_tries=$((_tries + 1))
+	if [ "$MAX_TRIES" -gt 0 ] && [ "$_tries" -gt "$MAX_TRIES" ]; then
+		_say giving-up "after $MAX_TRIES attempt(s) in state $_state"
+		exit 1
+	fi
+
+	if [ "$_state" = blocked ]; then
+		# Poll the CREDENTIAL, never the connection: an attempt here is
+		# a prompt, and this is the loop that would storm.
+		if _auth_state; then
+			_state=probing
+			_say probing "a credential is live again"
+			continue
+		fi
+		_wait "$BLOCKED_WAIT" blocked "waiting for a credential"
+		continue
+	fi
+
+	# Pre-flight. Refusing to attempt without a live credential is what makes
+	# the prompt storm impossible by construction rather than merely damped.
+	# `! _auth_state` would INVERT the status, making $? 0 for the very
+	# verdict being tested, so the blocked branch could never be reached.
+	# The three-state answer has to be captured, not negated.
+	_ar=0; _auth_state || _ar=$?
+	if [ "$_ar" = 1 ]; then
+		_state=blocked
+		_say blocked "no usable credential; not attempting"
+		continue
+	fi
+
+	# Reachability, ONLY if someone supplied a probe. NO PROBE MEANS NO
+	# OPINION, and the attempt itself becomes the probe -- which has to be
+	# tested here rather than inferred from _ask, because _ask answers 2 both
+	# for "no hook configured" and for "the hook ran and could not tell".
+	# Those are opposite instructions: the first says proceed, the second
+	# says wait. Conflating them made the DEFAULT configuration, with no
+	# probe seam set, wait forever and never attach even once. Found in a
+	# live smoke test against an unreachable host; the suite missed it
+	# because every case in it configures a probe.
+	if [ -n "$PROBE" ]; then
+		_pr=0; _ask "$PROBE" "$_host" || _pr=$?
+		case $_pr in
+		1|2)
+			# 1 says not reachable, 2 says the probe could not tell.
+			# Both wait, and both must UPDATE _state: the give-up line
+			# reports it, and it once said "in state probing" having
+			# just printed unknown, the report contradicting itself.
+			if [ "$_pr" = 1 ]; then
+				_state=probing
+				_why="the target is not reachable"
+			else
+				_state=unknown
+				_why="cannot tell if the target is usable"
+			fi
+			_wait "$_delay" "$_state" "$_why"
+			_backoff
+			continue ;;
+		esac
+	fi
+
+	: >"$_errf"
+	_say attaching "$_target via ${TRANSPORT%% *}"
+	_rc=0
+	# Built first, then run unquoted. `$(_transport_cmd)` directly would
+	# work but reads as the execute-your-own-output footgun, and every
+	# reader would stop on it; this says the same thing out loud.
+	_tcmd=$(_transport_cmd)
+	# shellcheck disable=SC2086
+	$_tcmd 2>"$_errf" || _rc=$?
+	_state=$(_classify_state "$_rc" "$_errf")
+
+	case $_state in
+	ended)
+		_say ended "the session was closed deliberately"
+		exit 0 ;;
+	gone)
+		_say gone "the session is not there any more; NOT recreating it"
+		exit 1 ;;
+	refused)
+		_say refused "$(_errline)"
+		exit 1 ;;
+	denied)
+		_say denied "$(_errline)"
+		_say denied "this needs a human: latch cannot see when a" \
+			"credential or a host key is fixed, so it stops rather" \
+			"than retrying a refusal forever"
+		exit 1 ;;
+	blocked)
+		# Only reachable from a classifier that says "no credential yet"
+		# rather than "rejected". Waiting is right; attempting is not.
+		_say blocked "$(_errline)"
+		continue ;;
+	*)
+		# The transport's OWN first line, when it left one. "the transport
+		# dropped" is true of a timeout, a refused port and an
+		# unresolvable name alike, and which one it was is the whole
+		# question a human has when the terminal goes dead.
+		_d1=$(_errline)
+		_wait "$_delay" "$_state" "${_d1:-the transport dropped}"
+		_backoff
+		continue ;;
+	esac
+done

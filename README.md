@@ -41,6 +41,7 @@ itself (`fzf` optional, for a nicer session picker).
   - [Themes](#themes)
   - [Contexts and partitions](#contexts-and-partitions)
   - [Views and tension](#views-and-tension)
+  - [Remote sessions: latch](#remote-sessions-latch)
 - [Commands](#commands)
 - [Key bindings](#key-bindings)
 - [Configuration](#configuration)
@@ -478,6 +479,39 @@ been idle (which is what identifies the forgotten one), and says whether the
 tension actually reaches the window you are in. Clicking the glyph cycles the
 mode; `mux views --detach <client>` ends a claim outright.
 
+### Remote sessions: latch
+
+`mux latch HOST[:SESSION]` holds an attachment to a mux session on another
+machine open across network drops. **Bring your own transport:** mux owns the
+state machine and the attach semantics, and ssh, mosh, Eternal Terminal or
+anything else supplies the pipe. latch never carries a keystroke and knows
+nothing about hosts, addresses or MTUs.
+
+The question that partitions its states is not which exit code came back, but:
+does resolving this need **a human**, or **patience**?
+
+| state | what it means | what latch does |
+| --- | --- | --- |
+| `probing` | down, recoverable on its own | retry on a backoff |
+| `blocked` | no credential live **yet** | wait, and never attempt |
+| `denied` | a credential or host key was refused | stop, and say what to fix |
+| `unknown` | cannot be determined | retry, with more patience |
+| `ended` | you detached or quit | stop (exit 0) |
+| `gone` | the far side lost the session | stop, and never recreate it |
+
+`blocked` is the interesting one. Every attempt while no credential is live is a
+password or touch prompt, so a retry loop there is a prompt storm. latch polls
+the **credential** instead of the connection, which costs about 12ms, raises no
+prompt while it waits, and moves on by itself the moment a key appears. So it is
+a waiting state rather than a dead end. `denied` is the opposite case and is
+terminal: latch cannot observe a human fixing `authorized_keys`, so retrying a
+refusal forever is that same storm wearing a backoff.
+
+Five seams, each a command, each settable in the environment or as a `latch-*`
+key in `$MUX_DIR/config`: `MUX_LATCH_TRANSPORT`, `_AUTH`, `_PROBE`, `_CLASSIFY`
+and `_STATUS`. An auth or probe hook answers 0 yes, 1 no, or 78 "cannot tell",
+and a hook that cannot tell is never read as fine. Defaults cover ssh; see
+**LATCH** in `man mux`.
 
 ## Commands
 
@@ -505,6 +539,8 @@ mux hide/show SESSION        hide/unhide a session for this client
 mux show-all                 clear this client's hidden sessions
 mux reload                   re-source tmux.conf on every mux server
 mux kill NAME | kill-all     tear down a session, or all (prompts)
+mux latch HOST[:SESSION]     hold a remote attachment open across drops
+mux capabilities             what this mux supports, for other programs
 ```
 
 ## Key bindings

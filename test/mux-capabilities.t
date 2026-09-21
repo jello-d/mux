@@ -72,9 +72,17 @@ case $(val "$_o" notify) in
 *) fail "with no notify-send, notify should read unavailable, got
 [$(val "$_o" notify)]" ;;
 esac
-[ "$(val "$_o" latch)" = "no " ] \
-	|| fail "latch is not implemented, so it must read 'no': got
-[$(val "$_o" latch)]"
+[ "$(val "$_o" attach-only)" = "no " ] \
+	|| fail "attach-only is not implemented, so it must read 'no': got
+[$(val "$_o" attach-only)]"
+# latch IS implemented, but there is no ssh on this stub PATH, so it is the
+# other contextual one. `1 unavailable` and `no` must not collapse together:
+# one says try again elsewhere, the other says never on this build.
+case $(val "$_o" latch) in
+*"1 unavailable"*) ;;
+*) fail "latch is implemented but has no transport here, so it should read
+'1 unavailable': got [$(val "$_o" latch)]" ;;
+esac
 
 # ... and a capability that becomes usable says so, rather than staying absent.
 printf '#!/bin/sh\nexit 0\n' >"$T/bin/notify-send"
@@ -85,6 +93,16 @@ case $(val "$(caps)" notify) in
 [$(val "$(caps)" notify)]" ;;
 esac
 rm -f "$T/bin/notify-send"
+
+# latch reads usable once its transport's program exists. Only the first WORD of
+# the template is checked, so the rest being nonsense must not matter.
+printf '#!/bin/sh\nexit 0\n' >"$T/bin/myhop"; chmod +x "$T/bin/myhop"
+case $(MUX_LATCH_TRANSPORT='myhop -x %h mux go %s' caps | \
+	awk '$1=="latch"{print $2, $3}') in
+"1 ") ;;
+*) fail "with its transport present, latch should be usable: got
+[$(MUX_LATCH_TRANSPORT='myhop %h' caps | grep '^latch')]" ;;
+esac
 
 # The context seam is the other contextual one: unavailable with no
 # context-command configured, usable once there is one.
@@ -141,7 +159,12 @@ Add each to _cap_manifest in bin/mux as 'contract <n>' or 'internal'."
 printf '%s\n' "$_o" | tail -n +2 | while IFS= read -r _l; do
 	_cn=${_l%% *}
 	case $_cn in
-	notify|context|latch) continue ;;      # seams and absent ones
+	notify|context) continue ;;            # seams, not verbs
+	esac
+	# A forward declaration has no verb by definition, and skipping it by
+	# VALUE rather than by name means the next one needs no edit here.
+	case $_l in
+	*' no') continue ;;
 	esac
 	case " $(printf '%s\n' "$_dispatched" | tr '\n' ' ') " in
 	*" $_cn "*) ;;
