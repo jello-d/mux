@@ -113,7 +113,40 @@ _hook() {   # <value> -> the value with its command resolved
 # ~/.local/bin and exits 127 `mux: not found`. Measured on this fleet, where it
 # was the first thing a real latch hit. A login shell reads the profile that
 # puts mux on PATH, and %c is what lets the command survive as one argument.
-_DEF_TRANSPORT='ssh -t %h sh -lc %q'
+#
+# ServerAliveInterval IS THE WHOLE RECONNECT STORY, and ssh's default is 0,
+# meaning OFF. Without it latch cannot recover from the most common disruption
+# there is. Two failures look nothing alike to TCP:
+#
+#   the far side says goodbye (reboot, sshd stop, a router sending RST) -- ssh
+#   returns immediately and latch retries within a second.
+#
+#   the packets simply STOP (wifi drops, the lid closes, a VPN dies, an MTU
+#   blackhole) -- nothing is refused, so ssh sits in a read that will not
+#   return until the kernel gives up on the socket. TCPKeepAlive is on by
+#   default and does not help, because a keepalive probe into a blackhole is
+#   just another lost packet; the kernel's own timer is ~2 hours.
+#
+# So without this latch is not merely slow to notice, it is asleep, and the
+# retry loop it exists for never runs. ServerAlive probes ride the encrypted
+# channel and give up on their own schedule: 5s x 3 means ssh returns 255 in
+# about 15 seconds and latch is back in `probing` where it belongs.
+#
+# AND ConnectTimeout, WHICH COVERS A DIFFERENT PHASE. ServerAlive probes do not
+# start until a session EXISTS, so they do nothing about a peer that accepts the
+# connection and then says nothing -- a half-open NAT entry, a wedged sshd, an
+# MTU blackhole during key exchange. Measured against exactly that:
+#
+#   no timeouts at all      still waiting after 40s
+#   ConnectTimeout=5        gives up in 5s
+#   ServerAliveInterval=5   still waiting after 40s
+#
+# ConnectTimeout governs the whole SETUP including the banner exchange, despite
+# its name, and it is safe on a long-lived attach because it stops applying once
+# the session is up. Together the two bound both hang modes.
+_DEF_ALIVE='-o ServerAliveInterval=5 -o ServerAliveCountMax=3'
+_DEF_ALIVE="$_DEF_ALIVE -o ConnectTimeout=10"
+_DEF_TRANSPORT="ssh -t $_DEF_ALIVE %h sh -lc %q"
 
 TRANSPORT=$(_seam "${MUX_LATCH_TRANSPORT:-}" latch-transport "$_DEF_TRANSPORT")
 AUTH=$(_hook "$(_seam "${MUX_LATCH_AUTH:-}" latch-auth ssh-auth)")
@@ -127,6 +160,10 @@ CLASSIFY=$(_hook "$_c_seam")
 # whole point of having a library.
 PROBE=$(_hook "$(_seam "${MUX_LATCH_PROBE:-}" latch-probe '')")
 STATUS=$(_hook "$(_seam "${MUX_LATCH_STATUS:-}" latch-status '')")
+# RESTORE runs after every transport return, before anything is reported.
+# See the call site for why it has to be first.
+_r_seam=$(_seam "${MUX_LATCH_RESTORE:-}" latch-restore term-restore)
+RESTORE=$(_hook "$_r_seam")
 
 # A NAMED HOOK THAT DOES NOT EXIST IS A CONFIG ERROR, and it must be loud.
 # Silently carrying on means the classifier never answers, every attempt lands
@@ -148,6 +185,7 @@ _hook_must_run "$AUTH" auth
 _hook_must_run "$CLASSIFY" classify
 _hook_must_run "$PROBE" probe
 _hook_must_run "$STATUS" status
+_hook_must_run "$RESTORE" restore
 
 # Backoff, and every bound is overridable so a test does not have to sleep.
 BACKOFF=${MUX_LATCH_BACKOFF:-2}
@@ -307,7 +345,12 @@ _run_transport() {   # <remote command> -> runs it, returns its status
 }
 
 _errf=$(mktemp)
-trap 'rm -f "$_lock" "$_errf"' EXIT INT HUP TERM
+# The terminal is repaired on the way out too. A latch killed with C-c
+# mid-attach leaves exactly the same wreckage as a dropped connection does, and
+# a human reaching for C-c is usually looking at that wreckage already. The
+# repair is idempotent, so running it again on a clean exit costs nothing.
+trap '$RESTORE >/dev/null 2>&1 || true
+	rm -f "$_lock" "$_errf"' EXIT INT HUP TERM
 
 # ATTACH-ONLY ON RETRY. The FIRST attempt may create -- you asked to latch onto
 # something -- but a REattach that finds nothing means the host rebooted, and
@@ -497,6 +540,21 @@ while :; do
 	_rc=0
 	_attempts=$((_attempts + 1))
 	_run_transport "$_cmd" 2>"$_errf" || _rc=$?
+
+	# PUT THE TERMINAL BACK FIRST, before classifying, reporting or waiting.
+	# tmux dying with ssh never sends its teardown, so the terminal is left
+	# in tmux's mode: cursor hidden, mouse reporting on (moving the mouse
+	# then types control characters at your shell), alternate screen still
+	# up. `stty sane` cannot fix that -- those modes live in the terminal
+	# EMULATOR, not the kernel's line discipline.
+	#
+	# First, not last, for two reasons. The human is sitting in front of a
+	# wedged terminal RIGHT NOW and every second of a backoff is spent that
+	# way. And latch's own messages go to that terminal: printing "probing,
+	# retrying in 8s" into a hidden-cursor alternate screen is how a
+	# reconnect looks like a hang.
+	$RESTORE >/dev/null 2>&1 || true
+
 	_state=$(_classify_state "$_rc" "$_errf")
 
 	case $_state in

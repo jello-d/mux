@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.32" "User Commands"
+.TH MUX 1 "" "mux 0.33" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -764,7 +764,7 @@ It always exits 0: it is a pure report, and a non\-zero exit would be
 indistinguishable from the transport.
 .PP
 .EX
-mux 0.32
+mux 0.33
 capabilities 1
 agent\-list 1
 agent\-summary 1
@@ -977,6 +977,34 @@ gets a PATH with no
 and exits 127
 .BR "mux: not found" .
 A login shell reads the profile that puts mux on PATH.
+.IP
+THE TIMEOUTS IN THE DEFAULT ARE WHAT MAKE RECONNECTION WORK AT ALL, and they
+cover two different phases. ssh sets
+.B ServerAliveInterval
+to 0 by default, meaning off, and there are two disruptions that look nothing
+alike to TCP. When the far side says goodbye \(em a reboot, sshd stopping, a
+router sending RST \(em ssh returns at once. When the packets simply STOP \(em
+wifi drops, a lid closes, a VPN dies \(em nothing is refused, so ssh waits on a
+socket the kernel will not give up on for about two hours.
+.B TCPKeepAlive
+is on by default and does not help, because a keepalive probe into a blackhole
+is just another lost packet. Without ServerAlive, latch is not slow to notice:
+it is asleep, and the retry loop it exists for never runs.
+.IP
+.B ConnectTimeout
+covers the other phase. ServerAlive probes do not start until a session EXISTS,
+so they do nothing about a peer that accepts the connection and then says
+nothing. Measured against exactly that:
+.PP
+.EX
+no timeouts at all      still waiting after 40s
+ConnectTimeout=5        gives up in 5s
+ServerAliveInterval=5   still waiting after 40s
+.EE
+.IP
+So ConnectTimeout governs the whole connection SETUP including the banner
+exchange, despite its name, and it is safe on a long attach because it stops
+applying once the session is up.
 .TP
 .BR MUX_LATCH_AUTH " (" latch\-auth )
 Is a credential live? Answers 0 yes, 1 needs a human, 78 cannot tell. Defaults
@@ -1004,6 +1032,30 @@ which is ssh\-specific by necessity: ssh exits 255 for a refused credential, an
 unreachable host and a killed connection alike, so stderr is the only
 discriminator there is. That specificity is precisely why this is a seam and not
 core code.
+.TP
+.BR MUX_LATCH_RESTORE " (" latch\-restore )
+Put the TERMINAL back. Run after every transport return, BEFORE anything is
+reported or waited on, and again on the way out. Defaults to the shipped
+.BR term\-restore .
+.IP
+tmux switches the terminal into its own operating mode on the way in and
+switches it back on the way out. When ssh dies mid\-session the way out never
+happens, so the cursor stays hidden, mouse reporting stays on (moving the mouse
+then types control characters at your shell), bracketed paste stays on and the
+alternate screen stays up.
+.IP
+.B stty sane
+is the reflex and only half works, because there are two pieces of state. The
+tty line discipline lives in the KERNEL and stty owns it. The alternate screen,
+cursor visibility, mouse reporting and bracketed paste live in the terminal
+EMULATOR, set by escape sequences, and the kernel has never heard of them. Only
+sending the matching sequences puts those back, which is what this does, using
+the teardown captured from tmux itself.
+.IP
+FIRST, not last, for two reasons: you are sitting in front of a wedged terminal
+and every second of a backoff is spent that way, and latch's own messages go to
+that same terminal \(em printing "retrying in 8s" into a hidden\-cursor
+alternate screen is how a reconnect looks like a hang.
 .TP
 .BR MUX_LATCH_STATUS " (" latch\-status )
 Called with
@@ -1035,12 +1087,13 @@ so it must not carry an absolute path that is right on only one of them. Only
 the first WORD is resolved, since a hook value is a command line; a value
 containing a slash is a path already and is left alone.
 .PP
-Three ship, in
+Four ship, in
 .IR share/latch :
 .BR ssh\-auth ,
-.B ssh\-classify
+.BR ssh\-classify ,
+.B ssh\-probe
 and
-.BR ssh\-probe .
+.BR term\-restore .
 Only ssh ones, deliberately: a mosh or Eternal Terminal hook is not shipped
 because it is not verified here, the same reason
 .I share/agents/gemini.agent
@@ -1052,6 +1105,13 @@ Each is a small program with a header explaining what it can and cannot answer.
 is worth reading before wiring it: a positive answer rules out one failure and
 leaves the interesting one untouched, because an MTU blackhole passes every
 cheap liveness signal there is.
+.PP
+Four ship in total, counting
+.BR term\-restore ,
+which is a repair rather than a question: it always exits 0, and it does
+NOTHING when no terminal is attached, so running it from a script or a pipe
+cannot corrupt the output. It is an ordinary program and can be run by hand
+after any wedged session, not only one latch was driving.
 .PP
 ONE TRANSPORT AT A TIME, deliberately. State is tracked per transport, so an
 ordered fallback list is a later refactor rather than a rewrite:

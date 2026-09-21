@@ -389,6 +389,71 @@ case "$(seq_of)" in
 esac
 rm -rf "$T/conf/latch"
 
+# --- THE TERMINAL IS PUT BACK FIRST, BEFORE ANYTHING IS REPORTED -----
+# tmux dying with ssh never sends its teardown, so the terminal is left in
+# tmux's mode: cursor hidden, mouse reporting on, alternate screen up.
+#
+# ORDER IS THE ASSERTION, not merely that it happens. The human is sitting in
+# front of a wedged terminal right now, and latch's own messages go to that same
+# terminal -- printing "probing, retrying in 8s" into a hidden-cursor alternate
+# screen is how a reconnect looks like a hang. Repairing after the report, or
+# after the backoff, would be most of the bug still present.
+ORDER=$T/order; export ORDER
+cat >"$T/bin/restore" <<'EOF'
+#!/bin/sh
+printf 'restore\n' >>"$ORDER"
+EOF
+cat >"$T/bin/orderstatus" <<'EOF'
+#!/bin/sh
+printf 'report:%s\n' "$1" >>"$ORDER"
+EOF
+chmod +x "$T/bin/restore" "$T/bin/orderstatus"
+
+_drop='255 ssh: connect to host box port 22: Connection timed out'
+printf '%s\n0\n' "$_drop" >"$SCRIPT"
+: >"$ORDER"; : >"$TRIES"
+env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
+	ORDER="$ORDER" SCRIPT="$SCRIPT" TRIES="$TRIES" \
+	MUX_LATCH_TRANSPORT="$T/bin/transport %h %s" \
+	MUX_LATCH_AUTH=/bin/true \
+	MUX_LATCH_RESTORE="$T/bin/restore" \
+	MUX_LATCH_STATUS="$T/bin/orderstatus" \
+	MUX_LATCH_SLEEP="$T/bin/nosleep" \
+	MUX_LATCH_BACKOFF=1 MUX_LATCH_MAX_TRIES=3 \
+	"$HERE/libexec/mux-latch" box:proj >/dev/null 2>&1 || true
+
+# The first thing after a drop must be the repair, and the report after it.
+_seq=$(tr '\n' ' ' <"$ORDER")
+case "$_seq" in
+"report:attaching restore "*) ;;
+*) fail "the terminal repair must come FIRST after the transport returns, and
+before any report. Sequence was: [$_seq]" ;;
+esac
+# ... and specifically before the state report that follows the drop.
+_first_state=$(grep -n 'report:probing' "$ORDER" | head -1 | cut -d: -f1)
+_first_rest=$(grep -n 'restore' "$ORDER" | head -1 | cut -d: -f1)
+[ -n "$_first_rest" ] || fail "the restore seam was never called"
+[ -n "$_first_state" ] \
+	&& [ "$_first_rest" -lt "$_first_state" ] \
+	|| fail "the repair ran AFTER the drop was reported. The message goes to
+the same wedged terminal, so this is the ordering that decides whether the
+human can read it. Sequence: [$_seq]"
+
+# It runs on a CLEAN end too. A tidy quit usually tears down properly, but
+# `usually` is not a thing to depend on, and the repair is idempotent.
+printf '0\n' >"$SCRIPT"
+: >"$ORDER"
+env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
+	ORDER="$ORDER" SCRIPT="$SCRIPT" TRIES="$TRIES" \
+	MUX_LATCH_TRANSPORT="$T/bin/transport %h %s" \
+	MUX_LATCH_AUTH=/bin/true \
+	MUX_LATCH_RESTORE="$T/bin/restore" \
+	MUX_LATCH_SLEEP="$T/bin/nosleep" MUX_LATCH_MAX_TRIES=1 \
+	"$HERE/libexec/mux-latch" box:proj >/dev/null 2>&1 || true
+grep -q restore "$ORDER" \
+	|| fail "the terminal repair was skipped on a clean end. A quit through a
+dying connection leaves the same wreckage, and the repair is idempotent."
+
 # --- NO SESSION NAMED MEANS `mux resume`, NOT A GUESSED NAME ---------
 # `mux latch manifestor` used to send `mux go manifestor`, using the HOSTNAME as
 # a session name. It succeeds, hands you a session that is not yours, and on

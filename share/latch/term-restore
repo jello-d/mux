@@ -1,0 +1,101 @@
+#!/bin/sh
+# share/latch/term-restore - put the terminal back after a full-screen program
+# died without tearing down.
+#
+# A `mux latch` RESTORE hook. Called with no arguments, it always exits 0: it is
+# a repair, not a question, and latch runs it before it reports anything.
+#
+# THE PROBLEM. tmux is a full-screen program. On the way in it switches the
+# terminal into a different operating mode, and on the way out it switches it
+# back. When ssh dies mid-session the way OUT never happens, so the terminal is
+# left in tmux's mode with nothing driving it: cursor hidden, mouse reporting
+# still on (so moving the mouse types control characters into your shell),
+# bracketed paste still on, and the alternate screen still showing.
+#
+# WHY `stty sane` DOES NOT FIX IT, which is the crux. There are two separate
+# pieces of state and stty only touches one:
+#
+#   the TTY LINE DISCIPLINE, in the kernel -- echo, canonical mode, signal
+#   characters. `stty sane` fixes this, and it is why stty helps a little.
+#
+#   the TERMINAL EMULATOR's modes, set by escape sequences and held by the
+#   emulator itself -- alternate screen, cursor visibility, mouse reporting,
+#   bracketed paste. The kernel has never heard of these, so no stty can
+#   restore them. Only sending the matching escape sequences can.
+#
+# So this does both, and the second part is the half that was missing.
+#
+# WHAT IT SENDS was MEASURED, not guessed: a tmux session was attached and
+# detached through a pty and the byte stream captured, which gives tmux's own
+# teardown verbatim. That is the right answer by construction, because "run it
+# locally and exit cleanly and the terminal is fine" is exactly the observation
+# this is reproducing. Captured modes: 1049 (alt screen), 1000/1002/1003/1005/
+# 1006 (mouse, several protocols), 2004 (bracketed paste), 1004 (focus events),
+# 1 (application cursor keys), 2031 (colour-scheme notifications), 7727
+# (application escape), 25 (cursor visibility).
+#
+# ONE DELIBERATE OMISSION. tmux clears the screen (ESC[H ESC[J) just BEFORE
+# leaving the alternate screen. Replaying that would be actively harmful here:
+# if the terminal is NOT in the alternate screen -- ssh died early, or something
+# already tidied up -- the clear would wipe the user's real screen instead of a
+# scratch buffer. It is also redundant, since leaving the alternate screen
+# discards its contents anyway. Being wrong in that direction destroys work, so
+# the clear is dropped and everything else is kept.
+#
+# TERMINFO FIRST, raw sequences only where terminfo has nothing. rmcup, cnorm,
+# rmkx and sgr0 exist as capabilities and adapt to the actual terminal; there is
+# no terminfo capability for mouse reporting, bracketed paste or focus events at
+# all, which is the other reason a terminfo-only tool like `tput reset` cannot
+# do this job. (`tput reset` is also too big a hammer: it sends a full reset,
+# which on most emulators clears the scrollback you were trying to get back to.)
+#
+# EVERY SEQUENCE IS IDEMPOTENT. Resetting a mode that is already reset is a
+# no-op, so running this when nothing was broken costs nothing and cannot make
+# things worse. latch therefore runs it on EVERY transport return rather than
+# trying to guess whether it was needed.
+set -eu
+
+# NO TERMINAL, NOTHING TO REPAIR. Checked before anything is emitted, because
+# writing escape sequences into a pipe corrupts whatever is reading it. All
+# three descriptors are tested: latch's own stderr is the usual one, but a
+# caller may have redirected it while still owning the terminal.
+if [ ! -t 0 ] && [ ! -t 1 ] && [ ! -t 2 ]; then
+	exit 0
+fi
+# The CONTROLLING terminal, not stdout: the repair has to reach the real
+# terminal even when the caller's streams are redirected somewhere else.
+[ -w /dev/tty ] || exit 0
+
+# A terminfo capability, or a fallback when TERM is unset, dumb, or unknown.
+# The fallbacks are the xterm-family sequences the capture above recorded.
+_cap() {   # <capname> <fallback>
+	if [ -n "${TERM:-}" ] && [ "$TERM" != dumb ]; then
+		if _v=$(tput "$1" 2>/dev/null) && [ -n "$_v" ]; then
+			printf '%s' "$_v"
+			return 0
+		fi
+	fi
+	printf '%s' "$2"
+}
+
+{
+	# Order matters: undo the modes while still on the alternate screen, then
+	# leave it last, so the user's own screen is what remains.
+	_cap sgr0  "$(printf '\033[m\017')"      # attributes + alt charset off
+	_cap rmkx  "$(printf '\033[?1l\033>')"   # normal cursor keys and keypad
+	printf '\033[r'                          # scroll region back to full
+	printf '\033[?1000l\033[?1002l\033[?1003l\033[?1005l\033[?1006l'
+	printf '\033[?1015l'                     # urxvt mouse, not in the capture
+	printf '\033[?2004l'                     # bracketed paste off
+	printf '\033[?1004l'                     # focus reporting off
+	printf '\033[?7727l\033[?2031l'          # application escape, colour notes
+	_cap cnorm "$(printf '\033[34h\033[?25h')"   # cursor visible
+	_cap rmcup "$(printf '\033[?1049l')"     # leave the alternate screen LAST
+} >/dev/tty 2>/dev/null || true
+
+# And the kernel half: echo, canonical mode and the signal characters. Second,
+# because it is the part that was never actually broken in an interesting way,
+# and first would mean a failure here skipped the part that matters.
+stty sane </dev/tty >/dev/null 2>&1 || true
+
+exit 0
