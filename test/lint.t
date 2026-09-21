@@ -114,5 +114,29 @@ if [ -s "$_bad" ]; then
 	exit 1
 fi
 
+# --- the exit-code contract, mechanically -------------------------------
+# mux uses exactly 0, 1 and 2. The ABSENCE of everything else is what lets a
+# caller attribute 255 to ssh and 127 to a missing binary rather than to mux,
+# which is what `latch` will classify retries on and how a fleet mid-upgrade
+# avoids reading as half-broken. test/mux-exit.t pins what today's verbs return;
+# this holds the rule against code nobody has written yet, which a per-verb test
+# cannot do.
+#
+# Literal codes only. A handful of sites exit through a variable (`exit "$RC"`
+# in mux-check, `exit "${1:-2}"` in usage), and those are covered behaviourally
+# instead -- a grep cannot evaluate them, and pretending otherwise would be a
+# guard that looks stronger than it is.
+_ec=$T/exitcodes
+( cd "$HERE" && grep -rnE '\bexit [0-9]+' bin libexec share setup.sh \
+	2>/dev/null | grep -vE '\bexit [012]\b' ) >"$_ec" || true
+if [ -s "$_ec" ]; then
+	printf 'FAIL %s: an exit code outside the 0/1/2 contract:\n' "$_name" >&2
+	sed 's/^/  /' "$_ec" >&2
+	printf 'mux exits 0 (answered), 1 (refused, reason on stderr) or 2\n' >&2
+	printf '(usage/unknown verb). Anything else makes 255 and 127\n' >&2
+	printf 'ambiguous for a remote caller. See test/mux-exit.t.\n' >&2
+	exit 1
+fi
+
 printf 'ok   %s (%s files clean)\n' "$_name" "$_n"
 exit 0

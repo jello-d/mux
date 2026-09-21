@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.27" "User Commands"
+.TH MUX 1 "" "mux 0.28" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -733,6 +733,52 @@ mux's helpers only as
 so it carries no paths.
 .I mux-opinions.tmux
 is optional ergonomics (mouse, scroll routing, navigation).
+.SH EXIT STATUS
+mux uses exactly three codes, and the absence of every other one is part of the
+contract.
+.TP
+.B 0
+It answered, or succeeded. An EMPTY answer is still an answer:
+.B mux agent-list
+on a host with no agents prints nothing and exits 0, which is a different fact
+from a failure and must not be conflated with one.
+.TP
+.B 1
+Refused, for a stated reason. Something is on stderr saying why, prefixed
+.BR mux: .
+A guard fired, drift was found, or the named thing does not exist.
+.TP
+.B 2
+A usage error, or a verb this mux does not know.
+.PP
+THE ABSENCE OF EVERYTHING ELSE IS LOAD-BEARING.
+.B ssh
+returns 255 for its own errors and otherwise passes the remote command's status
+through, and a shell returns 126 and 127 for not-executable and not-found.
+Because mux never produces any of those, a caller can attribute them with
+certainty:
+.PP
+.EX
+ssh host mux agent-list
+  0      an answer (possibly empty)
+  1      mux refused; the reason is on stderr
+  2      that mux is too old to know the verb
+  255    the transport, not mux
+  127    mux is not on that host's PATH
+.EE
+.PP
+That is how a fleet part way through an upgrade stops reading as half\-broken:
+.B 2
+is a VERSION answer, not a failure. It is also what a reconnect supervisor
+classifies retries on. None of it survives one verb returning 3, so do not add
+a code: widen an existing meaning, or put the detail on stderr.
+.PP
+Held by two tests.
+.I test/mux-exit.t
+pins what today's verbs return, including that every refusal also SAYS why;
+.I test/lint.t
+rejects any literal exit outside 0, 1 and 2 anywhere in shipped code, which is
+the half that holds against code nobody has written yet.
 .SH ENVIRONMENT
 .TP
 .B MUX_DIR
