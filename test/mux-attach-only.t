@@ -128,19 +128,24 @@ esac
 
 # --- END TO END WITH THE CLASSIFIER -------------------------------------
 # The refusal must become the `gone` state, or latch reports a rebooted host as
-# a generic failure and the operator learns nothing. This couples the two files
-# deliberately: the message is a contract between them, and a reword that breaks
-# it should fail HERE rather than in production six weeks later.
+# a generic failure and the operator learns nothing.
+#
+# The ACTUAL exit code is fed in, not a hardcoded one. That is the whole
+# coupling now: since 0.35 the classifier reads the CODE and nothing else, so
+# this asserts that what `--attach-only` returns is what the classifier acts
+# on. Passing a literal here would let the two drift apart while still passing,
+# which is exactly what happened when the code changed under a hardcoded 1.
 _e=$T/stderr
 rm -f "$LIVEFLAG"
+_arc=0
 ( cd "$T/proj" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
 	MUX_CACHE="$T/cache" "$HERE/bin/mux" go --attach-only proj \
-	</dev/null ) >/dev/null 2>"$_e" || true
-_state=$("$HERE/share/latch/ssh-classify" 1 "$_e")
+	</dev/null ) >/dev/null 2>"$_e" || _arc=$?
+_state=$("$HERE/share/latch/ssh-classify" "$_arc" "$_e")
 [ "$_state" = gone ] \
-	|| fail "the --attach-only refusal must classify as 'gone', got '$_state'.
-share/latch/ssh-classify matches 'no such session'; one side was reworded
-without the other, and latch would report a rebooted host as a plain refusal.
+	|| fail "--attach-only exited $_arc, and share/latch/ssh-classify reads
+that as '$_state' rather than 'gone'. The two sides of the unknown-name
+contract have drifted: latch would report a rebooted host as a plain refusal.
 Its stderr was:
 $(cat "$_e")"
 

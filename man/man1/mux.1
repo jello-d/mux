@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.35" "User Commands"
+.TH MUX 1 "" "mux 0.36" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -778,7 +778,7 @@ It always exits 0: it is a pure report, and a non\-zero exit would be
 indistinguishable from the transport.
 .PP
 .EX
-mux 0.35
+mux 0.36
 capabilities 1
 agent\-list 1
 agent\-summary 1
@@ -919,7 +919,8 @@ kill\-server, a
 .BR "mux kill-all" ,
 or a crash. tmux exits 1 and writes "lost server" to the TERMINAL rather than to
 stderr, so latch sees only the transport's generic goodbye, which is
-indistinguishable from any other exit 1. Rather than shrug, latch asks ONE
+indistinguishable from any other exit 1 (exit 3, mux's unknown\-name code, is
+the conclusive case and needs none of this). Rather than shrug, latch asks ONE
 read\-only question
 .RB ( "mux capabilities" )
 on that already\-terminal path: any answer, even the exit 2 of a mux too old to
