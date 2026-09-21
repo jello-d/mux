@@ -510,7 +510,7 @@ does resolving this need **a human**, or **patience**?
 | `refused` | the far side answered and cannot help | stop, and say why |
 | `unknown` | cannot be determined | retry, with more patience |
 | `ended` | you detached or quit | stop (exit 0) |
-| `gone` | the far side lost the session | stop, and never recreate it |
+| `gone` | the session, or its tmux server, is gone | stop, never recreate |
 
 `blocked` is the interesting one. Every attempt while no credential is live is a
 password or touch prompt, so a retry loop there is a prompt storm. latch polls

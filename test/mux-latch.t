@@ -265,6 +265,117 @@ case "$(seq_of)" in
 *) fail "a vanished session was not reported as gone: [$(seq_of)]" ;;
 esac
 
+# --- THE TMUX SERVER WENT AWAY UNDER THE ATTACH ----------------------
+# The one exit 1 latch cannot read. tmux writes "lost server" to the TERMINAL,
+# not to stderr, so all latch sees is the transport's generic goodbye
+# ("Connection to host closed.") -- indistinguishable from any other exit 1, and
+# reported as a bare `refused` that told the operator nothing.
+#
+# So latch ASKS, with one read-only query, and only on this already-terminal
+# path. Any answer from mux (even exit 2 from one too old to know the verb)
+# proves the far side is up, which means the failure was about the SESSION.
+ASKED=$T/asked; export ASKED
+cat >"$T/bin/ambig" <<'EOF'
+#!/bin/sh
+for _a in "$@"; do :; done
+case "$_a" in
+*capabilities*)
+	printf 'q\n' >>"$ASKED"
+	[ -n "${ALIVE:-}" ] && exit "${ALIVERC:-0}"
+	echo 'ssh: connect to host box port 22: No route to host' >&2
+	exit 255 ;;
+esac
+printf '%s\n' "${MSG:-Connection to box closed.}" >&2
+exit "${XRC:-1}"
+EOF
+chmod +x "$T/bin/ambig"
+
+# Every caller needs `|| true`: latch exits 1 on all of these (they are terminal
+# states, correctly), and under `set -e` a failing command substitution takes
+# the whole test file down SILENTLY -- exit 1, no message, nothing to read.
+amb() {   # -> stderr of a run with the given env
+	: >"$ASKED"
+	# INTENTIONAL and in this order: `2>&1 >/dev/null` points stderr at the
+	# capture and THEN sends stdout to /dev/null, which yields stderr alone.
+	# Reversing it would capture both. latch reports on stderr, so stderr is
+	# the whole subject here.
+	# shellcheck disable=SC2069
+	env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
+		ASKED="$ASKED" ALIVE="${A_ALIVE:-}" ALIVERC="${A_ALIVERC:-0}" \
+		MSG="${A_MSG:-}" XRC="${A_XRC:-1}" \
+		MUX_LATCH_TRANSPORT="$T/bin/ambig %h sh -lc %c" \
+		MUX_LATCH_AUTH=/bin/true MUX_LATCH_RESTORE=/bin/true \
+		MUX_LATCH_SLEEP="$T/bin/nosleep" MUX_LATCH_MAX_TRIES=1 \
+		"$HERE/libexec/mux-latch" box:k 2>&1 >/dev/null
+}
+
+# Far side ALIVE: this is a lost tmux server, and must say so.
+_o=$(A_ALIVE=1 amb || true)
+case "$_o" in
+*"latch: gone"*) ;;
+*) fail "an exit 1 with only the transport's goodbye, against a far side that
+still answers, is a lost tmux server and must report gone. Got:
+$_o" ;;
+esac
+case "$_o" in
+*"not running any more"*|*"went away"*) ;;
+*) fail "the report must SAY what happened, not just name a state. The whole
+complaint was that 'refused -- Connection to host closed.' explains nothing.
+Got:
+$_o" ;;
+esac
+[ "$(grep -c . "$ASKED")" = 1 ] \
+	|| fail "expected exactly one liveness query, got $(grep -c . "$ASKED")"
+
+# An old remote answers the query with exit 2 and usage. That is still an
+# ANSWER, and still proves the far side is up.
+_o=$(A_ALIVE=1 A_ALIVERC=2 amb || true)
+case "$_o" in
+*"latch: gone"*) ;;
+*) fail "exit 2 from a remote too old for 'mux capabilities' still proves it is
+alive, so the verdict must be the same. Got:
+$_o" ;;
+esac
+
+# Far side NOT answering: latch cannot see the session at all, so claiming it is
+# gone would be a lie. Matched on the STATE TOKEN ("latch: gone") rather than
+# the bare word, which also occurs in the explanatory prose -- an assertion that
+# greps for a word a message happens to contain passes on the wrong thing.
+_o=$(amb || true)
+case "$_o" in
+*"latch: gone"*) fail "with the far side unreachable latch cannot know the
+session is gone, and must not claim it. Got:
+$_o" ;;
+esac
+case "$_o" in
+*"not answering"*) ;;
+*) fail "when the follow-up query also fails, the report must say the
+connection went too. Got:
+$_o" ;;
+esac
+
+# --- AND THE QUERY IS ONLY FOR THE AMBIGUOUS CASE --------------------
+# An exit 1 that DOES carry a mux message needs no second round trip: the
+# classifier already knows. Asking anyway would cost a connection on every
+# ordinary refusal.
+_o=$(A_ALIVE=1 A_MSG='mux: no such session: k' amb || true)
+case "$_o" in
+*"latch: gone"*) ;;
+*) fail "'no such session' is already conclusive: [$_o]" ;;
+esac
+[ "$(grep -c . "$ASKED")" = 0 ] \
+	|| fail "latch made a liveness query for an exit 1 that already carried a
+mux message. The query exists for the case mux said nothing about."
+
+# Same for a remote too old for the VERB (exit 2 + usage): it explained itself.
+_o=$(A_ALIVE=1 A_XRC=2 A_MSG='mux: unknown verb: go' amb || true)
+case "$_o" in
+*"latch: refused"*) ;;
+*) fail "an exit 2 from the far side is a version answer: [$_o]" ;;
+esac
+[ "$(grep -c . "$ASKED")" = 0 ] \
+	|| fail "latch queried after an exit 2, which already explained itself"
+
 # --- the remote mux is too old for the verb ---------------------------
 # exit 2 from the far side is a VERSION answer, not a transport failure, so
 # retrying cannot help and latch stops.
