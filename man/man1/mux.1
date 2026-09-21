@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.31" "User Commands"
+.TH MUX 1 "" "mux 0.32" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -764,7 +764,7 @@ It always exits 0: it is a pure report, and a non\-zero exit would be
 indistinguishable from the transport.
 .PP
 .EX
-mux 0.31
+mux 0.32
 capabilities 1
 agent\-list 1
 agent\-summary 1
@@ -836,6 +836,29 @@ ssh, mosh, Eternal Terminal or anything else supplies the pipe. latch never
 carries a keystroke and knows nothing about hosts, addresses or MTUs \(em it
 decides WHEN to re\-establish an attachment and says WHY it has not, which is
 what keeps it from growing into a transport project.
+.PP
+THE FIRST FIELD IS ALWAYS THE HOST, and the colon is optional. Everything after
+the FIRST colon is the session name, so a name may itself contain one. What
+latch asks the far side to run follows from that:
+.PP
+.EX
+mux latch box            \(->  mux resume
+mux latch box:api        \(->  mux go api
+mux latch box:           \(->  mux resume
+.EE
+.PP
+WITH NO SESSION NAMED the command is
+.BR "mux resume" ,
+which rebuilds what that box had and attaches the first. That is the right verb
+BECAUSE of how it creates: after a reboot it restores the sessions you actually
+had, where
+.B go
+would build a single empty one. It is deterministic, so a retry lands in the
+same place, and idempotent, so retrying costs nothing.
+.PP
+Attach\-only therefore applies to the NAMED form only, and nothing is lost:
+.B resume
+already never invents anything, since it only rebuilds what was recorded.
 .SS The state machine
 The question that partitions it is not which exit code came back, but: does
 resolving this need a HUMAN, or PATIENCE? Retrying is right in every state
@@ -904,7 +927,11 @@ substituted separately; nothing is eval'd. Default
 the host
 .TP
 .B %s
-the session (defaulting to the host)
+the session, or the host when none was named. Prefer
+.B %c
+or
+.BR %q ,
+which carry the whole command and get the no\-session case right.
 .TP
 .B %c
 the remote mux command, composed by latch, as exactly ONE argv element

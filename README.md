@@ -487,6 +487,18 @@ state machine and the attach semantics, and ssh, mosh, Eternal Terminal or
 anything else supplies the pipe. latch never carries a keystroke and knows
 nothing about hosts, addresses or MTUs.
 
+The first field is always the host and the colon is optional; everything after
+the first colon is the session name. What that asks the far side to run:
+
+```
+mux latch box        ->  mux resume     bring back what that box had
+mux latch box:api    ->  mux go api     that session specifically
+```
+
+With no session named it is `mux resume`, and that is the right verb *because*
+of how it creates: after a reboot it restores the sessions you actually had,
+where `go` would build a single empty one.
+
 The question that partitions its states is not which exit code came back, but:
 does resolving this need **a human**, or **patience**?
 

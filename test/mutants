@@ -289,3 +289,10 @@ t mux-latch
 - 	if [ "$_attempts" -gt 0 ] && _remote_can_attach_only; then
 + 	if [ "$_attempts" -gt 0 ]; then
 m must keep the creating form
+
+= latch-bare-guesses-a-session
+f libexec/mux-latch
+t mux-latch
+- 		_cmd='mux resume'
++ 		_cmd="mux go $_host"
+m must send 'mux resume'
