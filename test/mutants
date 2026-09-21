@@ -171,3 +171,16 @@ t mux-exit
 -                 echo "mux: no tmux.conf at $TMUX_CONF" >&2; exit 1; }
 +                 echo "" >&2; exit 1; }
 m did not name the missing file
+
+= caps-omission-guard-off
+f bin/mux
+t mux-capabilities
+- rename internal
+m NOT in the capability
+
+= caps-usable-always-false
+f bin/mux
+t mux-capabilities
+- 			if _cap_usable "$_cn"; then
++ 			if false; then
+m agent-list should be usable

@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.28" "User Commands"
+.TH MUX 1 "" "mux 0.29" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -733,6 +733,69 @@ mux's helpers only as
 so it carries no paths.
 .I mux-opinions.tmux
 is optional ergonomics (mouse, scroll routing, navigation).
+.SH CAPABILITIES
+.B mux capabilities
+prints what this mux can do, so a consumer never has to sniff a version. The
+first line is
+.BR "mux <version>" ,
+then one
+.B "NAME VALUE [unavailable]"
+per capability, parsed with a single
+.BR "read -r name value note" .
+It always exits 0: it is a pure report, and a non\-zero exit would be
+indistinguishable from the transport.
+.PP
+.EX
+mux 0.28
+capabilities 1
+agent\-list 1
+agent\-summary 1
+agent\-doctor 1
+check 1
+notify 1 unavailable
+context 1
+latch no
+.EE
+.PP
+THE WHOLE KNOWN SET IS ENUMERATED, including what this build does not implement.
+A present\-only list makes absence ambiguous: a consumer cannot tell "this mux
+does not support it" from "whoever added the verb forgot the line". Declaring
+everything makes absence mean exactly one thing \(em that this mux predates the
+capability itself \(em and gives three answers instead of two:
+.TP
+.I <n>
+Usable here. The integer is the INTERFACE version, not the release: it is bumped
+when the output or the semantics change, never for an implementation change.
+Presence alone would not be enough, since
+.B agent-list
+could keep its name and go back to emitting an epoch instead of an age, which is
+exactly the property a cross\-machine reader depends on.
+.TP
+.B unavailable
+Implemented, but not usable in this context \(em
+.B notify
+with no send backend,
+.B context
+with no
+.B context-command
+configured. A later call may answer differently.
+.TP
+.B no
+This build does not have it at all.
+.PP
+For a mux too old to know the verb, the answer is exit 2 (see EXIT STATUS): a
+caller should then assume only what it can see. That is the case this verb
+exists for, measured on a fleet part way through an upgrade, where a reachable
+and perfectly healthy box answered
+.B "unknown verb: agent-list"
+and read as broken.
+.PP
+Internal verbs are deliberately absent from the report, but they are still
+CLASSIFIED in the manifest, and
+.I test/mux-capabilities.t
+asserts every dispatchable verb appears there. So a new verb nobody classified
+fails the suite rather than quietly never being advertised \(em omission is the
+one failure a curated list cannot catch.
 .SH EXIT STATUS
 mux uses exactly three codes, and the absence of every other one is part of the
 contract.
