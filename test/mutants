@@ -184,3 +184,66 @@ t mux-capabilities
 - 			if _cap_usable "$_cn"; then
 + 			if false; then
 m agent-list should be usable
+
+= latch-denied-becomes-retryable
+f libexec/mux-latch
+t mux-latch
+- 		then printf 'denied'
++ 		then printf 'probing'
+m offered a rejected credential
+
+= latch-preflight-block-still-attempts
+f libexec/mux-latch
+t mux-latch
+- 	if [ "$_ar" = 1 ]; then
++ 	if false; then
+m expected blocked then probing then ended
+
+= latch-quit-is-retried
+f libexec/mux-latch
+t mux-latch
+- 	0)   printf 'ended' ;;             # the human detached or quit
++ 	0)   printf 'probing' ;;           # the human detached or quit
+m a deliberate quit should exit 0
+
+= latch-cannot-tell-read-as-usable
+f libexec/mux-latch
+t mux-latch
+- 	*)  return 2 ;;
++ 	*)  return 0 ;;
+m unexpected probe exit was treated as usable
+
+= latch-gone-silently-recreated
+f libexec/mux-latch
+t mux-latch
+- 		then printf 'gone'
++ 		then printf 'probing'
+m a vanished session was retried
+
+= latch-single-flight-off
+f libexec/mux-latch
+t mux-latch
+- 	*) if kill -0 "$_other" 2>/dev/null; then
++ 	*) if false; then
+m a concurrent latch should refuse
+
+= latch-hostkey-treated-as-retryable
+f libexec/mux-latch
+t mux-latch
+- 			'permission denied\|authenticat\|host key verification' \
++ 			'permission denied\|authenticat' \
+m a host key refusal was retried
+
+= latch-say-detail-truncated
+f libexec/mux-latch
+t mux-latch
+- 	_sd=$*
++ 	_sd=$1
+m denied explanation was cut off
+
+= latch-no-probe-waits-forever
+f libexec/mux-latch
+t mux-latch
+- 	if [ -n "$PROBE" ]; then
++ 	if true; then
+m with no probe configured latch
