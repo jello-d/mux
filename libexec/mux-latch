@@ -66,9 +66,10 @@ _lib=$(dirname "$0")
 . "$_lib/mux-conf.sh"
 
 MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
+[ -d "${MUX_SHARE:-}" ] || MUX_SHARE=$_lib/../share
 
 # A seam's value: the environment wins, then a key in $MUX_DIR/config, then the
-# built-in default. Same precedence the context seam uses.
+# shipped default. Same precedence the context seam uses.
 _seam() {   # <env value> <config key> [default]
 	[ -n "$1" ] && { printf '%s' "$1"; return 0; }
 	if [ -r "$MUX_DIR/config" ]; then
@@ -80,16 +81,73 @@ _seam() {   # <env value> <config key> [default]
 	printf '%s' "${3:-}"
 }
 
+# THE HOOK LIBRARY. A hook is named, not spelled out, and a BARE name resolves
+# against the overlay before the shipped set before PATH -- the same
+# $MUX_DIR-over-$MUX_SHARE order layouts, themes and agents use, and the same
+# reason `context-command` already documents: this config travels between
+# machines through a dotfiles repo, so it must not carry an absolute path that
+# is only right on one of them.
+#
+# Only the FIRST word is resolved, because a hook value is a command LINE and
+# the rest is its arguments. A value containing a slash is a path already and is
+# left exactly alone.
+_hook() {   # <value> -> the value with its command resolved
+	case ${1:-} in
+	'' | */*) printf '%s' "${1:-}"; return 0 ;;
+	esac
+	_hn=${1%% *}; _ha=${1#"$_hn"}
+	for _hd in "$MUX_DIR/latch" "$MUX_SHARE/latch"; do
+		if [ -x "$_hd/$_hn" ]; then
+			printf '%s%s' "$_hd/$_hn" "$_ha"; return 0
+		fi
+	done
+	printf '%s' "$1"
+}
+
 # The DEFAULT transport is ssh, because it is the only one that needs no daemon
 # and no new listening port, and because the fleet's conventions already depend
 # on its agent forwarding. It is still only a default: the seam takes anything.
-_DEF_TRANSPORT='ssh -t %h mux go %s'
+#
+# `sh -lc` is load-bearing, not decoration. sshd runs a remote command WITHOUT a
+# login shell, so `ssh host mux go x` gets PATH=/usr/bin:... with no
+# ~/.local/bin and exits 127 `mux: not found`. Measured on this fleet, where it
+# was the first thing a real latch hit. A login shell reads the profile that
+# puts mux on PATH, and %c is what lets the command survive as one argument.
+_DEF_TRANSPORT='ssh -t %h sh -lc %q'
 
 TRANSPORT=$(_seam "${MUX_LATCH_TRANSPORT:-}" latch-transport "$_DEF_TRANSPORT")
-AUTH=$(_seam "${MUX_LATCH_AUTH:-}" latch-auth '')
-PROBE=$(_seam "${MUX_LATCH_PROBE:-}" latch-probe '')
-CLASSIFY=$(_seam "${MUX_LATCH_CLASSIFY:-}" latch-classify '')
-STATUS=$(_seam "${MUX_LATCH_STATUS:-}" latch-status '')
+AUTH=$(_hook "$(_seam "${MUX_LATCH_AUTH:-}" latch-auth ssh-auth)")
+_c_seam=$(_seam "${MUX_LATCH_CLASSIFY:-}" latch-classify ssh-classify)
+CLASSIFY=$(_hook "$_c_seam")
+# PROBE has NO default, and that is a decision rather than an omission: mux
+# ships share/latch/ssh-probe but does not wire it. No probe means no opinion,
+# so the attempt itself is the probe, which is right because a probe costs a
+# round trip before EVERY attempt and only pays off when the host is down.
+# Shipping a hook and running it are different acts, and that difference is the
+# whole point of having a library.
+PROBE=$(_hook "$(_seam "${MUX_LATCH_PROBE:-}" latch-probe '')")
+STATUS=$(_hook "$(_seam "${MUX_LATCH_STATUS:-}" latch-status '')")
+
+# A NAMED HOOK THAT DOES NOT EXIST IS A CONFIG ERROR, and it must be loud.
+# Silently carrying on means the classifier never answers, every attempt lands
+# in `unknown`, and latch retries forever against a host that is fine -- exactly
+# what a stale MUX_SHARE produced here during development, with no clue on
+# screen as to why. An empty seam is a different thing entirely and stays
+# silent: it means nobody asked for a hook.
+_hook_must_run() {   # <value> <what>
+	[ -n "$1" ] || return 0
+	_hw=${1%% *}
+	[ -x "$_hw" ] && return 0
+	command -v "$_hw" >/dev/null 2>&1 && return 0
+	echo "mux: latch: $2 hook not found: $_hw" >&2
+	echo "mux: latch: looked in $MUX_DIR/latch, $MUX_SHARE/latch," \
+		"then PATH" >&2
+	exit 2
+}
+_hook_must_run "$AUTH" auth
+_hook_must_run "$CLASSIFY" classify
+_hook_must_run "$PROBE" probe
+_hook_must_run "$STATUS" status
 
 # Backoff, and every bound is overridable so a test does not have to sleep.
 BACKOFF=${MUX_LATCH_BACKOFF:-2}
@@ -170,103 +228,162 @@ _ask() {   # <command...> -> 0 yes, 1 no, 2 cannot tell
 	esac
 }
 
-# The BUILT-IN ssh auth check, used when no auth seam is configured and the
-# transport still looks like ssh. Both halves are ~12ms and neither connects:
-# a live control master means no credential is needed at all, and `ssh-add -l`
-# distinguishes keys-loaded from agent-empty from no-agent.
-_auth_default() {
-	case $TRANSPORT in *ssh*) ;; *) return 2 ;; esac
-	command -v ssh >/dev/null 2>&1 || return 2
-	if ssh -O check "$_host" >/dev/null 2>&1; then return 0; fi
-	command -v ssh-add >/dev/null 2>&1 || return 2
-	_sr=0; ssh-add -l >/dev/null 2>&1 || _sr=$?
-	case $_sr in
-	0) return 0 ;;                     # keys loaded
-	1) return 1 ;;                     # agent running, empty: needs a human
-	*) return 2 ;;                     # no agent at all: cannot tell
-	esac
-}
-
-_auth_state() {
-	if [ -n "$AUTH" ]; then _ask "$AUTH" "$_host"; return $?; fi
-	_auth_default
-}
-
-# The BUILT-IN ssh classifier. All of auth-denied, unreachable and unresolvable
-# exit 255, so the discriminator is stderr, and it is ssh-specific knowledge
-# which is exactly why this is a seam: ssh prefixes ITS OWN failures with
-# `ssh: `, while an auth denial is prefixed `user@host`.
-_classify_default() {   # <exit> <stderr file>
-	case $1 in
-	0)   printf 'ended' ;;             # the human detached or quit
-	2)   printf 'refused' ;;           # the remote mux does not know the verb
-	255)
-		# ssh prefixes ITS OWN failures with `ssh: `, while an auth
-		# denial is prefixed `user@host`. All three exit 255, so stderr
-		# is the only discriminator, and it is ssh-specific knowledge --
-		# which is exactly why classify is a seam.
-		# HOST KEY VERIFICATION belongs here too, and finding that took a
-		# live run: a rebuilt host presents a new key, ssh exits 255, and
-		# nothing in the message says "denied", so it classified as
-		# `probing` and latch would have retried a problem only a human
-		# can fix, forever. It is the refusal pointing the other way --
-		# we rejected THEM -- but the handling is identical, which is why
-		# it is this state rather than a seventh one.
-		if grep -qi \
-			'permission denied\|authenticat\|host key verification' \
-			"$2" 2>/dev/null
-		then printf 'denied'
-		else printf 'probing'; fi ;;
-	1)
-		# The remote mux refused. `gone` is the case worth separating:
-		# attaching found no such session, so the host rebooted and the
-		# work is not there. Anything else is a refusal to report.
-		if grep -qi 'no such session' "$2" 2>/dev/null
-		then printf 'gone'
-		else printf 'refused'; fi ;;
-	*)   printf 'unknown' ;;
-	esac
-}
+_auth_state() { _ask "$AUTH" "$_host"; }
 
 _classify_state() {   # <exit> <stderr file>
-	if [ -n "$CLASSIFY" ]; then
-		_cs=$($CLASSIFY "$1" "$2" 2>/dev/null || true)
-		case ${_cs:-} in
-		probing|blocked|denied|unknown|ended|gone|refused)
-			printf '%s' "$_cs"
-			return 0 ;;
-		esac
-		# A classifier that answered with something meaningless has not
-		# answered. `unknown` is the honest state, not a guess.
-		printf 'unknown'; return 0
-	fi
-	_classify_default "$1" "$2"
+	_cs=$($CLASSIFY "$1" "$2" 2>/dev/null || true)
+	case ${_cs:-} in
+	probing|blocked|denied|unknown|ended|gone|refused)
+		printf '%s' "$_cs"; return 0 ;;
+	esac
+	# A classifier that answered with something meaningless has not answered,
+	# and neither has one that is missing or unrunnable. `unknown` is the
+	# honest state in all three cases, not a guess.
+	printf 'unknown'
 }
 
-# Substitute the target into the transport template. %% is a literal %.
-_transport_cmd() {
-	printf '%s' "$TRANSPORT" \
-		| sed -e "s|%h|$_host|g" -e "s|%s|${_sess:-$_host}|g" \
-		      -e 's|%%|%|g'
+# THE TRANSPORT IS ARGV, NOT A STRING. The template is split on whitespace into
+# positional parameters, and each word is substituted individually. Nothing is
+# eval'd, which is the same rule the context seam follows: a value from config
+# is parsed, never executed as shell.
+#
+# That is what makes `%c` possible, and `%c` is why this stopped being a string.
+# The old form printed one line for the caller to word-split, so it could not
+# express an argument CONTAINING a space -- and the default transport now needs
+# exactly that: `sh -lc "mux go NAME"` is three words plus one argument, and
+# word-splitting it would hand `go` and `NAME` to the inner shell as $0 and $1.
+#
+#   %h  the host
+#   %s  the session (defaulting to the host)
+#   %c  the remote mux command, as ONE argv element, composed by latch
+#   %q  the same command, additionally SHELL-QUOTED
+#   %%  a literal %
+#
+# %c AND %q BOTH EXIST BECAUSE TRANSPORTS DIFFER ON WHETHER ARGV SURVIVES, and
+# this was measured, not assumed. `ssh host sh -lc 'mux -V'` does NOT run
+# `mux -V`: ssh CONCATENATES its remaining arguments into one string and the
+# remote login shell re-splits it, so the inner shell received `mux` with `-V`
+# as its $0 and ran the bare session picker. Passing the command shell-quoted
+# instead printed `mux 0.28`, correctly.
+#
+# So: %c for a transport that preserves argv (`docker exec`, `kubectl exec`),
+# %q for one that flattens to a string and re-parses remotely (ssh). %q is still
+# one LOCAL argv element -- the quoting is for the far side's shell, not this
+# one -- which is why both go through the same machinery.
+#
+# A template using %s rather than %c keeps the pre-0.31 behaviour of always
+# creating, so attach-only is opt-in by template and no existing config breaks.
+# It BUILDS AND RUNS, rather than returning the argv, because POSIX sh has no
+# way to hand an array back: joining it into a string is the very problem this
+# exists to solve, and every delimiter is a bug waiting for a host name that
+# contains it. A function's `set --` rebinds only its OWN positionals, so this
+# is local and the script's arguments are untouched.
+# Single-quote for a REMOTE POSIX shell: wrap in ', and close/escape/reopen for
+# each embedded '. The only character single quotes cannot hold is the quote
+# itself, so this is the whole rule and there are no others to forget.
+_shquote() {
+	printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+}
+
+_run_transport() {   # <remote command> -> runs it, returns its status
+	_rc_cmd=$1
+	set --
+	for _w in $TRANSPORT; do
+		if [ "$_w" = %c ]; then
+			set -- "$@" "$_rc_cmd"
+			continue
+		fi
+		if [ "$_w" = %q ]; then
+			set -- "$@" "$(_shquote "$_rc_cmd")"
+			continue
+		fi
+		set -- "$@" "$(printf '%s' "$_w" | sed \
+			-e "s|%h|$_host|g" -e "s|%s|${_sess:-$_host}|g" \
+			-e 's|%%|%|g')"
+	done
+	[ "$#" -gt 0 ] || return 78
+	"$@"
 }
 
 _errf=$(mktemp)
 trap 'rm -f "$_lock" "$_errf"' EXIT INT HUP TERM
 
-# ATTACH-ONLY ON RETRY IS NOT IMPLEMENTED YET, and saying so is better than a
-# comment claiming otherwise. The design calls for it: the first attempt may
-# create, since you asked to latch onto something, but a REattach that finds
-# nothing means the host rebooted, and handing over a fresh empty session where
-# the work was is the worst available answer.
+# ATTACH-ONLY ON RETRY. The FIRST attempt may create -- you asked to latch onto
+# something -- but a REattach that finds nothing means the host rebooted, and
+# handing over a fresh empty session where the work was is the worst available
+# answer. So every attempt after the first asks for `mux go --attach-only`,
+# which refuses rather than creates, and the classifier turns the far side's own
+# "no such session" into `gone`.
 #
-# It needs a mux-side attach-only form to express, because the transport
-# template belongs to the caller and latch must not rewrite the verb inside it.
-# Until then the template is used verbatim on every attempt, so a rebooted host
-# gets a NEW session rather than the `gone` report. The classifier already
-# recognises `gone` from the far side's own refusal, so only the
-# create-by-default half is missing.
+# NEGOTIATED, ONCE, LAZILY, and this is the first real consumer of `mux
+# capabilities`. A remote too old for the flag answers exit 2 with a usage
+# block, so using it blind would make latch work perfectly until the first drop
+# and then break -- the exact discover-by-failure the handshake exists to end.
+# The query is deferred to the first RETRY, so the happy path pays nothing, and
+# cached for the run. A remote that cannot do it degrades to pre-0.31 behaviour
+# rather than to nothing: a stale far side is a reason to create, not to stop.
+_remote_attach_only=          # empty / yes / no, decided at most once per run
+
+_remote_can_attach_only() {
+	case $_remote_attach_only in
+	yes) return 0 ;;
+	no)  return 1 ;;
+	esac
+
+	_qrc=0
+	_qout=$(_run_transport 'mux capabilities' 2>/dev/null) || _qrc=$?
+	case $_qrc in
+	0)
+		# It answered. Absence is then a real answer about the build, not
+		# a silence, which is the entire reason the manifest enumerates
+		# what it does NOT have.
+		case $_qout in
+		*'attach-only 1'*) _remote_attach_only=yes; return 0 ;;
+		esac
+		_remote_attach_only=no ;;
+	2)
+		# mux's usage code: that far side is too old to know the verb.
+		# Also an answer, and the one this was built for.
+		_remote_attach_only=no ;;
+	*)
+		# COULD NOT ASK -- the transport failed, which says nothing
+		# whatever about the remote's version. Caching `no` here would
+		# record a network outage as a capability verdict and keep it for
+		# the life of the run, so this stays UNDECIDED and asks again
+		# next time. Same rule as everywhere else in this file: cannot
+		# tell is not no.
+		return 1 ;;
+	esac
+	_say attaching "the remote mux cannot attach-only; a reattach there" \
+		"may CREATE rather than report a lost session"
+	return 1
+}
+
+# The remote command for this attempt, as ONE argv element, ASSIGNED to $_cmd.
+#
+# It assigns rather than prints, and that is not a style choice. `_cmd=$(...)`
+# runs the function in a SUBSHELL, so every variable it sets is discarded when
+# the substitution ends -- which silently threw away the negotiation cache on
+# every single retry. latch re-queried the remote each time while its own
+# comments and the man page both claimed "negotiated once, lazily". The
+# mutation test is what found it: corrupting the cache changed NOTHING, because
+# there was no cache.
+#
+# Keyed on ATTEMPTS, not on loop iterations. `_tries` counts trips round the
+# state machine, and a `blocked` wait is one of those without ever touching the
+# transport -- so using it here made the very first attach ask for attach-only
+# after any wait at all, which is precisely the case that must CREATE.
+_remote_cmd() {   # -> sets $_cmd
+	if [ "$_attempts" -gt 0 ] && _remote_can_attach_only; then
+		_cmd="mux go --attach-only ${_sess:-$_host}"
+	else
+		_cmd="mux go ${_sess:-$_host}"
+	fi
+}
+
 _state=probing
 _tries=0
+_attempts=0       # transport attaches made; 0 means the next is the first
 _delay=$BACKOFF
 
 _wait() {   # <seconds> <state> <why>
@@ -354,14 +471,11 @@ while :; do
 	fi
 
 	: >"$_errf"
+	_remote_cmd
 	_say attaching "$_target via ${TRANSPORT%% *}"
 	_rc=0
-	# Built first, then run unquoted. `$(_transport_cmd)` directly would
-	# work but reads as the execute-your-own-output footgun, and every
-	# reader would stop on it; this says the same thing out loud.
-	_tcmd=$(_transport_cmd)
-	# shellcheck disable=SC2086
-	$_tcmd 2>"$_errf" || _rc=$?
+	_attempts=$((_attempts + 1))
+	_run_transport "$_cmd" 2>"$_errf" || _rc=$?
 	_state=$(_classify_state "$_rc" "$_errf")
 
 	case $_state in

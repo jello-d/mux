@@ -495,6 +495,7 @@ does resolving this need **a human**, or **patience**?
 | `probing` | down, recoverable on its own | retry on a backoff |
 | `blocked` | no credential live **yet** | wait, and never attempt |
 | `denied` | a credential or host key was refused | stop, and say what to fix |
+| `refused` | the far side answered and cannot help | stop, and say why |
 | `unknown` | cannot be determined | retry, with more patience |
 | `ended` | you detached or quit | stop (exit 0) |
 | `gone` | the far side lost the session | stop, and never recreate it |
@@ -507,11 +508,31 @@ a waiting state rather than a dead end. `denied` is the opposite case and is
 terminal: latch cannot observe a human fixing `authorized_keys`, so retrying a
 refusal forever is that same storm wearing a backoff.
 
+`refused` covers the two cases people actually hit first: a remote mux too old
+for the verb (exit 2), and `mux` missing from a non-interactive ssh PATH (127).
+Those codes are attributable only because mux itself uses nothing but 0, 1 and
+2, so a foreign code can only have come from the transport or the remote shell.
+
 Five seams, each a command, each settable in the environment or as a `latch-*`
 key in `$MUX_DIR/config`: `MUX_LATCH_TRANSPORT`, `_AUTH`, `_PROBE`, `_CLASSIFY`
-and `_STATUS`. An auth or probe hook answers 0 yes, 1 no, or 78 "cannot tell",
-and a hook that cannot tell is never read as fine. Defaults cover ssh; see
-**LATCH** in `man mux`.
+and `_STATUS`. A hook answers 0 yes, 1 no, or 78 "cannot tell", and a hook that
+cannot tell is never read as fine. A hook that is *unset* is different again:
+that means no opinion, so latch proceeds.
+
+**Hooks ship as a library, and wiring them is your step.** `share/latch/` holds
+`ssh-auth`, `ssh-classify` and `ssh-probe`; a bare name in your config resolves
+`$MUX_DIR/latch` first, then `$MUX_SHARE/latch`, then `PATH` — the same
+overlay-over-shipped order layouts and themes use, so a config can travel
+between machines without absolute paths. `ssh-auth` and `ssh-classify` are wired
+by default. `ssh-probe` ships **unwired** on purpose: no probe means no opinion,
+and the attempt is the probe. Adding a mosh or Eternal Terminal hook is a file,
+not a patch.
+
+On a retry latch asks for `mux go --attach-only`, which refuses rather than
+creates, so a rebooted host is *reported* instead of silently replaced by an
+empty session. It negotiates that once, lazily, via `mux capabilities` — the
+first real consumer of the handshake — and degrades gracefully against an older
+remote. See **LATCH** in `man mux`.
 
 ## Commands
 
@@ -539,6 +560,7 @@ mux hide/show SESSION        hide/unhide a session for this client
 mux show-all                 clear this client's hidden sessions
 mux reload                   re-source tmux.conf on every mux server
 mux kill NAME | kill-all     tear down a session, or all (prompts)
+mux go --attach-only [NAME]  attach if live, else refuse (never create)
 mux latch HOST[:SESSION]     hold a remote attachment open across drops
 mux capabilities             what this mux supports, for other programs
 ```

@@ -64,6 +64,7 @@ latch() {
 	: >"$STATES"; : >"$TRIES"; : >"$AUTHLOG"
 	_lr=0
 	env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" \
+		MUX_SHARE="$HERE/share" \
 		T_AUTH="$T_AUTH" T_PROBE="$T_PROBE" \
 		STATES="$STATES" TRIES="$TRIES" AUTHLOG="$AUTHLOG" \
 		SCRIPT="$SCRIPT" \
@@ -148,6 +149,7 @@ esac
 printf '255 Host key verification failed.\n' >"$SCRIPT"
 _err=$T/said
 env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" \
+	MUX_SHARE="$HERE/share" \
 	T_AUTH="$T_AUTH" T_PROBE="$T_PROBE" STATES="$STATES" \
 	TRIES="$TRIES" AUTHLOG="$AUTHLOG" SCRIPT="$SCRIPT" \
 	MUX_LATCH_TRANSPORT="$T/bin/transport %h %s" \
@@ -228,6 +230,7 @@ printf '0\n' >"$SCRIPT"
 : >"$STATES"; : >"$TRIES"
 _lr=0
 env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" \
+	MUX_SHARE="$HERE/share" \
 	STATES="$STATES" TRIES="$TRIES" SCRIPT="$SCRIPT" \
 	MUX_LATCH_TRANSPORT="$T/bin/transport %h %s" \
 	MUX_LATCH_AUTH=/bin/true \
@@ -286,6 +289,218 @@ grep -q 'box box' "$TRIES" \
 	|| fail "with no session the host should be used: [$(cat "$TRIES")]"
 _rc=$(latch)
 [ "$_rc" = 2 ] || fail "no target is a usage error (exit 2), got $_rc"
+
+# --- %c ARRIVES AS ONE ARGV ELEMENT ----------------------------------
+# The whole reason the transport stopped being a string. The default template is
+# `ssh -t %h sh -lc %q`, and if the command splits, the inner shell gets `mux`
+# as its -c string with `go` as $0 -- which silently runs the bare session
+# PICKER instead of the session you asked for. Measured against a real ssh
+# before it was believed.
+#
+# The stub reports $# and its last argument, so a split is visible as a COUNT
+# rather than as a downstream symptom.
+cat >"$T/bin/argv" <<'EOF'
+#!/bin/sh
+# POSIX has no ${!#}, so walk to the last argument. The COUNT is the assertion;
+# the last element is what makes a split legible when it fails.
+_a=
+for _a in "$@"; do :; done
+printf 'n=%s last=[%s]\n' "$#" "$_a" >"$TRIES.argv"
+exit 0
+EOF
+chmod +x "$T/bin/argv"
+: >"$TRIES"
+env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
+	TRIES="$TRIES" \
+	MUX_LATCH_TRANSPORT="$T/bin/argv -t %h sh -lc %c" \
+	MUX_LATCH_AUTH=/bin/true MUX_LATCH_SLEEP="$T/bin/nosleep" \
+	MUX_LATCH_MAX_TRIES=1 \
+	"$HERE/libexec/mux-latch" box:proj >/dev/null 2>&1 || true
+_got=$(cat "$TRIES.argv" 2>/dev/null || true)
+[ "$_got" = 'n=5 last=[mux go proj]' ] \
+	|| fail "%c must arrive as ONE argv element. Wanted
+  n=5 last=[mux go proj]
+got
+  $_got
+A count above 5 means the command word-split, and the far side would run a
+different command from the one latch composed."
+
+# %q is the same element, shell-quoted for the REMOTE shell, because ssh
+# concatenates its arguments and the far side re-parses them.
+: >"$TRIES"
+env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
+	TRIES="$TRIES" \
+	MUX_LATCH_TRANSPORT="$T/bin/argv -t %h sh -lc %q" \
+	MUX_LATCH_AUTH=/bin/true MUX_LATCH_SLEEP="$T/bin/nosleep" \
+	MUX_LATCH_MAX_TRIES=1 \
+	"$HERE/libexec/mux-latch" box:proj >/dev/null 2>&1 || true
+_got=$(cat "$TRIES.argv" 2>/dev/null || true)
+[ "$_got" = "n=5 last=['mux go proj']" ] \
+	|| fail "%q must be one element AND quoted for the remote shell. Wanted
+  n=5 last=['mux go proj']
+got
+  $_got"
+
+# --- A NAMED HOOK THAT DOES NOT EXIST FAILS LOUDLY -------------------
+# Silently carrying on means the classifier never answers, every attempt lands
+# in `unknown`, and latch retries forever against a host that is perfectly fine.
+# That is what a stale MUX_SHARE produced during development, with nothing on
+# screen to say why.
+_err=$T/hookerr
+_rc=0
+# BOUNDED, because the assertion is that it exits 2 BEFORE doing anything. If
+# the guard is ever removed, latch falls through into the retry loop, and with
+# the defaults that is forever with real sleeps -- which hangs the runner
+# instead of failing it. A test whose failure mode is a hang teaches nothing.
+printf '0\n' >"$SCRIPT"
+env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
+	SCRIPT="$SCRIPT" TRIES="$TRIES" \
+	MUX_LATCH_TRANSPORT="$T/bin/transport %h %s" \
+	MUX_LATCH_CLASSIFY=no-such-hook-anywhere \
+	MUX_LATCH_SLEEP="$T/bin/nosleep" MUX_LATCH_MAX_TRIES=2 \
+	"$HERE/libexec/mux-latch" box:proj >/dev/null 2>"$_err" || _rc=$?
+[ "$_rc" = 2 ] \
+	|| fail "a named hook that does not resolve is a config error (exit 2),
+got $_rc"
+grep -q 'no-such-hook-anywhere' "$_err" \
+	|| fail "the failure must name the hook it could not find, got:
+$(cat "$_err")"
+# An EMPTY seam is the opposite and must stay silent: nobody asked for a hook.
+printf '0\n' >"$SCRIPT"
+_rc=$(MUX_LATCH_PROBE= latch box:proj)
+[ "$_rc" = 0 ] \
+	|| fail "an unset seam is not a missing hook and must not fail, got $_rc"
+
+# --- THE SHIPPED HOOKS ARE FOUND BY BARE NAME ------------------------
+# The library only works if a name resolves, and the overlay must win over the
+# shipped set the same way layouts and themes do.
+mkdir -p "$T/conf/latch"
+cat >"$T/conf/latch/ssh-classify" <<'EOF'
+#!/bin/sh
+printf 'gone'
+EOF
+chmod +x "$T/conf/latch/ssh-classify"
+printf '255 whatever\n' >"$SCRIPT"
+_rc=$(latch box:proj)
+case "$(seq_of)" in
+*gone*) ;;
+*) fail "an overlay hook must win over the shipped one of the same name:
+[$(seq_of)]" ;;
+esac
+rm -rf "$T/conf/latch"
+
+# --- ATTACH-ONLY IS NEGOTIATED, NOT ASSUMED --------------------------
+# The first attempt may CREATE (you asked to latch onto something). Every
+# attempt after it must ask for --attach-only, so a rebooted host is reported
+# rather than silently replaced by an empty session.
+#
+# But only if the far side HAS it. A remote too old answers exit 2 with a usage
+# block, so using the flag blind would make latch work perfectly until the first
+# drop and then break -- the exact discover-by-failure the capability handshake
+# exists to end. Verified live against manifold on 0.30, which declares
+# `attach-only no` and must therefore keep getting the creating form.
+cat >"$T/bin/negotiate" <<'EOF'
+#!/bin/sh
+# Records every remote command, and answers `capabilities` per CAPRC/CAPOUT.
+for _a in "$@"; do :; done
+printf '%s
+' "$_a" >>"$CMDLOG"
+case "$_a" in
+*capabilities*)
+	[ -n "${CAPOUT:-}" ] && printf '%s
+' "$CAPOUT"
+	exit "${CAPRC:-0}" ;;
+esac
+# Drop retryably for the first $DROPS attaches (default 1), so the attempt
+# AFTER a retry is the one under test.
+printf 'x\n' >>"$ONCE"
+if [ "$(grep -c . "$ONCE")" -le "${DROPS:-1}" ]; then
+	echo 'ssh: connect to host box port 22: Connection timed out' >&2
+	exit 255
+fi
+exit 0
+EOF
+chmod +x "$T/bin/negotiate"
+CMDLOG=$T/cmdlog; ONCE=$T/once; export CMDLOG ONCE
+
+neg() {   # CAPRC CAPOUT -> the command used on the SECOND attempt
+	: >"$CMDLOG"; rm -f "$ONCE"
+	env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
+		CMDLOG="$CMDLOG" ONCE="$ONCE" CAPRC="$1" CAPOUT="$2" \
+		MUX_LATCH_TRANSPORT="$T/bin/negotiate %h sh -lc %c" \
+		MUX_LATCH_AUTH=/bin/true \
+		MUX_LATCH_SLEEP="$T/bin/nosleep" \
+		MUX_LATCH_BACKOFF=1 MUX_LATCH_MAX_TRIES=3 \
+		"$HERE/libexec/mux-latch" box:proj >/dev/null 2>&1 || true
+	grep -v capabilities "$CMDLOG" | tail -1
+}
+
+# A remote that DECLARES it: the retry must use the flag.
+_got=$(neg 0 'mux 0.31
+attach-only 1')
+[ "$_got" = 'mux go --attach-only proj' ] \
+	|| fail "a remote declaring attach-only must be asked for it on retry.
+Wanted [mux go --attach-only proj], got [$_got]"
+
+# A remote that declares it ABSENT: the flag must NOT be used.
+_got=$(neg 0 'mux 0.30
+attach-only no')
+[ "$_got" = 'mux go proj' ] \
+	|| fail "a remote declaring 'attach-only no' must keep the creating form.
+Wanted [mux go proj], got [$_got]"
+
+# A remote too OLD to know the verb (exit 2 + usage): same, and no failure.
+_got=$(neg 2 'mux: unknown verb: capabilities')
+[ "$_got" = 'mux go proj' ] \
+	|| fail "a remote too old for 'mux capabilities' must degrade to the
+creating form, not break. Wanted [mux go proj], got [$_got]"
+
+# AND THE FIRST ATTEMPT IS ALWAYS THE CREATING FORM, whatever the remote can
+# do. You asked to latch onto something; refusing to build it on the first try
+# would make latch useless for starting work.
+: >"$CMDLOG"; rm -f "$ONCE"
+env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
+	CMDLOG="$CMDLOG" ONCE="$ONCE" CAPRC=0 CAPOUT='attach-only 1' \
+	MUX_LATCH_TRANSPORT="$T/bin/negotiate %h sh -lc %c" \
+	MUX_LATCH_AUTH=/bin/true MUX_LATCH_SLEEP="$T/bin/nosleep" \
+	MUX_LATCH_BACKOFF=1 MUX_LATCH_MAX_TRIES=1 \
+	"$HERE/libexec/mux-latch" box:proj >/dev/null 2>&1 || true
+_first=$(grep -v capabilities "$CMDLOG" | head -1)
+[ "$_first" = 'mux go proj' ] \
+	|| fail "the FIRST attempt must create even when the remote supports
+attach-only. Wanted [mux go proj], got [$_first]"
+
+# A TRANSPORT FAILURE IS NOT A CAPABILITY VERDICT. If the query itself cannot
+# get through, the remote's version is still unknown, and caching `no` would
+# record a network outage as a permanent answer for the life of the run.
+: >"$CMDLOG"; rm -f "$ONCE"
+env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
+	CMDLOG="$CMDLOG" ONCE="$ONCE" CAPRC=255 CAPOUT= DROPS=3 \
+	MUX_LATCH_TRANSPORT="$T/bin/negotiate %h sh -lc %c" \
+	MUX_LATCH_AUTH=/bin/true MUX_LATCH_SLEEP="$T/bin/nosleep" \
+	MUX_LATCH_BACKOFF=1 MUX_LATCH_MAX_TRIES=4 \
+	"$HERE/libexec/mux-latch" box:proj >/dev/null 2>&1 || true
+[ "$(grep -c capabilities "$CMDLOG")" -ge 2 ] \
+	|| fail "an unreachable capability query must leave the question OPEN and
+ask again, not cache 'no' from a network failure. It asked
+$(grep -c capabilities "$CMDLOG") time(s)."
+
+# ... and once it HAS an answer it is not asked again. "Negotiated once" has to
+# be true, not just claimed: `_cmd=$(_remote_cmd)` ran the composer in a
+# SUBSHELL, so the cache it set was discarded every retry and latch re-queried
+# the remote each time while the man page said otherwise. Nothing observable
+# broke, which is why only a count catches it.
+: >"$CMDLOG"; rm -f "$ONCE"
+env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
+	CMDLOG="$CMDLOG" ONCE="$ONCE" CAPRC=0 CAPOUT='attach-only 1' DROPS=3 \
+	MUX_LATCH_TRANSPORT="$T/bin/negotiate %h sh -lc %c" \
+	MUX_LATCH_AUTH=/bin/true MUX_LATCH_SLEEP="$T/bin/nosleep" \
+	MUX_LATCH_BACKOFF=1 MUX_LATCH_MAX_TRIES=4 \
+	"$HERE/libexec/mux-latch" box:proj >/dev/null 2>&1 || true
+[ "$(grep -c capabilities "$CMDLOG")" = 1 ] \
+	|| fail "an ANSWERED capability query must be cached for the run, and it
+was asked $(grep -c capabilities "$CMDLOG") times across $(grep -vc \
+capabilities "$CMDLOG") attempts"
 
 # --- SINGLE FLIGHT: a second latch for the same target refuses -------
 # N loops against one target is N credential prompts and N reconnect races.
