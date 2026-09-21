@@ -65,8 +65,11 @@ case $_out in
 *) fail "--attach-only on a dead session must say 'no such session', got:
 $_out" ;;
 esac
-[ "$(rc go --attach-only proj)" = 1 ] \
-	|| fail "--attach-only on a dead session must exit 1"
+# Exit 3 is mux's standard "the name is not known here", which is what lets
+# latch's classifier key on a CODE instead of grepping stderr for a phrase.
+[ "$(rc go --attach-only proj)" = 3 ] \
+	|| fail "--attach-only on a dead session must exit 3 (the standard
+unknown-name code), got $(rc go --attach-only proj)"
 
 # It must not have tried to BUILD anything. A refusal that still created the
 # session would satisfy the message assertion above and defeat the entire point,

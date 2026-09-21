@@ -89,6 +89,15 @@ err() {
 		EDITOR=/bin/true VISUAL=/bin/true \
 		"$HERE/bin/mux" "$@" </dev/null ) 2>&1 >/dev/null || true
 }
+# The same, but STDOUT. `mux why` reports there rather than on stderr, since a
+# diagnostic's report is its output and not an error stream.
+out() {
+	( cd "$T/proj" && env -u MUX_SHARE -u TMUX PATH="$T/bin:$PATH" \
+		XDG_CONFIG_HOME="$T/conf" XDG_RUNTIME_DIR="$T/run" \
+		MUX_DIR="$T/conf" MUX_CACHE="$T/cache" \
+		EDITOR=/bin/true VISUAL=/bin/true \
+		"$HERE/bin/mux" "$@" </dev/null ) 2>/dev/null || true
+}
 is() {   # <want> <got> <what>
 	[ "$1" = "$2" ] || fail "$3: want exit $1, got $2"
 }
@@ -106,24 +115,53 @@ is 0 "$(rc agent-list)"       "mux agent-list with no agents"
 is 0 "$(rc agent-summary)"    "mux agent-summary with no agents"
 is 0 "$(rc agent-doctor)"     "mux agent-doctor with no state"
 is 0 "$(rc views)"            "mux views"
-is 0 "$(rc why unknownname)"  "mux why on an unresolvable name"
 
-# `why` answering 0 for a name that does not resolve is DELIBERATE: it is a
-# diagnostic, and "here is why that name resolves to nothing" is a successful
-# answer to the question asked. Pinned so it is not quietly changed into an
-# assertion about the name.
-case "$(err why unknownname)$(rc why unknownname)" in
-*0) ;;
-*) fail "why on an unknown name should still answer" ;;
-esac
+# --- 3: THE NAME IS NOT KNOWN HERE ----------------------------------------
+# ONE condition, many verbs, ONE code. A caller should not have to learn six
+# spellings of the same answer, and more importantly a code cannot be reworded:
+# latch had to grep stderr for "no such session" to tell a rebooted host from an
+# ordinary refusal, which made the wording of a message on one machine
+# load-bearing for a decision on another.
+#
+# `why` used to answer 0 here, on the reasoning that "here is why that name
+# resolves to nothing" is a successful answer to the question asked. It is a
+# good argument and it lost to a better one: `why` is the verb whose entire job
+# is saying what a name resolves to, so "it resolves to nothing" has to be
+# readable without parsing English.
+is 3 "$(rc why unknownname)"      "mux why on a name nothing knows"
+is 3 "$(rc go unknownname)"       "mux go on a name nothing knows"
+is 3 "$(rc kill nosuchsession)"   "mux kill on a name nothing knows"
+is 3 "$(rc rename nosuch other)"  "mux rename of a session that is not there"
+# (hide/show also use 3, but only INSIDE a session: outside one they exit 1 on
+# "must run inside a session" first, which is a different refusal and reached
+# before the name is ever looked up. Not asserted here rather than faked.)
+
+# And it still explains itself. A bare code with nothing to read would be the
+# worst of both: the caller knows it failed and cannot say why.
+#
+# The REFUSALS put that on stderr. `why` puts it on stdout and that is correct:
+# it is a diagnostic whose report IS its output, and exiting 3 says "the name
+# resolves to nothing" without making the report an error stream. So the stream
+# differs by verb and the assertion follows the verb rather than flattening it.
+for _v in "go unknownname" "kill nosuchsession"; do
+	# shellcheck disable=SC2086
+	[ -n "$(err $_v)" ] \
+		|| fail "'mux $_v' exited 3 silently; the code replaces the
+string match, it does not replace the explanation"
+done
+[ -n "$(out why unknownname)" ] \
+	|| fail "'mux why' exited 3 with an empty report. The code is an
+addition to the explanation, not a replacement for it"
+
+# 3 MUST NOT BLEED into the ordinary refusals. If everything non-zero drifted
+# to 3 the code would mean nothing, so a refusal that is NOT about an unknown
+# name stays 1.
+is 1 "$(rc theme sometheme)"      "an unknown THEME is not an unknown name"
 
 # --- 1: refused, for a reason ---------------------------------------------
 # Every one of these must ALSO put something on stderr. A silent non-zero is
 # the worst of both: the caller knows it failed and cannot say why.
 for _case in \
-	"kill nosuchsession" \
-	"go unknownname" \
-	"rename nosuch other" \
 	"rename onlyone" \
 	"theme sometheme" \
 	"resume"
@@ -172,9 +210,9 @@ for _v in go resume kill reload ls hide show show-all save new help theme \
 do
 	_got=$(rc "$_v")
 	case $_got in
-	0|1|2) ;;
-	*) fail "mux $_v returned $_got. Only 0, 1 and 2 are the contract, and
-255/126/127 must stay attributable to the transport or the shell" ;;
+	0|1|2|3) ;;
+	*) fail "mux $_v returned $_got. Only 0, 1, 2 and 3 are the contract,
+and 255/126/127 must stay attributable to the transport or the shell" ;;
 	esac
 done
 
@@ -182,8 +220,8 @@ done
 for _v in go kill theme rename edit why hide show; do
 	_got=$(rc "$_v" 'a name nothing knows')
 	case $_got in
-	0|1|2) ;;
-	*) fail "mux $_v <junk> returned $_got, outside the 0/1/2 contract" ;;
+	0|1|2|3) ;;
+	*) fail "mux $_v <junk> returned $_got, outside the 0/1/2/3 contract" ;;
 	esac
 done
 

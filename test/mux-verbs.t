@@ -75,7 +75,10 @@ case $_w in
 *"(row)"*) ;; *) fail "why: did not name the row as the source: $_w" ;;
 esac
 # A fully derived session says so, and names the derivation for each field.
-_w=$(mux why undeclared)
+# `|| true`: `undeclared` is a name nothing knows, so why exits 3, and an
+# unguarded substitution takes the file down SILENTLY under `set -e` -- the
+# only symptom is the test disappearing from the runner's list.
+_w=$(mux why undeclared || true)
 case $_w in *"(none)"*) ;; *) fail "why: should report no profile: $_w" ;; esac
 case $_w in *"hashed from the name"*) ;;
 *) fail "why: did not attribute the derived theme: $_w" ;;

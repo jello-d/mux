@@ -162,7 +162,10 @@ PROBE=$(_hook "$(_seam "${MUX_LATCH_PROBE:-}" latch-probe '')")
 STATUS=$(_hook "$(_seam "${MUX_LATCH_STATUS:-}" latch-status '')")
 # RESTORE runs after every transport return, before anything is reported.
 # See the call site for why it has to be first.
-_r_seam=$(_seam "${MUX_LATCH_RESTORE:-}" latch-restore term-restore)
+# Defaulted by PATH, not by bare name: mux-sane is mux's own helper (and the
+# `mux sane` verb), not a transport hook under share/latch, so there is
+# nothing for _hook to resolve and nothing to depend on $PATH for.
+_r_seam=$(_seam "${MUX_LATCH_RESTORE:-}" latch-restore "$_lib/mux-sane")
 RESTORE=$(_hook "$_r_seam")
 
 # A NAMED HOOK THAT DOES NOT EXIST IS A CONFIG ERROR, and it must be loud.

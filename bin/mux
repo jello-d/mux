@@ -99,7 +99,24 @@ set -eu
 # The ONE version string. The man page footer and `mux --version` both read it
 # from here, so they cannot drift apart the way a hardcoded "mux 0.1" in the
 # man page already had.
-MUX_VERSION=0.34
+MUX_VERSION=0.35
+
+# EXIT 3: THE NAME YOU GAVE IS NOT KNOWN HERE. A standard code rather than a
+# per-verb one, because it is one CONDITION that many verbs can trip on -- go,
+# kill, rename, hide, show, why -- and a caller should not have to learn six
+# spellings of the same answer.
+#
+# It replaces a STRING contract with a numeric one, which is the real win.
+# `mux latch` had to grep stderr for "no such session" to tell a rebooted host
+# from an ordinary refusal, so the wording of an error message was load-bearing
+# across two files, and a test existed only to hold it still. A code cannot be
+# reworded.
+#
+# 3 keeps the small-set property the contract depends on: mux still uses only
+# 0, 1, 2 and 3, so 126, 127 and 255 remain unambiguously NOT mux. Callers that
+# only know 0/1/2 still behave correctly, since 3 is non-zero and the reason is
+# still on stderr.
+MUX_EX_NONAME=3
 
 MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
 TMUX_CONF=${XDG_CONFIG_HOME:-$HOME/.config}/tmux/tmux.conf
@@ -171,6 +188,8 @@ check contract 1
 notify contract 1
 context contract 1
 latch contract 1
+sane contract 1
+unknown-name contract 1
 attach-only contract 1
 latch-fallback none
 agent-emit internal
@@ -299,6 +318,7 @@ scan)          shift; exec "$LIBEXEC/mux-scan" "$@" ;;
 views)         shift; exec "$LIBEXEC/mux-views" "$@" ;;
 agent-doctor)  shift; exec "$LIBEXEC/mux-agent-doctor" "$@" ;;
 latch)         shift; exec "$LIBEXEC/mux-latch" "$@" ;;
+sane)          shift; exec "$LIBEXEC/mux-sane" "$@" ;;
 capabilities)  shift; _cmd_capabilities "$@" ;;
 esac
 
@@ -580,6 +600,7 @@ usage: mux [OPTION] [VERB] [NAME] [PROFILE]  (OPTION may follow VERB too)
   rename [OLD] NEW           rename a session (and its matching layout)
   edit [NAME]                open a profile in $EDITOR
   resume                     rebuild this partition's sessions (--list)
+  sane                       put the terminal back after a wedged session
   latch HOST[:SESSION]       hold an attachment to a remote mux open across
                              drops (bring your own transport; see man 1 mux)
   why [NAME]                 show each resolved value and where it came from
@@ -1613,6 +1634,15 @@ cmd_why() {
         _why_field agent "${MUX_CFG_agent:-claude}" "the context's default"
         _why_note_refusal
         _why_note_collision
+        # A name nothing knows is not a successful answer, whatever the prose
+        # above explained. `mux why` is the one verb whose whole job is telling
+        # you what a name resolves to, so "it resolves to nothing" has to be
+        # readable without parsing English.
+        if [ "$w_nhit" -eq 0 ] && [ -n "$name_arg" ] \
+           && [ "$w_bypath" -eq 0 ] && [ "$w_row" -eq 0 ] \
+           && [ -z "$w_file" ]; then
+                exit "$MUX_EX_NONAME"
+        fi
         exit 0
 }
 
@@ -1634,7 +1664,8 @@ cmd_rename() {
         fi
         _new=$(printf '%s' "$_new" | tr ':.' '--')
         tm has-session -t "=$_old" 2>/dev/null || {
-                echo "mux: no such session: $_old" >&2; exit 1; }
+                echo "mux: no such session: $_old" >&2
+                exit "$MUX_EX_NONAME"; }
         _oroot=$(mux_sess_root "$_old" "$part")
         tm rename-session -t "=$_old" "$_new"
         # The recorded set has to learn the new name too. It did not, and the
@@ -1951,7 +1982,8 @@ hide|show)
                 echo "mux: cleared this client's hidden sessions"
         else
                 tm has-session -t "=$name" 2>/dev/null || {
-                        echo "mux: no such session: $name" >&2; exit 1; }
+                        echo "mux: no such session: $name" >&2
+                        exit "$MUX_EX_NONAME"; }
                 if [ "$cmd" = hide ]; then
                         grep -qxF "$name" "$_f" 2>/dev/null \
                                 || printf '%s\n' "$name" >> "$_f"
@@ -2268,7 +2300,7 @@ cmd_kill() {
                 exit 0
         fi
         echo "mux: no such session: $name" >&2
-        exit 1
+        exit "$MUX_EX_NONAME"
 }
 
 if [ "$cmd" = kill ]; then cmd_kill; fi
@@ -2476,7 +2508,7 @@ fi
 if [ "$attachonly" -eq 1 ]; then
         echo "mux: no such session: $name" >&2
         echo "mux:   --attach-only will not create one" >&2
-        exit 1
+        exit "$MUX_EX_NONAME"
 fi
 
 # Building a new session: resolve the blueprint. An explicit PROFILE positional
@@ -2581,7 +2613,7 @@ if [ -n "$name_arg" ] && [ "$bypath" -eq 0 ] && [ "$cmd" != new ] \
                                 echo "mux:   did you mean:      $near" >&2
                 fi
                 echo "mux:   or create it here:  mux new $name" >&2
-                exit 1
+                exit "$MUX_EX_NONAME"
         fi
 fi
 

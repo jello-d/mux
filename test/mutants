@@ -304,9 +304,9 @@ t mux-latch
 + 	: >/dev/null 2>&1 || true
 m repair must come FIRST
 
-= term-restore-sprays-without-a-tty
-f share/latch/term-restore
-t mux-term-restore
+= sane-sprays-without-a-tty
+f libexec/mux-sane
+t mux-sane
 - if [ ! -t 0 ] && [ ! -t 1 ] && [ ! -t 2 ]; then
 + if false; then
 m bytes with no
@@ -331,3 +331,17 @@ t mux-latch
 - 	0|1|2) return 0 ;;   # mux answered something: the far side is up
 + 	0|1|2|255) return 0 ;;   # mux answered something: the far side is up
 m must not claim it
+
+= why-unknown-answers-success
+f bin/mux
+t mux-why
+-            && [ -z "$w_file" ]; then
++            && false; then
+m must exit 3
+
+= classify-ignores-exit-3
+f share/latch/ssh-classify
+t mux-latch
+- 3)
++ 39)
+m must be read

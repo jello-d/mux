@@ -538,17 +538,17 @@ types control characters at your shell) and the alternate screen stays up.
 modes live in the terminal *emulator* and need the matching escape sequences.
 latch repairs the terminal **first** on every drop, before it reports or waits —
 otherwise "retrying in 8s" is printed into a hidden-cursor alternate screen and
-a reconnect looks like a hang. `share/latch/term-restore` is a plain program and
-you can run it by hand after any wedged session.
+a reconnect looks like a hang. `mux sane` is the same repair by hand, after any
+wedged session — named after `stty sane`, which only fixes the kernel half.
 
 **Hooks ship as a library, and wiring them is your step.** `share/latch/` holds
-`ssh-auth`, `ssh-classify`, `ssh-probe` and `term-restore`; a bare name in your
+`ssh-auth`, `ssh-classify` and `ssh-probe`; a bare name in your
 config resolves
 `$MUX_DIR/latch` first, then `$MUX_SHARE/latch`, then `PATH` — the same
 overlay-over-shipped order layouts and themes use, so a config can travel
-between machines without absolute paths. `ssh-auth`, `ssh-classify` and
-`term-restore` are wired by default. `ssh-probe` ships **unwired** on purpose:
-no probe means no opinion, and the attempt is the probe. Adding a mosh or
+between machines without absolute paths. `ssh-auth` and `ssh-classify` are
+wired by default. `ssh-probe` ships **unwired** on purpose: no probe means no
+opinion, and the attempt is the probe. Adding a mosh or
 Eternal Terminal hook is a file, not a patch.
 
 On a retry latch asks for `mux go --attach-only`, which refuses rather than
@@ -583,6 +583,7 @@ mux hide/show SESSION        hide/unhide a session for this client
 mux show-all                 clear this client's hidden sessions
 mux reload                   re-source tmux.conf on every mux server
 mux kill NAME | kill-all     tear down a session, or all (prompts)
+mux sane                     put the terminal back after a wedged session
 mux go --attach-only [NAME]  attach if live, else refuse (never create)
 mux latch HOST[:SESSION]     hold a remote attachment open across drops
 mux capabilities             what this mux supports, for other programs

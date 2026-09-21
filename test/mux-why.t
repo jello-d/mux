@@ -81,9 +81,23 @@ _g=$(run "$T" go dup) && fail "go should refuse an ambiguous name"
 has "$_g" "ambiguous" "go: no ambiguity refusal"
 
 # --- a name NOTHING knows: likewise a refusal, not a fabricated root -------
-_o=$(run "$T" why nosuchproject)
+# `|| true` because `why` EXITS 3 on a name nothing knows, and an unguarded
+# command substitution takes the whole file down silently under `set -e` -- it
+# did exactly that when the code was introduced, and the only symptom was this
+# test vanishing from the runner's output.
+_o=$(run "$T" why nosuchproject || true)
 has "$_o" "(unknown)" "unknown: invented a root"
 has "$_o" "REFUSES" "unknown: did not say go would refuse"
+# The report is not the whole answer: the exit code has to say so too, or a
+# caller has to parse English to learn that a name resolved to nothing.
+_wrc=0; run "$T" why nosuchproject >/dev/null 2>&1 || _wrc=$?
+[ "$_wrc" = 3 ] \
+	|| fail "why on a name nothing knows must exit 3 (mux's standard
+unknown-name code), got $_wrc"
+_wrc=0; run "$T" why dup >/dev/null 2>&1 || _wrc=$?
+[ "$_wrc" != 3 ] \
+	|| fail "why exited 3 for a name that IS known (ambiguously). 3 means
+the name resolves to nothing, and an ambiguous name resolves to too much"
 _g=$(run "$T" go nosuchproject) && fail "go should refuse an unknown name"
 
 # --- a profile that DECLARES a root wins, and the map is not consulted -----

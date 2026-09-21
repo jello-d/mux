@@ -166,6 +166,7 @@ printf '%s\n' "$_o" | tail -n +2 | while IFS= read -r _l; do
 	_cn=${_l%% *}
 	case $_cn in
 	notify|context) continue ;;            # seams, not verbs
+	unknown-name)   continue ;;            # an exit CODE, not a verb
 	attach-only)    continue ;;            # a FLAG on go, not a verb
 	esac
 	# A forward declaration has no verb by definition, and skipping it by

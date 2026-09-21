@@ -70,11 +70,17 @@ case $_rc in
 	else
 		printf 'probing'
 	fi ;;
+3)
+	# THE NAME IS NOT KNOWN THERE. mux's standard code for it, so this is a
+	# number rather than a phrase: the old test was `grep 'no such session'`,
+	# which made the WORDING of a message on one machine load-bearing for a
+	# decision on another. A code cannot be reworded by a tidy-up.
+	printf 'gone' ;;
 1)
-	# The remote mux refused. `gone` is the one worth separating: attaching
-	# found no such session, so the host rebooted and the work is not there.
-	# Reported loudly and never silently recreated, because handing over a
-	# fresh empty session where the work was is the worst available answer.
+	# The remote mux refused. Before exit 3 existed the only signal was the
+	# message, and a remote older than that still only has the message -- so
+	# the string match stays as a fallback rather than being replaced. It is
+	# now a compatibility path, not the contract.
 	if _saw 'no such session'; then
 		printf 'gone'
 	else
