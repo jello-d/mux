@@ -216,8 +216,8 @@ m unexpected probe exit was treated as usable
 = latch-gone-silently-recreated
 f share/latch/ssh-classify
 t mux-latch
-- 		printf 'gone'
-+ 		printf 'probing'
+- 	printf 'gone' ;;
++ 	printf 'probing' ;;
 m a vanished session was retried
 
 = latch-single-flight-off
@@ -323,7 +323,7 @@ f libexec/mux-latch
 t mux-latch
 - 		if [ "$_rc" = 1 ] && ! _errsaw 'mux:' && ! _errsaw 'usage:'; then
 + 		if true; then
-m is a version answer
+m own explanation is a refusal
 
 = latch-unreachable-read-as-gone
 f libexec/mux-latch
@@ -344,4 +344,4 @@ f share/latch/ssh-classify
 t mux-latch
 - 3)
 + 39)
-m must be read
+m a vanished session was retried

@@ -71,21 +71,22 @@ case $_rc in
 		printf 'probing'
 	fi ;;
 3)
-	# THE NAME IS NOT KNOWN THERE. mux's standard code for it, so this is a
-	# number rather than a phrase: the old test was `grep 'no such session'`,
-	# which made the WORDING of a message on one machine load-bearing for a
-	# decision on another. A code cannot be reworded by a tidy-up.
+	# THE NAME IS NOT KNOWN THERE. mux's standard unknown-name code, and the
+	# ONLY thing consulted for it -- this used to be `grep 'no such session'`
+	# on the far side's stderr, which made the WORDING of a message on one
+	# machine load-bearing for a decision on another, and needed a test whose
+	# only job was stopping anyone improving the sentence.
+	#
+	# The string fallback for pre-0.35 remotes is deliberately NOT kept. Two
+	# mechanisms for one fact is two things to test and two ways to drift,
+	# and mux is young enough to prefer a coordinated release. A remote older
+	# than 0.35 answers 1 with its own message, which still reports as
+	# `refused` and still prints what the far side said -- worse, but not
+	# silent, and the fix is to upgrade it.
 	printf 'gone' ;;
 1)
-	# The remote mux refused. Before exit 3 existed the only signal was the
-	# message, and a remote older than that still only has the message -- so
-	# the string match stays as a fallback rather than being replaced. It is
-	# now a compatibility path, not the contract.
-	if _saw 'no such session'; then
-		printf 'gone'
-	else
-		printf 'refused'
-	fi ;;
+	# The remote mux refused, for a reason it put on stderr.
+	printf 'refused' ;;
 *)
 	printf 'unknown' ;;
 esac

@@ -256,7 +256,9 @@ esac
 printf '0\n' >"$T_PROBE"
 
 # --- the far side lost the session: reported, never recreated ---------
-printf '1 mux: no such session: proj\n' >"$SCRIPT"
+# Exit 3 is mux's unknown-name code, and since 0.35 it is the only signal the
+# classifier consults for this.
+printf '3 mux: no such session: proj\n' >"$SCRIPT"
 _rc=$(latch box:proj)
 [ "$_rc" = 1 ] || fail "a vanished session should exit non-zero, got $_rc"
 [ "$(n_tries)" = 1 ] || fail "a vanished session was retried"
@@ -272,9 +274,9 @@ esac
 # load-bearing for a decision on another, and needed a test to hold the
 # sentence still.
 #
-# The string match stays as a COMPATIBILITY path for a remote older than the
-# code, so both are asserted: the contract is the number, the phrase is the
-# fallback.
+# There is NO string fallback. Two mechanisms for one fact is two things to
+# test and two ways to drift, so a remote older than the code reports `refused`
+# with its own message -- worse, but not silent, and the fix is to upgrade it.
 printf '3\n' >"$SCRIPT"
 _rc=$(latch box:proj)
 [ "$_rc" = 1 ] || fail "an unknown name should exit non-zero, got $_rc"
@@ -285,13 +287,21 @@ as gone, with no reference to the message: [$(seq_of)]" ;;
 esac
 [ "$(n_tries)" = 1 ] || fail "an unknown name was retried $(n_tries) times"
 
-# ... and an OLDER remote, which only has the phrase, still works.
+# ... and the phrase alone is NOT enough any more. This is the assertion that
+# keeps the compatibility path from creeping back in: if someone re-adds the
+# grep, this goes red.
 printf '1 mux: no such session: proj\n' >"$SCRIPT"
 _rc=$(latch box:proj)
 case "$(seq_of)" in
-*gone*) ;;
-*) fail "a remote too old for exit 3 still says 'no such session', and that
-compatibility path must keep working: [$(seq_of)]" ;;
+*"latch: gone"*) fail "exit 1 with the old phrase must NOT be read as gone.
+The code is the contract; re-adding the string match gives one fact two
+mechanisms, which is two things to test and two ways to drift:
+[$(seq_of)]" ;;
+esac
+case "$(seq_of)" in
+*refused*) ;;
+*) fail "a pre-0.35 remote should still report refused, and still print what
+the far side said: [$(seq_of)]" ;;
 esac
 
 # --- THE TMUX SERVER WENT AWAY UNDER THE ATTACH ----------------------
@@ -384,17 +394,32 @@ $_o" ;;
 esac
 
 # --- AND THE QUERY IS ONLY FOR THE AMBIGUOUS CASE --------------------
-# An exit 1 that DOES carry a mux message needs no second round trip: the
-# classifier already knows. Asking anyway would cost a connection on every
+# An exit 1 that DOES carry a mux message needs no second round trip: the far
+# side already said why. Asking anyway would cost a connection on every
 # ordinary refusal.
-_o=$(A_ALIVE=1 A_MSG='mux: no such session: k' amb || true)
+_o=$(A_ALIVE=1 A_MSG='mux: it went wrong somehow' amb || true)
 case "$_o" in
-*"latch: gone"*) ;;
-*) fail "'no such session' is already conclusive: [$_o]" ;;
+*"latch: refused"*) ;;
+*) fail "an exit 1 with the far side's own explanation is a refusal, and the
+explanation is what gets reported: [$_o]" ;;
+esac
+case "$_o" in
+*"went wrong somehow"*) ;;
+*) fail "the far side's own message must reach the operator: [$_o]" ;;
 esac
 [ "$(grep -c . "$ASKED")" = 0 ] \
 	|| fail "latch made a liveness query for an exit 1 that already carried a
 mux message. The query exists for the case mux said nothing about."
+
+# An unknown name is exit 3 now, and needs no query either -- the CODE is
+# conclusive, which is the whole reason it replaced the phrase.
+_o=$(A_ALIVE=1 A_XRC=3 A_MSG='mux: no such session: k' amb || true)
+case "$_o" in
+*"latch: gone"*) ;;
+*) fail "exit 3 is conclusive on its own: [$_o]" ;;
+esac
+[ "$(grep -c . "$ASKED")" = 0 ] \
+	|| fail "latch queried after an exit 3, which is already the answer"
 
 # Same for a remote too old for the VERB (exit 2 + usage): it explained itself.
 _o=$(A_ALIVE=1 A_XRC=2 A_MSG='mux: unknown verb: go' amb || true)
