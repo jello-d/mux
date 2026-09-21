@@ -76,6 +76,19 @@ _edit() {   # <file> <old> <new> -> 0 if a line changed
 	cat "$1.mut" >"$1" && rm -f "$1.mut"
 }
 
+# Run a test under a wall-clock bound. 124 is what timeout(1) reports; without
+# timeout(1) the bound is skipped rather than faked, because pretending to
+# enforce one would be worse than not having it.
+MUT_TIMEOUT=${MUT_TIMEOUT:-120}
+MUT_TIMEOUT_RC=124
+_timed() {   # <test file>
+	if command -v timeout >/dev/null 2>&1; then
+		timeout "$MUT_TIMEOUT" sh "$1"
+	else
+		sh "$1"
+	fi
+}
+
 _err() { printf 'ERROR    %s\n' "$1"; shift
 	for _l in "$@"; do printf '         %s\n' "$_l"; done
 	ERR=$((ERR + 1)); }
@@ -130,7 +143,23 @@ _run_one() {   # name file tests old new msg
 			  "about this guard. Fix the baseline first."
 			return
 		fi
-		_out=$(sh "$T/tree/test/$_t.t" 2>&1) && continue
+		# TIME-BOUNDED. A mutation can turn a bounded loop into an
+		# unbounded one -- removing latch's missing-hook guard drops it
+		# into its retry loop, which by default is forever with real
+		# sleeps -- and an unbounded mutant HANGS THE WHOLE RUN with no
+		# output and no diagnosis. That is the worst failure an
+		# instrument can have: it looks like slowness, so you wait.
+		# A hang is a RESULT, and this reports it as one.
+		_out=$(_timed "$T/tree/test/$_t.t" 2>&1) && continue
+		if [ "$?" = "$MUT_TIMEOUT_RC" ]; then
+			_err "$_n: '$_t' did not finish within ${MUT_TIMEOUT}s" \
+			  "The mutation probably turned a bounded loop into an" \
+			  "unbounded one. That is a real finding, but it is not a" \
+			  "kill: bound the loop in the TEST (a max-tries and a" \
+			  "no-op sleep) so the guard's absence fails instead of" \
+			  "hanging."
+			return
+		fi
 		# It died. If the record says WHY, hold it to that, or a
 		# mutation that breaks an unrelated assertion counts as cover.
 		if [ -n "$_msg" ]; then

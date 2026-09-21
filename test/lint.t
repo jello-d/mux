@@ -132,10 +132,18 @@ fi
 # documenting "ssh exits 255" is the opposite of mux exiting 255. A trailing
 # comment on a real line is still caught, so the exclusion is as narrow as it
 # can be made with a grep.
+#
+# share/latch/ IS A DIFFERENT CONTRACT and is checked separately below, not
+# merely excluded. A latch hook is not a mux command: it answers a QUESTION in
+# three states (0 yes, 1 no, 78 cannot tell), and 78 is the whole point --
+# "cannot tell" has to be distinguishable from "no" or an edge nobody can check
+# gets reported as fine. Exempting the directory with a hole would let a hook
+# invent a fourth code; a rule of its own does not.
 _ec=$T/exitcodes
 ( cd "$HERE" && grep -rnE '\bexit [0-9]+' bin libexec share setup.sh \
 	2>/dev/null | grep -vE '\bexit [012]\b' \
-	| grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' ) >"$_ec" || true
+	| grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' \
+	| grep -v '^share/latch/' ) >"$_ec" || true
 if [ -s "$_ec" ]; then
 	printf 'FAIL %s: an exit code outside the 0/1/2 contract:\n' "$_name" >&2
 	sed 's/^/  /' "$_ec" >&2
@@ -144,6 +152,30 @@ if [ -s "$_ec" ]; then
 	printf 'ambiguous for a remote caller. See test/mux-exit.t.\n' >&2
 	exit 1
 fi
+
+# --- the HOOK contract: a latch hook answers 0, 1 or 78, and nothing else ---
+_hc=$T/hookcodes
+( cd "$HERE" && grep -rnE '\bexit [0-9]+' share/latch 2>/dev/null \
+	| grep -vE '\bexit (0|1|78)\b' \
+	| grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' ) >"$_hc" || true
+if [ -s "$_hc" ]; then
+	printf 'FAIL %s: a latch hook used an exit code outside 0/1/78:\n' \
+		"$_name" >&2
+	sed 's/^/  /' "$_hc" >&2
+	printf 'A hook answers 0 (yes), 1 (no) or 78 (cannot tell). A fourth\n' >&2
+	printf 'code is read as "cannot tell" by latch, so it is silently\n' >&2
+	printf 'indistinguishable from 78 and says something it does not mean.\n' >&2
+	exit 1
+fi
+
+# Every shipped hook must be EXECUTABLE. A hook that is present and unrunnable
+# resolves by name, then fails to run, and latch reports the state it could not
+# determine rather than the install that is broken.
+for _h in "$HERE"/share/latch/*; do
+	[ -e "$_h" ] || continue
+	[ -x "$_h" ] || fail "share/latch/$(basename "$_h") is not executable;
+a hook that cannot run is a hook latch resolves and then cannot use"
+done
 
 printf 'ok   %s (%s files clean)\n' "$_name" "$_n"
 exit 0
