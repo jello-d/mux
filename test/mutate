@@ -85,7 +85,7 @@ MUT_TIMEOUT_RC=124
 # STDIN COMES FROM /dev/null, AND THAT IS LOAD-BEARING. The corpus is parsed by
 # a `while read` loop reading the corpus FILE, so the driver's stdin IS the
 # corpus -- and every test run from inside that loop inherits it. A test that
-# reads stdin then EATS COMPOSED RECORDS: mux-term-restore.t runs script(1),
+# reads stdin then EATS COMPOSED RECORDS: test/mux-sane.t runs script(1),
 # which consumes stdin, and it silently swallowed the next two records. The run
 # reported 40 of 42 with one record showing an empty filename, which reads like
 # a corrupt corpus rather than what it was. The same guard is on the baseline

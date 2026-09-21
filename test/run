@@ -4,10 +4,34 @@
 set -eu
 _dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 _rc=0
+_silent=
 for _t in "$_dir"/*.t; do
 	[ -f "$_t" ] || continue
-	sh "$_t" || _rc=1
+	_n=$(basename "$_t" .t)
+	# EVERY TEST MUST REPORT A VERDICT, and a test that exits non-zero
+	# WITHOUT printing one is the case this catches. It happened the moment
+	# `mux why` started exiting 3: two files captured it in an unguarded
+	# command substitution, `set -e` killed them mid-run, and they simply
+	# VANISHED from the output. The summary said some test failed and named
+	# none, and the only way to find them was to diff the list of files
+	# against the list of `ok` lines by hand. Twice.
+	#
+	# The same rule the suite applies to everything else, turned on itself:
+	# a run that reached no verdict is a failure, and it has to say WHICH.
+	_out=$(sh "$_t" 2>&1) || _rc=1
+	printf '%s\n' "$_out"
+	case $_out in
+	*"ok   $_n"*|*"skip $_n"*|*FAIL*) ;;
+	*) _rc=1; _silent="$_silent $_n" ;;
+	esac
 done
+if [ -n "$_silent" ]; then
+	printf '\nNO VERDICT from:%s\n' "$_silent"
+	printf 'Each exited without printing ok/skip/FAIL, so it neither\n'
+	printf 'passed nor reported why. The usual cause is `set -e` plus an\n'
+	printf 'unguarded $(...) around a command that now exits non-zero --\n'
+	printf 'add `|| true` where the output is what is wanted.\n'
+fi
 if [ "$_rc" -ne 0 ]; then
 	# A FAILURE SUMMARY AT THE END, because the per-test lines scroll and a
 	# failure is printed FIRST when the failing test sorts early. `lint`
