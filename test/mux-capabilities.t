@@ -72,8 +72,14 @@ case $(val "$_o" notify) in
 *) fail "with no notify-send, notify should read unavailable, got
 [$(val "$_o" notify)]" ;;
 esac
-[ "$(val "$_o" attach-only)" = "no " ] \
-	|| fail "attach-only is not implemented, so it must read 'no': got
+[ "$(val "$_o" latch-fallback)" = "no " ] \
+	|| fail "an ordered fallback list is not implemented, so latch-fallback
+must read 'no': got [$(val "$_o" latch-fallback)]"
+# attach-only went the other way, and that lifecycle is the point: it was the
+# `no` example one release ago and is a contract now. A consumer that had asked
+# gets a different answer without anyone sniffing a version.
+[ "$(val "$_o" attach-only)" = "1 " ] \
+	|| fail "attach-only is implemented, so it must read '1': got
 [$(val "$_o" attach-only)]"
 # latch IS implemented, but there is no ssh on this stub PATH, so it is the
 # other contextual one. `1 unavailable` and `no` must not collapse together:
@@ -160,6 +166,7 @@ printf '%s\n' "$_o" | tail -n +2 | while IFS= read -r _l; do
 	_cn=${_l%% *}
 	case $_cn in
 	notify|context) continue ;;            # seams, not verbs
+	attach-only)    continue ;;            # a FLAG on go, not a verb
 	esac
 	# A forward declaration has no verb by definition, and skipping it by
 	# VALUE rather than by name means the next one needs no edit here.

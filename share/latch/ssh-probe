@@ -1,0 +1,67 @@
+#!/bin/sh
+# share/latch/ssh-probe - is HOST usable for an ssh attempt right now?
+#
+# A `mux latch` PROBE hook. Called as `ssh-probe HOST`:
+#
+#   0   yes, attempt it
+#   1   no, not reachable: wait and retry
+#   78  cannot tell
+#
+# SHIPPED BUT NOT WIRED, deliberately, and that gap is the point of the hook
+# library. mux ships this so you do not have to write it; whether latch RUNS it
+# is your config's decision, not mux's. With no probe configured latch simply
+# attempts, and the attempt is the probe -- which is the right default, because
+# a probe costs a round trip before every single attempt and buys a faster
+# verdict only when the host is down.
+#
+# Wire it with, in $MUX_DIR/config:
+#
+#     latch-probe   ssh-probe
+#
+# WHEN IT IS WORTH IT: a host that is usually off (a laptop, a VM you suspend),
+# where attempting means waiting out a TCP timeout every cycle and this answers
+# in milliseconds instead. Also anywhere the transport is expensive to start.
+#
+# WHAT IT CANNOT DO, and this is why it is off by default rather than merely
+# optional: a positive answer here is NOT a promise the attach will work. An MTU
+# blackhole passes every cheap liveness signal there is -- the control-master
+# check, a TCP connect, a ping -- and then hangs the moment a full-sized packet
+# moves. That case is common on a real fleet rather than exotic, so a probe that
+# says "yes" has ruled out one failure and left the interesting one untouched.
+set -eu
+
+_host=${1:-}
+[ -n "$_host" ] || exit 78
+command -v ssh >/dev/null 2>&1 || exit 78
+
+# An established control master IS the answer, and costs nothing: the connection
+# is already up, so reachability is not in question.
+ssh -O check "$_host" >/dev/null 2>&1 && exit 0
+
+# Otherwise reach the host and run the cheapest possible command. BatchMode
+# guarantees no prompt is raised, so this can never wait on a human, and
+# ConnectTimeout bounds it.
+#
+# StrictHostKeyChecking is left ALONE on purpose. Turning it off here would make
+# a probe silently accept a changed host key, papering over exactly the refusal
+# the classify hook exists to report.
+#
+# Distinguishing "unreachable" from "reachable but we could not authenticate" is
+# NOT this hook's job -- auth has its own hook, and answering 1 for an auth
+# problem would park latch in a retry loop for something only a human can fix.
+# So only a plain connection failure is 1, and everything else is 78.
+_e=$(mktemp) || exit 78
+_rc=0
+ssh -o BatchMode=yes -o ConnectTimeout=5 "$_host" true 2>"$_e" || _rc=$?
+_out=$(cat "$_e" 2>/dev/null || true)
+rm -f "$_e"
+
+[ "$_rc" = 0 ] && exit 0
+case $_out in
+*"Connection refused"*|*"No route to host"*) exit 1 ;;
+*"Network is unreachable"*)                  exit 1 ;;
+*"Could not resolve hostname"*)              exit 1 ;;
+*"Name or service not known"*)               exit 1 ;;
+*"Operation timed out"*|*"Connection timed out"*) exit 1 ;;
+esac
+exit 78

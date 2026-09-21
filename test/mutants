@@ -186,10 +186,10 @@ t mux-capabilities
 m agent-list should be usable
 
 = latch-denied-becomes-retryable
-f libexec/mux-latch
+f share/latch/ssh-classify
 t mux-latch
-- 		then printf 'denied'
-+ 		then printf 'probing'
+- 		printf 'denied'
++ 		printf 'probing'
 m offered a rejected credential
 
 = latch-preflight-block-still-attempts
@@ -200,10 +200,10 @@ t mux-latch
 m expected blocked then probing then ended
 
 = latch-quit-is-retried
-f libexec/mux-latch
+f share/latch/ssh-classify
 t mux-latch
-- 	0)   printf 'ended' ;;             # the human detached or quit
-+ 	0)   printf 'probing' ;;           # the human detached or quit
+- 	printf 'ended' ;;
++ 	printf 'probing' ;;
 m a deliberate quit should exit 0
 
 = latch-cannot-tell-read-as-usable
@@ -214,10 +214,10 @@ t mux-latch
 m unexpected probe exit was treated as usable
 
 = latch-gone-silently-recreated
-f libexec/mux-latch
+f share/latch/ssh-classify
 t mux-latch
-- 		then printf 'gone'
-+ 		then printf 'probing'
+- 		printf 'gone'
++ 		printf 'probing'
 m a vanished session was retried
 
 = latch-single-flight-off
@@ -228,10 +228,10 @@ t mux-latch
 m a concurrent latch should refuse
 
 = latch-hostkey-treated-as-retryable
-f libexec/mux-latch
+f share/latch/ssh-classify
 t mux-latch
-- 			'permission denied\|authenticat\|host key verification' \
-+ 			'permission denied\|authenticat' \
+- 	   || _saw 'host key verification'; then
++ 	   || false; then
 m a host key refusal was retried
 
 = latch-say-detail-truncated
@@ -247,3 +247,45 @@ t mux-latch
 - 	if [ -n "$PROBE" ]; then
 + 	if true; then
 m with no probe configured latch
+
+= latch-c-word-splits
+f libexec/mux-latch
+t mux-latch
+- 			set -- "$@" "$_rc_cmd"
++ 			set -- "$@" $_rc_cmd
+m must arrive as ONE argv element
+
+= latch-q-not-quoted
+f libexec/mux-latch
+t mux-latch
+- 			set -- "$@" "$(_shquote "$_rc_cmd")"
++ 			set -- "$@" "$_rc_cmd"
+m quoted for the remote shell
+
+= latch-missing-hook-silent
+f libexec/mux-latch
+t mux-latch
+- 	[ -n "$1" ] || return 0
++ 	return 0
+m config error (exit 2)
+
+= attach-only-creates-anyway
+f bin/mux
+t mux-attach-only
+- if [ "$attachonly" -eq 1 ]; then
++ if false; then
+m on a dead session must say
+
+= latch-negotiation-not-cached
+f libexec/mux-latch
+t mux-latch
+- 	_remote_cmd
++ 	_cmd=$(_remote_cmd)
+m must arrive as ONE argv element
+
+= latch-always-attach-only
+f libexec/mux-latch
+t mux-latch
+- 	if [ "$_attempts" -gt 0 ] && _remote_can_attach_only; then
++ 	if [ "$_attempts" -gt 0 ]; then
+m must keep the creating form

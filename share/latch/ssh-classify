@@ -1,0 +1,86 @@
+#!/bin/sh
+# share/latch/ssh-classify - turn an ssh attempt's outcome into a latch state.
+#
+# A `mux latch` CLASSIFY hook. Called as `ssh-classify EXIT STDERR_FILE`, it
+# prints exactly one state word on stdout:
+#
+#   ended    the human detached or quit          terminal, and a success
+#   gone     the far side lost that session      terminal, never recreate it
+#   refused  the far side answered, and no       terminal
+#            amount of patience helps
+#   denied   a credential or host key was        terminal, needs a human
+#            refused
+#   probing  down, recoverable on its own        retry on a backoff
+#   unknown  cannot be determined                retry, with more patience
+#
+# THIS FILE IS DELIBERATELY ssh-SPECIFIC, and that specificity is the entire
+# argument for classify being a seam rather than core code. ssh exits 255 for an
+# auth denial, an unreachable host, an unresolvable name and a killed connection
+# alike, so the exit code alone cannot separate "wait" from "fetch a human", and
+# stderr is the only discriminator there is. None of that is true of mosh, of
+# Eternal Terminal, or of a transport nobody has written yet. mux must not carry
+# this knowledge; it must be able to LOAD it.
+#
+# mux's own exit codes are only 0, 1 and 2 (see EXIT STATUS in man 1 mux), and
+# the absence of every other code is precisely what makes the foreign ones below
+# attributable. 127 can only be the remote SHELL; 255 can only be ssh.
+set -eu
+
+_rc=${1:-}
+_err=${2:-/dev/null}
+[ -n "$_rc" ] || { printf 'unknown'; exit 0; }
+
+# Fixed-string, case-insensitive matching on the whole file. Not `head -1`: ssh
+# warns before it fails ("Pseudo-terminal will not be allocated because stdin is
+# not a terminal.") so the first line is routinely a red herring.
+_saw() { grep -qi -- "$1" "$_err" 2>/dev/null; }
+
+case $_rc in
+0)
+	# ssh passes the remote command's status through, so 0 is mux on the far
+	# side exiting cleanly: the human detached or quit. Terminal by design --
+	# retrying here resurrects a session they just closed, which is the case
+	# autossh gets wrong.
+	printf 'ended' ;;
+2)
+	# mux's usage/unknown-verb code, from the far side. A VERSION answer, not
+	# a transport failure: the remote mux is too old for the verb asked of
+	# it, and no amount of retrying teaches it.
+	printf 'refused' ;;
+126|127)
+	# The remote SHELL, not ssh and not mux: 127 not found, 126 found but not
+	# executable. Almost always mux missing from a non-interactive ssh PATH,
+	# which is its own trap -- `~/.local/bin` is on PATH for a login shell
+	# and not for `ssh host mux ...`. Terminal: only a human fixes a PATH,
+	# and latch retried this forever until a live run against a second box
+	# showed it. man 1 mux EXIT STATUS had documented the meaning all along.
+	printf 'refused' ;;
+255)
+	# ssh's own catch-all. Everything below is the stderr discriminator.
+	#
+	# HOST KEY VERIFICATION is grouped with the credential refusals, which a
+	# live run against a rebuilt host is what found: ssh exits 255 and says
+	# nothing resembling "denied", so it classified as retryable and latch
+	# would have spun forever on something only a human can fix. It is the
+	# same refusal pointing the other way -- we rejected THEM -- and the
+	# handling is identical, which is why it is this state and not a new one.
+	if _saw 'permission denied' || _saw 'authenticat' \
+	   || _saw 'host key verification'; then
+		printf 'denied'
+	else
+		printf 'probing'
+	fi ;;
+1)
+	# The remote mux refused. `gone` is the one worth separating: attaching
+	# found no such session, so the host rebooted and the work is not there.
+	# Reported loudly and never silently recreated, because handing over a
+	# fresh empty session where the work was is the worst available answer.
+	if _saw 'no such session'; then
+		printf 'gone'
+	else
+		printf 'refused'
+	fi ;;
+*)
+	printf 'unknown' ;;
+esac
+exit 0

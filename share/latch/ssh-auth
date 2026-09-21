@@ -1,0 +1,52 @@
+#!/bin/sh
+# share/latch/ssh-auth - is an ssh credential live for HOST, right now?
+#
+# A `mux latch` AUTH hook. Called as `ssh-auth HOST`, it answers in the
+# three-state code every latch hook uses:
+#
+#   0   yes, a credential is live: go ahead and attempt
+#   1   no, and a HUMAN has to fix it (an agent with no keys in it)
+#   78  cannot tell -- see below, and note this is NOT "no"
+#
+# WHY THIS HOOK EXISTS AT ALL. `blocked` is the one latch state where retrying
+# is actively harmful: every attempt against a host with no live credential is a
+# password prompt or a hardware-key touch, so a retry loop there IS the prompt
+# storm. latch avoids that by construction rather than damping it, which it can
+# only do if auth liveness is observable WITHOUT connecting. Both checks below
+# are local and cost about 12ms, and neither opens a connection or raises a
+# prompt. That is what makes `blocked` a waiting state instead of a dead end:
+# latch polls this, silently, and moves on by itself the moment a key appears.
+#
+# 78 IS NOT 1, and the distinction is load-bearing. "No agent is running at all"
+# is not the same claim as "an agent is running and has nothing in it". The
+# first is a machine this hook has no opinion about (you may be using a
+# password, a certificate, a GSSAPI ticket, or `ssh` may be configured in a way
+# this hook cannot see); the second is a specific, fixable human task.
+# Answering 1 for both would park latch in `blocked` forever on a box that would
+# have connected fine. An edge nobody can check must not report success -- and
+# it must not report failure either.
+set -eu
+
+_host=${1:-}
+[ -n "$_host" ] || exit 78              # asked about nothing: no opinion
+
+command -v ssh >/dev/null 2>&1 || exit 78
+
+# A live control master means the connection is ALREADY authenticated and no
+# credential is needed at all, so this is the strongest possible yes. It is also
+# the cheapest, which is why it goes first. `-O check` does not re-authenticate
+# and does not create a master; it only asks whether one is there.
+ssh -O check "$_host" >/dev/null 2>&1 && exit 0
+
+command -v ssh-add >/dev/null 2>&1 || exit 78
+
+# ssh-add's three exits are exactly the three answers, which is the whole reason
+# this is cheap: 0 keys loaded, 1 agent running but empty, anything else (2) no
+# agent to ask.
+_rc=0
+ssh-add -l >/dev/null 2>&1 || _rc=$?
+case $_rc in
+0) exit 0 ;;
+1) exit 1 ;;
+*) exit 78 ;;
+esac

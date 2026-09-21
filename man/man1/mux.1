@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.30" "User Commands"
+.TH MUX 1 "" "mux 0.31" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -87,6 +87,15 @@ partition and takes no way to name another. The set is state, not config:
 one
 .RI NAME <TAB> ROOT
 per line, per machine and never in git.
+.TP
+.B mux go \-\-attach\-only " [" \fINAME\fR ]
+Attach
+.I NAME
+if it is live, and REFUSE if it is not, rather than building it. Exits 1 naming
+the session. Written for
+.BR "mux latch" ,
+which uses it on every attempt after the first so that a rebooted host is
+reported rather than silently replaced with an empty session.
 .TP
 .B mux latch " " \fIHOST\fR [: \fISESSION\fR ]
 Hold an attachment to a mux session on another machine open across network
@@ -755,7 +764,7 @@ It always exits 0: it is a pure report, and a non\-zero exit would be
 indistinguishable from the transport.
 .PP
 .EX
-mux 0.30
+mux 0.31
 capabilities 1
 agent\-list 1
 agent\-summary 1
@@ -764,7 +773,8 @@ check 1
 notify 1 unavailable
 context 1
 latch 1
-attach\-only no
+attach\-only 1
+latch\-fallback no
 .EE
 .PP
 THE WHOLE KNOWN SET IS ENUMERATED, including what this build does not implement.
@@ -792,12 +802,17 @@ configured. A later call may answer differently.
 .TP
 .B no
 This build does not have it at all. It is a FORWARD declaration, not padding:
-.B attach\-only
+.B latch\-fallback
 is listed because
 .B mux latch
-needs an attach\-that\-refuses\-to\-create form to handle a rebooted host and
-mux does not have one yet, so a latch running against a newer mux can ASK
-instead of discovering by failure.
+deliberately drives one transport, with an ordered fallback list left as a later
+refactor, so a caller wanting several can ASK instead of discovering by failure.
+.IP
+.B attach\-only
+was this entry one release ago and now reads
+.BR 1 ,
+which is the lifecycle working as intended: a declared absence became a declared
+presence, and no consumer had to sniff a version to notice.
 .PP
 For a mux too old to know the verb, the answer is exit 2 (see EXIT STATUS): a
 caller should then assume only what it can see. That is the case this verb
@@ -861,8 +876,13 @@ The far side no longer has that session. Reported loudly, never silently
 recreated.
 .TP
 .B refused
-The far side answered, but its mux does not know the verb (exit 2). A version
-answer, not a transport failure, so retrying cannot help.
+The far side answered, and no amount of patience helps. Its mux does not know
+the verb (exit 2, a version answer rather than a transport failure), or the
+remote SHELL could not run mux at all (127 not found, 126 not executable).
+Those codes are attributable only because mux itself uses none of them: see
+.BR "EXIT STATUS" .
+127 is the common one on a fresh box, and latch retried it forever until a live
+run against a second machine showed it.
 .PP
 Only one latch runs per target at a time. A network flap can fire several
 attempts at once \(em a hook, a key binding, a human \(em and N loops against
@@ -875,34 +895,88 @@ key, because every one of them encodes transport\-specific knowledge that does
 not belong in mux.
 .TP
 .BR MUX_LATCH_TRANSPORT " (" latch\-transport )
-Stand the pipe up.
+Stand the pipe up. The template is split into ARGV on whitespace and each word
+substituted separately; nothing is eval'd. Default
+.BR "ssh \-t %h sh \-lc %q" .
+.RS
+.TP
 .B %h
-and
+the host
+.TP
 .B %s
-are the host and session,
+the session (defaulting to the host)
+.TP
+.B %c
+the remote mux command, composed by latch, as exactly ONE argv element
+.TP
+.B %q
+the same command, additionally shell\-quoted
+.TP
 .B %%
-a literal percent. Default
-.BR "ssh \-t %h mux go %s" .
+a literal percent
+.RE
+.IP
+.B %c
+AND
+.B %q
+BOTH EXIST because transports differ on whether argv survives, and that was
+measured rather than assumed.
+.B "ssh host sh \-lc 'mux \-V'"
+does not run
+.BR "mux \-V" :
+ssh CONCATENATES its remaining arguments into one string and the remote login
+shell re\-splits it, so the inner shell receives
+.B mux
+with
+.B \-V
+as its
+.B $0
+and runs the bare session picker. Passing the command shell\-quoted instead
+prints the version, correctly. So
+.B %c
+suits a transport that preserves argv
+.RB ( "docker exec" ,
+.BR "kubectl exec" )
+and
+.B %q
+one that flattens to a string and re\-parses remotely (ssh).
+.IP
+.B "sh \-lc"
+in the default is load\-bearing, not decoration: sshd runs a remote command
+WITHOUT a login shell, so
+.B "ssh host mux go x"
+gets a PATH with no
+.I ~/.local/bin
+and exits 127
+.BR "mux: not found" .
+A login shell reads the profile that puts mux on PATH.
 .TP
 .BR MUX_LATCH_AUTH " (" latch\-auth )
-Is a credential live? Answers 0 yes, 1 needs a human, 78 cannot tell. With no
-seam configured and an ssh\-shaped transport, a built\-in check is used that
-consults a live control master and then
+Is a credential live? Answers 0 yes, 1 needs a human, 78 cannot tell. Defaults
+to the shipped
+.BR ssh\-auth ,
+which consults a live control master and then
 .BR ssh\-add ;
-neither connects.
+neither connects, and together they cost about 12ms.
 .TP
 .BR MUX_LATCH_PROBE " (" latch\-probe )
-Is the target usable? Same three answers. NO PROBE MEANS NO OPINION, which is
+Is the target usable? Same three answers. NO PROBE MEANS NO OPINION, and that is
 the default: latch just attempts, and the attempt is the probe. That is a
 different instruction from a probe that ran and could not tell, which waits, and
-conflating the two once made a stock latch wait forever and never attach.
+conflating the two once made a stock latch wait forever and never attach. mux
+SHIPS
+.I share/latch/ssh\-probe
+without wiring it; shipping a hook and running it are different acts.
 .TP
 .BR MUX_LATCH_CLASSIFY " (" latch\-classify )
 Given
 .I "<exit> <stderr\-file>"
-print one state word. The built\-in classifier is ssh\-specific by necessity:
-ssh exits 255 for a refused credential, an unreachable host and a killed
-connection alike, so the discriminator is stderr.
+print one state word. Defaults to the shipped
+.BR ssh\-classify ,
+which is ssh\-specific by necessity: ssh exits 255 for a refused credential, an
+unreachable host and a killed connection alike, so stderr is the only
+discriminator there is. That specificity is precisely why this is a seam and not
+core code.
 .TP
 .BR MUX_LATCH_STATUS " (" latch\-status )
 Called with
@@ -913,22 +987,82 @@ being fixed.
 .PP
 78 means CANNOT ANSWER, and any other unrecognised code is read the same way.
 A hook that failed in a way it did not anticipate has not answered, and guessing
-on its behalf is how an edge nobody checked gets reported as fine.
+on its behalf is how an edge nobody checked gets reported as fine. A seam left
+UNSET is a different thing again: it means no opinion, so the caller proceeds.
+.PP
+A hook NAMED but not found is a configuration error and latch exits 2 saying so,
+rather than carrying on. Silently continuing without a classifier puts every
+attempt in
+.B unknown
+and retries forever against a host that is perfectly fine.
+.SS The hook library
+A hook is NAMED, not spelled out, and a bare name resolves
+.IR $MUX_DIR /latch
+first, then
+.IR $MUX_SHARE /latch,
+then PATH \(em the same overlay\-over\-shipped order layouts, themes and agents
+use, and for the reason
+.B context\-command
+already documents: this config travels between machines through a dotfiles repo,
+so it must not carry an absolute path that is right on only one of them. Only
+the first WORD is resolved, since a hook value is a command line; a value
+containing a slash is a path already and is left alone.
+.PP
+Three ship, in
+.IR share/latch :
+.BR ssh\-auth ,
+.B ssh\-classify
+and
+.BR ssh\-probe .
+Only ssh ones, deliberately: a mosh or Eternal Terminal hook is not shipped
+because it is not verified here, the same reason
+.I share/agents/gemini.agent
+declares no busy marker. Adding one is a FILE, not a patch, which is the whole
+point of the arrangement.
+.PP
+Each is a small program with a header explaining what it can and cannot answer.
+.B ssh\-probe
+is worth reading before wiring it: a positive answer rules out one failure and
+leaves the interesting one untouched, because an MTU blackhole passes every
+cheap liveness signal there is.
 .PP
 ONE TRANSPORT AT A TIME, deliberately. State is tracked per transport, so an
 ordered fallback list is a later refactor rather than a rewrite:
 .B blocked
 is a per\-transport verdict, and across several transports the aggregate is
 blocked only when every one of them is.
-.SS What it does not do yet
-A REATTACH THAT REFUSES TO CREATE. The first attempt may create, since you asked
-to latch onto something, but a reattach finding nothing means the host rebooted,
-and handing over a fresh empty session where the work was is the worst available
-answer. It needs a mux\-side attach\-only form to express, because the transport
-template belongs to the caller and latch must not rewrite the verb inside it.
-Until then the template is used verbatim on every attempt. The manifest declares
-.B "attach\-only no"
-so a caller can see this rather than discover it.
+.SS Attach\-only on retry
+The first attempt may CREATE, since you asked to latch onto something. Every
+attempt after it asks for
+.BR "mux go \-\-attach\-only" ,
+which refuses rather than creates, and the classifier turns the far side's own
+refusal into
+.BR gone .
+A reattach that finds nothing means the host rebooted, and handing over a fresh
+empty session where the work was is the worst available answer: it looks like
+success and the work is gone.
+.PP
+NEGOTIATED ONCE, LAZILY, and this is the first real consumer of
+.BR "mux capabilities" .
+A remote too old for the flag answers exit 2 with a usage block, so using it
+blind would make latch work perfectly until the first drop and then break \(em
+exactly the discover\-by\-failure the handshake exists to end. The query is
+deferred to the first RETRY, so the happy path pays nothing, and cached for the
+run. A remote that cannot do it degrades to the older behaviour rather than to
+nothing, because a stale far side is a reason to create, not to stop.
+.PP
+A transport template written with
+.B %s
+instead of
+.B %c
+or
+.B %q
+keeps the always\-creating behaviour, so this is opt\-in by template.
+.PP
+A failure to REACH the far side is never cached as a capability verdict. The
+transport failing says nothing whatever about the remote's version, so the
+question stays open and is asked again \(em the same rule as everywhere else
+here: cannot tell is not no.
 .SH EXIT STATUS
 mux uses exactly three codes, and the absence of every other one is part of the
 contract.
