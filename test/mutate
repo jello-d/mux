@@ -54,8 +54,16 @@ _occurrences() {   # <file> <line>
 
 # Exact whole-line replace of the FIRST match, via awk so there is no pattern
 # syntax at all: `||`, `*`, `/`, `$` and a trailing backslash are characters.
+#
+# THE STRINGS COME THROUGH THE ENVIRONMENT, not through `-v`. awk processes
+# escape sequences in a `-v` assignment, so a target containing `\|` arrived as
+# `|` and matched nothing, while mutants.t's `grep -Fx` matched it perfectly --
+# the two comparisons disagreeing in exactly the place this file claims they
+# cannot. The corpus was right and the instrument was wrong, again. ENVIRON does
+# no such processing, so the value awk compares is the value the corpus holds.
 _edit() {   # <file> <old> <new> -> 0 if a line changed
-	awk -v old="$2" -v new="$3" '
+	MUT_OLD=$2 MUT_NEW=$3 awk '
+		BEGIN { old = ENVIRON["MUT_OLD"]; new = ENVIRON["MUT_NEW"] }
 		!done && $0 == old { done = 1; if (new != "") print new; next }
 		{ print }
 		END { exit(done ? 0 : 1) }' "$1" >"$1.mut" || return 1
