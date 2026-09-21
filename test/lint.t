@@ -126,9 +126,16 @@ fi
 # in mux-check, `exit "${1:-2}"` in usage), and those are covered behaviourally
 # instead -- a grep cannot evaluate them, and pretending otherwise would be a
 # guard that looks stronger than it is.
+#
+# Whole-line COMMENTS are excluded, and they have to be: the files that classify
+# a FOREIGN exit code have to name it to explain themselves, and mux-latch
+# documenting "ssh exits 255" is the opposite of mux exiting 255. A trailing
+# comment on a real line is still caught, so the exclusion is as narrow as it
+# can be made with a grep.
 _ec=$T/exitcodes
 ( cd "$HERE" && grep -rnE '\bexit [0-9]+' bin libexec share setup.sh \
-	2>/dev/null | grep -vE '\bexit [012]\b' ) >"$_ec" || true
+	2>/dev/null | grep -vE '\bexit [012]\b' \
+	| grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' ) >"$_ec" || true
 if [ -s "$_ec" ]; then
 	printf 'FAIL %s: an exit code outside the 0/1/2 contract:\n' "$_name" >&2
 	sed 's/^/  /' "$_ec" >&2
