@@ -1,5 +1,6 @@
 #!/bin/sh
-# test/mux-term-restore.t - putting the terminal back after tmux died with ssh.
+# test/mux-sane.t - `mux sane`: putting the terminal back after a full-screen
+# program died without tearing down.
 #
 # THE BUG IT REPAIRS. tmux switches the terminal into a different operating mode
 # on the way in and switches it back on the way out. When ssh dies mid-session
@@ -20,11 +21,11 @@
 # these are tmux's own resets. Whether a given emulator honours them is the
 # emulator's contract, not this program's, and no test here can stand in for it.
 set -eu
-_name=mux-term-restore
+_name=mux-sane
 . "$(dirname "$0")/lib.sh"
 
-HOOK=$HERE/share/latch/term-restore
-[ -x "$HOOK" ] || fail "share/latch/term-restore is missing or not executable"
+HOOK=$HERE/libexec/mux-sane
+[ -x "$HOOK" ] || fail "libexec/mux-sane is missing or not executable"
 
 # --- WITH NO TERMINAL IT MUST BE COMPLETELY SILENT ----------------------
 # The dangerous failure, and the reason this assertion comes first. Escape
@@ -33,9 +34,9 @@ HOOK=$HERE/share/latch/term-restore
 _out=$T/quiet
 _rc=0
 "$HOOK" >"$_out" 2>&1 </dev/null || _rc=$?
-[ "$_rc" = 0 ] || fail "term-restore must always exit 0 (it is a repair, not a
+[ "$_rc" = 0 ] || fail "mux sane must always exit 0 (it is a repair, not a
 question), got $_rc"
-[ ! -s "$_out" ] || fail "term-restore wrote $(wc -c <"$_out") bytes with no
+[ ! -s "$_out" ] || fail "mux sane wrote $(wc -c <"$_out") bytes with no
 terminal attached. Anything on stdout here corrupts a caller's pipe:
 $(cat -v "$_out")"
 
@@ -65,7 +66,7 @@ do
 	_code=${_m%%:*}; _why=${_m#*:}
 	case $_seen in
 	*"^[[?$_code"*) ;;
-	*) fail "term-restore never reset ?$_code -- $_why
+	*) fail "mux sane never reset ?$_code -- $_why
 What it emitted:
 $_seen" ;;
 	esac
@@ -73,7 +74,7 @@ done
 
 # The kernel half is not optional either.
 grep -q 'stty sane' "$HOOK" \
-	|| fail "term-restore no longer runs stty sane, so the tty line
+	|| fail "mux sane no longer runs stty sane, so the tty line
 discipline (echo, canonical mode, signal characters) is left as tmux set it"
 
 # --- AND IT MUST NOT CLEAR THE SCREEN -----------------------------------
@@ -85,7 +86,7 @@ discipline (echo, canonical mode, signal characters) is left as tmux set it"
 # work in the name of fixing it. It is also redundant, since leaving the
 # alternate screen discards its contents anyway.
 case $_seen in
-*'^[[H^[[J'*|*'^[[2J'*) fail "term-restore clears the screen. If the terminal
+*'^[[H^[[J'*|*'^[[2J'*) fail "mux sane clears the screen. If the terminal
 is NOT on the alternate screen this wipes real content, and leaving the
 alternate screen already discards its buffer, so the clear can only ever do
 harm here. Emitted:
@@ -96,7 +97,7 @@ esac
 # `tput reset` drop the scrollback the user is trying to get back to, along
 # with the palette and the window title.
 case $_seen in
-*'^[c'*) fail "term-restore sends RIS (ESC c), a full terminal reset. That
+*'^[c'*) fail "mux sane sends RIS (ESC c), a full terminal reset. That
 discards the scrollback this whole exercise exists to return the user to." ;;
 esac
 
@@ -109,7 +110,7 @@ _n1=$(grep -c . "$_raw" 2>/dev/null || echo 0)
 [ -s "$_raw2" ] || fail "the second run captured nothing"
 case $(cat -v "$_raw2") in
 *'^[[?1049l'*) ;;
-*) fail "running term-restore twice stopped emitting the resets" ;;
+*) fail "running mux sane twice stopped emitting the resets" ;;
 esac
 [ "$_n1" -ge 1 ] || fail "the first capture was empty"
 

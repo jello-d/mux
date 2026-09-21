@@ -1,9 +1,18 @@
 #!/bin/sh
-# share/latch/term-restore - put the terminal back after a full-screen program
-# died without tearing down.
+# mux-sane - put the terminal back after a full-screen program died without
+# tearing down. `mux sane`, named after `stty sane`, which is the reflex and
+# only does half the job (see below).
 #
-# A `mux latch` RESTORE hook. Called with no arguments, it always exits 0: it is
-# a repair, not a question, and latch runs it before it reports anything.
+# It takes no arguments and always exits 0: it is a repair, not a question.
+# `mux latch` runs it as its RESTORE seam before reporting anything, and you can
+# run it by hand after any wedged session, including one latch never touched.
+#
+# IT LIVES IN libexec, NOT share/latch, and the distinction is the point. The
+# hooks under share/latch encode TRANSPORT-specific knowledge -- ssh's exit
+# codes, ssh's credential model -- and exist so a mosh or Eternal Terminal user
+# can replace them. A wedged terminal is the same wedged terminal whatever
+# carried the bytes, so this is mux's own helper with a verb of its own, and
+# latch merely points its seam at it.
 #
 # THE PROBLEM. tmux is a full-screen program. On the way in it switches the
 # terminal into a different operating mode, and on the way out it switches it
