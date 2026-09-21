@@ -265,6 +265,35 @@ case "$(seq_of)" in
 *) fail "a vanished session was not reported as gone: [$(seq_of)]" ;;
 esac
 
+# --- EXIT 3 IS THE UNKNOWN-NAME CODE, AND IT BEATS THE STRING --------
+# mux returns 3 for "the name is not known here", from any verb. That is what
+# lets the classifier decide on a NUMBER rather than grepping stderr for "no
+# such session" -- which made the wording of a message on one machine
+# load-bearing for a decision on another, and needed a test to hold the
+# sentence still.
+#
+# The string match stays as a COMPATIBILITY path for a remote older than the
+# code, so both are asserted: the contract is the number, the phrase is the
+# fallback.
+printf '3\n' >"$SCRIPT"
+_rc=$(latch box:proj)
+[ "$_rc" = 1 ] || fail "an unknown name should exit non-zero, got $_rc"
+case "$(seq_of)" in
+*gone*) ;;
+*) fail "exit 3 from the far side is mux's unknown-name code and must be read
+as gone, with no reference to the message: [$(seq_of)]" ;;
+esac
+[ "$(n_tries)" = 1 ] || fail "an unknown name was retried $(n_tries) times"
+
+# ... and an OLDER remote, which only has the phrase, still works.
+printf '1 mux: no such session: proj\n' >"$SCRIPT"
+_rc=$(latch box:proj)
+case "$(seq_of)" in
+*gone*) ;;
+*) fail "a remote too old for exit 3 still says 'no such session', and that
+compatibility path must keep working: [$(seq_of)]" ;;
+esac
+
 # --- THE TMUX SERVER WENT AWAY UNDER THE ATTACH ----------------------
 # The one exit 1 latch cannot read. tmux writes "lost server" to the TERMINAL,
 # not to stderr, so all latch sees is the transport's generic goodbye

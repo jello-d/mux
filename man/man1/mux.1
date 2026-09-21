@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.34" "User Commands"
+.TH MUX 1 "" "mux 0.35" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -96,6 +96,20 @@ the session. Written for
 .BR "mux latch" ,
 which uses it on every attempt after the first so that a rebooted host is
 reported rather than silently replaced with an empty session.
+.TP
+.B mux sane
+Put the terminal back after a full\-screen program died without tearing
+down \(em a dropped ssh, a killed tmux, a crashed editor. Named after
+.BR "stty sane" ,
+which is the reflex and does half the job: the tty line discipline it fixes
+lives in the KERNEL, while the hidden cursor, mouse reporting, bracketed paste
+and alternate screen live in the terminal EMULATOR and need the matching escape
+sequences. This sends those (captured from tmux's own teardown) and runs
+.B stty sane
+as well. It is idempotent, takes no arguments, always exits 0, and does nothing
+at all when no terminal is attached, so it is safe in a script or a pipe.
+.B mux latch
+runs it automatically on every drop; this is the same repair by hand.
 .TP
 .B mux latch " " \fIHOST\fR [: \fISESSION\fR ]
 Hold an attachment to a mux session on another machine open across network
@@ -764,7 +778,7 @@ It always exits 0: it is a pure report, and a non\-zero exit would be
 indistinguishable from the transport.
 .PP
 .EX
-mux 0.34
+mux 0.35
 capabilities 1
 agent\-list 1
 agent\-summary 1
@@ -773,6 +787,8 @@ check 1
 notify 1 unavailable
 context 1
 latch 1
+sane 1
+unknown\-name 1
 attach\-only 1
 latch\-fallback no
 .EE
@@ -1165,7 +1181,7 @@ transport failing says nothing whatever about the remote's version, so the
 question stays open and is asked again \(em the same rule as everywhere else
 here: cannot tell is not no.
 .SH EXIT STATUS
-mux uses exactly three codes, and the absence of every other one is part of the
+mux uses exactly four codes, and the absence of every other one is part of the
 contract.
 .TP
 .B 0
@@ -1177,10 +1193,25 @@ from a failure and must not be conflated with one.
 .B 1
 Refused, for a stated reason. Something is on stderr saying why, prefixed
 .BR mux: .
-A guard fired, drift was found, or the named thing does not exist.
+A guard fired, or drift was found.
 .TP
 .B 2
 A usage error, or a verb this mux does not know.
+.TP
+.B 3
+THE NAME YOU GAVE IS NOT KNOWN HERE \(em no such session, and nothing that
+could be resolved into one.
+.BR go ,
+.BR kill ,
+.BR rename ,
+.BR hide ,
+.B show
+and
+.B why
+all return it, because it is one CONDITION rather than one verb's failure, and
+a caller should not have to learn six spellings of the same answer. The reason
+is still written out: a code is an addition to the explanation, not a
+replacement for it.
 .PP
 THE ABSENCE OF EVERYTHING ELSE IS LOAD-BEARING.
 .B ssh
@@ -1194,6 +1225,7 @@ ssh host mux agent-list
   0      an answer (possibly empty)
   1      mux refused; the reason is on stderr
   2      that mux is too old to know the verb
+  3      the name is not known on that host
   255    the transport, not mux
   127    mux is not on that host's PATH
 .EE
@@ -1201,8 +1233,22 @@ ssh host mux agent-list
 That is how a fleet part way through an upgrade stops reading as half\-broken:
 .B 2
 is a VERSION answer, not a failure. It is also what a reconnect supervisor
-classifies retries on. None of it survives one verb returning 3, so do not add
-a code: widen an existing meaning, or put the detail on stderr.
+classifies retries on.
+.PP
+THIS SECTION USED TO SAY "do not add a code", AND 3 IS WHY THAT WAS TOO STRONG.
+The warning was aimed at per\-VERB codes, which multiply without bound and make
+every caller learn a dialect. A small set of cross\-cutting CONDITIONS is the
+opposite thing, and 3 earned its place by deleting a worse contract:
+.B mux latch
+had to grep stderr for the phrase "no such session" to tell a rebooted host
+from an ordinary refusal, so the WORDING of a message on one machine was
+load\-bearing for a decision on another, and a test existed only to stop anyone
+improving the sentence. A code cannot be reworded.
+.PP
+What actually has to hold is that mux never produces 126, 127 or 255, so those
+stay attributable. That is untouched. The bar for a fifth code is the one 3
+cleared: a condition MANY verbs share, that a caller would otherwise have to
+detect by parsing English.
 .PP
 Held by two tests.
 .I test/mux-exit.t
