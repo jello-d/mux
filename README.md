@@ -531,14 +531,25 @@ and `_STATUS`. A hook answers 0 yes, 1 no, or 78 "cannot tell", and a hook that
 cannot tell is never read as fine. A hook that is *unset* is different again:
 that means no opinion, so latch proceeds.
 
+**It puts your terminal back.** When ssh dies mid-session tmux never sends its
+teardown, so the cursor stays hidden, mouse reporting stays on (moving the mouse
+types control characters at your shell) and the alternate screen stays up.
+`stty sane` only half works: it fixes the kernel's line discipline, while those
+modes live in the terminal *emulator* and need the matching escape sequences.
+latch repairs the terminal **first** on every drop, before it reports or waits —
+otherwise "retrying in 8s" is printed into a hidden-cursor alternate screen and
+a reconnect looks like a hang. `share/latch/term-restore` is a plain program and
+you can run it by hand after any wedged session.
+
 **Hooks ship as a library, and wiring them is your step.** `share/latch/` holds
-`ssh-auth`, `ssh-classify` and `ssh-probe`; a bare name in your config resolves
+`ssh-auth`, `ssh-classify`, `ssh-probe` and `term-restore`; a bare name in your
+config resolves
 `$MUX_DIR/latch` first, then `$MUX_SHARE/latch`, then `PATH` — the same
 overlay-over-shipped order layouts and themes use, so a config can travel
-between machines without absolute paths. `ssh-auth` and `ssh-classify` are wired
-by default. `ssh-probe` ships **unwired** on purpose: no probe means no opinion,
-and the attempt is the probe. Adding a mosh or Eternal Terminal hook is a file,
-not a patch.
+between machines without absolute paths. `ssh-auth`, `ssh-classify` and
+`term-restore` are wired by default. `ssh-probe` ships **unwired** on purpose:
+no probe means no opinion, and the attempt is the probe. Adding a mosh or
+Eternal Terminal hook is a file, not a patch.
 
 On a retry latch asks for `mux go --attach-only`, which refuses rather than
 creates, so a rebooted host is *reported* instead of silently replaced by an

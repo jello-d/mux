@@ -50,13 +50,42 @@ ssh -O check "$_host" >/dev/null 2>&1 && exit 0
 # NOT this hook's job -- auth has its own hook, and answering 1 for an auth
 # problem would park latch in a retry loop for something only a human can fix.
 # So only a plain connection failure is 1, and everything else is 78.
+# ConnectTimeout IS the bound that matters, and it covers more than its name
+# suggests. Measured against a peer that accepts the TCP connection and then
+# says nothing (a half-open NAT entry, a wedged sshd, an MTU blackhole during
+# key exchange):
+#
+#   no timeouts at all      still waiting after 40s
+#   ConnectTimeout=5        gives up in 5s
+#   ServerAliveInterval=5   still waiting after 40s
+#
+# So ConnectTimeout governs the whole connection SETUP including the banner
+# exchange, not just the TCP handshake, while ServerAlive probes do nothing
+# until a session exists. Both are needed, for different phases.
+#
+# timeout(1) stays as a backstop anyway, because a probe is bounded BY CONTRACT
+# and should not depend on which ssh option happens to enforce it. A probe that
+# has not answered in ten seconds has already answered.
+_PROBE_MAX=${MUX_SSH_PROBE_TIMEOUT:-10}
+_bound() {
+	if command -v timeout >/dev/null 2>&1; then
+		timeout "$_PROBE_MAX" "$@"
+	else
+		"$@"        # no timeout(1): unbounded rather than pretend-bounded
+	fi
+}
+
 _e=$(mktemp) || exit 78
 _rc=0
-ssh -o BatchMode=yes -o ConnectTimeout=5 "$_host" true 2>"$_e" || _rc=$?
+_bound ssh -o BatchMode=yes -o ConnectTimeout=5 "$_host" true 2>"$_e" || _rc=$?
 _out=$(cat "$_e" 2>/dev/null || true)
 rm -f "$_e"
 
 [ "$_rc" = 0 ] && exit 0
+# timeout(1)'s own code. The host took longer than a probe is allowed to take,
+# which is a definite "not usable right now" rather than a "cannot tell": if it
+# will not talk within the bound, an attach will not fare better.
+[ "$_rc" = 124 ] && exit 1
 case $_out in
 *"Connection refused"*|*"No route to host"*) exit 1 ;;
 *"Network is unreachable"*)                  exit 1 ;;

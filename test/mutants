@@ -296,3 +296,17 @@ t mux-latch
 - 		_cmd='mux resume'
 + 		_cmd="mux go $_host"
 m must send 'mux resume'
+
+= latch-terminal-never-repaired
+f libexec/mux-latch
+t mux-latch
+- 	$RESTORE >/dev/null 2>&1 || true
++ 	: >/dev/null 2>&1 || true
+m repair must come FIRST
+
+= term-restore-sprays-without-a-tty
+f share/latch/term-restore
+t mux-term-restore
+- if [ ! -t 0 ] && [ ! -t 1 ] && [ ! -t 2 ]; then
++ if false; then
+m bytes with no
