@@ -81,11 +81,20 @@ _edit() {   # <file> <old> <new> -> 0 if a line changed
 # enforce one would be worse than not having it.
 MUT_TIMEOUT=${MUT_TIMEOUT:-120}
 MUT_TIMEOUT_RC=124
+#
+# STDIN COMES FROM /dev/null, AND THAT IS LOAD-BEARING. The corpus is parsed by
+# a `while read` loop reading the corpus FILE, so the driver's stdin IS the
+# corpus -- and every test run from inside that loop inherits it. A test that
+# reads stdin then EATS COMPOSED RECORDS: mux-term-restore.t runs script(1),
+# which consumes stdin, and it silently swallowed the next two records. The run
+# reported 40 of 42 with one record showing an empty filename, which reads like
+# a corrupt corpus rather than what it was. The same guard is on the baseline
+# run below.
 _timed() {   # <test file>
 	if command -v timeout >/dev/null 2>&1; then
-		timeout "$MUT_TIMEOUT" sh "$1"
+		timeout "$MUT_TIMEOUT" sh "$1" </dev/null
 	else
-		sh "$1"
+		sh "$1" </dev/null
 	fi
 }
 
@@ -137,7 +146,7 @@ _run_one() {   # name file tests old new msg
 		# BASELINE FIRST. "The test failed" only means the mutation did
 		# it if the test passed before; otherwise a pre-existing
 		# failure is counted as coverage.
-		if ! sh "$HERE/test/$_t.t" >/dev/null 2>&1; then
+		if ! sh "$HERE/test/$_t.t" >/dev/null 2>&1 </dev/null; then
 			_err "$_n: test '$_t' FAILS on the unmutated tree" \
 			  "A test that is already red cannot tell you anything" \
 			  "about this guard. Fix the baseline first."
