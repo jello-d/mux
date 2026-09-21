@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.33" "User Commands"
+.TH MUX 1 "" "mux 0.34" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -764,7 +764,7 @@ It always exits 0: it is a pure report, and a non\-zero exit would be
 indistinguishable from the transport.
 .PP
 .EX
-mux 0.33
+mux 0.34
 capabilities 1
 agent\-list 1
 agent\-summary 1
@@ -897,6 +897,20 @@ resurrect the session they just closed.
 .B gone
 The far side no longer has that session. Reported loudly, never silently
 recreated.
+.IP
+This also covers the remote tmux SERVER going away under a live attach \(em a
+kill\-server, a
+.BR "mux kill-all" ,
+or a crash. tmux exits 1 and writes "lost server" to the TERMINAL rather than to
+stderr, so latch sees only the transport's generic goodbye, which is
+indistinguishable from any other exit 1. Rather than shrug, latch asks ONE
+read\-only question
+.RB ( "mux capabilities" )
+on that already\-terminal path: any answer, even the exit 2 of a mux too old to
+know the verb, proves the far side is up and the failure was about the SESSION.
+If that follow\-up fails too, the connection is down as well, and latch says so
+instead of claiming a session it cannot see is gone. An exit 1 that DOES carry a
+mux message needs no second round trip and gets none.
 .TP
 .B refused
 The far side answered, and no amount of patience helps. Its mux does not know

@@ -368,6 +368,31 @@ trap '$RESTORE >/dev/null 2>&1 || true
 # rather than to nothing: a stale far side is a reason to create, not to stop.
 _remote_attach_only=          # empty / yes / no, decided at most once per run
 
+# IS THE FAR SIDE STILL ANSWERING? Asked only on a path that is already
+# terminal, so it costs nothing in the steady state, and it resolves the one
+# ambiguity latch cannot read off an exit code.
+#
+# THE CASE: the remote tmux SERVER goes away under a live attach -- a
+# kill-server, a `mux kill-all`, or a crash. tmux exits 1 and writes "lost
+# server" to the TERMINAL, not to stderr, so all latch ever sees is the
+# transport's own generic goodbye ("Connection to host closed."). That is
+# indistinguishable from any other exit 1, and reporting it as a bare `refused`
+# told the operator nothing at all.
+#
+# One read-only question separates them. `mux capabilities` is the right one: it
+# changes nothing, it is cheap, and even a mux too old to know the verb exits 2
+# with usage -- which still proves the host is up and mux ran. So any answer
+# from mux means the far side is alive and the failure was ABOUT THE SESSION,
+# while a transport-level code means the connection itself is gone too.
+_remote_alive() {
+	_arc=0
+	_run_transport 'mux capabilities' >/dev/null 2>&1 || _arc=$?
+	case $_arc in
+	0|1|2) return 0 ;;   # mux answered something: the far side is up
+	*)     return 1 ;;   # 255, 126, 127: the transport or the host, not mux
+	esac
+}
+
 _remote_can_attach_only() {
 	case $_remote_attach_only in
 	yes) return 0 ;;
@@ -464,6 +489,13 @@ _wait() {   # <seconds> <state> <why>
 # what a human reads to decide what to fix.
 _errline() {
 	awk 'NF { l = $0 } END { print l }' "$_errf" 2>/dev/null || true
+}
+
+# Did the captured stderr carry anything from MUX itself, as opposed to the
+# transport's own commentary? That is what separates "the far side told us why"
+# from "all we got was ssh saying goodbye".
+_errsaw() {   # <fixed string>
+	grep -qiF -- "$1" "$_errf" 2>/dev/null
 }
 
 # Doubled per attempt, capped. One place, so the two retrying paths cannot
@@ -565,7 +597,30 @@ while :; do
 		_say gone "the session is not there any more; NOT recreating it"
 		exit 1 ;;
 	refused)
-		_say refused "$(_errline)"
+		# `refused` covers several things, and only ONE of them is
+		# ambiguous. An old remote (exit 2) and a missing mux (127) both
+		# say so in their own words, so those are reported as they are.
+		# An exit 1 whose stderr carries nothing but the transport's
+		# goodbye is the tmux-server-went-away case, and for that latch
+		# asks rather than shrugs.
+		_rmsg=$(_errline)
+		if [ "$_rc" = 1 ] && ! _errsaw 'mux:' && ! _errsaw 'usage:'; then
+			if _remote_alive; then
+				_say gone "the far side is up and mux answers" \
+					"there, so that session is not running" \
+					"any more -- its tmux server went away" \
+					"(kill-server, kill-all, or a crash)."
+				_say gone "NOT recreating it. Re-run latch to" \
+					"rebuild what that box had."
+				exit 1
+			fi
+			_say refused "${_rmsg:-the far side exited 1}"
+			_say refused "and it is not answering now either," \
+				"so the connection is down too. Whether that" \
+				"session survived is unknown from here."
+			exit 1
+		fi
+		_say refused "$_rmsg"
 		exit 1 ;;
 	denied)
 		_say denied "$(_errline)"

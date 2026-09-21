@@ -310,3 +310,24 @@ t mux-term-restore
 - if [ ! -t 0 ] && [ ! -t 1 ] && [ ! -t 2 ]; then
 + if false; then
 m bytes with no
+
+= latch-lost-server-not-diagnosed
+f libexec/mux-latch
+t mux-latch
+- 		if [ "$_rc" = 1 ] && ! _errsaw 'mux:' && ! _errsaw 'usage:'; then
++ 		if false; then
+m must report gone
+
+= latch-alive-query-always
+f libexec/mux-latch
+t mux-latch
+- 		if [ "$_rc" = 1 ] && ! _errsaw 'mux:' && ! _errsaw 'usage:'; then
++ 		if true; then
+m is a version answer
+
+= latch-unreachable-read-as-gone
+f libexec/mux-latch
+t mux-latch
+- 	0|1|2) return 0 ;;   # mux answered something: the far side is up
++ 	0|1|2|255) return 0 ;;   # mux answered something: the far side is up
+m must not claim it
