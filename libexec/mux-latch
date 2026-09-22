@@ -600,30 +600,35 @@ while :; do
 		_say gone "the session is not there any more; NOT recreating it"
 		exit 1 ;;
 	refused)
-		# `refused` covers several things, and only ONE of them is
-		# ambiguous. An old remote (exit 2) and a missing mux (127) both
-		# say so in their own words, so those are reported as they are.
-		# An exit 1 whose stderr carries nothing but the transport's
-		# goodbye is the tmux-server-went-away case, and for that latch
-		# asks rather than shrugs.
-		_rmsg=$(_errline)
+		# WHAT THE FAR SIDE SAID COMES FIRST, ALWAYS. An earlier version
+		# of this replaced that message with a guess at the cause ("its
+		# tmux server went away") whenever stderr carried no `mux:`
+		# prefix -- and tmux's own messages carry none. So a `mux resume`
+		# that could not attach printed "open terminal failed: not a
+		# terminal", which is the entire answer, and latch threw it away
+		# to report `gone` about a host with five healthy sessions.
+		#
+		# A confident wrong cause is worse than a vague right one. The
+		# liveness query still earns its place, because "the far side is
+		# up" is something latch can ESTABLISH rather than infer, and it
+		# rules out the network. But it is added as CONTEXT after the
+		# real message, never in place of it, and it stops there: it does
+		# not name a cause it cannot see.
+		#
+		# `gone` is reserved for exit 3, which is definitive. Everything
+		# here is a refusal whose reason the far side already stated.
+		_say refused "$(_errline)"
 		if [ "$_rc" = 1 ] && ! _errsaw 'mux:' && ! _errsaw 'usage:'; then
 			if _remote_alive; then
-				_say gone "the far side is up and mux answers" \
-					"there, so that session is not running" \
-					"any more -- its tmux server went away" \
-					"(kill-server, kill-all, or a crash)."
-				_say gone "NOT recreating it. Re-run latch to" \
-					"rebuild what that box had."
-				exit 1
+				_say refused "the far side is up and mux" \
+					"answers there, so this is not the" \
+					"connection. Something on that host" \
+					"refused; check it with: mux ls"
+			else
+				_say refused "and it is not answering now" \
+					"either, so the connection is down too."
 			fi
-			_say refused "${_rmsg:-the far side exited 1}"
-			_say refused "and it is not answering now either," \
-				"so the connection is down too. Whether that" \
-				"session survived is unknown from here."
-			exit 1
 		fi
-		_say refused "$_rmsg"
 		exit 1 ;;
 	denied)
 		_say denied "$(_errline)"

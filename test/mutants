@@ -311,19 +311,19 @@ t mux-sane
 + if false; then
 m bytes with no
 
-= latch-lost-server-not-diagnosed
+= latch-liveness-context-dropped
 f libexec/mux-latch
 t mux-latch
 - 		if [ "$_rc" = 1 ] && ! _errsaw 'mux:' && ! _errsaw 'usage:'; then
 + 		if false; then
-m must report gone
+m it rules out the network
 
 = latch-alive-query-always
 f libexec/mux-latch
 t mux-latch
 - 		if [ "$_rc" = 1 ] && ! _errsaw 'mux:' && ! _errsaw 'usage:'; then
 + 		if true; then
-m own explanation is a refusal
+m made a liveness query for an exit 1
 
 = latch-unreachable-read-as-gone
 f libexec/mux-latch
@@ -345,3 +345,10 @@ t mux-latch
 - 3)
 + 39)
 m a vanished session was retried
+
+= latch-discards-far-side-message
+f libexec/mux-latch
+t mux-latch
+- 		_say refused "$(_errline)"
++ 		_say refused "something went wrong"
+m must be reported, not replaced
