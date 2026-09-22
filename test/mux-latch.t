@@ -348,19 +348,37 @@ amb() {   # -> stderr of a run with the given env
 		"$HERE/libexec/mux-latch" box:k 2>&1 >/dev/null
 }
 
-# Far side ALIVE: this is a lost tmux server, and must say so.
-_o=$(A_ALIVE=1 amb || true)
+# THE FAR SIDE'S OWN MESSAGE IS NEVER REPLACED BY A GUESS. This is the
+# regression that mattered: an earlier version reported `gone -- its tmux server
+# went away` whenever stderr carried no `mux:` prefix, and tmux's own messages
+# carry none. A `mux resume` that could not attach said "open terminal failed:
+# not a terminal" -- the entire answer -- and latch threw it away to make a
+# confident claim about a host with five healthy sessions.
+_o=$(A_ALIVE=1 A_MSG='open terminal failed: not a terminal' amb || true)
 case "$_o" in
-*"latch: gone"*) ;;
-*) fail "an exit 1 with only the transport's goodbye, against a far side that
-still answers, is a lost tmux server and must report gone. Got:
+*"open terminal failed"*) ;;
+*) fail "the far side's own message must be reported, not replaced by a guess
+at the cause. Got:
 $_o" ;;
 esac
 case "$_o" in
-*"not running any more"*|*"went away"*) ;;
-*) fail "the report must SAY what happened, not just name a state. The whole
-complaint was that 'refused -- Connection to host closed.' explains nothing.
-Got:
+*"went away"*|*"not running any more"*) fail "latch named a cause it cannot
+see. 'the far side is up' is all the liveness query establishes; the session
+may be fine and the attach may have failed for its own reasons. Got:
+$_o" ;;
+esac
+# `gone` is reserved for exit 3, which is definitive. An exit 1 is a refusal.
+case "$_o" in
+*"latch: gone"*) fail "an exit 1 must not report gone: nothing here shows the
+session is gone. Got:
+$_o" ;;
+esac
+# The query still earns its place, because "the far side is up" is ESTABLISHED
+# rather than inferred, and it rules out the network.
+case "$_o" in
+*"not the connection"*) ;;
+*) fail "when the far side answers, say so: it rules out the network, which is
+the one thing latch can actually establish here. Got:
 $_o" ;;
 esac
 [ "$(grep -c . "$ASKED")" = 1 ] \
@@ -370,16 +388,14 @@ esac
 # ANSWER, and still proves the far side is up.
 _o=$(A_ALIVE=1 A_ALIVERC=2 amb || true)
 case "$_o" in
-*"latch: gone"*) ;;
+*"not the connection"*) ;;
 *) fail "exit 2 from a remote too old for 'mux capabilities' still proves it is
 alive, so the verdict must be the same. Got:
 $_o" ;;
 esac
 
-# Far side NOT answering: latch cannot see the session at all, so claiming it is
-# gone would be a lie. Matched on the STATE TOKEN ("latch: gone") rather than
-# the bare word, which also occurs in the explanatory prose -- an assertion that
-# greps for a word a message happens to contain passes on the wrong thing.
+# Far side NOT answering: say the connection went too, and claim nothing about
+# a session that cannot be seen at all.
 _o=$(amb || true)
 case "$_o" in
 *"latch: gone"*) fail "with the far side unreachable latch cannot know the
