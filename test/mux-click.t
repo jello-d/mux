@@ -38,7 +38,7 @@ case "$*" in
 	# grep-based removal silently kept the old line and every read returned
 	# the stale first match. A stub that models the tool wrongly is worse
 	# than no test; this one produced a confident false failure.
-	awk -F'\t' -v k="$_n" '$1 != k' "$OPTS" >"$OPTS.t" 2>/dev/null || :
+	awk -F'\t' -v k="$_n" '$1 != k' "$OPTS" 2>/dev/null >"$OPTS.t" || :
 	mv -f "$OPTS.t" "$OPTS"
 	printf '%s\t%s\n' "$_n" "$_v" >>"$OPTS" ;;
 esac

@@ -30,7 +30,7 @@ case "$*" in
 *rename-session*)
 	_o=$(printf '%s' "$*" | sed -n 's/.*-t =\([^ ]*\).*/\1/p')
 	_n=${*##* }
-	grep -vxF "$_o" "$LIVE" >"$LIVE.t" 2>/dev/null || :
+	grep -vxF "$_o" "$LIVE" 2>/dev/null >"$LIVE.t" || :
 	mv -f "$LIVE.t" "$LIVE"
 	printf '%s\n' "$_n" >>"$LIVE" ;;
 *display-message*session_name*) head -1 "$LIVE" ;;

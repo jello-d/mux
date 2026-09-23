@@ -100,15 +100,29 @@ fi
 # pruned between the glob and the read is the normal case, not the exception.
 # Each looks deliberately silenced, which is what makes it worth a machine
 # check rather than a reviewer's eye.
+#
+# IT APPLIES TO OUTPUT TOO, which this rule missed until 2026-09-23. A brand new
+# `printf ... >>"$f" 2>/dev/null` in mux-log.sh printed `cannot create ...:
+# Permission denied` from a path built to be silent, and the input-only pattern
+# below sailed past it. The direction was never the point -- a failing OPEN is a
+# failing open -- so both are checked now. The output pattern wants a target
+# starting with a quote or `$`, which is every form this codebase uses and
+# conveniently excludes `>/dev/null 2>/dev/null` (a target that cannot fail).
+#
+# IT FOUND TEN SHIPPED INSTANCES the moment it was added, four of them in
+# libexec: the session-set write and delete, mux-scan's log fallback, and
+# agent-state-render's session query -- which runs on every status TICK. Every
+# one was a path built to be silent that would have printed shell noise instead.
 _bad=$T/order
 # The second grep drops COMMENT lines -- including the ones just above,
 # which describe the bad shape and would otherwise report this file. A line
 # with a TRAILING comment is still checked; only a comment-only line is not.
-( cd "$HERE" && grep -rnE '<[^ <]+ +2>/dev/null' \
+( cd "$HERE" && grep -rnE \
+	'<[^ <]+ +2>/dev/null|>>?["'"'"'$][^ ]* +2>/dev/null' \
 	bin libexec test share setup.sh 2>/dev/null \
 	| grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' ) >"$_bad" || true
 if [ -s "$_bad" ]; then
-	printf 'FAIL %s: input redirect BEFORE its 2>/dev/null:\n' "$_name" >&2
+	printf 'FAIL %s: redirect BEFORE its 2>/dev/null:\n' "$_name" >&2
 	sed 's/^/  /' "$_bad" >&2
 	printf 'Put 2>/dev/null first; it does not silence a failing open.\n' >&2
 	exit 1

@@ -169,7 +169,7 @@ fi
 # whatever fell off the right -- possibly a session that needs you.
 tmpf=$(mktemp); recs=$(mktemp)
 trap 'rm -f "$tmpf" "$recs"' EXIT
-tmux list-sessions -F '#{session_name}' >"$tmpf" 2>/dev/null || true
+tmux list-sessions -F '#{session_name}' 2>/dev/null >"$tmpf" || true
 now=$(date +%s)          # one instant, so every age is measured the same
 nsess=0
 while read -r sess; do
