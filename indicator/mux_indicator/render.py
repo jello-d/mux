@@ -127,7 +127,7 @@ def _hero(d, s, m, col, cursor=True):
     d.rectangle([cx, bot - ch, min(cx + cw, rlim), bot], fill=cur)
 
 
-def _badge(img, s, fill, ink, count):
+def _badge(img, s, fill, ink, count, check=False):
     bd = int(s * _BADGE_F)
     x0 = s - bd
     box = [x0, -1, s - 1, bd - 1]
@@ -139,13 +139,29 @@ def _badge(img, s, fill, ink, count):
     d = ImageDraw.Draw(img)
     edge = _darker(fill, 0.62)
     d.ellipse(box, fill=fill, outline=edge, width=max(1, s // 30))
-    if count is None:                     # idle -> a check, no number
+    # THE CHECK IS KEYED ON THE STATE, NOT ON A MISSING COUNT, and the
+    # difference is not academic. This used to read `if count is None`, which
+    # made two silent mistakes possible:
+    #
+    #   `idle` WITH a count drew the NUMBER -- a tray icon reading `idle 4`,
+    #   which looks like four things needing attention when the truth is the
+    #   opposite. It never happened only because _parse() normalises idle's
+    #   count away, so the invariant lived in the PARSER rather than here.
+    #
+    #   `blocked` with an UNREADABLE count (`_parse` yields None for `-` or a
+    #   non-numeric field) drew the CHECK -- the calmest glyph there is, on the
+    #   loudest state.
+    #
+    # Now: idle draws the check because it is idle. Any other state draws its
+    # number when it has one, and a BARE badge when it does not -- honest about
+    # "something is happening, how much is unknown" rather than claiming calm.
+    if check:
         r = bd
         d.line([(x0 + r * 0.28, (bd - 1) / 2),
                 ((x0 + s - 1) / 2, bd - 1 - r * 0.20),
                 (s - 1 - r * 0.14, r * 0.10 - 1)],
                fill=ink, width=max(2, s // 9), joint="curve")
-    else:
+    elif count is not None:
         _number(d, box, str(count), _font(_SANS, int(bd * _NUM)), ink)
 
 
@@ -161,7 +177,8 @@ def _tile(state, count, size, cursor=True):
     _hero(d, s, m, _prompt(state), cursor)
     bcol = STATE_BADGE.get(state)
     if bcol is not None:              # blocked/working (number), idle (check)
-        _badge(img, s, bcol, STATE_INK.get(state, _BADGE_INK), count)
+        _badge(img, s, bcol, STATE_INK.get(state, _BADGE_INK), count,
+               check=(state == "idle"))
     return img
 
 
