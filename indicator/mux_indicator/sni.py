@@ -167,7 +167,15 @@ def _read_override():
     if not CTL:
         return None
     try:
-        return _parse(open(CTL).read())
+        # `with` rather than `open(CTL).read()`. On CPython the bare form is
+        # not a leak -- refcounting closes the handle the moment .read()
+        # returns -- so the ResourceWarning the test run surfaced was about
+        # DEPENDING on that, not about descriptors piling up. Worth fixing
+        # anyway, since this runs on every poll and the guarantee is an
+        # implementation detail rather than a language one, but it was never
+        # the fd-exhaustion bug it first looked like.
+        with open(CTL) as fh:
+            return _parse(fh.read())
     except OSError:
         return None
 
