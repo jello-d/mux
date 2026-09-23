@@ -39,7 +39,7 @@ case "$*" in
 	printf '%s\t%s\n' "$_n" "$_c" >>"$LIVE" ;;
 *kill-session*)
 	_n=${*##*=}
-	grep -v "^$_n	" "$LIVE" >"$LIVE.t" 2>/dev/null; mv -f "$LIVE.t" "$LIVE" ;;
+	grep -v "^$_n	" "$LIVE" 2>/dev/null >"$LIVE.t"; mv -f "$LIVE.t" "$LIVE" ;;
 *kill-server*) : >"$LIVE" ;;
 *window_index*) printf '0\n' ;;
 *pane_id*)      printf '%%1\n' ;;

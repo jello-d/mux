@@ -158,7 +158,7 @@ mux_scan_build() {      # [socket key] [ignored-log]
 	mux_scan_prune
 	_st=$_sf.tmp.$$
 	_ilog=${2:-}
-	[ -n "$_ilog" ] && : >"$_ilog" 2>/dev/null || _ilog=/dev/null
+	[ -n "$_ilog" ] && : 2>/dev/null >"$_ilog" || _ilog=/dev/null
 	: >"$_st"
 	mux_scan_roots | while read -r _root _depth; do
 		[ -d "$_root" ] || continue

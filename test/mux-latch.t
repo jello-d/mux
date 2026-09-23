@@ -36,7 +36,7 @@ cat >"$T/bin/transport" <<'EOF'
 printf '%s\n' "$*" >>"$TRIES"
 _l=$(head -1 "$SCRIPT" 2>/dev/null || true)
 [ -n "$_l" ] || { echo "transport: script exhausted" >&2; exit 99; }
-tail -n +2 "$SCRIPT" >"$SCRIPT.t" 2>/dev/null || :
+tail -n +2 "$SCRIPT" 2>/dev/null >"$SCRIPT.t" || :
 mv -f "$SCRIPT.t" "$SCRIPT"
 _rc=${_l%% *}; _msg=${_l#* }
 [ "$_msg" = "$_l" ] && _msg=

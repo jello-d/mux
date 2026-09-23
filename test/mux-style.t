@@ -55,7 +55,7 @@ case "$*" in
 	printf 'set %s\n' "$_n" >>"$SETLOG"
 	# Exact field compare, not a grep pattern: an option name with a regex
 	# metacharacter would otherwise never be replaced (see mux-click.t).
-	awk -F'\t' -v k="$_n" '$1 != k' "$OPTS" >"$OPTS.t" 2>/dev/null || :
+	awk -F'\t' -v k="$_n" '$1 != k' "$OPTS" 2>/dev/null >"$OPTS.t" || :
 	mv -f "$OPTS.t" "$OPTS"
 	printf '%s\t%s\n' "$_n" "$_v" >>"$OPTS" ;;
 esac

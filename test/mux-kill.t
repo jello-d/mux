@@ -34,7 +34,7 @@ case "$*" in
 *kill-session*)
 	_n=${*##*=}
 	printf 'kill-session %s\n' "$_n" >>"$KILLED"
-	grep -vxF "$_n" "$LIVE" >"$LIVE.t" 2>/dev/null || :
+	grep -vxF "$_n" "$LIVE" 2>/dev/null >"$LIVE.t" || :
 	mv -f "$LIVE.t" "$LIVE" ;;
 *has-session*)
 	_n=${*##*=}

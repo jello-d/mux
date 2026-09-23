@@ -88,7 +88,7 @@ mux_sess_add() {        # <name> <root> [key]
 	_sf=$(mux_sess_file "${3:-}")
 	mkdir -p "$(dirname "$_sf")" 2>/dev/null || return 0
 	mux_sess_has "$1" "${3:-}" && return 0
-	printf '%s\t%s\n' "$1" "$2" >>"$_sf" 2>/dev/null || true
+	printf '%s\t%s\n' "$1" "$2" 2>/dev/null >>"$_sf" || true
 	return 0
 }
 
@@ -99,7 +99,7 @@ mux_sess_drop() {       # <name> [key]
 	_sf=$(mux_sess_file "${2:-}")
 	[ -f "$_sf" ] || return 0
 	_st=$_sf.tmp.$$
-	awk -F'\t' -v n="$1" '$1!=n' "$_sf" >"$_st" 2>/dev/null
+	awk -F'\t' -v n="$1" '$1!=n' "$_sf" 2>/dev/null >"$_st"
 	mv -f "$_st" "$_sf" 2>/dev/null || rm -f "$_st"
 	return 0
 }
