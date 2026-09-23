@@ -51,7 +51,10 @@ _lib=$(dirname "$0")
 # than a private parser. Omitting it made _busy_pat silently return nothing,
 # which degraded to the old verdict instead of failing loudly -- a graceful
 # fallback hiding a missing dependency.
-for _l in mux-agent-state.sh mux-data.sh mux-context.sh mux-conf.sh; do
+# mux-log.sh for mux_log: --repair MUTATES a record, and a mutation nobody can
+# see afterwards is exactly what made the original bug expensive to find.
+for _l in mux-agent-state.sh mux-data.sh mux-context.sh mux-conf.sh mux-log.sh
+do
 	[ -r "$_lib/$_l" ] || {
 		echo "mux: $_l missing (incomplete install)" >&2; exit 1; }
 	. "$_lib/$_l"
@@ -341,6 +344,8 @@ printf '%s' "$_rows" \
 				# rather than an error.
 				if _fix "$_pane" "$_ep"; then
 					_v="REPAIRED: was working, now idle"
+					mux_log doctor "repaired $_sess" \
+						"($_pane): working -> idle"
 				else
 					_v="moved during the window, left alone"
 				fi

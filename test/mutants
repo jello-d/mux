@@ -535,3 +535,45 @@ t mux-agent-doctor
 - 	-*) echo "mux: agent-doctor: unknown option: $1" >&2
 + 	--no-such-flag) echo "mux: agent-doctor: unknown option: $1" >&2
 m must exit 2
+
+= log-write-failure-propagates
+f libexec/mux-log.sh
+t mux-log
+- 		2>/dev/null >>"$_ml_f" || return 0
++ 		2>/dev/null >>"$_ml_f" || return 1
+m unwritable DIRECTORY made mux_log fail
+
+= log-never-truncates
+f libexec/mux-log.sh
+t mux-log
+- 	_ml_max=${MUX_LOG_MAX:-262144}
++ 	_ml_max=999999999
+m cap is not firing
+
+= log-none-still-writes
+f libexec/mux-log.sh
+t mux-log
+- 	none) return 0 ;;
++ 	none) : ;;
+m OFF
+
+= log-filter-matches-whole-line
+f libexec/mux-log
+t mux-log
+- 		awk -v s="$_sub" '{ f = $2; sub(/\[.*/, "", f); if (f == s) print }'
++ 		grep -F -- "$_sub"
+m matched the MESSAGE
+
+= log-missing-reads-as-empty
+f libexec/mux-log
+t mux-log
+- if [ ! -e "$_f" ]; then
++ if false; then
+m no log yet
+
+= log-mkdir-failure-propagates
+f libexec/mux-log.sh
+t mux-log
+- 	[ -d "$_ml_d" ] || mkdir -p "$_ml_d" 2>/dev/null || return 0
++ 	[ -d "$_ml_d" ] || mkdir -p "$_ml_d" 2>/dev/null || return 1
+m unwritable PATH made mux_log fail

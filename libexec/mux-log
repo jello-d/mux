@@ -1,0 +1,86 @@
+#!/bin/sh
+# mux-log: read mux's log.
+#
+#   mux log [-n LINES] [-f] [SUBSYSTEM]
+#
+# The log itself is written by mux-log.sh (which explains what goes in it and
+# why it is always on). This is the reader, and it exists so the feature is
+# DISCOVERABLE: a log whose path you have to know is a log nobody reads.
+#
+# IT REPORTS ITS OWN ABSENCE, and that is load-bearing rather than politeness.
+# Writing is deliberately best-effort -- a full disk must not kill a latch that
+# is holding your session -- which means a broken log is silent at write time.
+# So the loudness moves here, to the moment you go looking: a missing directory,
+# an unwritable file or logging switched off are each said plainly instead of
+# being shown as an empty log, because "nothing went wrong" and "nothing was
+# recorded" are opposite answers and an empty file cannot tell them apart.
+set -eu
+
+_lib=$(dirname "$0")
+[ -r "$_lib/mux-log.sh" ] || {
+	echo "mux: mux-log.sh missing (incomplete install)" >&2; exit 1; }
+. "$_lib/mux-log.sh"
+
+_n=200 _follow=0 _sub=
+while [ "$#" -gt 0 ]; do
+	case $1 in
+	-n) shift; _n=${1:-200} ;;
+	-n*) _n=${1#-n} ;;
+	-f|--follow) _follow=1 ;;
+	-h|--help)
+		echo "usage: mux log [-n LINES] [-f] [SUBSYSTEM]"; exit 0 ;;
+	--) shift; break ;;
+	-*) echo "mux: log: unknown option: $1" >&2
+	    echo "usage: mux log [-n LINES] [-f] [SUBSYSTEM]" >&2; exit 2 ;;
+	*)  break ;;
+	esac
+	shift
+done
+_sub=${1:-}
+
+case $_n in
+''|*[!0-9]*) echo "mux: log: -n wants a number, got '$_n'" >&2; exit 2 ;;
+esac
+
+_f=$(mux_log_path)
+[ -n "$_f" ] || {
+	echo "mux: logging is OFF (MUX_LOG=none)" >&2
+	echo "mux: unset MUX_LOG to log to the default path" >&2
+	exit 1; }
+
+if [ ! -e "$_f" ]; then
+	# Not an error state: a box that has never latched and never repaired a
+	# record has correctly written nothing. Say WHICH it is, and where.
+	echo "mux: no log yet at $_f" >&2
+	echo "mux: it is written when mux changes something or cannot do" >&2
+	echo "mux: something -- a latch transition, a doctor repair." >&2
+	exit 1
+fi
+[ -r "$_f" ] || { echo "mux: cannot read $_f" >&2; exit 1; }
+
+# The subsystem filter matches the FIELD, not the line: a message mentioning
+# `latch` must not be mistaken for a latch entry. The format is
+# `<ts> <subsys>[<pid>] ...`, so anchor on the second field up to its bracket.
+_filter() {
+	if [ -n "$_sub" ]; then
+		awk -v s="$_sub" '{ f = $2; sub(/\[.*/, "", f); if (f == s) print }'
+	else
+		cat
+	fi
+}
+
+if [ "$_follow" -eq 1 ]; then
+	# No `tail -n` here: -f is for watching what ARRIVES, and pairing it with
+	# a backlog makes the first screen ambiguous about which is which.
+	tail -f -- "$_f" | _filter
+	exit 0
+fi
+
+_out=$(_filter <"$_f" | tail -n "$_n")
+if [ -z "$_out" ]; then
+	[ -n "$_sub" ] \
+		&& echo "mux: no '$_sub' entries in $_f" >&2 \
+		|| echo "mux: $_f is empty" >&2
+	exit 1
+fi
+printf '%s\n' "$_out"

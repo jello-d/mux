@@ -119,6 +119,43 @@ It REFUSES (exit 1) rather than answering half a pair: colours 0\(en15 are the
 terminal's own and have no fixed value, so a guess would put a wrong colour on
 the thing whose whole job is identifying a machine.
 .TP
+.B mux log " [" \-n " " \fILINES\fR "] [" \-f "] [" \fISUBSYSTEM\fR ]
+Read mux's log: what mux CHANGED, and what it could not do. Mutations and
+failures only \(em never routine activity \(em which is what keeps it small
+enough to read and makes it answer the question you actually have after an
+incident.
+.IP
+It is ALWAYS ON, unlike
+.B MUX_EMIT_LOG
+(which fires on every tool call and so is opt\-in). That is deliberate: a
+log you must switch on BEFORE the incident cannot help with one you cannot
+reproduce, and a network outage is exactly that. It exists because
+.B mux latch
+once held a session across an hour\-long outage and a recovery while leaving
+nothing behind \(em every transition went to stderr, and the state machine lived
+in shell variables that died with the process.
+.IP
+Entries are
+.RI < timestamp "> <" subsystem >[< pid >] < message >,
+the pid so two concurrent latches can be told apart in one file.
+.I SUBSYSTEM
+filters on that FIELD, not on the line, so a message merely mentioning
+.B latch
+is not reported as a latch entry. Current subsystems are
+.B latch
+(every state transition) and
+.B doctor
+(each record
+.B \-\-repair
+rewrites).
+.IP
+It REPORTS ITS OWN SILENCES rather than printing nothing, because "logging is
+off", "nothing has happened yet", "the file is empty" and "no entries for that
+subsystem" are four different answers and an empty screen cannot tell them
+apart. Writing is best\-effort by design \(em a full disk must never kill a
+latch holding your session \(em so this reader is where an unwritable or
+missing log is said out loud.
+.TP
 .B mux sane
 Put the terminal back after a full\-screen program died without tearing
 down \(em a dropped ssh, a killed tmux, a crashed editor. Named after
@@ -1341,6 +1378,27 @@ Shipped package data (themes, layouts, agents, the tmux fragments). Default the
 sibling of the
 .B mux
 binary's prefix.
+.TP
+.B MUX_LOG
+Where the log goes, and whether there is one. Three\-valued on purpose, since
+"unset" and "off" are different instructions: UNSET is the default path,
+.IR $MUX_STATE/mux.log ;
+.B none
+disables logging entirely (nothing is written and no directory is created); any
+other value is used as the file. It lives under
+.B MUX_STATE
+rather than
+.B MUX_CACHE
+because a log cannot be REBUILT, which is the test that divides the two.
+.TP
+.B MUX_LOG_MAX
+Bytes after which the log is truncated. Default 262144. Capped rather than
+rotated, on the same reasoning as
+.BR MUX_EMIT_LOG :
+an unbounded always\-on file is its own bug. Truncation is safe only BECAUSE the
+log records mutations and failures rather than activity \(em at that volume the
+default holds years of incidents, so if truncation ever fires in real use,
+something is logging routine events and that is the bug, not the cap.
 .TP
 .B MUX_CACHE
 Regenerable state: the per-socket palette stamps and the project discovery map.

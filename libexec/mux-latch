@@ -64,6 +64,10 @@ set -eu
 
 _lib=$(dirname "$0")
 . "$_lib/mux-conf.sh"
+# mux-log.sh for mux_log: latch is the reason the log exists. Every transition
+# went to stderr and the state machine lived in shell variables, so a latch that
+# did NOT recover left nothing to read afterwards.
+. "$_lib/mux-log.sh"
 
 MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
 [ -d "${MUX_SHARE:-}" ] || MUX_SHARE=$_lib/../share
@@ -239,6 +243,11 @@ _say() {   # <state> <detail...>
 	_ss=$1; shift
 	_sd=$*
 	printf 'mux latch: %s%s\n' "$_ss" "${_sd:+ -- $_sd}" >&2
+	# The log gets every transition, and this is the ONE place that needs to
+	# know: a transition is latch's unit of both change and failure, and
+	# they are rare, so logging all of them respects the mutations-and-
+	# failures rule rather than bending it.
+	mux_log latch "$_ss${_sd:+ -- $_sd}"
 	[ -n "$STATUS" ] || return 0
 	$STATUS "$_ss" "$_sd" >/dev/null 2>&1 || true
 }
