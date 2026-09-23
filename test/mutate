@@ -39,7 +39,24 @@ PASS=0; FAIL=0; ERR=0
 
 # Parse under the shell the file actually declares. mux is dash-clean by rule,
 # but the check follows the shebang rather than assuming.
+# BY LANGUAGE, not just by shebang. The corpus reaches indicator/ now, and
+# render.py has no shebang at all -- so the shebang-only version fell through to
+# `dash -n` on Python, called every mutation a syntax error, and reported a
+# corpus error for a record that was fine. A parse check that cannot parse the
+# file is worse than none: it turns every result into the same wrong one.
 _parses() {   # <file>
+	case "$1" in
+	*.py)
+		# compile(), not py_compile: it checks the syntax and writes
+		# NOTHING. py_compile always wants an output file, refuses
+		# /dev/null outright ("will be changed into a regular one"), and
+		# left to itself would drop a .pyc beside the source that a later
+		# import would pick up.
+		python3 -c 'import sys
+src = open(sys.argv[1]).read()
+compile(src, sys.argv[1], "exec")' "$1" 2>/dev/null
+		return $? ;;
+	esac
 	case "$(head -1 "$1")" in
 	*bash) bash -n "$1" 2>/dev/null ;;
 	*)     dash -n "$1" 2>/dev/null ;;

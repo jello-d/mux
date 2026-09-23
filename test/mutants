@@ -457,3 +457,38 @@ t mux-host-color
 - 	[ -n "$_hfh" ] && [ -n "$_hbh" ] || return 0
 + 	:
 m refuses: got
+
+= indicator-unknown-verb-installs
+f indicator/setup.sh
+t mux-indicator-setup
+- 	   exit 2 ;;
++ 	   exit 0 ;;
+m unknown verb must exit 2
+
+= indicator-check-colours-a-pipe
+f indicator/setup.sh
+t mux-indicator-setup
+- 	if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
++ 	if true; then
+m ANSI colour into a pipe
+
+= indicator-stale-unit-reads-current
+f indicator/setup.sh
+t mux-indicator-setup
+- 	if cmp -s "$PKG_DIR/$UNIT" "$UNIT_DIR/$UNIT" 2>/dev/null
++ 	if [ -f "$UNIT_DIR/$UNIT" ]
+m DRIFTED unit file read as current
+
+= indicator-check-never-fails
+f indicator/setup.sh
+t mux-indicator-setup
+- 	bad() { printf '  %s[FAIL]%s %s\n' "$_R" "$_O" "$*"; RC=1; }
++ 	bad() { printf '  %s[FAIL]%s %s\n' "$_R" "$_O" "$*"; :; }
+m must exit non-zero
+
+= render-check-keyed-on-count
+f indicator/mux_indicator/render.py
+t mux-indicator
+-     if check:
++     if count is None:
+m idle
