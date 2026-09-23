@@ -65,7 +65,7 @@ doc() {
 		XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" \
 		MUX_SHARE="$T/share" MUX_DOCTOR_PROC="$T/proc" \
 		MUX_DOCTOR_WINDOW="${WIN:-1}" \
-		"$HERE/libexec/mux-agent-doctor" global 2>&1
+		"$HERE/libexec/mux-agent-doctor" "$@" global 2>&1
 }
 # `_rc=0; _o=$(doc) || _rc=$?` throughout: under set -eu a bare `_o=$(doc)`
 # aborts the moment doc exits non-zero, which is exactly the case under test.
@@ -181,6 +181,150 @@ rm -f "$PANE_TXT"
 _rc=0; _o=$(doc) || _rc=$?
 no_has "$_o" "STALE" "an uncapturable pane produced a stale verdict"
 [ "$_rc" -eq 0 ] || fail "a failed capture must not fail the run"
+printf 'some output\n  auto mode on . esc to interrupt . for agents\n' \
+	>"$PANE_TXT"
+: >"$T/share/agents/claude.agent"
+
+# --- --repair: the ONE finding that cannot heal itself -------------------
+# Found live on manifold: session `fenix-binary` sat on a `working` record for
+# days. The cause was upstream (an agent resolves its hooks ONCE at session
+# start, so a session running since before the plugin gained --beat keeps
+# promoting after the turn ends), but the point here is the RECOVERY. The other
+# two findings recover on their own; this one cannot, because the turn is over
+# and nothing further fires until a human starts a new one. Detecting a thing
+# that only a restart can fix is a diagnosis without a cure.
+#
+# THE SCOPE IS THE INTERESTING PART, so each refusal below is pinned as tightly
+# as the repair itself. A --repair that also "fixed" DRIFT would write `working`
+# on a session that just finished, which is the worse direction; one that fixed
+# an ORPHAN would have to invent a state from a CPU sample.
+printf 'busy    esc to interrupt\n' >"$T/share/agents/claude.agent"
+printf 'nothing that matches the marker\n' >"$PANE_TXT"
+rm -f "$T/run/agent-state/global"/*
+# A session name WITH A SPACE and a notification id, because the rewrite has to
+# put six fields back in the order it found them. Hand-parsing a record is the
+# trap this codebase has already paid for twice.
+SFILE=$T/run/agent-state/global/1
+agent_rec "$SFILE" working %1 1234 'my project' 777
+setcpu 101 0
+burn 101 0
+
+# Without the flag it stays read-only ON THIS PATH TOO. The read-only case above
+# covers drift; this is the path that gained the ability to write, so the
+# default has to be re-proved here rather than inherited.
+_sum=$(md5sum <"$SFILE")
+_rc=0; _o=$(doc) || _rc=$?
+# The BYTES are checked before the verdict string, deliberately. A repair that
+# ran unconditionally would also change the verdict from STALE to REPAIRED, so
+# asserting the verdict first reports "no stale record" -- which reads as a
+# broken fixture and sends you to the wrong end of the file.
+[ "$_sum" = "$(md5sum <"$SFILE")" ] \
+	|| fail "a plain run rewrote a stale record. Read-only is the DEFAULT:
+looking must never write, which is the whole reason --repair is opt-in."
+has "$_o" "STALE" "the setup did not produce a stale record"
+has "$_o" "mux agent-doctor --repair" "the stale summary did not offer the cure"
+
+# With the flag: the state word changes and NOTHING else does.
+setcpu 101 0
+burn 101 0
+_rc=0; _o=$(doc --repair) || _rc=$?
+has "$_o" "REPAIRED" "--repair did not report repairing a stale record"
+# Field by field FIRST, so the failure names which one moved. The epoch is kept
+# on purpose: the turn ended at an unknown point AFTER working began, so
+# stamping now would assert the one thing known to be false. The notif id is
+# kept so the next real transition closes the banner the ordinary way.
+read -r _gs _gw _gp _ge _gn _gsess <"$SFILE"
+[ "$_gs" = idle ]         || fail "state not repaired to idle: [$_gs]"
+[ "$_gw" = 0 ]            || fail "the window index moved: [$_gw]"
+[ "$_gp" = %1 ]           || fail "the pane id moved: [$_gp]"
+[ "$_ge" = 1234 ]         || fail "the epoch was rewritten: [$_ge]"
+[ "$_gn" = 777 ]          || fail "the notification id was dropped: [$_gn]"
+[ "$_gsess" = 'my project' ] || fail "the session name broke: [$_gsess]"
+# ... then the whole line, as the backstop the per-field reads cannot be: they
+# would not notice a trailing field appended after the session name, because
+# `read` hands the last variable the rest of the line.
+_got=$(cat "$SFILE")
+[ "$_got" = "idle 0 %1 1234 777 my project" ] \
+	|| fail "the repaired record is not the original with one word changed:
+  got  [$_got]
+  want [idle 0 %1 1234 777 my project]"
+
+# A repair that did what it was asked is a SUCCESS. Exiting non-zero after
+# fixing everything would make `mux agent-doctor --repair` unusable from a
+# script, and would report failure for a run that left the box correct.
+[ "$_rc" -eq 0 ] || fail "a successful repair must exit 0, got $_rc"
+
+# ... but it still names the CAUSE. The record was wrong because a hook
+# misbehaved, and a repair that only says "fixed" invites the same bug forever.
+has "$_o" "--beat" "the repair did not name the cause it is papering over"
+has "$_o" "at session start" "the repair did not mention hooks being resolved
+once -- the reason a plugin update does not reach a running session, which is
+how this bug survived two provisions"
+
+# Twice is once: nothing left to repair, and no complaint about it.
+setcpu 101 0
+burn 101 0
+_rc=0; _o=$(doc --repair) || _rc=$?
+no_has "$_o" "REPAIRED" "a second repair claimed to fix an already-fixed record"
+[ "$_rc" -eq 0 ] || fail "a second repair must be a clean no-op, got $_rc"
+
+# --- --repair REFUSES the other two verdicts -----------------------------
+# DRIFT: recorded idle, agent working. It heals on the next tool call, and the
+# repair would be to write `working` -- making a finished session look busy,
+# which is the direction that leaves you waiting on nothing.
+agent_rec "$SFILE" idle %1 1234 alpha
+setcpu 101 0
+burn 101 40
+_sum=$(md5sum <"$SFILE")
+_rc=0; _o=$(doc --repair) || _rc=$?
+has "$_o" "DRIFT" "--repair hid a drift finding"
+[ "$_sum" = "$(md5sum <"$SFILE")" ] || fail "--repair rewrote a DRIFT record.
+It must fix STALE and nothing else: writing working here is the worse
+direction, and this one heals itself anyway."
+[ "$_rc" -ne 0 ] || fail "an unrepaired drift must still exit non-zero"
+
+# ORPHAN: pane %2 has an agent and no record. A repair would have to INVENT a
+# state, and only a real lifecycle event has the standing to do that.
+printf '  100     1 ksh\n  101   100 claude\n  200     1 ksh\n%s\n' \
+	'  201   200 claude' >"$PSTAB"
+setcpu 201 0
+rm -f "$SFILE"
+_rc=0; _o=$(doc --repair) || _rc=$?
+has "$_o" "ORPHAN" "--repair hid an orphan finding"
+[ ! -e "$T/run/agent-state/global/2" ] \
+	|| fail "--repair CREATED a record for an orphan. It has no state to
+copy, so any value it wrote would be a guess dressed up as a reading."
+[ "$_rc" -ne 0 ] || fail "an unrepaired orphan must still exit non-zero"
+printf '  100     1 ksh\n  101   100 claude\n  200     1 ksh\n' >"$PSTAB"
+
+# --- the compare-and-swap ------------------------------------------------
+# The sample is taken BEFORE a multi-second CPU window, which is long enough for
+# a real hook to fire. A record that moved in the meantime is the hooks' truth
+# and this verdict is the stale one, so overwriting it would be exactly
+# backwards -- and would clobber a genuine `working` with `idle`, the inversion
+# this whole file exists to prevent.
+agent_rec "$SFILE" working %1 1234 alpha 777
+setcpu 101 0
+burn 101 0
+# A hook lands mid-window: same pane, NEW epoch.
+( sleep 0.3; agent_rec "$SFILE" working %1 9999 alpha 777 ) &
+WIN=1 _rc=0; _o=$(doc --repair) || _rc=$?
+_got=$(cat "$SFILE")
+[ "$_got" = "working 0 %1 9999 777 alpha" ] \
+	|| fail "a record that moved during the window was clobbered: [$_got]"
+no_has "$_o" "REPAIRED" "a refused swap was reported as a repair"
+has "$_o" "moved during the window" "a refused swap must say why"
+
+# --- an unknown option is an error, not a namespace ----------------------
+# `mux agent-doctor --repar` must not be read as a partition called --repar:
+# that reports an empty namespace and exits 0, which reads exactly like a clean
+# bill of health for the partition you meant.
+_rc=0; _o=$(doc --repar) || _rc=$?
+[ "$_rc" -eq 2 ] || fail "an unknown option must exit 2, got $_rc: $_o"
+has "$_o" "unknown option" "an unknown option did not say so"
+has "$_o" "usage" "an unknown option did not print the usage"
+
+rm -f "$T/run/agent-state/global"/*
 printf 'some output\n  auto mode on . esc to interrupt . for agents\n' \
 	>"$PANE_TXT"
 : >"$T/share/agents/claude.agent"

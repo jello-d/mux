@@ -492,3 +492,46 @@ t mux-indicator
 -     if check:
 +     if count is None:
 m idle
+
+# Making repair unconditional is caught by the EARLIEST plain run in the file,
+# not by the byte-comparison written for it further down, and the `m` says so on
+# purpose. Repairing by default changes the VERDICT everywhere -- every plain
+# `doc` call reports REPAIRED instead of STALE -- so the first assertion about
+# a stale verdict dies before any later one about bytes can be reached. There
+# is no mutation that reaches the later one while the earlier assertion exists,
+# which makes the byte check a deliberately redundant second statement of the
+# property rather than the guard that holds it up.
+= doctor-repair-not-opt-in
+f libexec/mux-agent-doctor
+t mux-agent-doctor
+- 			if [ "$_repair" -eq 1 ]; then
++ 			if true; then
+m record was not surfaced
+
+= doctor-repair-ignores-epoch
+f libexec/mux-agent-doctor
+t mux-agent-doctor
+- 	[ "$_fs" = working ] && [ "$_fe" = "$2" ] || return 1
++ 	[ "$_fs" = working ] || return 1
+m was clobbered
+
+= doctor-repair-restamps-epoch
+f libexec/mux-agent-doctor
+t mux-agent-doctor
+- 		idle "$_fw" "$_fp" "$_fe" "${_fn:--}" "$_fsess" \
++ 		idle "$_fw" "$_fp" "$(date +%s)" "${_fn:--}" "$_fsess" \
+m the epoch was rewritten
+
+= doctor-repair-fails-after-fixing
+f libexec/mux-agent-doctor
+t mux-agent-doctor
+- 	REPAIRED*)     echo fixed  >>"$_dir/.doctor.$$" ;;
++ 	REPAIRED*)     echo stale  >>"$_dir/.doctor.$$" ;;
+m must exit 0
+
+= doctor-unknown-option-is-a-namespace
+f libexec/mux-agent-doctor
+t mux-agent-doctor
+- 	-*) echo "mux: agent-doctor: unknown option: $1" >&2
++ 	--no-such-flag) echo "mux: agent-doctor: unknown option: $1" >&2
+m must exit 2

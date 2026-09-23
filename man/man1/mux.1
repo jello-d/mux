@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.40" "User Commands"
+.TH MUX 1 "" "mux 0.41" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -296,7 +296,7 @@ reads as fit rather than one row short.
 .B \-\-detach
 removes a client, ending its claim on the size altogether.
 .TP
-.B mux agent-doctor " [" \fINS\fR ]
+.B mux agent-doctor " [" \-\-repair "] [" \fINS\fR ]
 Does each session's RECORDED agent state match what its agent is doing? The
 status strip reports state from per\-pane files written by an agent's lifecycle
 hooks; when a hook does not fire, the file keeps saying whatever it last said
@@ -338,10 +338,48 @@ confidently wrong about a working agent.
 Non\-zero exit when a session reports a finished agent that is working, when a
 record outlives the turn it described, or when any agent is running unrecorded.
 .IP
-STRICTLY READ\-ONLY. It writes nothing and removes nothing, unlike
+A
+.B STALE
+record is the one finding that does NOT heal on its own: the turn is already
+over, so no further hook fires until a human starts a new one, and until then
+the session draws as BUSY while it sits at a prompt waiting.
+.B \-\-repair
+rewrites those records as
+.BR idle .
+It repairs that verdict and no other. A
+.B DRIFT
+heals on the agent's next tool call and the repair would be to write
+.BR working ,
+which is the direction that makes a finished session look busy; an
+.B ORPHAN
+has no record at all, so a repair would have to INVENT a state, and only a real
+lifecycle event has the standing to do that.
+.IP
+Only the state word changes. The epoch is kept deliberately: it marks when the
+current state began, and the turn ended at some unknown point after that, so
+stamping the present would claim the turn just finished \(em the one thing known
+to be false. The notification id is kept too, so the next real transition closes
+the banner the ordinary way. The write is a compare\-and\-swap against the state
+and epoch sampled before the CPU window, so a record that a genuine hook moved
+in the meantime is left exactly alone.
+.IP
+Repairing fixes the SYMPTOM, and the command says so. A record outliving its
+turn means some hook promoted after the turn ended; the cure is that hook
+passing
+.B \-\-beat
+(see
+.BR "mux agent-emit" ).
+Note that an agent resolves its hooks ONCE, at session start, so updating a
+plugin does not reach a session already running.
+.IP
+READ\-ONLY BY DEFAULT: without
+.B \-\-repair
+it writes nothing and removes nothing, unlike
 .BR "mux agent-render" ,
 which prunes state files it believes orphaned and so is destructive when it
-cannot see the server. Use this to inspect state, never the renderer.
+cannot see the server. Use this to inspect state, never the renderer. The
+hazard there was an INCIDENTAL write from a tool reached for to look, which is
+why repair is something you have to ask for.
 .IP
 CPU alone cannot settle every case, so there are three bands, not two: clearly
 idle, a middle band reported but not counted, and clearly working.
@@ -800,7 +838,7 @@ It always exits 0: it is a pure report, and a non\-zero exit would be
 indistinguishable from the transport.
 .PP
 .EX
-mux 0.40
+mux 0.41
 capabilities 1
 agent\-list 1
 agent\-summary 1
