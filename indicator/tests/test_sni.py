@@ -122,34 +122,156 @@ class Override(unittest.TestCase):
             os.unlink(path)
 
 
-class QueryMux(unittest.TestCase):
-    """Running the feed command, and telling "quiet" from "could not ask"."""
+class Query(unittest.TestCase):
+    """Running a source, and telling "quiet" from "could not ask".
 
-    def test_a_missing_binary_is_none_not_a_crash(self):
-        """The daemon outlives a broken PATH. It polls forever; one failed
-        lookup must not end it, and must not be read as a state either."""
-        sni = _fresh(MUX_BIN="/nonexistent/definitely-not-mux")
-        self.assertIsNone(asyncio.run(sni._query_mux()))
+    THE EXIT CODE IS THE CONTRACT, and ignoring it was a real bug. `mux
+    agent-summary` prints `none 0` and exits 0 on a host with no agents, so
+    EMPTY IS EXIT 0 and a quiet host is a genuine answer. A non-zero exit has
+    no meaning of its own -- it can only be the transport -- so it must become
+    UNKNOWN.
 
-    def test_output_is_parsed(self):
-        sni = _fresh(MUX_BIN=self._stub("working 2\n", 0))
-        self.assertEqual(asyncio.run(sni._query_mux()), ("working", 2))
+    The old `_query_mux` read stdout and never checked the status. A failed
+    ssh produced empty output, which parsed to None, which the caller read as
+    "no change" -- so it left the previous icon up, and an unreachable machine
+    kept showing whatever it last said, forever. These tests exist so that
+    cannot come back.
+    """
 
-    def test_an_empty_answer_is_still_an_answer(self):
-        """`none 0` from a host with no agents is a FACT, and exits 0."""
-        sni = _fresh(MUX_BIN=self._stub("none 0\n", 0))
-        self.assertEqual(asyncio.run(sni._query_mux()), ("none", None))
-
-    def _stub(self, out, rc):
-        """A throwaway executable standing in for `mux`."""
+    def _stub(self, out, rc, sleep=0):
         import stat
         import tempfile
         fd, path = tempfile.mkstemp(prefix="muxstub", suffix=".sh")
         with os.fdopen(fd, "w") as fh:
-            fh.write("#!/bin/sh\nprintf '%s'\nexit %d\n" % (out, rc))
+            fh.write("#!/bin/sh\n")
+            if sleep:
+                fh.write("sleep %d\n" % sleep)
+            fh.write("printf '%s'\nexit %d\n" % (out, rc))
         os.chmod(path, os.stat(path).st_mode | stat.S_IEXEC)
         self.addCleanup(os.unlink, path)
         return path
+
+    def test_exit_zero_output_is_parsed(self):
+        sni = _fresh()
+        self.assertEqual(
+            asyncio.run(sni._query([self._stub("working 2\n", 0)])),
+            ("working", 2))
+
+    def test_an_empty_answer_is_still_an_answer(self):
+        """`none 0` from a host with no agents is a FACT, and exits 0. It must
+        NOT be confused with a failure -- that is the whole distinction."""
+        sni = _fresh()
+        self.assertEqual(
+            asyncio.run(sni._query([self._stub("none 0\n", 0)])),
+            ("none", None))
+
+    def test_a_NONZERO_exit_is_unknown(self):
+        """Even with plausible output on stdout. The status wins, because only
+        the transport can have failed."""
+        sni = _fresh()
+        self.assertEqual(
+            asyncio.run(sni._query([self._stub("idle 0\n", 255)])),
+            ("unknown", None))
+
+    def test_a_missing_binary_is_unknown_not_none(self):
+        """The daemon outlives a broken PATH, and says it cannot see the host
+        rather than returning None for the caller to misread as "no change"."""
+        sni = _fresh()
+        self.assertEqual(
+            asyncio.run(sni._query(["/nonexistent/definitely-not-mux"])),
+            ("unknown", None))
+
+    def test_exit_zero_but_unparseable_is_unknown(self):
+        """A feed that answers nothing has not told us the host is calm."""
+        sni = _fresh()
+        self.assertEqual(asyncio.run(sni._query([self._stub("", 0)])),
+                         ("unknown", None))
+
+    def test_A_HANG_BECOMES_UNKNOWN(self):
+        """The case that makes `unknown` reachable at all. ssh into a blackholed
+        host does not fail, it SLEEPS -- so without a deadline the item would
+        freeze on its last value indefinitely, showing a calm icon for a machine
+        that fell off the network. That is the exact failure this feature exists
+        to prevent, so the timeout is load-bearing, not a nicety.
+        """
+        sni = _fresh(MUX_INDICATOR_TIMEOUT="0.3")
+        self.assertEqual(
+            asyncio.run(sni._query([self._stub("idle 0\n", 0, sleep=30)])),
+            ("unknown", None))
+
+    def test_a_state_word_mux_NEVER_EMITS_is_unknown(self):
+        """A feed can return plausible garbage. A mis-quoted ssh source ran the
+        remote session PICKER, whose output parsed to the state `1)`, which the
+        renderer draws with the `none` fallback: a calm tile for a host whose
+        feed is broken. The exit code alone did not catch it (that picker
+        happened to fail; a feed returning junk and exiting 0 would not).
+        """
+        sni = _fresh()
+        self.assertEqual(
+            asyncio.run(sni._query([self._stub(" 1) bootique\n", 0)])),
+            ("unknown", None))
+
+    def test_parse_still_passes_words_through(self):
+        """The validation lives in _query, not _parse: _parse stays a pure
+        text->tuple function, and deciding what to TRUST sits with the exit
+        code. Keeping them separate is why the renderer can still have its own
+        fallback for a word it does not know."""
+        sni = _fresh()
+        self.assertEqual(sni._parse("frobnicating 2"), ("frobnicating", 2))
+
+    def test_never_returns_None(self):
+        """The caller compares against its last value to decide whether to
+        repaint; a None would be read as "unchanged" and is what let a stale
+        icon persist. Every path must yield a state."""
+        sni = _fresh(MUX_INDICATOR_TIMEOUT="0.3")
+        for argv in (["/nonexistent/x"], [self._stub("", 0)],
+                     [self._stub("x", 3)]):
+            self.assertIsNotNone(asyncio.run(sni._query(argv)))
+
+
+class Identity(unittest.TestCase):
+    """What a tray host and a human see when there are SEVERAL items.
+
+    With one item "mux" was enough. With one per host it identifies nothing, so
+    the label has to reach the id (which a bar orders on, and which appears in
+    the watcher's name list) and the tooltip (which is what you hover to ask
+    "which machine is this?").
+    """
+
+    def setUp(self):
+        self.sni = _fresh()
+
+    def test_id_carries_the_label_and_keeps_the_prefix(self):
+        """The `mux-` prefix keeps a bar's existing tray `order` working, and
+        the suffix makes the id self-describing on the bus."""
+        self.assertEqual(self.sni.Indicator(label="manifold").Id,
+                         "mux-manifold")
+
+    def test_unlabelled_keeps_the_historical_id(self):
+        self.assertEqual(self.sni.Indicator().Id, "mux-indicator")
+
+    def test_tooltip_title_names_the_HOST(self):
+        tip = self.sni.Indicator(label="manifold").ToolTip
+        self.assertEqual(tip[2], "mux @ manifold")
+
+    def test_two_labels_never_share_an_id(self):
+        """Two items with one id is a tray that cannot tell them apart."""
+        a = self.sni.Indicator(label="manifold").Id
+        b = self.sni.Indicator(label="manifestor").Id
+        self.assertNotEqual(a, b)
+
+    def test_unknown_tooltip_says_it_cannot_reach_the_host(self):
+        """Not "all sessions idle", which is what the count-is-None branch would
+        otherwise say -- a calm sentence about a host we cannot see."""
+        i = self.sni.Indicator(state="unknown", count=None, label="manifold")
+        self.assertIn("cannot reach", i.ToolTip[3])
+
+    def test_unknown_is_not_NeedsAttention(self):
+        """Only `blocked` earns attention. An unreachable host is not an
+        agent waiting on you, and escalating it would cry wolf on every
+        network blip."""
+        i = self.sni.Indicator(state="unknown", label="h")
+        self.assertEqual(i.Status, "Active")
 
 
 if __name__ == "__main__":                              # pragma: no cover

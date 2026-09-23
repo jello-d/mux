@@ -26,6 +26,14 @@ STATE_FRAME = {
     "working": (0xFF, 0x8C, 0xE6, 0xFF),   # bright magenta/pink border
     "idle":    (0x34, 0xC9, 0x4A, 0xFF),   # green (= the badge green)
     "none":    (0x88, 0x88, 0x8E, 0xFF),   # grey (agentless)
+    # UNKNOWN IS NOT CALM, and this row is the whole reason it exists. A source
+    # that could not be reached says NOTHING about that host -- it may be idle,
+    # it may have six blocked agents. Falling back to `none` (which is what an
+    # unrecognised state used to do) would draw a quiet grey tile and assert the
+    # one thing we do not know. Slate blue, deliberately outside the
+    # blocked/working/idle hue family: it must not read as an agent state at
+    # all, because it is a statement about the CONNECTION.
+    "unknown": (0x6C, 0x7A, 0x9C, 0xFF),   # slate blue (unreachable)
 }
 # Badge colour per state -- related to the frame, distinct from it. `none` is
 # absent -> no badge. idle's badge holds a white check, not a number.
@@ -33,6 +41,10 @@ STATE_BADGE = {
     "blocked": (0xC0, 0x18, 0x28, 0xFF),   # bold red -- urgent, less black
     "working": (0x5F, 0x00, 0xD7, 0xFF),   # mux chip bg colour56 (purple)
     "idle":    (0x25, 0xA8, 0x3A, 0xFF),   # green, a drop darker for contrast
+    # A badge, because `none` has none: that difference is what stops "no agents
+    # here" and "cannot see this host" drawing the same tile. It holds a `?`
+    # rather than a count -- there is no count to hold.
+    "unknown": (0x3A, 0x44, 0x5C, 0xFF),   # dark slate, same family as frame
 }
 # Number/check colour per state -- chosen for contrast on the badge, echoing the
 # frame hue: amber (= frame) on the dark-red block badge, deep purple on the
@@ -41,6 +53,7 @@ STATE_INK = {
     "blocked": (0xFF, 0xF6, 0xA8, 0xFF),   # light yellow, pops on red
     "working": (0xFF, 0xE2, 0xBC, 0xFF),   # warm peach, a drop brighter
     "idle":    (0xF4, 0xF4, 0xF6, 0xFF),   # white check
+    "unknown": (0xC8, 0xD2, 0xE8, 0xFF),   # pale slate, reads on the dark badge
 }
 _BASE = (0x14, 0x15, 0x19)           # near-black screen
 _PROMPT_LIFT = 0.55  # how far the ornamental >_ lifts from the screen toward
@@ -127,7 +140,7 @@ def _hero(d, s, m, col, cursor=True):
     d.rectangle([cx, bot - ch, min(cx + cw, rlim), bot], fill=cur)
 
 
-def _badge(img, s, fill, ink, count, check=False):
+def _badge(img, s, fill, ink, count, check=False, mark=None):
     bd = int(s * _BADGE_F)
     x0 = s - bd
     box = [x0, -1, s - 1, bd - 1]
@@ -161,6 +174,11 @@ def _badge(img, s, fill, ink, count, check=False):
                 ((x0 + s - 1) / 2, bd - 1 - r * 0.20),
                 (s - 1 - r * 0.14, r * 0.10 - 1)],
                fill=ink, width=max(2, s // 9), joint="curve")
+    elif mark is not None:
+        # A literal glyph (`?` for unknown), drawn through the same centring
+        # path as a count so it lands identically -- the badge geometry has one
+        # owner, not two.
+        _number(d, box, mark, _font(_SANS, int(bd * _NUM)), ink)
     elif count is not None:
         _number(d, box, str(count), _font(_SANS, int(bd * _NUM)), ink)
 
@@ -178,7 +196,8 @@ def _tile(state, count, size, cursor=True):
     bcol = STATE_BADGE.get(state)
     if bcol is not None:              # blocked/working (number), idle (check)
         _badge(img, s, bcol, STATE_INK.get(state, _BADGE_INK), count,
-               check=(state == "idle"))
+               check=(state == "idle"),
+               mark="?" if state == "unknown" else None)
     return img
 
 

@@ -1,19 +1,41 @@
 """The StatusNotifierItem D-Bus service (org.kde.StatusNotifierItem).
 
-Exports one tray item and updates it live: on a state/count change it re-renders
-the owned pixmap and emits NewIcon/NewStatus so the host (waybar's tray, or any
-DE's) repaints. State comes from `mux agent-summary` (the aggregate worst state
-+ count across the namespace's sessions), polled on a timer. A manual override
-file takes precedence when present, for testing without live sessions.
+Exports ONE TRAY ITEM PER SOURCE and updates each live: on a state/count change
+it re-renders the owned pixmap and emits NewIcon/NewStatus so the host (waybar's
+tray, or any DE's) repaints. State comes from each source's command (normally
+`mux agent-summary`: the aggregate worst state + count across that host's
+sessions), polled on a timer. A manual override file takes precedence when
+present, for testing without live sessions.
+
+N ITEMS FROM ONE PROCESS, and it has to be a CONNECTION EACH. A single
+connection can own several bus names, but `RegisterStatusNotifierItem` takes a
+service NAME and nothing else -- the watcher then looks for /StatusNotifierItem
+on it -- so two names on one connection resolve to the same exported object and
+you get the same item twice. Measured against a live waybar: two connections
+from one pid registered as two items and drew as two. The `-1` in
+`org.kde.StatusNotifierItem-<pid>-1` is a per-process item INDEX, so the naming
+convention anticipated exactly this.
+
+EACH SOURCE POLLS INDEPENDENTLY. One task per item rather than a gather, so a
+host that is slow to answer delays only its own icon. A shared round would make
+every host as slow as the worst one, which over ssh is the normal case.
 """
 import asyncio
 import os
+# SIGKILL by NAME, not the `signal` module: dbus_next.service exports a `signal`
+# DECORATOR (imported below) which shadows it, so `signal.SIGKILL` raises
+# AttributeError. That is not caught by the OSError/ProcessLookupError guard at
+# the call site, so it would have escaped _query, killed that host's poll task,
+# and frozen its icon -- on the TIMEOUT path, meaning it would only ever have
+# fired the moment a host became unreachable.
+from signal import SIGKILL
 
 from dbus_next import BusType, PropertyAccess
 from dbus_next.aio import MessageBus
 from dbus_next.service import ServiceInterface, dbus_property, method, signal
 
 from .render import icon_pixmap
+from .sources import load as load_sources
 
 WATCHER = "org.kde.StatusNotifierWatcher"
 WATCHER_PATH = "/StatusNotifierWatcher"
@@ -24,7 +46,16 @@ ITEM_PATH = "/StatusNotifierItem"
 # to force a value. UNSET by default -- so the deployed service reads ONLY the
 # live feed and no stray /tmp file can silently pin it.
 MUX = os.environ.get("MUX_BIN", "mux")
-POLL = float(os.environ.get("MUX_INDICATOR_POLL", "1.5"))
+# 5s, not the 1.5s of the single-local-host days: a source may be an ssh round
+# trip now, and polling a remote box thrice a second is rude for a signal that
+# changes on human timescales.
+POLL = float(os.environ.get("MUX_INDICATOR_POLL", "5"))
+# A SOURCE THAT HANGS MUST STILL ANSWER. ssh into a blackholed host does not
+# fail, it SLEEPS -- so without a deadline that item would freeze on its last
+# value forever, showing a calm icon for a machine that fell off the network.
+# That is the precise failure this indicator exists to prevent, so the timeout
+# is not a nicety; it is what makes `unknown` reachable.
+TIMEOUT = float(os.environ.get("MUX_INDICATOR_TIMEOUT", "10"))
 CTL = os.environ.get("MUX_INDICATOR_CTL")
 # On a state/count change the `_` cursor blinks BLINK_N times at BLINK_MS each,
 # to catch the eye, then settles cursor-on.
@@ -33,8 +64,11 @@ BLINK_MS = int(os.environ.get("MUX_INDICATOR_BLINK_MS", "250"))
 
 
 class Indicator(ServiceInterface):
-    def __init__(self, state="none", count=None):
+    def __init__(self, state="none", count=None, label=None):
         super().__init__("org.kde.StatusNotifierItem")
+        # The label names the host this item speaks for. None keeps the old
+        # unlabelled identity, which is what the existing tests construct.
+        self._label = label
         self._state = state
         self._count = count
         self._pixmap = icon_pixmap(state, count)
@@ -76,11 +110,16 @@ class Indicator(ServiceInterface):
 
     @dbus_property(access=PropertyAccess.READ)
     def Id(self) -> "s":
-        return "mux-indicator"
+        # `mux-<label>`, so the id is SELF-DESCRIBING on the bus: a human
+        # reading the watcher's item list can tell which host each speaks for
+        # without introspecting it, which is exactly what you want when working
+        # out why one icon is stale. It also keeps the `mux-` prefix a bar can
+        # order on. Unlabelled stays `mux-indicator`, the historical id.
+        return f"mux-{self._label}" if self._label else "mux-indicator"
 
     @dbus_property(access=PropertyAccess.READ)
     def Title(self) -> "s":
-        return "mux"
+        return f"mux @ {self._label}" if self._label else "mux"
 
     @dbus_property(access=PropertyAccess.READ)
     def Status(self) -> "s":
@@ -108,11 +147,17 @@ class Indicator(ServiceInterface):
 
     @dbus_property(access=PropertyAccess.READ)
     def ToolTip(self) -> "(sa(iiay)ss)":
-        if self._count is None:
+        # The TITLE carries the host, because with several items in a tray
+        # "mux" alone identifies nothing -- the one thing you want on hover is
+        # WHICH machine this is.
+        if self._state == "unknown":
+            body = "cannot reach this host"
+        elif self._count is None:
             body = "all sessions idle"
         else:
             body = f"{self._count} session(s): {self._state}"
-        return ["", [], "mux", body]
+        title = f"mux @ {self._label}" if self._label else "mux"
+        return ["", [], title, body]
 
     @dbus_property(access=PropertyAccess.READ)
     def ItemIsMenu(self) -> "b":
@@ -180,37 +225,108 @@ def _read_override():
         return None
 
 
-async def _query_mux():
-    """`mux agent-summary` -> (state, count), or None if it can't be run."""
+UNKNOWN = ("unknown", None)
+# The states `mux agent-summary` can emit. A feed answering ANYTHING else has
+# not told us about that host, so it is UNKNOWN rather than whatever the
+# renderer happens to fall back to.
+#
+# NOT PARANOIA -- measured. A mis-quoted ssh source ran the bare session PICKER
+# on the far side (ssh concatenates its args and the remote shell re-splits, so
+# `sh -lc` `mux agent-summary` became `sh -lc mux` with `agent-summary` as $0).
+# Its output parsed to the state `1)`, which the renderer draws with the `none`
+# fallback: a calm grey tile for a host whose feed is misconfigured. It happened
+# to exit non-zero and so read as unknown anyway, but that was luck. A feed that
+# returns plausible garbage and exits 0 is the failure this closes.
+KNOWN = ("blocked", "working", "idle", "none")
+
+
+async def _query(argv):
+    """Run one source -> (state, count). NEVER None.
+
+    THE EXIT CODE IS THE WHOLE POINT, and ignoring it was the bug this replaces.
+    `mux agent-summary` prints `none 0` and exits 0 on a host with no agents, so
+    EMPTY IS EXIT 0 and a quiet host is a real answer. A non-zero exit therefore
+    has no meaning of its own -- it can only be the transport -- so it must
+    draw as UNKNOWN, never as calm.
+
+    The old version read stdout and ignored the status: a failed ssh gave empty
+    output, which parsed to None, which the caller treated as "no change" and
+    left the previous icon up. So an unreachable machine kept showing whatever
+    it last said, indefinitely. A tray confidently reporting a host it cannot
+    see is worse than no tray, and it is the exact thing this feature exists to
+    prevent.
+    """
     try:
         proc = await asyncio.create_subprocess_exec(
-            MUX, "agent-summary",
+            *argv,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL)
-        out, _ = await proc.communicate()
+            stderr=asyncio.subprocess.DEVNULL,
+            # A SESSION OF ITS OWN, so a timeout can kill the whole GROUP.
+            # Measured: killing just the direct child leaves a grandchild
+            # holding the stdout pipe, and `proc.wait()` then blocks until that
+            # grandchild exits -- 30s against a `sh -c "sleep 30"` source, with
+            # the timeout itself firing correctly at 0.3s. That stalls this
+            # host's poll loop for the grandchild's whole life, which is the
+            # very freeze the timeout exists to prevent, reintroduced through
+            # the reaping path. A source is an arbitrary command, so a
+            # wrapper that spawns a child is not an edge case.
+            start_new_session=True)
     except OSError:
-        return None
-    return _parse(out.decode("utf-8", "replace"))
+        return UNKNOWN
+    try:
+        out, _ = await asyncio.wait_for(proc.communicate(), TIMEOUT)
+    except asyncio.TimeoutError:
+        # Reap it rather than leaving a wedged ssh per poll, which over hours
+        # would be a process leak dressed up as a slow host.
+        try:
+            os.killpg(os.getpgid(proc.pid), SIGKILL)
+        except (OSError, ProcessLookupError):
+            try:
+                proc.kill()
+            except (OSError, ProcessLookupError):
+                pass
+        # BOUNDED even so. The group kill should make this immediate, but this
+        # function's one promise is that it always answers, and an unbounded
+        # wait here would be a way to break that promise while looking careful.
+        try:
+            await asyncio.wait_for(proc.wait(), 2)
+        except (asyncio.TimeoutError, OSError, ProcessLookupError):
+            pass
+        return UNKNOWN
+    if proc.returncode != 0:
+        return UNKNOWN
+    got = _parse(out.decode("utf-8", "replace"))
+    # _parse stays a pure text->tuple function and passes any word through;
+    # deciding whether to TRUST it belongs here, with the exit code.
+    if got is None or got[0] not in KNOWN:
+        return UNKNOWN
+    return got
 
 
-async def _watch(item):
-    """Feed the icon: the override file if present, else `mux agent-summary`.
+async def _watch(item, argv, label=""):
+    """Feed one icon: the override file if present, else this item's source.
     Only repaints when the (state, count) actually changes."""
     last = None
     while True:
-        cur = _read_override() or await _query_mux()
-        if cur is not None and cur != last:
+        cur = _read_override() or await _query(argv)
+        if cur != last:
             last = cur
             item.set(*cur)
-            print(f"mux-indicator: set {cur[0]} {cur[1]}", flush=True)
+            print(f"mux-indicator: {label or 'local'} = "
+                  f"{cur[0]} {cur[1]}", flush=True)
         await asyncio.sleep(POLL)
 
 
-async def run():
+async def _publish(index, label, argv):
+    """One connection, one bus name, one item, one poll task.
+
+    A CONNECTION EACH is not a style choice: see the module docstring. The bus
+    name index is 1-based to match the convention every other SNI producer uses.
+    """
     bus = await MessageBus(bus_type=BusType.SESSION).connect()
-    item = Indicator()
+    item = Indicator(label=label)
     bus.export(ITEM_PATH, item)
-    name = f"org.kde.StatusNotifierItem-{os.getpid()}-1"
+    name = f"org.kde.StatusNotifierItem-{os.getpid()}-{index}"
     await bus.request_name(name)
 
     async def register():
@@ -219,13 +335,15 @@ async def run():
             obj = bus.get_proxy_object(WATCHER, WATCHER_PATH, intro)
             w = obj.get_interface(WATCHER)
             await w.call_register_status_notifier_item(name)
-            print(f"mux-indicator: registered {name} "
-                  f"(feed: {MUX} agent-summary)", flush=True)
+            print(f"mux-indicator: registered {name} as mux-{label} "
+                  f"(feed: {' '.join(argv)})", flush=True)
         except Exception as e:
-            print(f"mux-indicator: register failed: {e}", flush=True)
+            print(f"mux-indicator: register failed for {label}: {e}",
+                  flush=True)
 
     # (Re)register whenever the tray watcher (waybar) appears, so a `wb restart`
-    # or a late-starting bar never leaves us invisible.
+    # or a late-starting bar never leaves us invisible. Per connection, because
+    # each name has to re-announce itself.
     di = await bus.introspect("org.freedesktop.DBus", "/org/freedesktop/DBus")
     dobj = bus.get_proxy_object("org.freedesktop.DBus",
                                 "/org/freedesktop/DBus", di)
@@ -243,6 +361,22 @@ async def run():
     if owner:
         await register()
     else:
-        print("mux-indicator: waiting for the tray watcher", flush=True)
-    asyncio.create_task(_watch(item))
+        print(f"mux-indicator: {label} waiting for the tray watcher",
+              flush=True)
+    asyncio.create_task(_watch(item, argv, label))
+    return bus
+
+
+async def run():
+    sources = load_sources(mux_bin=MUX)
+    print(f"mux-indicator: {len(sources)} source(s): "
+          f"{', '.join(l for l, _ in sources)}", flush=True)
+    for n, (label, argv) in enumerate(sources, start=1):
+        # One failing source must not take the others down: a box you cannot
+        # publish an item for is exactly the box whose absence you most want to
+        # see on the OTHER items.
+        try:
+            await _publish(n, label, argv)
+        except Exception as e:
+            print(f"mux-indicator: could not publish {label}: {e}", flush=True)
     await asyncio.get_event_loop().create_future()  # run until killed
