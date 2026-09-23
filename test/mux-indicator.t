@@ -51,9 +51,9 @@ if ( cd "$IND" && "$_py" -m unittest discover -s tests -t . ) \
 	_n=$(sed -n 's/^Ran \([0-9]*\) test.*/\1/p' "$_out" | tail -1)
 	# A run that asserted NOTHING is a failure, the same rule the rest of the
 	# suite applies to itself: an empty discover exits 0 and looks like a pass.
-	[ -n "$_n" ] && [ "$_n" -ge 20 ] || fail "only ${_n:-0} python test(s)
-ran, and there were 28 when this was written. A discover that matches nothing
-exits 0, so a rename or a broken import reads exactly like a clean run."
+	[ -n "$_n" ] && [ "$_n" -ge 45 ] || fail "only ${_n:-0} python test(s)
+ran, and there were 52 when this was last raised. A discover that matches
+nothing exits 0, so a rename or a broken import reads exactly like a clean run."
 	printf 'ok   %s (%s python tests, %s)\n' "$_name" "$_n" \
 		"$(basename "$(dirname "$(dirname "$_py")")")"
 	exit 0

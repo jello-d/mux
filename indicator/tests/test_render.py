@@ -23,14 +23,15 @@ The three that matter most:
 """
 import unittest
 
-from mux_indicator.render import icon_pixmap, _to_argb
+from mux_indicator.render import (STATE_BADGE, STATE_FRAME, icon_pixmap,
+                                  _to_argb)
 
 try:
     from PIL import Image
 except ImportError:                                     # pragma: no cover
     Image = None
 
-STATES = ("blocked", "working", "idle", "none")
+STATES = ("blocked", "working", "idle", "none", "unknown")
 
 
 class ByteOrder(unittest.TestCase):
@@ -129,6 +130,52 @@ class CountIsIgnoredWhereItShouldBe(unittest.TestCase):
                             icon_pixmap("none", None)[0][2])
 
 
+class UnreachableIsNotCalm(unittest.TestCase):
+    """`unknown` is a STATE now, and the one rule about it is non-negotiable.
+
+    A source that could not be reached says NOTHING about that host: it may be
+    idle, it may have six blocked agents. Before this it fell through to `none`
+    and drew a quiet grey tile, asserting the one thing we do not know. A tray
+    confidently reporting a machine it cannot see is worse than no tray at all,
+    and preventing exactly that is why the cross-machine design pins "empty is
+    exit 0" -- so a quiet host and an unreachable one can never collapse into
+    one answer.
+    """
+
+    def test_unknown_does_not_look_like_none(self):
+        self.assertNotEqual(icon_pixmap("unknown", None)[0][2],
+                            icon_pixmap("none", None)[0][2])
+
+    def test_unknown_does_not_look_like_idle(self):
+        """The other calm glyph, and the more dangerous confusion: idle wears a
+        green check, which reads as a positive report about the host."""
+        self.assertNotEqual(icon_pixmap("unknown", None)[0][2],
+                            icon_pixmap("idle", None)[0][2])
+
+    def test_unknown_has_its_OWN_frame_colour(self):
+        """Asserted on the table, not just on the rendered bytes, because the
+        two halves of unknown's look cover for each other. Mutation testing
+        showed it: delete the frame row and the tile STILL differs from `none`,
+        because the badge row alone is enough to make the pixels differ. Two
+        properties, one assertion, and neither individually killable -- so each
+        gets its own. What matters here is that an unreachable host does not
+        wear the agentless colour."""
+        self.assertIn("unknown", STATE_FRAME)
+        self.assertNotEqual(STATE_FRAME["unknown"], STATE_FRAME["none"])
+
+    def test_unknown_has_a_BADGE_and_none_does_not(self):
+        """The other half. `none` deliberately has no badge, so a badge is what
+        carries "I have something to say about this host" -- here, a `?`."""
+        self.assertIn("unknown", STATE_BADGE)
+        self.assertNotIn("none", STATE_BADGE)
+
+    def test_unknown_ignores_a_count(self):
+        """There is no count to draw -- that is what unknown MEANS. A number
+        here would be a quantity we invented."""
+        self.assertEqual(icon_pixmap("unknown", None)[0][2],
+                         icon_pixmap("unknown", 4)[0][2])
+
+
 class UnknownInputIsSurvivable(unittest.TestCase):
     """The state word comes from `mux agent-summary`, soon from a REMOTE one.
 
@@ -137,7 +184,10 @@ class UnknownInputIsSurvivable(unittest.TestCase):
     `none` look is the right answer: it claims nothing.
     """
 
-    def test_unknown_state_renders_as_none(self):
+    def test_an_UNRECOGNISED_word_renders_as_none(self):
+        """Distinct from the `unknown` STATE above, which has its own look. A
+        word mux never sends (a newer version, a truncated read) still falls
+        back to the claim-nothing glyph rather than raising."""
         self.assertEqual(icon_pixmap("no-such-state", None)[0][2],
                          icon_pixmap("none", None)[0][2])
 

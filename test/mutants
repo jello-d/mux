@@ -577,3 +577,24 @@ t mux-log
 - 	[ -d "$_ml_d" ] || mkdir -p "$_ml_d" 2>/dev/null || return 0
 + 	[ -d "$_ml_d" ] || mkdir -p "$_ml_d" 2>/dev/null || return 1
 m unwritable PATH made mux_log fail
+
+= indicator-ignores-exit-code
+f indicator/mux_indicator/sni.py
+t mux-indicator
+-     if proc.returncode != 0:
++     if False:
+m unknown
+
+= indicator-unknown-falls-back-to-none
+f indicator/mux_indicator/render.py
+t mux-indicator
+-     "unknown": (0x6C, 0x7A, 0x9C, 0xFF),   # slate blue (unreachable)
++ 
+m unknown
+
+= indicator-empty-sources-yields-nothing
+f indicator/mux_indicator/sources.py
+t mux-indicator
+-     return got or [(local_label(), [mux_bin, "agent-summary"])]
++     return got
+m agent-summary
