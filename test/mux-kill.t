@@ -65,9 +65,9 @@ reset()  {
 	: >"$KILLED"
 	mkdir -p "$T/cache"
 	printf 'alpha\t%s\nbravo\t%s\ncharlie\t%s\n' "$T/proj" "$T/proj" \
-		"$T/proj" >"$T/cache/sessions.global"
+		"$T/proj" >"$T/state/sessions.global"
 }
-recorded() { cut -f1 "$T/cache/sessions.global" 2>/dev/null | tr '\n' ' '; }
+recorded() { cut -f1 "$T/state/sessions.global" 2>/dev/null | tr '\n' ' '; }
 
 # --- an unconfirmed kill --all MUST NOT kill anything ----------------------
 # The load-bearing case. Every one of these answers means "no", and the only

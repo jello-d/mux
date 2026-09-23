@@ -144,7 +144,7 @@ case $_o in *"no such session"*) ;; *) fail "unhelpful refusal: [$_o]" ;; esac
 # `my project` was rebuilt as two phantoms -- `my` and `project` -- and the
 # real one never came back. The set is newline separated for exactly this
 # reason: a session name may contain a space, never a newline.
-rm -f "$T"/cache/sessions.*
+rm -f "$T"/state/sessions.*
 : >"$LIVE"
 mkdir -p "$T/tree/my project"
 git init -q "$T/tree/my project" 2>/dev/null || true
@@ -165,7 +165,7 @@ grep -q "^my project	" "$LIVE" \
 grep -q "^my	" "$LIVE" && fail "a phantom session 'my' was built"
 
 # --- nothing recorded is a loud, non-zero answer ----------------------------
-rm -f "$T"/cache/sessions.*
+rm -f "$T"/state/sessions.*
 _o=$(mux "$T/elsewhere" resume) \
 	&& fail "resume with no set should exit non-zero"
 case $_o in *"no sessions recorded"*) ;; *) fail "unhelpful message: [$_o]" ;;

@@ -1,12 +1,39 @@
 # test/lib.sh - a tiny harness for mux's shell tests, sourced by each *.t.
 #
 # Sets HERE (the repo root, so a test sources libexec/<lib>.sh), a private
-# scratch dir T (removed on exit), and fail/pass. A test sets _name, sources
-# this, then the library under test. Pure string logic; nothing outside T is
-# touched. POSIX sh; run one test with `sh test/<name>.t` or all with test/run.
+# scratch dir T (removed on exit), a HOME pinned inside it, and fail/pass. A
+# test sets _name, sources this, then the library under test. Pure string logic;
+# nothing outside T is touched. POSIX sh; run one test with `sh test/<name>.t`
+# or all with test/run.
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT INT TERM
+
+# HOME IS PINNED INSIDE T, and that one line is what makes the claim above
+# ("nothing outside T is touched") actually true rather than aspirational.
+#
+# It was aspirational, and got caught: every location mux derives is
+# $HOME-relative by default, and each test pinned the ones it KNEW about
+# ($MUX_DIR, $MUX_CACHE) by name. When the session set moved to $MUX_STATE
+# (~/.local/state/mux) no existing test had any reason to know the variable
+# existed, so the suite wrote four fixture session files into the REAL state
+# directory and three tests went red for the wrong reason.
+#
+# Pinning the variables one at a time would have fixed those three tests and
+# left the next new location exposed. Pinning HOME fixes every location mux will
+# ever derive, including ones nobody has written yet, which is the only version
+# of this that cannot rot. A test that needs a real path still has $HERE.
+HOME=$T/home
+export HOME
+mkdir -p "$HOME"
+
+# The session set, pinned explicitly as well. HOME above already keeps it inside
+# T, but a fixture is easier to read as $T/state/sessions.global than as
+# $T/home/.local/state/mux/sessions.global, and it mirrors how each test pins
+# $MUX_CACHE. The HOME pin is the guard; this is the convenience.
+MUX_STATE=$T/state
+export MUX_STATE
+mkdir -p "$MUX_STATE"
 _name=${_name:-$(basename -- "$0")}
 fail() { printf 'FAIL %s: %s\n' "$_name" "$1" >&2; exit 1; }
 pass() { printf 'ok   %s\n' "$_name"; exit 0; }

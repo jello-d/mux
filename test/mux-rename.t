@@ -56,7 +56,7 @@ mux_in() {
 		PATH="$T/bin:$PATH" MUX_DIR="$T/conf" MUX_CACHE="$T/cache" \
 		"$HERE/bin/mux" "$@" ) 2>&1
 }
-SET=$T/cache/sessions.global
+SET=$T/state/sessions.global
 live()     { sort "$LIVE" 2>/dev/null | tr '\n' ' '; }
 recorded() { cut -f1 "$SET" 2>/dev/null | sort | tr '\n' ' '; }
 root_of()  { awk -F'\t' -v n="$1" '$1==n{print $2}' "$SET" 2>/dev/null; }
