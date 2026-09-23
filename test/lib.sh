@@ -23,6 +23,12 @@ trap 'rm -rf "$T"' EXIT INT TERM
 # left the next new location exposed. Pinning HOME fixes every location mux will
 # ever derive, including ones nobody has written yet, which is the only version
 # of this that cannot rot. A test that needs a real path still has $HERE.
+# The REAL home, captured before the pin. A test that needs to READ something
+# optional the user installed -- the indicator's venv, say -- has no other way
+# to find it once HOME points into T. Reading is all it is for: the pin's
+# guarantee is that nothing is WRITTEN outside T, and that still holds.
+HOME_REAL=$HOME
+export HOME_REAL
 HOME=$T/home
 export HOME
 mkdir -p "$HOME"
