@@ -3,9 +3,22 @@
 # reboot is followed by `mux resume` and not by rebuilding five sessions by
 # hand. Sourced (functions only).
 #
-# STATE, not config. It lives under $MUX_CACHE, never in $MUX_DIR and never in
-# git: which sessions are up is per-machine and transient. But it must outlive a
-# reboot, so $MUX_CACHE (under ~/.cache) rather than anything in /tmp.
+# STATE, not config, and not CACHE either. Never in $MUX_DIR and never in git:
+# which sessions are up is per-machine. But it must outlive a reboot, so not
+# /tmp -- and it must outlive a CACHE CLEAR, which is the part that was wrong.
+#
+# It lived under $MUX_CACHE (~/.cache/mux) until 0.38. The comment here reasoned
+# about cache versus /tmp and never about cache versus state, and ~/.cache is by
+# definition the directory anything may delete to reclaim space. NOTHING
+# REBUILDS THIS FILE: the set is accumulated one `mux go` at a time, so clearing
+# the cache silently destroyed the answer to "what was I working on", and the
+# only moment you would notice is the `mux resume` after a reboot -- exactly
+# when you cannot reconstruct it.
+#
+# $MUX_STATE ($XDG_STATE_HOME/mux, i.e. ~/.local/state/mux) is the XDG home for
+# precisely this: durable, unreconstructible, not precious enough to be data.
+# The palette stamps and the discovery map stay in $MUX_CACHE, correctly -- both
+# regenerate on demand, which is what makes them a cache.
 #
 # Recorded AUTOMATICALLY, because the scenario is "the machine rebooted" --
 # exactly the moment you did not think to save. Adding a session records it,
@@ -28,12 +41,37 @@
 #
 # Keyed on the PARTITION, so each isolated namespace resumes only its own.
 
+# Where the set lives now, and where it used to.
+mux_sess_dir() {
+	printf '%s' "${MUX_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/mux}"
+}
+_mux_sess_olddir() {
+	printf '%s' "${MUX_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/mux}"
+}
+
 # The set file for a partition. KEY defaults to the ambient socket, matching
 # how the theme stamp and the agent-state dir are keyed.
+#
+# MIGRATES ON FIRST TOUCH, and it has to happen here rather than in a verb
+# somebody has to remember to run. The upgrade lands while sessions are already
+# recorded, and the very next thing that reads this file is likely the
+# `mux resume` after a reboot -- so a set left behind in the old location is a
+# set lost at the one moment it mattered. The move is a rename, idempotent, and
+# silent when there is nothing to move.
 mux_sess_file() {       # [partition]
 	_sk=${1:-${MUX_CTX_PARTITION:-global}}
-	printf '%s/sessions.%s' \
-		"${MUX_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/mux}" "$_sk"
+	_sd=$(mux_sess_dir)
+	_sf=$_sd/sessions.$_sk
+	_so=$(_mux_sess_olddir)/sessions.$_sk
+	if [ ! -e "$_sf" ] && [ -f "$_so" ]; then
+		# Best effort: a failed move must not break the caller, which
+		# then simply sees an empty set rather than an error. The old
+		# file is left alone if the rename fails, so nothing is lost.
+		if mkdir -p "$_sd" 2>/dev/null; then
+			mv -f "$_so" "$_sf" 2>/dev/null || true
+		fi
+	fi
+	printf '%s' "$_sf"
 }
 
 # mux_sess_list [key] -> every recorded name, one per line, insertion order.

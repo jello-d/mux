@@ -350,7 +350,7 @@ one of the same name.
 ### Session sets
 
 The sessions you have open are recorded as you open them, per socket, in
-`$MUX_CACHE/sessions.<socket>` — one `NAME<TAB>ROOT` per line. After a reboot:
+`$MUX_STATE/sessions.<socket>` — one `NAME<TAB>ROOT` per line. After a reboot:
 
 ```sh
 mux resume           # rebuild them all, then attach the first
@@ -609,7 +609,13 @@ Provided by `mux.tmux` (prefix table unless noted; your prefix is untouched):
   hook, and theme overrides. Default `~/.config/mux`.
 - **`MUX_SHARE`** — shipped package data: themes, shapes, agents, and the tmux
   fragments. Default: the `share` sibling of the `mux` binary.
-- **`MUX_CACHE`** — per-socket palette stamp directory. Default `~/.cache/mux`.
+- **`MUX_CACHE`** — regenerable state: palette stamps, the discovery map,
+  in-progress profile edits. Default `~/.cache/mux`. Everything here rebuilds on
+  demand, which is what makes it a cache.
+- **`MUX_STATE`** — the session set. Default `~/.local/state/mux`. *Not* in
+  the cache because nothing rebuilds it: the set accumulates one `mux go` at a
+  time, so a cache clear would destroy it, and you would find out at the
+  `mux resume` after a reboot.
 
 Defaults live in `MUX_SHARE`; your overrides and layouts live in `MUX_DIR`. mux
 reads your override first, then the shipped default.
