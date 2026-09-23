@@ -1,0 +1,60 @@
+#!/bin/sh
+# mux-host-color: the colour pair that identifies a host, as hex.
+#
+#   mux host-color [HOST]   ->  #rrggbb #rrggbb      (fg then bg)
+#
+# Exists for the TRAY. A per-host tray item has to be the same colour as that
+# host's status-bar chip, or the two disagree about which machine is which and
+# neither looks broken -- so the answer comes from mux rather than being derived
+# a second time by whoever is drawing.
+#
+# HEX, NOT A TMUX STYLE, because a style is tmux's dialect: `bg=colour236` is a
+# pixel value only if you know the xterm-256 layout, and handing that to a
+# drawing program makes it learn a standard nobody should own twice. The rule
+# (which colour) and the conversion (what pixel) both live in mux-hosts.sh.
+#
+# A PAIR, ALWAYS. The backgrounds are deliberately dark so light text sits on
+# them, so a bg alone is unusable as ink and an fg alone unusable as a fill.
+# Anything drawing with this uses both, exactly as the chip does.
+#
+# ANY HOST, not just this one: the colour is derived from the NAME, so the box
+# you are sitting at can colour a remote host correctly with nothing shared.
+#
+# READ-ONLY: exits 0 with output, or 1 with a reason. Nothing is written and no
+# tmux server is contacted, so it is safe anywhere, including a status tick.
+set -eu
+
+_lib=$(dirname "$0")
+MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
+
+for _l in mux-conf.sh mux-hosts.sh; do
+	[ -r "$_lib/$_l" ] || {
+		echo "mux: host-color: $_lib/$_l missing (broken install)" >&2
+		exit 1; }
+	. "$_lib/$_l"
+done
+
+case ${1:-} in
+-h|--help)
+	echo "usage: mux host-color [HOST]" >&2
+	exit 0 ;;
+-*)
+	echo "mux: host-color: unknown option: $1" >&2
+	exit 2 ;;
+esac
+
+_h=${1:-$(mux_host_name)}
+[ -n "$_h" ] || { echo "mux: host-color: no host to answer for" >&2; exit 1; }
+
+_pair=$(mux_host_hex "$_h")
+# Empty means a half-resolvable pair -- a 0-15 colour, which is the terminal's
+# own and has no fixed value, or a style with no fg/bg. Refused rather than
+# guessed: a caller drawing ink with no fill is worse off than one that drew
+# nothing, and it would have no way to tell.
+[ -n "$_pair" ] || {
+	echo "mux: host-color: cannot resolve a hex pair for '$_h'" >&2
+	echo "mux:   its style is '$(mux_host_style "$_h")'" >&2
+	echo "mux:   colours 0-15 are the terminal's own and have no fixed" >&2
+	echo "mux:   value; set an explicit fg/bg in $MUX_DIR/hosts" >&2
+	exit 1; }
+printf '%s\n' "$_pair"
