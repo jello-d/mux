@@ -122,6 +122,35 @@ stamp_write() {         # KEY HASH
 	printf '%s\n' "$2" >"$STAMPDIR/mux-themes.$1.sha"
 }
 
+# Drop stamps whose socket has no server behind it any more.
+#
+# EVERY tmux server that sources mux.tmux writes one of these, including the
+# throwaway `-L scratch` servers a test suite spins up, and nothing ever removed
+# one. 60 had accumulated here from 59 dead sockets: not harmful, but it is
+# litter mux made and mux should clear, and a directory that only grows is one
+# nobody will ever audit.
+#
+# HERE is the right moment because it is the only one that needs no decision. A
+# prune verb would need remembering and a timer would need installing, whereas
+# `load` runs whenever a server starts -- so every new server tidies away the
+# dead ones and the steady state is however many servers you actually have.
+#
+# The liveness test is the same one heal() uses. A server mid-startup may not
+# answer and lose its stamp, which costs nothing: the stamp is a cache, and the
+# next load rewrites it. That is also why this never touches anything but
+# stamps.
+prune_stamps() {
+	[ -d "$STAMPDIR" ] || return 0
+	for _ps in "$STAMPDIR"/mux-themes.*.sha; do
+		[ -e "$_ps" ] || continue
+		_pk=${_ps##*/mux-themes.}
+		_pk=${_pk%.sha}
+		[ -n "$_pk" ] || continue
+		tmux -L "$_pk" list-sessions >/dev/null 2>&1 || rm -f "$_ps"
+	done
+	return 0
+}
+
 # Heal one server: KEY names it (for the stamp), ARGS addresses it. Skip when
 # its stamp already matches, or when no server is up on that socket.
 # $2 is the tmux socket ARGS -- `-L work`, two words -- so it must word-split.
@@ -142,6 +171,9 @@ load)
 	[ -n "$_key" ] || _key=default
 	push_palette
 	stamp_write "$_key" "$(themes_hash)"
+	# After the stamp, never before: a failure here must not cost the
+	# server the palette it just loaded.
+	prune_stamps
 	;;
 sync)
 	_h=$(themes_hash)
@@ -177,7 +209,14 @@ EOF
 	fi
 	printf 'swatches: mux help colors\n'
 	;;
+prune)
+	# The same sweep `load` does, on demand. Exposed as a verb for two
+	# reasons: it is the only way to TEST the prune without an ambient
+	# server to hang a load off, and it is the escape hatch for a box that
+	# accumulated stamps before this existed (60 of them, here).
+	prune_stamps
+	;;
 *)
-	echo "usage: mux themes [load|sync|list]" >&2
+	echo "usage: mux themes [load|sync|list|prune]" >&2
 	exit 2 ;;
 esac
