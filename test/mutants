@@ -429,3 +429,31 @@ t mux-discover
 - 		*" $_spn "*) ;;
 + 		*" __never__ "*) ;;
 m LIVE partition's map was pruned
+
+= hostcolor-leading-zero-is-octal
+f libexec/mux-hosts.sh
+t mux-host-color
+- 		0?*) _hc=${_hc#0} ;;
++ 		000?*) _hc=${_hc#0} ;;
+m padded-vs-not
+
+= hostcolor-cube-level-shifted
+f libexec/mux-hosts.sh
+t mux-host-color
+- 	0) printf '0' ;;   1) printf '95' ;;  2) printf '135' ;;
++ 	0) printf '0' ;;   1) printf '96' ;;  2) printf '135' ;;
+m cube: got
+
+= hostcolor-greyscale-base
+f libexec/mux-hosts.sh
+t mux-host-color
+- 		_hv=$((8 + (_hc - 232) * 10))
++ 		_hv=$(((_hc - 232) * 10))
+m greyscale: got
+
+= hostcolor-half-a-pair
+f libexec/mux-hosts.sh
+t mux-host-color
+- 	[ -n "$_hfh" ] && [ -n "$_hbh" ] || return 0
++ 	:
+m refuses: got

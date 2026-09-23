@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.39" "User Commands"
+.TH MUX 1 "" "mux 0.40" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -96,6 +96,28 @@ the session. Written for
 .BR "mux latch" ,
 which uses it on every attempt after the first so that a rebooted host is
 reported rather than silently replaced with an empty session.
+.TP
+.B mux host-color " [" \fIHOST\fR ]
+Print the colour PAIR that identifies HOST (default: this machine) as
+.RI # rrggbb
+for the foreground then the background \(em the same pair
+.B mux style
+paints that host's status\-bar chip with.
+.IP
+It exists for the tray. A per\-host tray item has to be the same colour as that
+host's chip, or the two disagree about which machine is which and neither looks
+broken, so the rule has ONE owner rather than being derived again by whatever
+is drawing. HEX rather than the tmux style because
+.B bg=colour236
+is a pixel value only if you know the xterm\-256 layout, which a drawing program
+should not have to learn.
+.IP
+ANY host, not just this one: the colour derives from the NAME, so the box you
+are sitting at can colour a remote host correctly with nothing shared.
+.IP
+It REFUSES (exit 1) rather than answering half a pair: colours 0\(en15 are the
+terminal's own and have no fixed value, so a guess would put a wrong colour on
+the thing whose whole job is identifying a machine.
 .TP
 .B mux sane
 Put the terminal back after a full\-screen program died without tearing
@@ -778,7 +800,7 @@ It always exits 0: it is a pure report, and a non\-zero exit would be
 indistinguishable from the transport.
 .PP
 .EX
-mux 0.39
+mux 0.40
 capabilities 1
 agent\-list 1
 agent\-summary 1
