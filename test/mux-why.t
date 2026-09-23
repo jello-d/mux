@@ -128,11 +128,11 @@ has "$_r" "$T/src/other" "bare: wrong directory"
 # --- the session set OUTRANKS the map, and says so -------------------------
 # It is the only source that knows where a profile-less `mux go` was rooted,
 # so it must win -- and be named, not passed off as the map.
-printf 'solo\t%s/src/other\n' "$T" >"$T/cache/sessions.work"
+printf 'solo\t%s/src/other\n' "$T" >"$T/state/sessions.work"
 _o=$(run "$T" why solo); _r=$(line "$_o" root)
 has "$_r" "a session you had" "session set: not credited"
 has "$_r" "$T/src/other" "session set: did not outrank the map"
-rm -f "$T/cache/sessions.work"
+rm -f "$T/state/sessions.work"
 
 # --- provenance of the CONTEXT comes from what happened, not what is set ---
 # The failing case is manifold's exactly: a context-command configured against
