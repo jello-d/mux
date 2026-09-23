@@ -354,17 +354,17 @@ t mux-latch
 m must be reported, not replaced
 
 = sessions-back-in-the-cache
-f libexec/mux-sessions.sh
+f libexec/mux-paths.sh
 t mux-sessions
 - 	printf '%s' "${MUX_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/mux}"
 + 	printf '%s' "${MUX_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/mux}"
 m must live under $MUX_STATE
 
 = sessions-migration-clobbers
-f libexec/mux-sessions.sh
+f libexec/mux-paths.sh
 t mux-sessions
-- 	if [ ! -e "$_sf" ] && [ -f "$_so" ]; then
-+ 	if [ -f "$_so" ]; then
+- 	if [ ! -e "$_mpn" ] && [ -e "$_mpo" ]; then
++ 	if [ -e "$_mpo" ]; then
 m adopt-no-clobber
 
 = stamp-prune-takes-the-live-one

@@ -37,7 +37,9 @@ edit() {  # EDITOR NAME
 		EDITOR="$T/ed/$1" "$HERE/bin/mux" edit "$2" 2>&1
 }
 row() { grep "^$1 " "$T/conf/profiles" 2>/dev/null || true; }
-draft() { printf '%s/cache/edit/%s.profile' "$T" "$1"; }
+# STATE, not cache: a draft is work you typed and nothing rebuilds it, so a
+# cache clear must not be able to take it mid-edit (moved in 0.39).
+draft() { printf '%s/state/edit/%s.profile' "$T" "$1"; }
 
 printf 'api         theme=cyan root=/tmp/api\nweb         theme=red\n' \
 	>"$T/conf/profiles"

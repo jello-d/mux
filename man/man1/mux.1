@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.38" "User Commands"
+.TH MUX 1 "" "mux 0.39" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -778,7 +778,7 @@ It always exits 0: it is a pure report, and a non\-zero exit would be
 indistinguishable from the transport.
 .PP
 .EX
-mux 0.38
+mux 0.39
 capabilities 1
 agent\-list 1
 agent\-summary 1
@@ -1283,8 +1283,8 @@ sibling of the
 binary's prefix.
 .TP
 .B MUX_CACHE
-Regenerable state: the per-socket palette stamps, the project discovery map, and
-in-progress profile edits. Default
+Regenerable state: the per-socket palette stamps and the project discovery map.
+Default
 .IR $XDG_CACHE_HOME/mux .
 Everything here rebuilds on demand, which is what makes it a cache.
 .IP
@@ -1298,7 +1298,8 @@ actually have. That moment was chosen because it needs no decision: a verb has
 to be remembered and a timer has to be installed.
 .TP
 .B MUX_STATE
-The SESSION SET, and nothing else so far. Default
+Durable state that CANNOT be rebuilt: the session set, and an unsaved profile
+draft. Default
 .IR $XDG_STATE_HOME/mux ,
 i.e.
 .IR ~/.local/state/mux .
@@ -1307,11 +1308,15 @@ It is here rather than in
 .B MUX_CACHE
 because NOTHING REBUILDS IT: the set is accumulated one
 .B mux go
-at a time, so a cache clear would silently destroy the answer to "what was I
-working on" \(em and the only moment you would notice is the
+at a time, and a draft is what you typed. A cache clear would silently destroy
+the answer to "what was I working on", and the only moment you would notice is
+the
 .B mux resume
-after a reboot, exactly when you cannot reconstruct it. A set left in the old
-location is adopted automatically on first touch.
+after a reboot \(em exactly when you cannot reconstruct it.
+.IP
+THE LINE BETWEEN THE TWO IS ONE QUESTION: does mux rebuild it? Stamps and the
+discovery map do. The session set and a draft do not. Anything left in the old
+location is adopted automatically on first touch, so an upgrade loses nothing.
 .TP
 .BR MUX_NOTIFY_SEND ", " MUX_NOTIFY_CLOSE
 Replace the built-in notification path, for a platform that is not freedesktop.

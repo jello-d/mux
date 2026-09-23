@@ -10,7 +10,7 @@ set -eu
 MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
 
 _lib=$(dirname "$0")
-for _l in mux-profiles.sh mux-context.sh mux-scan.sh; do
+for _l in mux-paths.sh mux-profiles.sh mux-context.sh mux-scan.sh; do
 	[ -r "$_lib/$_l" ] || {
 		echo "mux: $_l missing (incomplete install)" >&2; exit 1; }
 	. "$_lib/$_l"

@@ -18,8 +18,8 @@ MUX_SHARE=${MUX_SHARE:-$(dirname "$0")/../share}
 # The shared $MUX_DIR-over-$MUX_SHARE resolver (mux-data.sh), so the check
 # audits the data mux would ACTUALLY read -- a default theme or layout supplied
 # by the overlay counts, and one shadowed by it is judged on the overlay copy.
-for _l in mux-data.sh mux-context.sh mux-scan.sh mux-profiles.sh \
-		mux-notify.sh mux-views.sh; do
+for _l in mux-paths.sh mux-data.sh mux-context.sh mux-scan.sh \
+		mux-profiles.sh mux-notify.sh mux-views.sh; do
 	_lp=$(dirname "$0")/$_l
 	[ -r "$_lp" ] || {
 		printf '  [FAIL] %s missing (broken install)\n' "$_lp" >&2
@@ -217,7 +217,7 @@ fi
 # 5. unsaved edit drafts. A draft survives an unparseable save on purpose, so
 # the work is handed back rather than eaten -- but a forgotten one means an edit
 # you think you made is not in effect anywhere. Surface it.
-_ed=${MUX_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/mux}/edit
+_ed=$(mux_state_path edit)
 if [ -d "$_ed" ]; then
 	for _d in "$_ed"/*.profile; do
 		[ -e "$_d" ] || continue

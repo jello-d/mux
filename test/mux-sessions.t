@@ -14,6 +14,9 @@
 set -eu
 _name=mux-sessions
 . "$(dirname "$0")/lib.sh"
+# mux-sessions.sh derives its path through mux-paths.sh (mux_state_path), so
+# the dependency is sourced here exactly as bin/mux sources it.
+. "$HERE/libexec/mux-paths.sh"
 . "$HERE/libexec/mux-sessions.sh"
 
 MUX_CACHE=$T/cache

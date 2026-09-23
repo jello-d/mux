@@ -41,14 +41,6 @@
 #
 # Keyed on the PARTITION, so each isolated namespace resumes only its own.
 
-# Where the set lives now, and where it used to.
-mux_sess_dir() {
-	printf '%s' "${MUX_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/mux}"
-}
-_mux_sess_olddir() {
-	printf '%s' "${MUX_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/mux}"
-}
-
 # The set file for a partition. KEY defaults to the ambient socket, matching
 # how the theme stamp and the agent-state dir are keyed.
 #
@@ -60,18 +52,7 @@ _mux_sess_olddir() {
 # silent when there is nothing to move.
 mux_sess_file() {       # [partition]
 	_sk=${1:-${MUX_CTX_PARTITION:-global}}
-	_sd=$(mux_sess_dir)
-	_sf=$_sd/sessions.$_sk
-	_so=$(_mux_sess_olddir)/sessions.$_sk
-	if [ ! -e "$_sf" ] && [ -f "$_so" ]; then
-		# Best effort: a failed move must not break the caller, which
-		# then simply sees an empty set rather than an error. The old
-		# file is left alone if the rename fails, so nothing is lost.
-		if mkdir -p "$_sd" 2>/dev/null; then
-			mv -f "$_so" "$_sf" 2>/dev/null || true
-		fi
-	fi
-	printf '%s' "$_sf"
+	mux_state_path "sessions.$_sk"
 }
 
 # mux_sess_list [key] -> every recorded name, one per line, insertion order.
