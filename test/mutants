@@ -380,3 +380,52 @@ t mux-stamp-prune
 - 	for _ps in "$STAMPDIR"/mux-themes.*.sha; do
 + 	for _ps in "$STAMPDIR"/*; do
 m survived while siblings were at risk
+
+= auth-master-no-shortcircuit
+f share/latch/ssh-auth
+t mux-latch-hooks
+- ssh -O check "$_host" >/dev/null 2>&1 && exit 0
++ ssh -O check "$_host" >/dev/null 2>&1 || true
+m even with an EMPTY agent
+
+= auth-no-agent-read-as-blocked
+f share/latch/ssh-auth
+t mux-latch-hooks
+- *) exit 78 ;;
++ *) exit 1 ;;
+m must answer 78, not 1
+
+= auth-empty-agent-read-as-fine
+f share/latch/ssh-auth
+t mux-latch-hooks
+- 1) exit 1 ;;
++ 1) exit 0 ;;
+m must answer 1
+
+= probe-refusal-read-as-unreachable
+f share/latch/ssh-probe
+t mux-latch-hooks
+- exit 78
++ exit 1
+m is a refusal, not unreachability
+
+= probe-timeout-read-as-cannot-tell
+f share/latch/ssh-probe
+t mux-latch-hooks
+- [ "$_rc" = 124 ] && exit 1
++ [ "$_rc" = 124 ] && exit 78
+m took longer than a
+
+= scan-prune-empty-list
+f libexec/mux-scan.sh
+t mux-discover
+- 	[ -n "$_spk" ] || return 0
++ 	:
+m prune deleted anyway
+
+= scan-prune-takes-live-map
+f libexec/mux-scan.sh
+t mux-discover
+- 		*" $_spn "*) ;;
++ 		*" __never__ "*) ;;
+m LIVE partition's map was pruned
