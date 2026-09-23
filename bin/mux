@@ -190,6 +190,7 @@ context contract 1
 latch contract 1
 sane contract 1
 host-color contract 1
+log contract 1
 unknown-name contract 1
 attach-only contract 1
 latch-fallback none
@@ -321,6 +322,7 @@ agent-doctor)  shift; exec "$LIBEXEC/mux-agent-doctor" "$@" ;;
 latch)         shift; exec "$LIBEXEC/mux-latch" "$@" ;;
 sane)          shift; exec "$LIBEXEC/mux-sane" "$@" ;;
 host-color)    shift; exec "$LIBEXEC/mux-host-color" "$@" ;;
+log)           shift; exec "$LIBEXEC/mux-log" "$@" ;;
 capabilities)  shift; _cmd_capabilities "$@" ;;
 esac
 
@@ -609,6 +611,7 @@ usage: mux [OPTION] [VERB] [NAME] [PROFILE]  (OPTION may follow VERB too)
   why [NAME]                 show each resolved value and where it came from
   views [MODE]               who is attached, and what that costs
   agent-doctor               does recorded agent state match reality? (--repair)
+  log [-n N] [-f] [SUBSYS]   what mux changed, and what it could not do
   check                      audit mux's install: package data, deps, overlay
   migrate-profiles           convert pre-rename *.layout files (--apply)
   scan                       rebuild the project discovery map (--list)
