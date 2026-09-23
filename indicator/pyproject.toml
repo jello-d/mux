@@ -8,6 +8,13 @@ dependencies = ["dbus-next>=0.2.3", "Pillow>=9"]
 [project.scripts]
 mux-indicator = "mux_indicator.__main__:main"
 
+# EXPLICIT, not auto-discovered. setuptools' flat-layout heuristic happens to
+# exclude a top-level `tests/`, but relying on a heuristic to keep test code
+# out of an installed package is a silent failure waiting for the day the
+# heuristic changes. One line, and the answer is stated.
+[tool.setuptools]
+packages = ["mux_indicator"]
+
 [build-system]
 requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
