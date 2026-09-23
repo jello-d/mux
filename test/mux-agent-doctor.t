@@ -283,19 +283,12 @@ It must fix STALE and nothing else: writing working here is the worse
 direction, and this one heals itself anyway."
 [ "$_rc" -ne 0 ] || fail "an unrepaired drift must still exit non-zero"
 
-# ORPHAN: pane %2 has an agent and no record. A repair would have to INVENT a
-# state, and only a real lifecycle event has the standing to do that.
-printf '  100     1 ksh\n  101   100 claude\n  200     1 ksh\n%s\n' \
-	'  201   200 claude' >"$PSTAB"
-setcpu 201 0
-rm -f "$SFILE"
-_rc=0; _o=$(doc --repair) || _rc=$?
-has "$_o" "ORPHAN" "--repair hid an orphan finding"
-[ ! -e "$T/run/agent-state/global/2" ] \
-	|| fail "--repair CREATED a record for an orphan. It has no state to
-copy, so any value it wrote would be a guess dressed up as a reading."
-[ "$_rc" -ne 0 ] || fail "an unrepaired orphan must still exit non-zero"
-printf '  100     1 ksh\n  101   100 claude\n  200     1 ksh\n' >"$PSTAB"
+# The other refusal, ORPHAN, is asserted further down instead of here, right
+# after the section that establishes orphans are detected at all. Order matters
+# between those two: this case presupposes detection works, so if detection
+# breaks it must be the DETECTION test that goes red. Sitting here, it fired
+# first and took the blame for a mutation aimed at the other one -- which
+# test/mutate caught and refused to count as coverage.
 
 # --- the compare-and-swap ------------------------------------------------
 # The sample is taken BEFORE a multi-second CPU window, which is long enough for
@@ -369,6 +362,20 @@ _bf=$(ls "$T/run/agent-state/global" | LC_ALL=C sort | tr '\n' ' ')
 doc >/dev/null 2>&1 || true
 [ "$_bf" = "$(ls "$T/run/agent-state/global" | LC_ALL=C sort | tr '\n' ' ')" ] \
 	|| fail "the orphan pass changed state files"
+
+# ... and --repair REFUSES this one, which is why it is asserted HERE rather
+# than beside the other repair cases. An orphan has no record to amend, so a
+# repair would have to INVENT a state from a CPU sample; "recording something
+# beats nothing" is the emit path's call to make from a real lifecycle event,
+# not this one's to make from a reading. Placed after the detection assertions
+# above on purpose: this presupposes orphans are found at all, so a mutation
+# that breaks DETECTION must be caught by the detection test, not by this one.
+_rc=0; _o=$(doc --repair) || _rc=$?
+has "$_o" "ORPHAN" "--repair hid an orphan finding"
+[ ! -e "$T/run/agent-state/global/3" ] \
+	|| fail "--repair CREATED a record for an orphan. It has no state to
+copy, so any value it wrote would be a guess dressed up as a reading."
+[ "$_rc" -ne 0 ] || fail "an unrepaired orphan must still exit non-zero"
 
 # Recording it clears the finding -- the verb must be satisfiable.
 agent_rec "$T/run/agent-state/global/3" idle %3 1 gamma
