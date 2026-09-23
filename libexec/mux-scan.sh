@@ -100,6 +100,49 @@ EOF
 	return 1
 }
 
+# Drop maps for partitions that no longer exist.
+#
+# Same shape as the palette-stamp prune and the same reasoning: mux made the
+# file, mux should clear it, and a directory that only grows is one nobody will
+# ever audit. `projects.default` sat on manifold for weeks after the partition
+# it indexed stopped existing.
+#
+# THE ORACLE IS mux_ctx_partitions, which already answers "which partitions mux
+# knows of" -- anything with a .partition file, plus the one we are in. A map
+# outside that set indexes a namespace that cannot be reached.
+#
+# ONE GUARD, AND AN EMPTY ANSWER IS NOT AN ANSWER. This lib is sourced by three
+# programs that each happen to source mux-context.sh too, but "happens to" is
+# not a contract -- so an absent oracle, or one that answers nothing, must mean
+# DO NOTHING. The alternative is reading an empty list as "no partition exists"
+# and deleting every map on the box.
+#
+# There was a `command -v mux_ctx_partitions` check here as well, and mutation
+# testing showed it could not be killed: with it gone the oracle is simply not
+# found, the answer is empty, and the check below catches it anyway. Two guards
+# for one condition means neither can be tested, so the redundant one went. Its
+# only effect was hiding a "not found" on stderr, which in the case it covers is
+# information rather than noise.
+#
+# Safe even when wrong, which is the licence for doing this automatically: every
+# file it can touch is regenerable by definition.
+mux_scan_prune() {
+	_spd=$(mux_cache_dir)
+	[ -d "$_spd" ] || return 0
+	_spk=$(mux_ctx_partitions 2>/dev/null | tr '\n' ' ')
+	[ -n "$_spk" ] || return 0
+	for _spf in "$_spd"/projects.*; do
+		[ -e "$_spf" ] || continue
+		_spn=${_spf##*/projects.}
+		[ -n "$_spn" ] || continue
+		case " $_spk " in
+		*" $_spn "*) ;;
+		*) rm -f "$_spf" ;;
+		esac
+	done
+	return 0
+}
+
 # mux_scan_build [socket key] [ignored-log] -> rescan every root and REPLACE the
 # cache. Writes via a temp and moves, so a concurrent reader never sees a
 # half-written map. Echoes nothing; the caller reports.
@@ -110,6 +153,9 @@ EOF
 mux_scan_build() {      # [socket key] [ignored-log]
 	_sf=$(mux_scan_file "${1:-}")
 	mkdir -p "$(dirname "$_sf")"
+	# Before the rebuild, so a prune that goes wrong cannot take the map this
+	# call is about to write.
+	mux_scan_prune
 	_st=$_sf.tmp.$$
 	_ilog=${2:-}
 	[ -n "$_ilog" ] && : >"$_ilog" 2>/dev/null || _ilog=/dev/null

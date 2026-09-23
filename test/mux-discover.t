@@ -175,4 +175,84 @@ mux "$T/elsewhere" go "$T/tree/solo/inner" >/dev/null \
 # A path that is not a directory fails loud rather than becoming a name.
 fails path-missing "not a directory" "$T/elsewhere" go "$T/no/such/dir"
 
+# --- ORPHANED MAPS ARE PRUNED, LIVE ONES ARE NOT ----------------------
+# mux made these files and nothing ever removed one: `projects.default` sat on
+# manifold for weeks after the partition it indexed stopped existing. The oracle
+# is mux_ctx_partitions, which already answers which partitions mux knows of.
+#
+# The LIVE map is the assertion that matters: a prune that deleted everything
+# would pass any count-based check, and it would delete the map the very call
+# that triggered it is about to use.
+MAPD=$T/cache
+mkdir -p "$MAPD"
+printf 'x\t/tmp\n' >"$MAPD/projects.global"
+printf 'x\t/tmp\n' >"$MAPD/projects.gonepartition"
+printf 'y\n' >"$MAPD/mux-themes.global.sha"
+printf 'z\n' >"$MAPD/sessions.global"
+(
+	. "$HERE/libexec/mux-paths.sh"
+	. "$HERE/libexec/mux-scan.sh"
+	mux_ctx_partitions() { printf 'global\n'; }
+	# The subshell is the POINT: it scopes the stubbed oracle and MUX_CACHE to
+	# this one call, so the three cases here cannot leak into each other.
+	# shellcheck disable=SC2030
+	MUX_CACHE=$MAPD; export MUX_CACHE
+	mux_scan_prune
+)
+[ -f "$MAPD/projects.global" ] \
+	|| fail "the LIVE partition's map was pruned. A prune that deletes
+everything passes any count-based assertion, and this one would delete the map
+the call that triggered it is about to rebuild."
+[ -e "$MAPD/projects.gonepartition" ] \
+	&& fail "a map for a partition mux does not know of survived the prune"
+# It must touch nothing else in that directory.
+[ -f "$MAPD/mux-themes.global.sha" ] \
+	|| fail "the prune took a palette stamp; those are pruned by their own
+rule (a live tmux server), not by this one"
+[ -f "$MAPD/sessions.global" ] \
+	|| fail "the prune took a session set left in the cache by a pre-0.38
+mux, before it could be adopted. That is unreconstructible."
+
+# TWO SEPARATE REFUSALS, asserted separately. They looked like one belt-and-
+# braces pair until a mutation of EITHER survived: each alone covers the case
+# the other does, so neither was individually killable. They guard different
+# conditions, so they get different tests.
+#
+# 1. NO ORACLE AT ALL. mux-scan.sh is sourced by three programs that each happen
+#    to source mux-context.sh too, but "happens to" is not a contract.
+printf 'x\t/tmp\n' >"$MAPD/projects.gonepartition"
+(
+	. "$HERE/libexec/mux-paths.sh"
+	. "$HERE/libexec/mux-scan.sh"
+	# The subshell is the POINT: it scopes the stubbed oracle and MUX_CACHE to
+	# this one call, so the three cases here cannot leak into each other.
+	# shellcheck disable=SC2030
+	MUX_CACHE=$MAPD; export MUX_CACHE
+	mux_scan_prune
+) 2>/dev/null
+[ -e "$MAPD/projects.gonepartition" ] \
+	|| fail "with NO way to enumerate partitions the prune deleted anyway.
+The alternative to skipping is deleting files based on an empty list."
+
+# 2. AN ORACLE THAT ANSWERS NOTHING. A different failure: the function is there
+#    and returned empty. mux_ctx_partitions always includes the one we are in,
+#    so this should be impossible -- which is exactly why it must not be trusted
+#    to be. An empty list means "no partition exists", and acting on it deletes
+#    every map on the box.
+(
+	. "$HERE/libexec/mux-paths.sh"
+	. "$HERE/libexec/mux-scan.sh"
+	mux_ctx_partitions() { return 0; }
+	# The subshell is the POINT: it scopes the stubbed oracle and MUX_CACHE to
+	# this one call, so the three cases here cannot leak into each other.
+	# shellcheck disable=SC2030
+	MUX_CACHE=$MAPD; export MUX_CACHE
+	mux_scan_prune
+)
+[ -e "$MAPD/projects.gonepartition" ] \
+	|| fail "an oracle that answered NOTHING was read as 'no partition
+exists' and every map was deleted. An empty answer is not an answer."
+[ -f "$MAPD/projects.global" ] \
+	|| fail "the live map went with it"
+
 pass
