@@ -99,7 +99,7 @@ set -eu
 # The ONE version string. The man page footer and `mux --version` both read it
 # from here, so they cannot drift apart the way a hardcoded "mux 0.1" in the
 # man page already had.
-MUX_VERSION=0.38
+MUX_VERSION=0.39
 
 # EXIT 3: THE NAME YOU GAVE IS NOT KNOWN HERE. A standard code rather than a
 # per-verb one, because it is one CONDITION that many verbs can trip on -- go,
@@ -336,7 +336,8 @@ fi
 # fallback here, unlike mux_conf_clean above: a normalizer has a safe degraded
 # mode, a data resolver has none (it would silently resolve nothing), so a
 # missing lib is a broken install and says so.
-for _l in mux-data.sh mux-profiles.sh mux-scan.sh mux-sessions.sh; do
+for _l in mux-paths.sh mux-data.sh mux-profiles.sh mux-scan.sh \
+		mux-sessions.sh; do
         [ -r "$LIBEXEC/$_l" ] || {
                 echo "mux: $LIBEXEC/$_l missing (incomplete install)" >&2
                 exit 1; }
@@ -1718,7 +1719,11 @@ _edit_target() {
 # $EDITOR is word-split on purpose: it commonly carries flags, e.g.
 # EDITOR="code -w" or "emacsclient -nw".
 _edit_draft() {
-        _dd=${MUX_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/mux}/edit
+        # STATE, not cache: a draft is work you typed and nothing can
+        # rebuild it. It sat in $MUX_CACHE until 0.39 on the reasoning that
+        # it was transient -- true of the draft's LIFETIME and irrelevant to
+        # whether a cache clear may take it mid-edit.
+        _dd=$(mux_state_path edit)
         _df=$_dd/$_en.profile
         mkdir -p "$_dd"
         if [ -f "$_df" ]; then

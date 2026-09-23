@@ -37,7 +37,17 @@ MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
 # may override per fragment (see mux-data.sh). Inherited from the mux entry
 # point; self-located as a fallback (share/ is a sibling of libexec/).
 MUX_SHARE=${MUX_SHARE:-$(dirname "$0")/../share}
-STAMPDIR=${MUX_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/mux}
+
+# Where mux keeps things (see mux-paths.sh), so the stamp directory is derived
+# in one place rather than spelled out here. Required, not optional: a fallback
+# would be a second copy of the very rule that lib exists to hold.
+_paths=$(dirname "$0")/mux-paths.sh
+[ -r "$_paths" ] || {
+	echo "mux-themes: $_paths missing (incomplete install)" >&2; exit 1; }
+. "$_paths"
+# AFTER the source, obviously, and it was not: assigning this above the `.` line
+# left STAMPDIR empty and every stamp read and write landed at `/mux-themes...`.
+STAMPDIR=$(mux_cache_dir)
 
 # The shared $MUX_DIR-over-$MUX_SHARE resolver (see mux-data.sh), so a theme
 # dropped in $MUX_DIR/themes is COMPILED, not just listed -- the palette the

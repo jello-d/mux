@@ -34,7 +34,7 @@
 mux_scan_file() {       # [partition]
 	_sk=${1:-${MUX_CTX_PARTITION:-global}}
 	printf '%s/projects.%s' \
-		"${MUX_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/mux}" "$_sk"
+		"$(mux_cache_dir)" "$_sk"
 }
 
 # The configured roots, as `PATH DEPTH` lines.
