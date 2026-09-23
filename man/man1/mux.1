@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.37" "User Commands"
+.TH MUX 1 "" "mux 0.38" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -83,7 +83,7 @@ Sessions are recorded automatically as you open them and forgotten on
 .BR "mux kill" ,
 so after a reboot this brings back what you had. It acts on the CURRENT
 partition and takes no way to name another. The set is state, not config:
-.IR $MUX_CACHE/sessions.<socket> ,
+.IR $MUX_STATE/sessions.<socket> ,
 one
 .RI NAME <TAB> ROOT
 per line, per machine and never in git.
@@ -778,7 +778,7 @@ It always exits 0: it is a pure report, and a non\-zero exit would be
 indistinguishable from the transport.
 .PP
 .EX
-mux 0.37
+mux 0.38
 capabilities 1
 agent\-list 1
 agent\-summary 1
@@ -1283,8 +1283,35 @@ sibling of the
 binary's prefix.
 .TP
 .B MUX_CACHE
-Per-socket palette stamp directory. Default
+Regenerable state: the per-socket palette stamps, the project discovery map, and
+in-progress profile edits. Default
 .IR $XDG_CACHE_HOME/mux .
+Everything here rebuilds on demand, which is what makes it a cache.
+.IP
+THE STAMPS PRUNE THEMSELVES. Every tmux server that sources the fragment writes
+one, throwaway
+.B -L
+servers included, and nothing used to remove them \(em 60 had accumulated here
+from 59 sockets that no longer existed. A server start now drops any stamp whose
+socket has no server behind it, so the steady state is however many servers you
+actually have. That moment was chosen because it needs no decision: a verb has
+to be remembered and a timer has to be installed.
+.TP
+.B MUX_STATE
+The SESSION SET, and nothing else so far. Default
+.IR $XDG_STATE_HOME/mux ,
+i.e.
+.IR ~/.local/state/mux .
+.IP
+It is here rather than in
+.B MUX_CACHE
+because NOTHING REBUILDS IT: the set is accumulated one
+.B mux go
+at a time, so a cache clear would silently destroy the answer to "what was I
+working on" \(em and the only moment you would notice is the
+.B mux resume
+after a reboot, exactly when you cannot reconstruct it. A set left in the old
+location is adopted automatically on first touch.
 .TP
 .BR MUX_NOTIFY_SEND ", " MUX_NOTIFY_CLOSE
 Replace the built-in notification path, for a platform that is not freedesktop.

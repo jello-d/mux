@@ -87,4 +87,40 @@ eq rootless-once "$(mux_sess_list $K | tr '\n' ' ')" "spacey rootless "
 mux_sess_has spacey other && fail "has: not scoped to its partition"
 mux_sess_has "" $K && fail "has: an empty name reads as present"
 
+# --- IT LIVES IN $MUX_STATE, NOT $MUX_CACHE ---------------------------
+# Nothing rebuilds this file: the set accumulates one `mux go` at a time. In
+# ~/.cache it was one `rm -rf ~/.cache` away from gone, and the only moment you
+# would notice is the `mux resume` after a reboot -- exactly when you cannot
+# reconstruct it.
+case "$(mux_sess_file probe)" in
+"$MUX_STATE"/sessions.probe) ;;
+*) fail "the set must live under \$MUX_STATE, got [$(mux_sess_file probe)].
+~/.cache is by definition what anything may delete to reclaim space, and this
+file is unreconstructible." ;;
+esac
+
+# --- AND AN OLD SET IN THE CACHE IS ADOPTED, NOT ORPHANED -------------
+# The upgrade lands while sessions are already recorded, and the next thing to
+# read them is likely a post-reboot resume. A set left in the old location would
+# be a set lost at the one moment it mattered, so the move is automatic.
+OLDC=$T/oldcache
+mkdir -p "$OLDC"
+printf 'legacy	%s/old
+' "$T" >"$OLDC/sessions.adopt"
+_sf=$(MUX_CACHE="$OLDC" mux_sess_file adopt)
+[ -f "$_sf" ] || fail "the old set was not adopted into \$MUX_STATE"
+eq adopt-content "$(cut -f1 "$_sf")" "legacy"
+[ ! -e "$OLDC/sessions.adopt" ] \
+	|| fail "the old file survived the move, so the next upgrade would see
+two sets and the stale one could win"
+
+# Idempotent, and it must never CLOBBER a set that already moved. If it did, an
+# upgrade followed by real use would lose whatever was recorded after it.
+printf 'stale	%s/stale
+' "$T" >"$OLDC/sessions.adopt"
+printf 'current	%s/cur
+' "$T" >"$_sf"
+_sf2=$(MUX_CACHE="$OLDC" mux_sess_file adopt)
+eq adopt-no-clobber "$(cut -f1 "$_sf2")" "current"
+
 pass
