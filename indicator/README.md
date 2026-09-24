@@ -51,27 +51,48 @@ remove the file to revert to the live feed.
 
 ## Several hosts, one tray
 
-One tray item per SOURCE, and a source is a **command**, not a host -- the same
-seam shape as mux's `context-command`. So it works over ssh, a jump host,
-`kubectl exec`, anything; the indicator never learns what ssh is. The box you
-are sitting at **pulls**; nothing is pushed to it.
+One tray item per host, and **there is nothing to configure**. The set comes
+from `mux latch`'s own lock directory: latch to a box and its item appears,
+detach and it goes. Nothing to stand up, tear down, or keep in sync, and nothing
+to edit per machine.
 
-List them in `$MUX_DIR/indicator-sources` (or point `MUX_INDICATOR_SOURCES` at a
-file), one `LABEL COMMAND...` per line:
-
-```sh
-# LABEL       COMMAND...
-manifold      mux agent-summary
-manifestor    ssh manifestor "sh -lc \"mux agent-summary\""
+```
+$ mux-indicator
+mux-indicator: watching manifold
+mux-indicator: + manifold
+mux-indicator: manifold = idle None
+                                     # ... you run `mux latch manifestor`
+mux-indicator: watching manifestor, manifold
+mux-indicator: + manifestor
+mux-indicator: manifestor = working 1
+                                     # ... you detach
+mux-indicator: - manifestor (latch ended)
 ```
 
-With no file you get one source for this machine, which is what the indicator
-always did -- it just gains a name.
+That works because `mux latch` already writes
+`$XDG_RUNTIME_DIR/mux-latch/<target>.lock` at start and removes it via a trap on
+every exit path, with the pid on line 1 and the target on line 2. A second job
+for a file that already did it perfectly. A lock whose process is gone is
+skipped, so a crashed latch cannot leave a phantom host in the tray.
 
-The LABEL does three jobs: it names the host in the tooltip (`mux @ manifold`),
-it becomes the tray id `mux-<label>` (so a bar can order items, and the id is
-self-describing in the D-Bus name list), and it keys `mux host-color` so a
-remote host is drawn in the same colour as its status-bar chip.
+**Your own machine is always there**, first, whether or not you are latched
+anywhere. It needs no transport and it is what the indicator showed before it
+could show anything else.
+
+The remote command is composed from a template, so ssh is a default and not a
+law -- set `indicator-transport` in `$MUX_DIR/config` (or
+`MUX_INDICATOR_TRANSPORT`) to anything that carries a command to a host:
+
+```
+indicator-transport   kubectl exec %h -- %q
+```
+
+`%h` is the host and `%q` the remote command as **one** argument. That matters:
+ssh concatenates its remaining arguments and the remote shell re-splits them, so
+passing the words through made the far side run mux's bare session picker. The
+default also uses `sh -lc`, because sshd runs a remote command *without* a login
+shell and `~/.local/bin` is then not on `PATH`; and `BatchMode=yes`, because a
+tray daemon can never answer a prompt.
 
 ### Which machine is this?
 
@@ -99,10 +120,10 @@ manifold    fg=colour252,bg=colour236
 manifestor  fg=colour230,bg=#5f3a1a
 ```
 
-That file is per-machine, so a host pinned on one box and derived on another
-gets two different colours. If you rely on the colours, share `$MUX_DIR` (it is
-designed to be shareable -- everything machine-local lives in `MUX_CACHE` and
-`MUX_STATE`).
+`$MUX_DIR/hosts` is per-machine, so a host pinned on one box and derived on
+another gets two different colours. If you rely on the colours, share `$MUX_DIR`
+(it is designed to be shareable -- everything machine-local lives in `MUX_CACHE`
+and `MUX_STATE`).
 
 If `mux host-color` refuses -- colours 0-15 have no fixed hex, since every theme
 remaps them -- the item draws host-neutral rather than guessing.

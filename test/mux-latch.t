@@ -805,4 +805,72 @@ printf '0\n' >"$SCRIPT"
 _rc=$(latch box:proj)
 [ "$_rc" = 0 ] || fail "a stale lock from a dead pid blocked latch, got $_rc"
 
+# --- the lock is also the LIVE REGISTRY of what this box is latched to -----
+# Second job for a file that already did it perfectly: written at start, removed
+# by the trap on every exit path, and carrying a pid so a killed run is
+# detectable. The tray indicator reads this directory to decide which hosts to
+# watch, so the format is a contract now, not an implementation detail.
+#
+# THE TARGET IS IN THE FILE BECAUSE THE FILENAME CANNOT HOLD IT. The name is
+# sanitised through `tr -c`, so `manifold:api` becomes `manifold_api` and no
+# reader can tell that from a host genuinely called `manifold_api`. A tray item
+# polling the wrong hostname would draw `unknown` forever with nothing on screen
+# to say why.
+MAXT=1 _rc=$(latch 'hostwith:sess')
+_lk=$T/run/mux-latch/hostwith_sess.lock
+[ ! -e "$_lk" ] || fail "the lock outlived the run: the trap must remove it on
+every exit path, or a finished latch leaves a phantom host in the tray"
+
+# Written WHILE running, and readable. A transport that blocks lets the file be
+# inspected mid-flight, which is the state the indicator actually sees.
+cat >"$T/bin/slowtransport" <<EOF
+#!/bin/sh
+cat 2>/dev/null "$T/run/mux-latch/hostwith_sess.lock" >"$T/seen.lock" || true
+exit 0
+EOF
+chmod +x "$T/bin/slowtransport"
+MAXT=1 env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
+	T_AUTH="$T_AUTH" T_PROBE="$T_PROBE" STATES="$STATES" TRIES="$TRIES" \
+	AUTHLOG="$AUTHLOG" SCRIPT="$SCRIPT" \
+	MUX_LATCH_TRANSPORT="$T/bin/slowtransport %h %s" \
+	MUX_LATCH_AUTH="$T/bin/auth" MUX_LATCH_PROBE="$T/bin/probe" \
+	MUX_LATCH_STATUS="$T/bin/status" MUX_LATCH_SLEEP="$T/bin/nosleep" \
+	MUX_LATCH_BACKOFF=1 MUX_LATCH_MAX_TRIES=1 \
+	"$HERE/libexec/mux-latch" 'hostwith:sess' >/dev/null 2>&1 || :
+[ -s "$T/seen.lock" ] || fail "no lock file existed while latch was running"
+_pid=$(sed -n 1p "$T/seen.lock")
+_tgt=$(sed -n 2p "$T/seen.lock")
+case $_pid in
+''|*[!0-9]*) fail "line 1 of the lock must be the pid, got [$_pid]" ;;
+esac
+[ "$_tgt" = 'hostwith:sess' ] \
+	|| fail "line 2 must be the target VERBATIM, got [$_tgt]. The filename is
+sanitised (hostwith_sess), so the file is the only place a reader can recover
+which host to poll."
+
+# --- single flight still holds with two lines ------------------------------
+# THE TRAP THIS GUARDS: reading the pid with `$(cat)` folds both lines into one
+# string, and the numeric test then rejects a perfectly live pid because a
+# newline is not a digit. Single-flight would stop holding SILENTLY -- a flap
+# would again mean N loops and N credential prompts against one target, which is
+# the storm the lock exists to prevent. `read -r` takes the first line only.
+mkdir -p "$T/run/mux-latch"
+_held=$T/run/mux-latch/heldhost.lock
+printf '%s\n%s\n' "$$" 'heldhost' >"$_held"   # $$ is live: this test itself
+_rc=$(MAXT=1 latch heldhost)
+# THE LOCK FILE IS THE EVIDENCE, NOT THE EXIT CODE, and that order is the point.
+# Mutating `read` back to `cat` leaves the exit code at 1 ANYWAY: the intruding
+# run fails for its own unrelated reason and returns 1 by coincidence -- so an
+# exit-code assertion passes while single flight is completely broken. What
+# actually happens is worse than "it did not refuse": the intruder runs, and its
+# own EXIT trap then deletes the HOLDER's lock, so the surviving latch is left
+# unprotected and its host silently vanishes from the tray registry.
+[ -s "$_held" ] || fail "a second latch to a held target ran anyway, and its
+trap deleted the HOLDER's lock. Single flight is not holding: a flap now means
+N loops and N credential prompts against one target, and the tray loses the
+host. (The pid must be read with \`read\`, not \`cat\`.)"
+[ "$_rc" = 1 ] || fail "a second latch to a held target must refuse with 1,
+got $_rc"
+rm -f "$_held"
+
 pass

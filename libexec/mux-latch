@@ -213,11 +213,28 @@ _sess=${_target#*:}
 # dispatcher hook, a key binding, a human), and N loops against one target is N
 # credential prompts and N reconnect races. The lock is per target, and a stale
 # one from a killed run is reclaimed by checking the recorded pid.
+#
+# IT IS ALSO THE LIVE REGISTRY OF WHAT THIS BOX IS LATCHED TO, which the tray
+# indicator reads to decide which hosts to watch. That is a second job for a
+# file that already did it perfectly: created at start, removed by the trap on
+# every exit path, and carrying a pid so a killed run is detectable. Nothing
+# extra has to be stood up or torn down.
+#
+# TWO LINES: the pid, then the TARGET verbatim. The target is written because
+# the FILENAME CANNOT CARRY IT -- it is sanitised through `tr -c`, so
+# `manifold:api` becomes `manifold_api` and a reader cannot tell that from a
+# host genuinely called `manifold_api`. A reader wanting the host takes
+# everything before the first colon, which is the target grammar's own rule.
 _run=${XDG_RUNTIME_DIR:-/tmp}/mux-latch
 mkdir -p "$_run" 2>/dev/null || true
 _lock=$_run/$(printf '%s' "$_target" | tr -c 'A-Za-z0-9_.-' '_').lock
 if [ -f "$_lock" ]; then
-	_other=$(cat "$_lock" 2>/dev/null || true)
+	# ONE LINE, via read: `$(cat)` would fold both lines into one string, and
+	# the numeric test below would then reject a perfectly live pid (a
+	# newline is not a digit) -- so single-flight would silently stop
+	# holding and a flap would again mean N loops against one target.
+	_other=
+	read -r _other 2>/dev/null <"$_lock" || _other=
 	case ${_other:-} in
 	''|*[!0-9]*) ;;
 	*) if kill -0 "$_other" 2>/dev/null; then
@@ -227,7 +244,7 @@ if [ -f "$_lock" ]; then
 		fi ;;
 	esac
 fi
-printf '%s\n' "$$" >"$_lock"
+printf '%s\n%s\n' "$$" "$_target" >"$_lock"
 trap 'rm -f "$_lock"' EXIT INT HUP TERM
 
 # say STATE DETAIL: to the terminal AND to the status seam. The terminal copy is

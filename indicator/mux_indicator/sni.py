@@ -57,6 +57,10 @@ POLL = float(os.environ.get("MUX_INDICATOR_POLL", "5"))
 # is not a nicety; it is what makes `unknown` reachable.
 TIMEOUT = float(os.environ.get("MUX_INDICATOR_TIMEOUT", "10"))
 CTL = os.environ.get("MUX_INDICATOR_CTL")
+# How often to re-read latch's lock directory. Slower than POLL on purpose: this
+# is a listdir of a tmpfs, but a host appearing a few seconds after you latch is
+# imperceptible, while an item flickering in and out is not.
+DISCOVER = float(os.environ.get("MUX_INDICATOR_DISCOVER", "5"))
 # On a state/count change the `_` cursor blinks BLINK_N times at BLINK_MS each,
 # to catch the eye, then settles cursor-on.
 BLINK_N = int(os.environ.get("MUX_INDICATOR_BLINK", "5"))
@@ -377,8 +381,7 @@ async def _publish(index, label, argv):
             obj = bus.get_proxy_object(WATCHER, WATCHER_PATH, intro)
             w = obj.get_interface(WATCHER)
             await w.call_register_status_notifier_item(name)
-            print(f"mux-indicator: registered {name} as mux-{label} "
-                  f"(feed: {' '.join(argv)})", flush=True)
+            print(f"mux-indicator: + {label} ({name})", flush=True)
         except Exception as e:
             print(f"mux-indicator: register failed for {label}: {e}",
                   flush=True)
@@ -405,20 +408,67 @@ async def _publish(index, label, argv):
     else:
         print(f"mux-indicator: {label} waiting for the tray watcher",
               flush=True)
-    asyncio.create_task(_watch(item, argv, label))
-    return bus
+    task = asyncio.create_task(_watch(item, argv, label))
+    return bus, task
+
+
+async def _supervise():
+    """Keep the published set matching the discovered set, forever.
+
+    THE SET IS LIVE NOW, which is the whole point of reading latch's locks
+    rather than a config file: latch to a box and its item appears; detach and
+    it goes. Nothing is stood up or torn down by hand, and nothing has to be
+    edited per machine.
+
+    WITHDRAWING IS DISCONNECTING. A tray host drops an item when its bus name
+    goes away, so closing the connection is the withdrawal -- there is no
+    "unregister" in the SNI spec. Verified against a live waybar.
+
+    THE BUS NAME INDEX ONLY EVER GOES UP. Reusing the index of a departed host
+    would hand a tray host a name it may still be holding state for, and the
+    spec's name is meant to be unique per item; a counter costs nothing.
+    """
+    live = {}          # label -> (bus, task)
+    index = 0
+    announced = False
+    while True:
+        try:
+            want = {label: argv for label, argv in load_sources(mux_bin=MUX)}
+        except Exception as e:
+            # Discovery failing must never take the daemon down: the items
+            # already published are still telling the truth.
+            print(f"mux-indicator: discovery failed: {e}", flush=True)
+            await asyncio.sleep(DISCOVER)
+            continue
+
+        if not announced or set(want) != set(live):
+            _names = ", ".join(sorted(want)) or "none"
+            print(f"mux-indicator: watching {_names}", flush=True)
+            announced = True
+
+        for label in list(live):
+            if label not in want:
+                bus, task = live.pop(label)
+                task.cancel()
+                try:
+                    bus.disconnect()
+                except Exception:
+                    pass
+                print(f"mux-indicator: - {label} (latch ended)", flush=True)
+
+        for label, argv in want.items():
+            if label in live:
+                continue
+            index += 1
+            try:
+                live[label] = await _publish(index, label, argv)
+            except Exception as e:
+                # One host that cannot be published must not cost the others --
+                # and the others are exactly where its absence would show.
+                print(f"mux-indicator: could not publish {label}: {e}",
+                      flush=True)
+        await asyncio.sleep(DISCOVER)
 
 
 async def run():
-    sources = load_sources(mux_bin=MUX)
-    print(f"mux-indicator: {len(sources)} source(s): "
-          f"{', '.join(l for l, _ in sources)}", flush=True)
-    for n, (label, argv) in enumerate(sources, start=1):
-        # One failing source must not take the others down: a box you cannot
-        # publish an item for is exactly the box whose absence you most want to
-        # see on the OTHER items.
-        try:
-            await _publish(n, label, argv)
-        except Exception as e:
-            print(f"mux-indicator: could not publish {label}: {e}", flush=True)
-    await asyncio.get_event_loop().create_future()  # run until killed
+    await _supervise()
