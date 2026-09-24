@@ -647,3 +647,10 @@ t mux-indicator
 -             out.append(REMOTE_CMD)
 +             out.extend(REMOTE_CMD.split())
 m test_the_command_is_ONE_argv_element
+
+= indicator-code-drift-not-recorded
+f indicator/setup.sh
+t mux-indicator-setup
+- 			|| _cc_drift="$_cc_drift $_cc_b"
++ 			|| :
+m DRIFTED file read as current

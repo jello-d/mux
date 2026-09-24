@@ -129,4 +129,72 @@ has 'venv' "uninstall should say the venv was left"
 run uninstall
 [ "$RC" = 0 ] || fail "a second uninstall must be a no-op, got $RC"
 
+# --- the INSTALLED CODE is checked, not just its presence -----------------
+# THE BUG THIS EXISTS FOR, and it is not hypothetical: manifold ran a copy
+# installed on 2026-08-30 for weeks while every marker read [OK]. Everything was
+# present, the unit file matched, the service was enabled -- and a provisioner
+# runs `apply` only when `check` FAILS, so passing is precisely what kept the
+# stale code alive. The green check was the thing preventing the fix.
+#
+# BY CONTENT, NOT BY VERSION, because a version needs someone to remember to
+# bump it. This same fleet already watched a version-keyed plugin cache sit
+# stale through two full provisions for exactly that reason.
+#
+# python is STUBBED to answer where the package landed, which is what the real
+# check asks it. That keeps this fast and hermetic: building a real venv is
+# minutes and a network, and the thing under test is the COMPARISON.
+SITE=$T/site/mux_indicator
+mkdir -p "$SITE"
+cat >"$T/venv/bin/python" <<EOF
+#!/bin/sh
+# The real check asks the interpreter where mux_indicator lives; everything
+# else it asks (the dbus_next/PIL import) just has to succeed.
+case "\$*" in
+*mux_indicator*os.path.dirname*) echo "$SITE" ;;
+esac
+exit 0
+EOF
+chmod +x "$T/venv/bin/python"
+
+# In step: every package file has an identical installed copy.
+for _f in "$HERE"/indicator/mux_indicator/*.py; do cp "$_f" "$SITE/"; done
+run check
+has "$OUT" "installed code matches" "identical copies were not reported current"
+
+# DRIFTED: one file differs. This is the manifold case exactly -- present,
+# importable, wrong.
+printf '\n# a local edit\n' >>"$SITE/render.py"
+run check
+case $OUT in
+*"installed code matches"*) fail "a DRIFTED file read as current. The whole
+point is that content is compared; presence was already covered above." ;;
+esac
+has "$OUT" "STALE" "drifted code was not called stale"
+has "$OUT" "render.py" "the stale report did not name the file that drifted"
+[ "$RC" = 1 ] || fail "stale installed code must fail the check, got $RC.
+Passing is what stopped a provisioner from ever re-running apply."
+# It must say what to DO. A check that reports drift without the remedy makes
+# two reasonable people close it two different ways.
+has "$OUT" "setup.sh indicator install" "the stale report named no remedy"
+
+# MISSING: a new module that was never installed. Same verdict as drifted --
+# a half-updated install is not a working one.
+cp "$HERE"/indicator/mux_indicator/render.py "$SITE/render.py"
+rm -f "$SITE/sources.py"
+run check
+has "$OUT" "sources.py" "a MISSING module was not reported"
+[ "$RC" = 1 ] || fail "a missing module must fail the check, got $RC"
+
+# An UNIMPORTABLE package is its own verdict, not a silent pass: if the venv
+# cannot say where the code is, nothing here can claim it is current.
+cat >"$T/venv/bin/python" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+chmod +x "$T/venv/bin/python"
+run check
+has "$OUT" "not found" "an unimportable package did not report so"
+[ "$RC" = 1 ] || fail "an unimportable package must fail the check, got $RC"
+rm -rf "$T/site"
+
 pass

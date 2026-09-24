@@ -61,6 +61,49 @@ uninstall() {
 	echo "mux-indicator: uninstalled (venv $VENV left in place)"
 }
 
+# _code_current: is the INSTALLED code the package's code?
+#
+# THE CHECK THAT WAS MISSING, and its absence was not theoretical: manifold ran
+# a copy installed on 2026-08-30 for weeks while every marker here read [OK].
+# Everything existed, the unit matched, the service was enabled -- and because a
+# provisioner runs `apply` only when `check` FAILS, passing is exactly what kept
+# the stale code alive. A green check was the thing preventing the fix.
+#
+# That is this package's own rule turned on itself: `mux check` exists because a
+# presence check says [OK] to a box that is fully installed and fully broken,
+# which is worse than failing because it sends you to look elsewhere.
+#
+# BY CONTENT, NOT BY VERSION. A version-keyed check needs someone to remember to
+# bump it, and the same fleet has already watched a version-keyed plugin cache
+# sit stale through two full provisions for exactly that reason. Content cannot
+# be forgotten.
+#
+# The interpreter is ASKED where the package landed rather than globbing a
+# python version out of the venv path -- one less thing to break when the
+# interpreter moves.
+_code_current() {
+	_cc_dir=$("$VENV/bin/python" -c \
+		'import mux_indicator,os;print(os.path.dirname(mux_indicator.__file__))' \
+		2>/dev/null || true)
+	if [ -z "$_cc_dir" ] || [ ! -d "$_cc_dir" ]; then
+		bad "installed code not found (the venv cannot import it)"
+		return 0
+	fi
+	_cc_drift=
+	for _cc_f in "$PKG_DIR"/mux_indicator/*.py; do
+		[ -f "$_cc_f" ] || continue
+		_cc_b=${_cc_f##*/}
+		cmp -s "$_cc_f" "$_cc_dir/$_cc_b" 2>/dev/null \
+			|| _cc_drift="$_cc_drift $_cc_b"
+	done
+	if [ -n "$_cc_drift" ]; then
+		bad "installed code is STALE or missing:$_cc_drift"
+		bad "  run: setup.sh indicator install   (then the service restarts)"
+	else
+		ok "installed code matches the package"
+	fi
+}
+
 # check: the [OK]/[FAIL] MARKER contract (same as `mux check`) -- coloured ONLY
 # on a real terminal, so a caller that captures the output repaints the plain
 # markers itself. mux owns this copy; no integrator dependency.
@@ -84,6 +127,7 @@ check() {
 	else bad "$BIN_DIR/mux-indicator missing"; fi
 	if cmp -s "$PKG_DIR/$UNIT" "$UNIT_DIR/$UNIT" 2>/dev/null
 	then ok "$UNIT current"; else bad "$UNIT missing or stale"; fi
+	_code_current
 	_st=$(systemctl --user is-enabled "$UNIT" 2>/dev/null || true)
 	if [ "$_st" = enabled ]; then ok "$UNIT enabled"
 	else bad "$UNIT not enabled (${_st:-unknown})"; fi
