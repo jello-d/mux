@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.42" "User Commands"
+.TH MUX 1 "" "mux 0.43" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -155,6 +155,34 @@ subsystem" are four different answers and an empty screen cannot tell them
 apart. Writing is best\-effort by design \(em a full disk must never kill a
 latch holding your session \(em so this reader is where an unwritable or
 missing log is said out loud.
+.TP
+.B mux undo-pane
+Put back the pane you just closed by accident. Bound to
+.BR prefix-u .
+.IP
+.B ^D
+is one keystroke away from detaching and does something very different, and the
+recovery was otherwise to rebuild the window by hand \(em which costs every
+OTHER pane's scrollback, so the slip was expensive out of all proportion to it.
+.IP
+WHAT COMES BACK: the pane, at its old position, at the size it actually had
+\(em the saved geometry is the LIVE layout, not the declared one, so a window
+you resized by hand returns the way YOU had it. It reopens in its old directory
+and re\-runs what it was running, replayed from tmux's own record of how the
+pane was started, so an agent pane comes back on the same conversation rather
+than a fresh one.
+.IP
+WHAT DOES NOT: that pane's SCROLLBACK. tmux frees a pane's history the moment
+it dies and there is no way to ask for it back. Every SURVIVING pane is left
+untouched, though, which is the point \(em nothing is killed, respawned or
+cleared but the one pane that went.
+.IP
+It refuses when nothing was lost, including when you filled the hole yourself
+in the meantime, and the record is consumed, so one accident is one undo. The
+directory is best effort: it is captured when the window layout last changed,
+so a
+.B cd
+with no split or resize after it is not seen.
 .TP
 .B mux sane
 Put the terminal back after a full\-screen program died without tearing
@@ -875,7 +903,7 @@ It always exits 0: it is a pure report, and a non\-zero exit would be
 indistinguishable from the transport.
 .PP
 .EX
-mux 0.42
+mux 0.43
 capabilities 1
 agent\-list 1
 agent\-summary 1
