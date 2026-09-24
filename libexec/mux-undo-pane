@@ -1,0 +1,236 @@
+#!/bin/sh
+# mux-undo-pane: put back the pane you just closed by accident.
+#
+#   mux undo-pane                  restore the last pane closed in this window
+#   mux undo-pane --record WINID   (from the pane-exited hook) remember one
+#
+# ^D IS ONE KEYSTROKE FROM DETACH, and the two do very different things. This
+# exists because the recovery was otherwise "rebuild the window by hand", and
+# the surviving panes -- with the scrollback you actually wanted -- cannot be
+# rebuilt at all, so people put up with a broken layout instead.
+#
+# WHAT COMES BACK, and what does not, stated plainly because the gap is the
+# whole reason to read this:
+#
+#   the pane            yes, at its old index
+#   the exact geometry  yes, INCLUDING any manual resize -- the saved layout is
+#                       the LIVE one, not the declared one, so a window you
+#                       rearranged comes back rearranged
+#   what it was running yes, replayed from tmux's own record of how the pane was
+#                       started -- so an agent pane restarts with whatever mux
+#                       launched it as (`claude --continue`, not a fresh chat)
+#   its directory       best effort (see the tracker below)
+#   its SCROLLBACK      NO. tmux frees a pane's history when it dies and there
+#                       is no way to ask for it back. Nothing here can change
+#                       that, and pretending otherwise would be the one
+#                       dishonest thing this could do.
+#
+# THE SURVIVING PANES ARE NEVER TOUCHED. Only a new pane is created; nothing is
+# killed, respawned or cleared, so their scrollback is safe. That is the point:
+# a rebuild-by-hand costs you every pane, which is why the accident hurts.
+#
+# HOW THE "BEFORE" PICTURE IS KEPT, since the hook cannot supply it. Measured:
+# `pane-exited` reports the SURVIVING pane, not the dying one, and by the time
+# it runs `#{window_layout}` has already collapsed. So the state is tracked
+# CONTINUOUSLY into window options by `window-layout-changed`, which fires
+# first -- and because `pane-exited` runs BEFORE the layout hook, what those
+# options hold at record time is still the pre-death picture.
+#
+# THE TRACKER COSTS NO SUBPROCESS. It is `set-option -wF`, evaluated inside
+# tmux, because layout-changed fires on every step of an interactive resize and
+# a fork per step would be felt. Only a real death pays for a shell.
+#
+# WHICH IS ALSO WHY THE DIRECTORY IS BEST EFFORT: the lists are refreshed when
+# the layout changes, so a `cd` with no split or resize after it is not seen.
+# The recorded directory is then the one that pane last had at a layout event.
+# Exact would need a timer or a fork per prompt, and neither is worth it for a
+# field one `cd` fixes -- whereas the pane, its slot and its command are exact.
+set -eu
+
+_lib=$(dirname "$0")
+[ -r "$_lib/mux-log.sh" ] || {
+	echo "mux: mux-log.sh missing (incomplete install)" >&2; exit 1; }
+. "$_lib/mux-log.sh"
+
+_run=${XDG_RUNTIME_DIR:-/tmp}/mux-undo
+_tab=$(printf '\t')
+
+_die() { echo "mux: undo-pane: $*" >&2; exit 1; }
+
+# The record for a window. The window ID (`@3`) is the key: it is stable for the
+# window's whole life and safe as a filename, where a session NAME is neither.
+_recfile() {   # <window id>
+	printf '%s/%s' "$_run" "$(printf '%s' "$1" | tr -c 'A-Za-z0-9_.-' '_')"
+}
+
+# --- record: called from the pane-exited hook ------------------------------
+# Writes at most one record per window: the LAST death is the one you meant to
+# undo. A stack would invite "undo four times", and each step would have to
+# reconcile an old layout against a window that has moved on since.
+#
+# The tracked lists are KEYED BY PANE ID, not positional, so a start command
+# containing a newline cannot slide the fields out of step. Their ORDER is
+# pane order, which is what the restore needs: `select-layout` maps geometry by
+# POSITION, so position is the currency, not tmux's pane_index (which shifts
+# when a pane dies, and can start at 1 under pane-base-index).
+_lookup() {   # <pane id> <tab-separated list> -> the value for that id
+	printf '%s\n' "$2" | awk -F"$_tab" -v k="$1" \
+		'$1 == k { sub(/^[^\t]*\t/, ""); print; exit }'
+}
+
+# tmux's `pane_start_command` is QUOTED for display: wrapped in double quotes
+# with inner `"`, `$` and `\` backslash-escaped. Replaying it verbatim does not
+# fail loudly -- the pane is created and simply runs the wrong thing, which is
+# how it slipped past a first live test. Reversing tmux's own quoting is
+# well-defined, so it is done once, here, at the point the value is read.
+_unquote() {   # <quoted> -> the command as it was given
+	case $1 in
+	'"'*'"') ;;
+	*) printf '%s' "$1"; return 0 ;;
+	esac
+	_uq=${1#\"}; _uq=${_uq%\"}
+	printf '%s' "$_uq" | sed 's/\\\(.\)/\1/g'
+}
+
+_record() {   # <window id>
+	_w=$1
+	[ -n "$_w" ] || _die "--record needs a window id"
+
+	_lay=$(tmux show-options -wqv -t "$_w" @mux-ul 2>/dev/null || true)
+	_cmds=$(tmux show-options -wqv -t "$_w" @mux-up 2>/dev/null || true)
+	_cwds=$(tmux show-options -wqv -t "$_w" @mux-uc 2>/dev/null || true)
+	# No tracked state means the hooks are not loaded (an old tmux.conf, or a
+	# server started before this version). Nothing to record, and nothing to
+	# say about it here: a missing hook is `mux check`'s business.
+	[ -n "$_lay" ] && [ -n "$_cmds" ] || return 0
+
+	_live=$(tmux list-panes -t "$_w" -F '#{pane_id}' 2>/dev/null || true)
+	[ -n "$_live" ] || return 0
+
+	# WHICH id is gone, and its POSITION in the old order. Diffing ids rather
+	# than counting: a count says one went, an id says which slot to refill.
+	_pos=0 _gone= _slot=
+	while IFS="$_tab" read -r _id _rest; do
+		[ -n "${_id:-}" ] || continue
+		case "
+$_live
+" in
+		*"
+$_id
+"*) ;;
+		*) [ -n "$_gone" ] || { _gone=$_id; _slot=$_pos; } ;;
+		esac
+		_pos=$((_pos + 1))
+	done <<EOF
+$_cmds
+EOF
+	[ -n "$_gone" ] || return 0
+
+	mkdir -p "$_run" 2>/dev/null || return 0
+	{
+		printf 'slot\t%s\n' "$_slot"
+		printf 'panes\t%s\n' "$_pos"
+		printf 'layout\t%s\n' "$_lay"
+		printf 'cwd\t%s\n' "$(_lookup "$_gone" "$_cwds")"
+		printf 'command\t%s\n' "$(_unquote "$(_lookup "$_gone" "$_cmds")")"
+	} 2>/dev/null >"$(_recfile "$_w")" || return 0
+	return 0
+}
+
+# --- restore ---------------------------------------------------------------
+_restore() {
+	_w=$(tmux display-message -p '#{window_id}' 2>/dev/null || true)
+	[ -n "$_w" ] || _die "no tmux window here (run this inside tmux)"
+	_f=$(_recfile "$_w")
+	[ -f "$_f" ] || _die "nothing to undo in this window"
+
+	_idx= _cwd= _lay= _cmd= _n=
+	while IFS="$_tab" read -r _k _v; do
+		case ${_k:-} in
+		slot)    _idx=$_v ;;
+		panes)   _n=$_v ;;
+		cwd)     _cwd=$_v ;;
+		layout)  _lay=$_v ;;
+		command) _cmd=$_v ;;
+		esac
+	done 2>/dev/null <"$_f"
+	[ -n "$_lay" ] || _die "the undo record is unusable (no layout)"
+	case ${_idx:-} in
+	''|*[!0-9]*) _die "the undo record is unusable (bad slot)" ;;
+	esac
+
+	# ALREADY WHOLE? The record existing does not mean something is still
+	# missing: the hole may have been filled by hand since. Undoing then adds
+	# a pane nobody lost and applies a layout that does not fit it.
+	#
+	# THE COUNT IS RECORDED, NOT DERIVED FROM THE LAYOUT STRING. Counting
+	# panes by splitting the layout on commas and keeping the numeric fields
+	# counts every X and Y COORDINATE too -- it read 9 for a three-pane
+	# window, so the guard never fired and a mutation of it survived because
+	# there was nothing left to break. The writer knows the real number.
+	_have=$(tmux list-panes -t "$_w" -F x 2>/dev/null | wc -l)
+	if [ -n "${_n:-}" ] && [ "${_have:-0}" -ge "$_n" ]; then
+		rm -f "$_f"
+		_die "this window already has $_have pane(s); nothing was lost"
+	fi
+
+	# A directory that has since been removed would fail the split outright,
+	# so fall back rather than refuse: the pane matters more than its cwd.
+	[ -n "$_cwd" ] && [ -d "$_cwd" ] || _cwd=
+	# Anchor the split on the pane that now occupies the dead slot, so the new
+	# pane lands NEXT to where it used to be. Position is load-bearing:
+	# `select-layout` maps the saved geometry POSITIONALLY, so a pane created
+	# in the wrong slot does not merely sit in the wrong place -- it shuffles
+	# the SURVIVORS into each other's sizes. Measured.
+	# By POSITION in the current pane list, not by pane_index: the index of a
+	# surviving pane shifts when its neighbour dies, and may not start at 0.
+	#
+	# TWO CASES, and collapsing them put the pane at the wrong end. If a pane
+	# now sits in the dead slot it is the one that moved up, so the new pane
+	# goes BEFORE it (-b) to take that slot back. If nothing does, the dead
+	# pane was the LAST one, and -b against the final survivor would insert it
+	# in front of everything -- which is what happened: a two-pane window came
+	# back with its panes swapped, each wearing the other's size.
+	_before=-b
+	_anchor=$(tmux list-panes -t "$_w" -F '#{pane_id}' 2>/dev/null \
+		| awk -v n="$_idx" 'NR == n + 1 { print; exit }')
+	if [ -z "$_anchor" ]; then
+		_before=
+		_anchor=$(tmux list-panes -t "$_w" -F '#{pane_id}' \
+			2>/dev/null | tail -1)
+	fi
+	[ -n "$_anchor" ] || _die "no pane to split from"
+
+	# shellcheck disable=SC2086
+	# $_before is a FLAG OR NOTHING, so it must word-split: quoting it would
+	# pass an empty argument that tmux reads as an empty command.
+	set -- split-window $_before -t "$_anchor" -P -F '#{pane_id}'
+	[ -n "$_cwd" ] && set -- "$@" -c "$_cwd"
+	if [ -n "$_cmd" ]; then
+		_new=$(tmux "$@" "$_cmd" 2>/dev/null || true)
+	else
+		_new=$(tmux "$@" 2>/dev/null || true)
+	fi
+	[ -n "$_new" ] || _die "could not create the pane"
+
+	# The geometry last, once the pane count matches what the layout expects.
+	tmux select-layout -t "$_w" "$_lay" >/dev/null 2>&1 \
+		|| echo "mux: undo-pane: restored the pane, but the saved" \
+			"layout no longer fits (the window was resized)" >&2
+
+	rm -f "$_f"
+	mux_log undo-pane "restored pane in slot $_idx of $_w${_cwd:+ ($_cwd)}"
+	echo "mux: put back the pane${_cwd:+ at $_cwd}"
+	echo "mux: its scrollback is gone -- tmux frees it when a pane dies"
+}
+
+case "${1:-}" in
+--record) shift; _record "${1:-}" ;;
+-h|--help)
+	echo "usage: mux undo-pane           put back the pane you just closed"
+	echo "       mux undo-pane --record WINID   (internal, from the hook)"
+	;;
+'') _restore ;;
+*)  echo "mux: undo-pane: unknown option: $1" >&2
+    echo "usage: mux undo-pane" >&2; exit 2 ;;
+esac

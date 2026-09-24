@@ -682,3 +682,24 @@ t mux-latch
 - 	*) kill -0 "$_sp" 2>/dev/null || rm -f "$_stale" ;;
 + 	*) rm -f "$_stale" ;;
 m deleted a LIVE latch's lock
+
+= undo-pane-always-inserts-before
+f libexec/mux-undo-pane
+t mux-undo-pane
+- 		_before=
++ 		:
+m did not come back the
+
+= undo-pane-replays-quoted-command
+f libexec/mux-undo-pane
+t mux-undo-pane
+- 		printf 'command\t%s\n' "$(_unquote "$(_lookup "$_gone" "$_cmds")")"
++ 		printf 'command\t%s\n' "$(_lookup "$_gone" "$_cmds")"
+m did not come back the
+
+= undo-pane-not-idempotent
+f libexec/mux-undo-pane
+t mux-undo-pane
+- 	if [ -n "${_n:-}" ] && [ "${_have:-0}" -ge "$_n" ]; then
++ 	if false; then
+m added a pane to a window that was already whole

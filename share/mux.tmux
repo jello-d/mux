@@ -48,6 +48,13 @@ bind -n MouseDown1Status {
 # prefix+R = the bigger hammer: REBUILD the bottom pane (break out + rejoin) to
 # clear a stuck RENDER state a perturb cannot -- e.g. tmux drawing a border in
 # reverse video. Content preserved, focus restored.
+# prefix u: UNDO the pane you just closed. Restores it at its old index, at the
+# size it actually had (manual resizes included), running what it was running.
+# Its scrollback is gone -- tmux frees a dead pane's history -- but every
+# SURVIVING pane is left untouched, which is what makes this better than
+# rebuilding the window by hand.
+bind u run-shell "mux undo-pane"
+
 bind r run-shell "mux refresh"
 bind R run-shell "mux refresh --force"
 
@@ -169,6 +176,52 @@ set-hook -g client-resized  'run-shell -b "mux pin"'
 # already what it wants, so the second pass resizes nothing and there is no
 # third.
 set-hook -g window-layout-changed 'run-shell -b "mux pin"'
+
+# --- undo-pane: keep a "before" picture, fork-free ------------------------
+# ^D is one keystroke from detach and closes a pane instead. `mux undo-pane`
+# (prefix-u) puts it back, and these lines are what make that possible.
+#
+# NOTHING HERE FORKS. `set -wF` is evaluated inside tmux, which matters because
+# this hook fires on every step of an interactive resize; a shell per step would
+# be felt. Only an actual death pays for a subprocess, below.
+#
+# THE HOOK CANNOT SUPPLY THE "BEFORE" PICTURE ITSELF, measured: `pane-exited`
+# reports the SURVIVING pane rather than the dying one, and by the time it runs
+# `#{window_layout}` has already collapsed. So the picture is kept here,
+# continuously -- and because `pane-exited` fires BEFORE this hook, what these
+# options hold at record time is still the pre-death state.
+#
+# APPENDED (-ag) so the pin above keeps its place. Re-sourcing this file stays
+# idempotent: the `-g` on the pin line resets the list and these re-append.
+#
+# THREE OPTIONS RATHER THAN ONE RECORD, for two reasons that both bite. A single
+# combined format runs past 80 columns and tmux will not let a quoted hook be
+# split across lines (measured -- it reads the continuation as extra arguments).
+# And each list is KEYED BY PANE ID rather than positional, so they cannot
+# desync if a start command ever contains a newline.
+#
+# The LIVE layout, not the declared one, which is the point: a window you
+# resized by hand comes back the way YOU had it, not the way its layout says.
+set-hook -ag window-layout-changed \
+  'set -wF @mux-ul "#{window_layout}"'
+set-hook -ag window-layout-changed \
+  'set -wF @mux-up "#{P:#{pane_id}	#{pane_start_command}\n}"'
+set-hook -ag window-layout-changed \
+  'set -wF @mux-uc "#{P:#{pane_id}	#{pane_current_path}\n}"'
+
+# The one subprocess, and only on a real death. `pane-exited` fires when a
+# pane's program exits (^D, `exit`) and NOT on kill-pane, which is exactly the
+# line we want: killing a pane is a thing you meant to do.
+#
+# FOREGROUND, deliberately -- no -b, unlike every other hook here.
+# `run-shell -b` is ASYNCHRONOUS, and the recorder then races the very removal
+# it is recording: it
+# queried the pane list before tmux had finished taking the pane out and saw all
+# three still alive, so it concluded nothing had died and wrote nothing.
+# Measured, and it failed silently, which is the worst way for it to fail. A
+# death is rare and the recorder is three tmux queries, so blocking the server
+# for it is the cheap half of the trade.
+set-hook -g pane-exited 'run-shell "mux undo-pane --record #{window_id}"'
 
 # status-left already re-runs mux-style every status-interval, which is what
 # catches a context being entered in the pane you are already looking at. These
