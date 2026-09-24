@@ -237,8 +237,8 @@ m a host key refusal was retried
 = latch-say-detail-truncated
 f libexec/mux-latch
 t mux-latch
-- 	_sd=$*
-+ 	_sd=$1
+- 	_sd=$(_clean "$*")
++ 	_sd=$(_clean "$1")
 m denied explanation was cut off
 
 = latch-no-probe-waits-forever
@@ -717,3 +717,17 @@ t mux-indicator
 -         return (alnum[0] + rest[-2] + rest[-1]).upper()
 +         return (alnum[0] + rest[0] + rest[1]).upper()
 m test_the_tail_is_what_distinguishes
+
+= latch-transport-text-unsanitised
+f libexec/mux-latch
+t mux-latch
+- 	_sd=$(_clean "$*")
++ 	_sd=$*
+m carriage return from the transport reached
+
+= latch-animation-not-tty-gated
+f libexec/mux-latch
+t mux-latch
+- 	if [ "$_TTY" -eq 0 ] || [ "${1:-0}" -le 1 ]; then
++ 	if false; then
+m drew escape sequences into a
