@@ -70,6 +70,11 @@ _BADGE_F = 0.65    # badge diameter (overhangs the corner)
 _MARGIN = 0.0      # tile inset as a fraction; 0 = frame fills the tile
 _NUM = 1.10        # badge number, blown up to fill / clip the round badge
 _TINT = 0.14       # how much state hue bleeds into the near-black screen
+# The host's bg is a STATUS-BAR chip colour, picked to sit behind text on a bar
+# -- so at full strength it would make a bright tray tile that reads as a
+# different application, not a different host. Mixed well into the near-black
+# base instead: unmistakable side by side, still obviously a terminal.
+_HOST_TINT = 0.55
 _TRACK = 0.28      # inter-digit tracking to pull, e.g., "12" tighter
 
 _SANS = ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -89,20 +94,72 @@ def _darker(c, f):
     return tuple(int(c[i] * f) for i in range(3)) + (0xFF,)
 
 
-def _screen(state):
+def parse_pair(text):
+    """`mux host-color` output -> ((fg), (bg)) as RGBA, or None.
+
+    WHY MUX ANSWERS THIS AT ALL: a per-host tray item has to be the same colour
+    as that host's status-bar chip, or the two disagree about which machine is
+    which and neither looks broken. So the rule has ONE owner (mux-hosts.sh,
+    which `mux style` also uses) and this only converts.
+
+    None on anything unexpected, INCLUDING the refusal. `mux host-color` exits 1
+    for colours 0-15 -- the terminal's own sixteen, which every theme remaps, so
+    there is no correct hex -- and the right answer to that is to draw the
+    host-neutral look, not to guess a colour for the thing whose whole job is
+    identifying a machine.
+    """
+    parts = text.split()
+    if len(parts) != 2:
+        return None
+    out = []
+    for tok in parts:
+        if len(tok) != 7 or not tok.startswith("#"):
+            return None
+        try:
+            v = int(tok[1:], 16)
+        except ValueError:
+            return None
+        out.append(((v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF, 0xFF))
+    return (out[0], out[1])
+
+
+def _screen(state, host=None):
+    """The tile's screen. WITH a host pair this is the host's BACKGROUND, which
+    is literally what that colour is for -- so identity reads at a glance while
+    STATE keeps the frame and the badge. The two dimensions never collide:
+    nothing about the host can make a blocked agent look calm.
+
+    The state tint is dropped when a host colour is in play rather than mixed
+    with it. Two hues bleeding into one screen is how both become unreadable,
+    and state is already carried twice over (frame + badge)."""
+    if host is not None:
+        return _mix(_BASE, host[1], _HOST_TINT)
     col = STATE_FRAME.get(state, STATE_FRAME["none"])
-    mix = tuple(int(_BASE[i] * (1 - _TINT) + col[i] * _TINT) for i in range(3))
-    return mix + (0xFF,)
+    return _mix(_BASE, col, _TINT)
 
 
-def _prompt(state):
-    # The ornamental >_ colour: the state's screen lifted toward white, so it
-    # sits a consistent step above whatever tint that state paints -- one rule,
-    # no per-state prompt table.
+def _prompt(state, host=None):
+    """The ornamental >_ colour.
+
+    WITH a host pair this is the host's FOREGROUND, and that pairing is the
+    whole reason to use mux's own colours rather than deriving something here:
+    the pair EXISTS so that fg is legible on bg (mux's own suite asserts they
+    are never equal), so `>_` on the screen is guaranteed readable for free. A
+    lift heuristic would have to re-derive that property and could get it wrong
+    on a pale host colour.
+
+    Without one, the old rule: the state's screen lifted toward white, so the
+    prompt sits a consistent step above whatever tint the state paints."""
+    if host is not None:
+        return host[0]
     scr = _screen(state)
-    lift = [int(scr[i] * (1 - _PROMPT_LIFT) + 0xFF * _PROMPT_LIFT)
-            for i in range(3)]
-    return tuple(lift) + (0xFF,)
+    return _mix(scr, (0xFF, 0xFF, 0xFF), _PROMPT_LIFT)
+
+
+def _mix(a, b, f):
+    """b blended into a by f. Was open-coded three times over once the host
+    pair arrived, which is exactly when a two-line helper starts paying."""
+    return tuple(int(a[i] * (1 - f) + b[i] * f) for i in range(3)) + (0xFF,)
 
 
 def _number(d, box, text, fnt, fill):
@@ -183,16 +240,16 @@ def _badge(img, s, fill, ink, count, check=False, mark=None):
         _number(d, box, str(count), _font(_SANS, int(bd * _NUM)), ink)
 
 
-def _tile(state, count, size, cursor=True):
+def _tile(state, count, size, cursor=True, host=None):
     s = size
     img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     frame = STATE_FRAME.get(state, STATE_FRAME["none"])
     m = max(0, round(s * _MARGIN))
     d.rounded_rectangle([m, m, s - 1 - m, s - 1 - m], max(2, s // 7),
-                        fill=_screen(state), outline=frame,
+                        fill=_screen(state, host), outline=frame,
                         width=max(1, s // 11))
-    _hero(d, s, m, _prompt(state), cursor)
+    _hero(d, s, m, _prompt(state, host), cursor)
     bcol = STATE_BADGE.get(state)
     if bcol is not None:              # blocked/working (number), idle (check)
         _badge(img, s, bcol, STATE_INK.get(state, _BADGE_INK), count,
@@ -212,7 +269,13 @@ def _to_argb(img):
     return bytes(out)
 
 
-def icon_pixmap(state, count, sizes=(22, 32, 48), cursor=True):
+def icon_pixmap(state, count, sizes=(22, 32, 48), cursor=True, host=None):
     """SNI IconPixmap for a state + count. idle/none draw no badge. cursor=False
-    renders the blink OFF frame (the `_` cursor hidden)."""
-    return [[s, s, _to_argb(_tile(state, count, s, cursor))] for s in sizes]
+    renders the blink OFF frame (the `_` cursor hidden).
+
+    `host` is an (fg, bg) RGBA pair from parse_pair() -- the host's identity
+    colours, which tint the screen and paint the `>_`. None draws the
+    host-neutral look, which is both the single-host default and the honest
+    answer when `mux host-color` refuses."""
+    return [[s, s, _to_argb(_tile(state, count, s, cursor, host))]
+            for s in sizes]
