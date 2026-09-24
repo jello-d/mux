@@ -56,8 +56,17 @@ _recorded() { [ -n "$(ls -A "$T/run/mux-undo" 2>/dev/null)" ]; }
 # The shells must have STARTED before their cwd is readable: pane_current_path
 # reports the server's directory until then, which silently recorded the wrong
 # one the first time this ran by hand.
-_cwds_ready() { case "$(state)" in *:/etc*) case "$(state)" in *:/usr*)
-	return 0 ;; esac ;; esac; return 1; }
+# ALL THREE, not just the two splits. Waiting only for /etc and /usr let the
+# tracker snapshot before pane 0's shell had reported /tmp, so the record
+# carried the SERVER's directory and the restore came back in the wrong place.
+# Intermittent -- it survived five clean runs before showing up.
+_cwds_ready() {
+	_cr=$(state)
+	case $_cr in *:/tmp*) ;; *) return 1 ;; esac
+	case $_cr in *:/etc*) ;; *) return 1 ;; esac
+	case $_cr in *:/usr*) ;; *) return 1 ;; esac
+	return 0
+}
 
 # state: "height:cwd height:cwd ..." top to bottom -- the two things a restore
 # has to get right, in the one order that makes a mismatch readable.

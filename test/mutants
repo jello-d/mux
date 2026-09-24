@@ -703,3 +703,17 @@ t mux-undo-pane
 - 	if [ -n "${_n:-}" ] && [ "${_have:-0}" -ge "$_n" ]; then
 + 	if false; then
 m added a pane to a window that was already whole
+
+= indicator-mark-not-drawn
+f indicator/mux_indicator/render.py
+t mux-indicator
+-     if mark:
++     if False:
+m test_TWO_HOSTS_WITH_THE_SAME_COLOUR_DIFFER
+
+= indicator-mark-uses-the-prefix
+f indicator/mux_indicator/render.py
+t mux-indicator
+-         return (alnum[0] + rest[-2] + rest[-1]).upper()
++         return (alnum[0] + rest[0] + rest[1]).upper()
+m test_the_tail_is_what_distinguishes

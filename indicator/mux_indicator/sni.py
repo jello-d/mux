@@ -34,7 +34,7 @@ from dbus_next import BusType, PropertyAccess
 from dbus_next.aio import MessageBus
 from dbus_next.service import ServiceInterface, dbus_property, method, signal
 
-from .render import icon_pixmap, parse_pair
+from .render import host_mark, icon_pixmap, parse_pair
 from .sources import load as load_sources
 
 WATCHER = "org.kde.StatusNotifierWatcher"
@@ -78,6 +78,11 @@ class Indicator(ServiceInterface):
         # cannot change while the daemon runs, and re-querying it per poll would
         # be a subprocess per host per tick for an answer that never moves.
         self._host = host
+        # The three-character host mark, or None for the single-host look.
+        # Set later too: it appears when a second host joins the tray and goes
+        # again when you detach, so one item never carries a label it does not
+        # need.
+        self._mark = None
         self._state = state
         self._count = count
         self._pixmap = icon_pixmap(state, count, host=host)
@@ -88,8 +93,16 @@ class Indicator(ServiceInterface):
 
     def _paint(self, cursor=True):
         self._pixmap = icon_pixmap(self._state, self._count, cursor=cursor,
-                                   host=self._host)
+                                   host=self._host, mark=self._mark)
         self.NewIcon()
+
+    def set_mark(self, mark):
+        """Show or hide the host mark. Repaints only on a real change, so the
+        discovery loop can call this every tick without churning the tray."""
+        if mark == self._mark:
+            return
+        self._mark = mark
+        self._paint()
 
     def set(self, state, count):
         """Update the icon live: re-render, tell the host to repaint, then blink
@@ -409,7 +422,7 @@ async def _publish(index, label, argv):
         print(f"mux-indicator: {label} waiting for the tray watcher",
               flush=True)
     task = asyncio.create_task(_watch(item, argv, label))
-    return bus, task
+    return bus, task, item
 
 
 async def _supervise():
@@ -448,7 +461,7 @@ async def _supervise():
 
         for label in list(live):
             if label not in want:
-                bus, task = live.pop(label)
+                bus, task, _item = live.pop(label)
                 task.cancel()
                 try:
                     bus.disconnect()
@@ -467,6 +480,18 @@ async def _supervise():
                 # and the others are exactly where its absence would show.
                 print(f"mux-indicator: could not publish {label}: {e}",
                       flush=True)
+
+        # ONE HOST NEEDS NO LABEL. The mark exists to tell several apart, so a
+        # single-host tray -- the common case, and every new user's first
+        # impression -- keeps exactly the look it always had.
+        #
+        # AFTER publishing, not before: a host joining is the tick that turns
+        # the marks ON, and marking only the previously-live items would leave
+        # the newcomer blank until the next pass -- the one item you are
+        # looking at precisely because it just appeared.
+        _show = len(live) > 1
+        for _label, (_b, _t, _item) in live.items():
+            _item.set_mark(host_mark(_label) if _show else None)
         await asyncio.sleep(DISCOVER)
 
 
