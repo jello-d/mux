@@ -201,9 +201,35 @@ BLOCKED_WAIT=${MUX_LATCH_BLOCKED_WAIT:-5}
 MAX_TRIES=${MUX_LATCH_MAX_TRIES:-0}         # 0 = forever
 SLEEP=${MUX_LATCH_SLEEP:-sleep}
 
+_usage() {
+	echo "usage: mux latch [HOST[:SESSION]]"
+	echo "  hold an attachment to a remote mux session open across drops"
+}
+
+# OPTIONS ARE OPTIONS. Without this, `mux latch --help` took `--help` as the
+# HOSTNAME: it tried to ssh there, wrote a lock called `--help.lock`, and
+# retried on a backoff. Found by seeing that lock sitting in a live runtime
+# directory. `mux latch -V` was worse -- `ssh -V` SUCCEEDS, so the transport
+# exited cleanly, which latch reads as the human having detached, and it
+# reported success and exit 0 for a session that never existed.
+#
+# That is the failure mode this codebase keeps meeting: not an error, but
+# something PLAUSIBLE. An unknown option is exit 2, the same code every other
+# mux usage error uses, so a typo can never be mistaken for a host.
+while [ "$#" -gt 0 ]; do
+	case $1 in
+	-h|--help) _usage; exit 0 ;;
+	--) shift; break ;;
+	-*) echo "mux: latch: unknown option: $1" >&2; _usage >&2; exit 2 ;;
+	*)  break ;;
+	esac
+	shift
+done
+
 _target=${1:-}
 [ -n "$_target" ] || {
-	echo "mux: latch needs a target: HOST[:SESSION]" >&2; exit 2; }
+	echo "mux: latch needs a target: HOST[:SESSION]" >&2; _usage >&2
+	exit 2; }
 _host=${_target%%:*}
 _sess=${_target#*:}
 [ "$_sess" = "$_target" ] && _sess=
@@ -246,6 +272,38 @@ if [ -f "$_lock" ]; then
 fi
 printf '%s\n%s\n' "$$" "$_target" >"$_lock"
 trap 'rm -f "$_lock"' EXIT INT HUP TERM
+
+# MUX CLEARS THE LITTER MUX MAKES. Until now NOTHING removed a stale lock: the
+# trap covers every exit path this process controls, but a SIGKILL, a reboot
+# mid-latch, or an OOM kill leaves the file behind, and the reclaim above only
+# overwrites the lock for the target you are latching to RIGHT NOW. A lock for a
+# host you never latch to again simply stays -- which is how a `--help.lock`
+# from a since-fixed bug was still sitting in a live runtime directory.
+#
+# It matters more than tidiness now: the tray indicator reads this directory to
+# decide which hosts to watch, so an unreaped lock is a phantom host. The pid
+# check makes it harmless (a dead one is skipped), but a directory that only
+# grows is one nobody will ever audit.
+#
+# HERE is the right moment, by the same argument `mux themes load` already
+# makes about palette stamps: it is the only one needing no decision. A prune
+# verb must be remembered and a timer must be installed, whereas every latch
+# already opens this directory -- so each new latch tidies away the dead and the
+# steady state is however many latches you actually have.
+#
+# AFTER our own lock is written, never before: a failure in the sweep must not
+# cost this run the lock it just took. Locks only, and only ones whose pid is
+# gone -- the same liveness test the reclaim uses.
+for _stale in "$_run"/*.lock; do
+	[ -e "$_stale" ] || continue
+	[ "$_stale" = "$_lock" ] && continue
+	_sp=
+	read -r _sp 2>/dev/null <"$_stale" || _sp=
+	case ${_sp:-} in
+	''|*[!0-9]*) rm -f "$_stale" ;;          # unreadable: not a live latch
+	*) kill -0 "$_sp" 2>/dev/null || rm -f "$_stale" ;;
+	esac
+done
 
 # say STATE DETAIL: to the terminal AND to the status seam. The terminal copy is
 # the point -- "why is my terminal dead" is the actual daily complaint, and

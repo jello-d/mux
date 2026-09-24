@@ -944,6 +944,27 @@ one failure a curated list cannot catch.
 .B mux latch " " \fIHOST\fR [: \fISESSION\fR ]
 keeps an attachment to a remote mux session alive as the network allows.
 .PP
+SINGLE FLIGHT, through a lock at
+.IR $XDG_RUNTIME_DIR/mux\-latch/<target>.lock ,
+because a network flap can fire several attach attempts at once (a hook, a key
+binding, a human) and N loops against one target is N credential prompts and N
+reconnect races. The file holds the pid on line 1 and the target verbatim on
+line 2 \(em the target, because the FILENAME is sanitised and cannot carry it:
+.B manifold:api
+becomes
+.I manifold_api
+and no reader could tell that from a host genuinely called that.
+.PP
+THE DIRECTORY IS ALSO A LIVE REGISTRY of what this box is attached to, written
+at start and removed by a trap on every exit path, which is what the optional
+tray indicator reads to decide which hosts to watch. Each latch additionally
+reaps locks whose process is gone: the trap covers every exit this process
+controls, but a SIGKILL or a reboot mid\-latch does not, and nothing else would
+ever remove one. That moment is chosen for the same reason
+.B mux themes load
+prunes palette stamps \(em it is the only one needing no decision, since every
+latch already opens the directory.
+.PP
 BRING YOUR OWN TRANSPORT. mux owns the state machine and the attach semantics;
 ssh, mosh, Eternal Terminal or anything else supplies the pipe. latch never
 carries a keystroke and knows nothing about hosts, addresses or MTUs \(em it
