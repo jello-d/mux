@@ -592,13 +592,6 @@ t mux-indicator
 + 
 m unknown
 
-= indicator-empty-sources-yields-nothing
-f indicator/mux_indicator/sources.py
-t mux-indicator
--     return got or [(local_label(), [mux_bin, "agent-summary"])]
-+     return got
-m agent-summary
-
 = indicator-host-screen-ignored
 f indicator/mux_indicator/render.py
 t mux-indicator
@@ -619,3 +612,38 @@ t mux-indicator
 -     if len(parts) != 2:
 +     if False:
 m parsed as a colour
+
+= latch-lock-pid-read-with-cat
+f libexec/mux-latch
+t mux-latch
+- 	read -r _other 2>/dev/null <"$_lock" || _other=
++ 	_other=$(cat "$_lock" 2>/dev/null || true)
+m trap deleted the HOLDER's lock
+
+= latch-lock-omits-the-target
+f libexec/mux-latch
+t mux-latch
+- printf '%s\n%s\n' "$$" "$_target" >"$_lock"
++ printf '%s\n' "$$" >"$_lock"
+m line 2 must be the target
+
+= indicator-stale-lock-is-polled
+f indicator/mux_indicator/sources.py
+t mux-indicator
+-         if not pid.isdigit() or not _alive(int(pid)):
++         if not pid.isdigit():
+m test_A_STALE_LOCK_IS_SKIPPED
+
+= indicator-local-host-dropped
+f indicator/mux_indicator/sources.py
+t mux-indicator
+-     out = [(local, [mux_bin, "agent-summary"])]
++     out = []
+m test_the_local_host_is_always_there
+
+= indicator-remote-cmd-word-split
+f indicator/mux_indicator/sources.py
+t mux-indicator
+-             out.append(REMOTE_CMD)
++             out.extend(REMOTE_CMD.split())
+m test_the_command_is_ONE_argv_element
