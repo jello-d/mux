@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.44" "User Commands"
+.TH MUX 1 "" "mux 0.45" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -903,7 +903,7 @@ It always exits 0: it is a pure report, and a non\-zero exit would be
 indistinguishable from the transport.
 .PP
 .EX
-mux 0.44
+mux 0.45
 capabilities 1
 agent\-list 1
 agent\-summary 1
@@ -971,6 +971,24 @@ one failure a curated list cannot catch.
 .SH LATCH
 .B mux latch " " \fIHOST\fR [: \fISESSION\fR ]
 keeps an attachment to a remote mux session alive as the network allows.
+.PP
+WHILE IT WAITS IT SAYS SO. A backoff of more than a second draws a spinner and
+a countdown, rewritten in place, so a terminal that has just lost its session
+shows something moving rather than nothing. It is drawn only when stderr is a
+TERMINAL: on a pipe, in a log, or under a test it emits nothing at all, since
+all of it is cursor control.
+.PP
+What it cannot animate is the ATTEMPT itself, because the transport owns the
+terminal for the duration and anything drawn over it would fight the session the
+moment one established. An attempt that took long enough to look like a hang is
+therefore reported afterwards, with how long it took.
+.PP
+THE TRANSPORT'S OWN TEXT IS SANITISED before it is printed or logged.
+.B ssh \-t
+allocates a pty, so the far side's stderr arrives CRLF\-terminated and a
+captured line carries a trailing carriage return; mid\-message that returns the
+cursor to column 0 and the rest of the sentence overwrites the start of it. Only
+printable characters survive, which matters for the log as much as the screen.
 .PP
 SINGLE FLIGHT, through a lock at
 .IR $XDG_RUNTIME_DIR/mux\-latch/<target>.lock ,

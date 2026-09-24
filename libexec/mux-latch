@@ -314,9 +314,50 @@ done
 # the first fragment, and the terminal printed "this needs a human: latch cannot
 # see when a" and stopped mid-sentence. The wrapping is unavoidable here, so the
 # function has to tolerate it.
+# IS ANYONE WATCHING? Everything below is for a human at a terminal and must
+# leave a pipe, a log or a test byte-identical, so it is all gated on this.
+_TTY=0
+[ -t 2 ] && _TTY=1
+
+# BACK TO COLUMN ONE, AND CLEAR THE LINE, before anything is printed.
+#
+# `mux sane` restores every terminal MODE and cannot restore a cursor
+# POSITION: leaving the alternate screen puts the cursor wherever the normal
+# screen last had it, which is mid-line after whatever the shell printed, or
+# in the middle of an earlier latch message. So a report written straight
+# there lands on top of existing text -- the garbled, overwritten output seen
+# during a real reconnect. \r fixes the column and the erase clears whatever
+# that line still held.
+_line() {
+	[ "$_TTY" -eq 1 ] && printf '\r\033[K' >&2
+	return 0
+}
+
+# THE TRANSPORT'S TEXT IS NOT SAFE TO PRINT. `ssh -t` allocates a pty, so the
+# far side's stderr comes back CRLF-terminated and the captured line carries a
+# trailing CARRIAGE RETURN. Embedded mid-message it sends the cursor back to
+# column 0, so the rest of the sentence overwrites the beginning of it:
+#
+#   probing -- Connection closed by 10.10.0.64 port 22^M, retrying in 60s
+#
+# which renders as `, retrying in 60s`d by 10.10.0.64 port 22` and reads as a
+# corrupt terminal. Found in a REAL incident (a reboot of the far side on
+# 2026-09-24) sitting in 17 log lines, where it is equally wrong: a log is not a
+# terminal and a control character in one is just damage.
+#
+# Sanitised HERE rather than in _errline because this is the single funnel every
+# detail passes through on its way to all three consumers -- the terminal, the
+# log and the status hook -- so one strip covers paths a per-source fix would
+# keep missing.
+_clean() {   # <text> -> the same text, printable characters only
+	printf '%s' "$1" | tr -dc '[:print:]' 2>/dev/null \
+		|| printf '%s' "$1"
+}
+
 _say() {   # <state> <detail...>
 	_ss=$1; shift
-	_sd=$*
+	_sd=$(_clean "$*")
+	_line
 	printf 'mux latch: %s%s\n' "$_ss" "${_sd:+ -- $_sd}" >&2
 	# The log gets every transition, and this is the ONE place that needs to
 	# know: a transition is latch's unit of both change and failure, and
@@ -562,9 +603,50 @@ _tries=0
 _attempts=0       # transport attaches made; 0 means the next is the first
 _delay=$BACKOFF
 
+# A COUNTDOWN IS THE ANIMATION. It ticks once a second, which needs only whole
+# seconds and so stays portable, and a number that changes is better evidence of
+# life than a glyph alone: it says not just "still here" but "and here is when
+# something will happen".
+#
+# ASCII, deliberately, where the rest of mux draws unicode. This is the one
+# output path that runs on a terminal which has JUST been un-wedged, and the
+# whole point of it is legibility under exactly those conditions. The strip's
+# glyphs render inside tmux, which is a known-good context; this does not.
+_spin=0
+_tick() {   # -> sets _g
+	_spin=$(( (_spin + 1) % 4 ))
+	case $_spin in
+	0) _g='|' ;;
+	1) _g='/' ;;
+	2) _g='-' ;;
+	# Unquoted-escaped, not '\\': single quotes do no escaping in
+	# POSIX sh, so the quoted form is TWO backslashes and the
+	# spinner drew two of them. Visible in a live run, and shellcheck
+	# flags the quoted form as ambiguous (SC1003) besides.
+	*) _g=\\ ;;
+	esac
+}
+
 _wait() {   # <seconds> <state> <why>
 	_say "$2" "$3, retrying in ${1}s"
-	$SLEEP "$1" || true
+	# Not on a pipe, and not for a one-second wait where the animation would
+	# be a flash and a clear. `$SLEEP` stays the seam either way, so a test
+	# that stubs it still runs this instantly.
+	if [ "$_TTY" -eq 0 ] || [ "${1:-0}" -le 1 ]; then
+		$SLEEP "$1" || true
+		return 0
+	fi
+	_wn=$1
+	while [ "$_wn" -gt 0 ]; do
+		_tick
+		printf '\r\033[K  %s  retrying in %2ds ' "$_g" "$_wn" >&2
+		$SLEEP 1 || true
+		_wn=$((_wn - 1))
+	done
+	# Leave the line as we found it: the next _say starts clean, and a latch
+	# that exits here does not strand a half-drawn countdown on the screen.
+	printf '\r\033[K' >&2
+	return 0
 }
 
 # The transport's operative complaint: its LAST non-empty stderr line, not its
@@ -658,7 +740,27 @@ while :; do
 	_say attaching "$_target via ${TRANSPORT%% *}"
 	_rc=0
 	_attempts=$((_attempts + 1))
+	# HOW LONG THE ATTEMPT TOOK, because latch cannot show anything WHILE it
+	# runs: the transport owns the terminal, so a spinner drawn over it would
+	# fight ssh for the screen the moment a session established.
+	#
+	# It is worth reporting because the silence is real and can be long. A
+	# reboot of the far side on 2026-09-24 produced attempts bounded at 10s by
+	# ConnectTimeout, and then ONE that ran 5m42s with nothing on screen --
+	# neither timeout covers the gap after the banner and before a session
+	# exists. Saying so afterwards at least turns a dead-looking terminal into
+	# a number.
+	_t0=$(date +%s 2>/dev/null || echo 0)
 	_run_transport "$_cmd" 2>"$_errf" || _rc=$?
+	_t1=$(date +%s 2>/dev/null || echo 0)
+	_took=
+	if [ "$_t0" -gt 0 ] && [ "$_t1" -ge "$_t0" ]; then
+		_el=$((_t1 - _t0))
+		# Only when it was long enough to have looked like a hang. Tagging
+		# every one-second failure with "(1s)" is noise that trains the eye
+		# to skip the field.
+		[ "$_el" -ge 20 ] && _took=" after $((_el / 60))m$((_el % 60))s"
+	fi
 
 	# PUT THE TERMINAL BACK FIRST, before classifying, reporting or waiting.
 	# tmux dying with ssh never sends its teardown, so the terminal is left
@@ -731,7 +833,10 @@ while :; do
 		# unresolvable name alike, and which one it was is the whole
 		# question a human has when the terminal goes dead.
 		_d1=$(_errline)
-		_wait "$_delay" "$_state" "${_d1:-the transport dropped}"
+		# `$_took` only appears when the attempt was long enough to have
+		# read as a hang, which is exactly the case where the number is
+		# the useful part of the message.
+		_wait "$_delay" "$_state" "${_d1:-the transport dropped}$_took"
 		_backoff
 		continue ;;
 	esac

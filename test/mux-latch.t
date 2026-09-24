@@ -934,4 +934,79 @@ broken for that run, and its host vanishes from the tray registry."
 	|| fail "the sweep deleted a file that is not a lock"
 rm -f "$T/run/mux-latch"/*.lock "$T/run/mux-latch/notalock.txt"
 
+# --- the transport's text cannot corrupt the line -------------------------
+# `ssh -t` allocates a pty, so the far side's stderr comes back CRLF-terminated
+# and the captured line carries a trailing CARRIAGE RETURN. Embedded mid-message
+# it sends the cursor to column 0 and the rest of the sentence overwrites the
+# start of it:
+#
+#   probing -- Connection closed by 10.10.0.64 port 22^M, retrying in 60s
+#
+# which renders as a corrupt terminal, and is what "the text garbles and writes
+# on top of itself" turned out to be. NOT hypothetical: found in a real incident
+# (the far side rebooting, 2026-09-24) sitting in 17 lines of the live log,
+# where it is equally wrong -- a log is not a terminal and a control character
+# in one is just damage.
+#
+# ASSERTED ON LATCH'S OWN STDERR, which is the stream that reaches the terminal,
+# and ON THE BYTES, because this is invisible in rendered output: a CR does not
+# print, it MOVES THE CURSOR, so anything comparing visible text sees nothing
+# wrong.
+saymsg() {   # <script line...> [MAXT] -> latch's stderr
+	printf '%s\n' "$1" >"$SCRIPT"
+	env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
+		T_AUTH="$T_AUTH" T_PROBE="$T_PROBE" STATES="$STATES" \
+		TRIES="$TRIES" AUTHLOG="$AUTHLOG" SCRIPT="$SCRIPT" \
+		MUX_LATCH_TRANSPORT="$T/bin/transport %h %s" \
+		MUX_LATCH_AUTH="$T/bin/auth" MUX_LATCH_PROBE="$T/bin/probe" \
+		MUX_LATCH_STATUS="$T/bin/status" MUX_LATCH_SLEEP="$T/bin/nosleep" \
+		MUX_LATCH_BACKOFF=1 MUX_LATCH_MAX_TRIES=1 \
+		"$HERE/libexec/mux-latch" box >/dev/null 2>"$T/say.err" || :
+	cat "$T/say.err"
+}
+
+_e=$(saymsg "1 boom$(printf '\r')")   # a CRLF-terminated line
+case $_e in
+*"$(printf '\r')"*) fail "a carriage return from the transport reached a
+message. It moves the cursor to column 0, so whatever follows overwrites the
+line -- and it lands in the log as damage too." ;;
+esac
+case $_e in
+*boom*) ;;
+*) fail "the transport's message was lost; only CONTROL characters should be
+stripped, not the text: $_e" ;;
+esac
+
+# Every non-printable, not just CR. A transport is an arbitrary command and its
+# stderr is arbitrary bytes; an escape sequence reaching the terminal could do
+# considerably more than move a cursor.
+_e=$(saymsg "1 esc$(printf '\033')[31mRED$(printf '\007')")
+case $_e in
+*"$(printf '\033')"* | *"$(printf '\007')"*)
+	fail "an escape or a bell from the transport reached a message" ;;
+esac
+
+# --- the countdown is for a HUMAN, and stays off a pipe -------------------
+# Everything the animation writes is cursor control. On a pipe, in a log, or in
+# this test it must emit NOTHING, or every consumer that is not a terminal gets
+# a screenful of escape sequences.
+#
+# EXIT 255, NOT 1, AND A BACKOFF WORTH ANIMATING. An earlier version of this
+# used the refused case, which EXITS without ever calling _wait -- so it
+# asserted "no escapes" about output that never had the chance to contain any,
+# and a mutation removing the tty gate sailed straight through it. A vacuous
+# assertion is worse than none: it reads as coverage. 255 classifies as
+# `probing`, which is the retrying path, and a delay above 1 is what the
+# animation is skipped for when it is not worth drawing.
+_e=$(saymsg '255 dropped' 2 4)
+case $_e in
+*"$(printf '\033')"*) fail "the wait animation drew escape sequences into a
+NON-tty. It is gated on [ -t 2 ] precisely so a pipe stays clean, and a log or
+a pipe would otherwise fill with cursor control." ;;
+esac
+case $_e in
+*'retrying in'*) ;;
+*) fail "the retry path was not reached, so this proves nothing: $_e" ;;
+esac
+
 pass
