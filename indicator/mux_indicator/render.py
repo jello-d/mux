@@ -55,6 +55,19 @@ STATE_INK = {
     "idle":    (0xF4, 0xF4, 0xF6, 0xFF),   # white check
     "unknown": (0xC8, 0xD2, 0xE8, 0xFF),   # pale slate, reads on the dark badge
 }
+# THE HOST MARK'S INK. Fixed, and deliberately outside every STATE_FRAME hue:
+# the mark answers "WHICH machine", so it must not change as the agent works.
+# A state-coloured mark was tried and rejected for exactly that -- it was the
+# most legible option of the lot, and it made host identity flicker with state,
+# which is the one thing identity may not do.
+#
+# Cyan also separates it from the `>_`, which wears the host's FOREGROUND (a
+# near-white on every derived pair). The mark is drawn straight over the prompt
+# rather than beside it: the chevron shows through, and a fragment of it is
+# enough of a cue even where it is not fully legible, which is what buys the
+# letters their full size instead of a squeezed column.
+MARK_INK = (0x6F, 0xD9, 0xFF, 0xFF)
+_MARK_COL = 0.215    # the left strip the mark runs down, as a fraction
 _BASE = (0x14, 0x15, 0x19)           # near-black screen
 _PROMPT_LIFT = 0.55  # how far the ornamental >_ lifts from the screen toward
                      # white; higher = brighter/less recessive. Derived off the
@@ -79,6 +92,11 @@ _TRACK = 0.28      # inter-digit tracking to pull, e.g., "12" tighter
 
 _SANS = ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
          "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf")
+# Condensed and bold for the mark: three capitals have to fit a strip a fifth
+# of the tile wide, and weight is what keeps them readable at 32px.
+_COND = ("/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf",
+         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf")
 
 
 def _font(paths, px):
@@ -92,6 +110,62 @@ def _font(paths, px):
 
 def _darker(c, f):
     return tuple(int(c[i] * f) for i in range(3)) + (0xFF,)
+
+
+def host_mark(name):
+    """A host name -> the three characters that identify it on the tile.
+
+    FIRST CHARACTER, THEN THE LAST TWO CONSONANTS of what follows. Colour alone
+    cannot carry identity: mux derives one of eight pairs by hashing, and with
+    only three machines `manifestor` and `manifold` already collide -- and no
+    palette fixes that, because the birthday paradox beats you long before the
+    colours run out.
+
+    THE END OF A NAME IS WHERE THE INFORMATION IS. Fleets share prefixes
+    (`manif...`, `prod-`, `us-east-`), so the first letters are exactly the ones
+    that do NOT distinguish. Taking consonants from the tail is what separates
+    names that agree for five characters:
+
+        manifestor -> MTR      manifold -> MLD      rover -> RVR
+
+    Dropping vowels is the same trick abjads use: consonants carry most of a
+    word's identity, and three of them fit where five letters would not.
+
+    DERIVED FROM THE NAME ALONE, never from the set of hosts on screen. A
+    set-aware rule could guarantee uniqueness, but the mark would then change
+    when you latched somewhere new -- and a label that moves is worse than one
+    that occasionally collides, because you stop trusting any of them.
+    """
+    alnum = [c for c in (name or "") if c.isalnum()]
+    if not alnum:
+        return ""
+    rest = [c for c in alnum[1:] if c.lower() not in "aeiou"]
+    if len(rest) >= 2:
+        return (alnum[0] + rest[-2] + rest[-1]).upper()
+    return "".join(alnum[:3]).upper()
+
+
+def _mark_font(maxw, maxh):
+    """The largest condensed bold that fits an `M` in the strip."""
+    probe = ImageDraw.Draw(Image.new("RGB", (8, 8)))
+    for px in range(int(maxh) + 8, 3, -1):
+        f = _font(_COND, px)
+        bb = probe.textbbox((0, 0), "M", font=f)
+        if bb[2] - bb[0] <= maxw and bb[3] - bb[1] <= maxh:
+            return f
+    return _font(_COND, 5)
+
+
+def _mark(d, s, text):
+    """Three characters stacked down the left strip, over the prompt."""
+    col = int(round(s * _MARK_COL))
+    cell = s / 3.0
+    f = _mark_font(col * 0.92, cell * 0.90)
+    for i, ch in enumerate(text[:3]):
+        bb = d.textbbox((0, 0), ch, font=f)
+        w, h = bb[2] - bb[0], bb[3] - bb[1]
+        d.text(((col - w) / 2 - bb[0], i * cell + (cell - h) / 2 - bb[1]),
+               ch, font=f, fill=MARK_INK)
 
 
 def parse_pair(text):
@@ -240,7 +314,7 @@ def _badge(img, s, fill, ink, count, check=False, mark=None):
         _number(d, box, str(count), _font(_SANS, int(bd * _NUM)), ink)
 
 
-def _tile(state, count, size, cursor=True, host=None):
+def _tile(state, count, size, cursor=True, host=None, mark=None):
     s = size
     img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
@@ -250,6 +324,10 @@ def _tile(state, count, size, cursor=True, host=None):
                         fill=_screen(state, host), outline=frame,
                         width=max(1, s // 11))
     _hero(d, s, m, _prompt(state, host), cursor)
+    # AFTER the prompt, so the mark sits on top where they cross, and BEFORE
+    # the badge, which keeps its corner.
+    if mark:
+        _mark(d, s, mark)
     bcol = STATE_BADGE.get(state)
     if bcol is not None:              # blocked/working (number), idle (check)
         _badge(img, s, bcol, STATE_INK.get(state, _BADGE_INK), count,
@@ -269,13 +347,18 @@ def _to_argb(img):
     return bytes(out)
 
 
-def icon_pixmap(state, count, sizes=(22, 32, 48), cursor=True, host=None):
+def icon_pixmap(state, count, sizes=(22, 32, 48), cursor=True, host=None,
+                mark=None):
     """SNI IconPixmap for a state + count. idle/none draw no badge. cursor=False
     renders the blink OFF frame (the `_` cursor hidden).
 
     `host` is an (fg, bg) RGBA pair from parse_pair() -- the host's identity
     colours, which tint the screen and paint the `>_`. None draws the
     host-neutral look, which is both the single-host default and the honest
-    answer when `mux host-color` refuses."""
-    return [[s, s, _to_argb(_tile(state, count, s, cursor, host))]
+    answer when `mux host-color` refuses.
+
+    `mark` is the three-character host mark from host_mark(), drawn down the
+    left strip. None when there is only ONE item in the tray, which is the
+    common case and must look exactly as it always has."""
+    return [[s, s, _to_argb(_tile(state, count, s, cursor, host, mark))]
             for s in sizes]

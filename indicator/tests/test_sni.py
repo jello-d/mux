@@ -273,6 +273,47 @@ class HostColour(unittest.TestCase):
         self.assertIsNone(asyncio.run(sni._host_colors("")))
 
 
+class Mark(unittest.TestCase):
+    """The mark appears when a second host joins and goes when it leaves.
+
+    That is the rule the supervisor enforces, and the reason set_mark exists at
+    all rather than the mark being fixed at construction: hosts come and go as
+    you latch and detach, so an item has to be able to gain and lose its label
+    without being torn down and republished.
+    """
+
+    def setUp(self):
+        self.sni = _fresh()
+
+    def test_an_item_starts_unmarked(self):
+        """One host is the common case, so it is also the default."""
+        self.assertIsNone(self.sni.Indicator(label="manifold")._mark)
+
+    def test_setting_a_mark_changes_the_pixels(self):
+        i = self.sni.Indicator(label="manifold")
+        before = i._pixmap
+        i.set_mark("MLD")
+        self.assertNotEqual(before, i._pixmap)
+
+    def test_clearing_it_returns_the_original(self):
+        """Detaching from your last remote must give back exactly the
+        single-host tile, not a near-miss of it."""
+        i = self.sni.Indicator(label="manifold")
+        before = i._pixmap
+        i.set_mark("MLD")
+        i.set_mark(None)
+        self.assertEqual(before, i._pixmap)
+
+    def test_an_unchanged_mark_does_not_repaint(self):
+        """The discovery loop calls this every tick. Repainting regardless
+        would emit NewIcon at the poll rate and churn the tray for nothing."""
+        i = self.sni.Indicator(label="manifold")
+        i.set_mark("MLD")
+        first = i._pixmap
+        i.set_mark("MLD")
+        self.assertIs(first, i._pixmap)
+
+
 class Identity(unittest.TestCase):
     """What a tray host and a human see when there are SEVERAL items.
 

@@ -110,10 +110,32 @@ NAME by hashing, so this box can colour a remote host with nothing shared. That
 matters most when the host is unreachable: the `unknown` glyph still has to
 say *which* host it cannot see.
 
-**Two hosts can land on the same colour.** mux derives one of eight pairs by
-name, which is plenty for a status-bar chip (the name is written right there in
-text) but thin for a tray icon, where colour is the only cue. Pin the ones you
-care about in `$MUX_DIR/hosts`:
+### Telling hosts apart
+
+With more than one item in the tray, each tile carries a **three-character
+mark** down its left edge, in a fixed cyan: `manifold` is `MLD`, `manifestor`
+is `MTR`, `rover` is `RVR`. It is the first character plus the last two
+consonants of the rest — the *tail*, because fleets share prefixes and the
+first letters are exactly the ones that do not distinguish.
+
+**Colour alone cannot do this job.** mux derives one of eight pairs by hashing,
+so with only three machines `manifold` and `manifestor` already collide, and a
+wider palette does not save you — the birthday paradox beats you long before
+the colours run out. The mark is derived from the name alone, so it is stable,
+identical on every machine, and needs no configuration.
+
+The cyan is fixed and belongs to no state. A state-coloured mark was tried and
+rejected: it was the most legible option of all, and it made host identity
+flicker as the agent worked, which is the one thing identity may not do.
+
+**One host in the tray gets no mark at all** — the tile is exactly what it has
+always been. The mark appears when a second host joins and goes when you
+detach. It is drawn straight over the `>_`, which shows through; a fragment of
+the prompt is enough of a cue, and that is what lets the letters keep their
+full size instead of being squeezed into a column of their own.
+
+**Colours still help**, and two hosts can still land on the same pair. Pin the
+ones you care about in `$MUX_DIR/hosts`:
 
 ```
 manifold    fg=colour252,bg=colour236

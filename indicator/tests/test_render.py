@@ -23,8 +23,9 @@ The three that matter most:
 """
 import unittest
 
-from mux_indicator.render import (STATE_BADGE, STATE_FRAME, icon_pixmap,
-                                  parse_pair, _prompt, _screen, _to_argb)
+from mux_indicator.render import (MARK_INK, STATE_BADGE, STATE_FRAME,
+                                  host_mark, icon_pixmap, parse_pair,
+                                  _prompt, _screen, _to_argb)
 
 try:
     from PIL import Image
@@ -295,6 +296,93 @@ class HostIdentity(unittest.TestCase):
         unk = icon_pixmap("unknown", None, host=host)[0][2]
         self.assertNotEqual(unk, icon_pixmap("unknown", None)[0][2])
         self.assertNotEqual(unk, icon_pixmap("idle", None, host=host)[0][2])
+
+
+class HostMark(unittest.TestCase):
+    """The three-character mark, which is what actually makes two hosts tell
+    apart. COLOUR CANNOT DO IT: mux derives one of eight pairs by hashing, and
+    with only three machines `manifestor` and `manifold` already collide. No
+    wider palette fixes that either -- the birthday paradox beats you long
+    before the colours run out -- so identity needs a channel that is not a hue.
+    """
+
+    def test_the_tail_is_what_distinguishes(self):
+        """Fleets share PREFIXES, so the first letters are exactly the ones
+        that do not separate. `manifold` and `manifestor` agree for five
+        characters; their consonant tails do not."""
+        self.assertEqual(host_mark("manifold"), "MLD")
+        self.assertEqual(host_mark("manifestor"), "MTR")
+        self.assertNotEqual(host_mark("manifold"), host_mark("manifestor"))
+
+    def test_the_first_character_is_kept(self):
+        """Even when it is a vowel, so `us-east-1a` still reads as a us-* box
+        rather than starting at some consonant in the middle."""
+        self.assertTrue(host_mark("us-east-1a").startswith("U"))
+        self.assertTrue(host_mark("rover").startswith("R"))
+
+    def test_short_and_vowel_heavy_names_degrade_sanely(self):
+        for name, want in (("rover", "RVR"), ("web-01", "W01"), ("a", "A")):
+            self.assertEqual(host_mark(name), want)
+
+    def test_no_name_is_no_mark(self):
+        """Not a crash and not a placeholder: an item with nothing to say
+        should say nothing."""
+        for empty in ("", None, "---"):
+            self.assertEqual(host_mark(empty), "")
+
+    def test_it_is_derived_from_the_NAME_alone(self):
+        """Never from the set on screen. A set-aware rule could guarantee
+        uniqueness, but the mark would then change when you latched somewhere
+        new -- and a label that moves is worse than one that rarely collides,
+        because you stop trusting any of them."""
+        self.assertEqual(host_mark("manifold"), "MLD")   # same answer, always
+
+
+class MarkOnTheTile(unittest.TestCase):
+    def test_TWO_HOSTS_WITH_THE_SAME_COLOUR_DIFFER(self):
+        """The property the whole feature exists for. `manifestor` and
+        `manifold` hash to the identical pair on a box with no hosts file, so
+        before the mark their tray items were pixel-for-pixel the same."""
+        pair = parse_pair("#ffffff #005f87")
+        a = icon_pixmap("working", 2, host=pair, mark=host_mark("manifold"))
+        b = icon_pixmap("working", 2, host=pair, mark=host_mark("manifestor"))
+        self.assertNotEqual(a[0][2], b[0][2])
+
+    def test_no_mark_renders_EXACTLY_as_before(self):
+        """One host on the tray keeps the look it has always had, byte for
+        byte. The mark is for telling several apart; a lone item has nobody to
+        be told apart from, and that is every new user's first impression."""
+        pair = parse_pair("#d0d0d0 #303030")
+        self.assertEqual(icon_pixmap("idle", None, host=pair, mark=None),
+                         icon_pixmap("idle", None, host=pair))
+
+    def test_the_mark_ink_is_no_state_colour(self):
+        """It must not read as a state. A state-coloured mark was tried and
+        rejected: it was the most legible option of all, and it made host
+        identity flicker as the agent worked -- the one thing identity may not
+        do."""
+        self.assertNotIn(MARK_INK, STATE_FRAME.values())
+        self.assertNotIn(MARK_INK, STATE_BADGE.values())
+
+    def test_state_still_reads_under_a_mark(self):
+        """The mark must not swallow the signal it sits beside."""
+        pair = parse_pair("#ffffff #005f87")
+        seen = {}
+        for st in STATES:
+            k = bytes(icon_pixmap(st, 2, host=pair, mark="MLD")[0][2])
+            self.assertIsNone(seen.get(k),
+                              f"{st} == {seen.get(k)} under a mark")
+            seen[k] = st
+
+    def test_it_draws_at_every_offered_size(self):
+        """Including the smallest, where it is cramped: a tray host picks the
+        size, and returning a buffer that ignored the mark at one size would be
+        an item that changes identity with the bar's settings."""
+        pair = parse_pair("#ffffff #005f87")
+        for w, h, buf in icon_pixmap("idle", None, host=pair, mark="MLD"):
+            plain = dict((a, c) for a, b, c in
+                         icon_pixmap("idle", None, host=pair))
+            self.assertNotEqual(buf, plain[w], f"no mark drawn at {w}px")
 
 
 class Deterministic(unittest.TestCase):
