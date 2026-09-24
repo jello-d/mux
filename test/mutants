@@ -654,3 +654,31 @@ t mux-indicator-setup
 - 			|| _cc_drift="$_cc_drift $_cc_b"
 + 			|| :
 m DRIFTED file read as current
+
+= latch-option-read-as-host
+f libexec/mux-latch
+t mux-latch
+- 	-*) echo "mux: latch: unknown option: $1" >&2; _usage >&2; exit 2 ;;
++ 	--nope) echo "mux: latch: unknown option: $1" >&2; _usage >&2; exit 2 ;;
+m must be an unknown option
+
+= latch-stale-locks-never-reaped
+f libexec/mux-latch
+t mux-latch
+- 	*) kill -0 "$_sp" 2>/dev/null || rm -f "$_stale" ;;
++ 	*) : ;;
+m was not reaped
+
+= latch-sweep-eats-its-own-lock
+f libexec/mux-latch
+t mux-latch
+- 	[ "$_stale" = "$_lock" ] && continue
++ 	[ "$_stale" = "$_lock" ] && rm -f "$_stale"
+m no lock file existed while latch was running
+
+= latch-sweep-reaps-live-locks
+f libexec/mux-latch
+t mux-latch
+- 	*) kill -0 "$_sp" 2>/dev/null || rm -f "$_stale" ;;
++ 	*) rm -f "$_stale" ;;
+m deleted a LIVE latch's lock

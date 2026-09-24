@@ -873,4 +873,65 @@ host. (The pid must be read with \`read\`, not \`cat\`.)"
 got $_rc"
 rm -f "$_held"
 
+# --- options are OPTIONS, not hostnames -----------------------------------
+# `mux latch --help` used to take `--help` as the HOSTNAME: it tried to ssh
+# there, wrote a lock called `--help.lock`, and retried on a backoff. Found by
+# seeing exactly that file sitting in a live runtime directory.
+#
+# `-V` WAS THE WORSE ONE, and shows why this is not a cosmetic fix: `ssh -V`
+# SUCCEEDS, so the transport exited cleanly, which latch reads as the human
+# having detached -- so it reported SUCCESS and exit 0 for a session that never
+# existed. Not an error; something plausible.
+_rc=0
+env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
+	"$HERE/libexec/mux-latch" --help >"$T/help.out" 2>&1 || _rc=$?
+[ "$_rc" = 0 ] || fail "--help must exit 0, got $_rc"
+grep -q 'usage' "$T/help.out" || fail "--help printed no usage:
+$(cat "$T/help.out")"
+[ ! -e "$T/run/mux-latch/--help.lock" ] \
+	|| fail "--help was treated as a target: it took a LOCK"
+
+for _opt in -V --version --bogus; do
+	_rc=0
+	env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
+		"$HERE/libexec/mux-latch" "$_opt" >"$T/opt.out" 2>&1 || _rc=$?
+	[ "$_rc" = 2 ] || fail "$_opt must be an unknown option (exit 2), got
+$_rc. Exit 0 here is the dangerous one: it reports a session that never was."
+	grep -q 'unknown option' "$T/opt.out" \
+		|| fail "$_opt did not say it was an unknown option"
+done
+
+# --- mux clears the litter mux makes --------------------------------------
+# NOTHING reaped a stale lock before this. The trap covers every exit path the
+# process controls, but a SIGKILL, a reboot mid-latch or an OOM kill leaves the
+# file, and the reclaim only overwrites the lock for the target being latched
+# RIGHT NOW -- so a lock for a host you never latch to again simply stays. That
+# is how a `--help.lock` from the bug above was still present weeks later.
+#
+# It matters more than tidiness: the tray indicator reads this directory to
+# decide which hosts to watch, so an unreaped lock is a phantom host.
+mkdir -p "$T/run/mux-latch"
+printf '%s\n%s\n' 2147483646 deadhost >"$T/run/mux-latch/deadhost.lock"
+printf '%s\n%s\n' "$$" livehost >"$T/run/mux-latch/livehost.lock"
+printf 'garbage\n' >"$T/run/mux-latch/junk.lock"
+: >"$T/run/mux-latch/notalock.txt"
+MAXT=1 _rc=$(latch sweeper)
+
+# THE LIVE ONE SURVIVING IS THE LOAD-BEARING ASSERTION: a prune that deletes
+# everything passes any count-based check, and deleting a live lock would break
+# single flight for the run that holds it. $$ is this test itself, so it is
+# genuinely alive.
+[ -f "$T/run/mux-latch/livehost.lock" ] \
+	|| fail "the sweep deleted a LIVE latch's lock. Single flight is now
+broken for that run, and its host vanishes from the tray registry."
+[ ! -e "$T/run/mux-latch/deadhost.lock" ] \
+	|| fail "a lock whose pid is gone was not reaped"
+[ ! -e "$T/run/mux-latch/junk.lock" ] \
+	|| fail "an unreadable lock was not reaped (it can never be a live latch)"
+# NOTHING BUT LOCKS, the same restraint the palette-stamp sweep keeps: this
+# directory is not ours alone to empty.
+[ -f "$T/run/mux-latch/notalock.txt" ] \
+	|| fail "the sweep deleted a file that is not a lock"
+rm -f "$T/run/mux-latch"/*.lock "$T/run/mux-latch/notalock.txt"
+
 pass
