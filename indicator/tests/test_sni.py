@@ -229,6 +229,50 @@ class Query(unittest.TestCase):
             self.assertIsNotNone(asyncio.run(sni._query(argv)))
 
 
+class HostColour(unittest.TestCase):
+    """Resolving a host's identity colours: LOCAL, once, and fail-soft.
+
+    Run locally even for a remote host, which is the point and not a shortcut:
+    the colour derives from the NAME by hashing, so this box can colour a remote
+    host with nothing shared. Asking the remote would need it reachable just to
+    pick a colour -- so an unreachable host would lose its identity at the exact
+    moment the `unknown` glyph needs to say which host is unreachable.
+    """
+
+    def _stub(self, out, rc):
+        import stat
+        import tempfile
+        fd, path = tempfile.mkstemp(prefix="muxhc", suffix=".sh")
+        with os.fdopen(fd, "w") as fh:
+            fh.write("#!/bin/sh\nprintf '%s'\nexit %d\n" % (out, rc))
+        os.chmod(path, os.stat(path).st_mode | stat.S_IEXEC)
+        self.addCleanup(os.unlink, path)
+        return path
+
+    def test_a_pair_is_parsed(self):
+        sni = _fresh(MUX_BIN=self._stub("#d0d0d0 #303030\n", 0))
+        self.assertEqual(asyncio.run(sni._host_colors("h")),
+                         ((0xD0, 0xD0, 0xD0, 0xFF), (0x30, 0x30, 0x30, 0xFF)))
+
+    def test_the_REFUSAL_is_honoured(self):
+        """Exit 1 for colours 0-15. Drawing neutral is correct; inventing a
+        colour for a machine identifier is not."""
+        sni = _fresh(MUX_BIN=self._stub("", 1))
+        self.assertIsNone(asyncio.run(sni._host_colors("h")))
+
+    def test_a_missing_mux_is_not_fatal(self):
+        """An item with no colour is a small loss. An item that never publishes
+        because a colour lookup raised is a host missing from the tray."""
+        sni = _fresh(MUX_BIN="/nonexistent/definitely-not-mux")
+        self.assertIsNone(asyncio.run(sni._host_colors("h")))
+
+    def test_no_label_asks_nothing(self):
+        """The single-host default has no label, so there is no name to hash and
+        no subprocess worth spawning."""
+        sni = _fresh(MUX_BIN=self._stub("#d0d0d0 #303030\n", 0))
+        self.assertIsNone(asyncio.run(sni._host_colors("")))
+
+
 class Identity(unittest.TestCase):
     """What a tray host and a human see when there are SEVERAL items.
 

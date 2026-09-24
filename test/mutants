@@ -581,7 +581,7 @@ m unwritable PATH made mux_log fail
 = indicator-ignores-exit-code
 f indicator/mux_indicator/sni.py
 t mux-indicator
--     if proc.returncode != 0:
+-     if proc.returncode != 0:          # the transport failed, not the host
 +     if False:
 m unknown
 
@@ -598,3 +598,24 @@ t mux-indicator
 -     return got or [(local_label(), [mux_bin, "agent-summary"])]
 +     return got
 m agent-summary
+
+= indicator-host-screen-ignored
+f indicator/mux_indicator/render.py
+t mux-indicator
+-         return _mix(_BASE, host[1], _HOST_TINT)
++         pass
+m SCREEN
+
+= indicator-host-prompt-ignored
+f indicator/mux_indicator/render.py
+t mux-indicator
+-         return host[0]
++         pass
+m PROMPT
+
+= indicator-host-refusal-ignored
+f indicator/mux_indicator/render.py
+t mux-indicator
+-     if len(parts) != 2:
++     if False:
+m parsed as a colour

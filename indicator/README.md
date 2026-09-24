@@ -71,7 +71,41 @@ always did -- it just gains a name.
 The LABEL does three jobs: it names the host in the tooltip (`mux @ manifold`),
 it becomes the tray id `mux-<label>` (so a bar can order items, and the id is
 self-describing in the D-Bus name list), and it keys `mux host-color` so a
-remote host can be drawn in the same colour as its status-bar chip.
+remote host is drawn in the same colour as its status-bar chip.
+
+### Which machine is this?
+
+Each item wears its host's identity colours: the host's **background** tints the
+screen, its **foreground** paints the `>_`. Those come from `mux host-color`, so
+the tray and the status bar agree -- one rule, one owner. The pair exists so fg
+is legible on bg, so using each half for its actual purpose gets that legibility
+for free.
+
+State keeps the **frame** and the **badge**, so the two dimensions never
+collide: nothing about a host's colour can make a blocked agent look calm.
+
+The lookup runs **locally**, even for a remote host: the colour derives from the
+NAME by hashing, so this box can colour a remote host with nothing shared. That
+matters most when the host is unreachable: the `unknown` glyph still has to
+say *which* host it cannot see.
+
+**Two hosts can land on the same colour.** mux derives one of eight pairs by
+name, which is plenty for a status-bar chip (the name is written right there in
+text) but thin for a tray icon, where colour is the only cue. Pin the ones you
+care about in `$MUX_DIR/hosts`:
+
+```
+manifold    fg=colour252,bg=colour236
+manifestor  fg=colour230,bg=#5f3a1a
+```
+
+That file is per-machine, so a host pinned on one box and derived on another
+gets two different colours. If you rely on the colours, share `$MUX_DIR` (it is
+designed to be shareable -- everything machine-local lives in `MUX_CACHE` and
+`MUX_STATE`).
+
+If `mux host-color` refuses -- colours 0-15 have no fixed hex, since every theme
+remaps them -- the item draws host-neutral rather than guessing.
 
 **Quote the remote command as one argument.** `ssh` concatenates its remaining
 arguments into a single string and the remote shell re-splits it, so
@@ -100,7 +134,6 @@ required -- `RegisterStatusNotifierItem` takes only a service name, so two names
 on one connection resolve to the same object and you get the same item twice).
 Verified against a live waybar.
 
-Next, in order: per-host colour in the glyph (host `bg` in the screen, host `fg`
-in the `>_`), then left-click activates `mux next-blocked`, then a per-session
-menu (right-click). The visual identity lives entirely in `render.py`; the D-Bus
+Next, in order: left-click activates `mux next-blocked`, then a per-session menu
+(right-click). The visual identity lives entirely in `render.py`; the D-Bus
 plumbing is in `sni.py`; the source list is in `sources.py`.

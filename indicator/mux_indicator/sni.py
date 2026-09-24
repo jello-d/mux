@@ -34,7 +34,7 @@ from dbus_next import BusType, PropertyAccess
 from dbus_next.aio import MessageBus
 from dbus_next.service import ServiceInterface, dbus_property, method, signal
 
-from .render import icon_pixmap
+from .render import icon_pixmap, parse_pair
 from .sources import load as load_sources
 
 WATCHER = "org.kde.StatusNotifierWatcher"
@@ -64,21 +64,27 @@ BLINK_MS = int(os.environ.get("MUX_INDICATOR_BLINK_MS", "250"))
 
 
 class Indicator(ServiceInterface):
-    def __init__(self, state="none", count=None, label=None):
+    def __init__(self, state="none", count=None, label=None, host=None):
         super().__init__("org.kde.StatusNotifierItem")
         # The label names the host this item speaks for. None keeps the old
         # unlabelled identity, which is what the existing tests construct.
         self._label = label
+        # The (fg, bg) identity pair, or None for the host-neutral look. Fixed
+        # for this item's life: it derives from the NAME by hashing, so it
+        # cannot change while the daemon runs, and re-querying it per poll would
+        # be a subprocess per host per tick for an answer that never moves.
+        self._host = host
         self._state = state
         self._count = count
-        self._pixmap = icon_pixmap(state, count)
+        self._pixmap = icon_pixmap(state, count, host=host)
         self._blink = None
 
     def _status(self):
         return "NeedsAttention" if self._state == "blocked" else "Active"
 
     def _paint(self, cursor=True):
-        self._pixmap = icon_pixmap(self._state, self._count, cursor=cursor)
+        self._pixmap = icon_pixmap(self._state, self._count, cursor=cursor,
+                                   host=self._host)
         self.NewIcon()
 
     def set(self, state, count):
@@ -293,7 +299,7 @@ async def _query(argv):
         except (asyncio.TimeoutError, OSError, ProcessLookupError):
             pass
         return UNKNOWN
-    if proc.returncode != 0:
+    if proc.returncode != 0:          # the transport failed, not the host
         return UNKNOWN
     got = _parse(out.decode("utf-8", "replace"))
     # _parse stays a pure text->tuple function and passes any word through;
@@ -301,6 +307,35 @@ async def _query(argv):
     if got is None or got[0] not in KNOWN:
         return UNKNOWN
     return got
+
+
+async def _host_colors(label):
+    """`mux host-color LABEL` -> an (fg, bg) pair, or None.
+
+    RUN LOCALLY, even for a remote host, and that is the point rather than a
+    shortcut: the colour derives from the NAME by hashing, so the box you are
+    sitting at can colour a remote host correctly with nothing shared and
+    nothing configured. Asking the remote would need it reachable just to pick a
+    colour -- so an unreachable host would lose its identity at the exact moment
+    the `unknown` glyph needs to say WHICH host is unreachable.
+
+    None on any failure, including the deliberate refusal for colours 0-15.
+    A tray item drawing the neutral look is a small loss; a wrong colour on the
+    thing whose whole job is identifying a machine is a real one.
+    """
+    if not label:
+        return None
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            MUX, "host-color", label,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL)
+        out, _ = await asyncio.wait_for(proc.communicate(), TIMEOUT)
+    except (OSError, asyncio.TimeoutError):
+        return None
+    if proc.returncode != 0:
+        return None
+    return parse_pair(out.decode("utf-8", "replace"))
 
 
 async def _watch(item, argv, label=""):
@@ -324,7 +359,14 @@ async def _publish(index, label, argv):
     name index is 1-based to match the convention every other SNI producer uses.
     """
     bus = await MessageBus(bus_type=BusType.SESSION).connect()
-    item = Indicator(label=label)
+    # Before the export, so the FIRST pixmap a tray host reads already carries
+    # the host colour. Painting neutral and then correcting it would make every
+    # item visibly change colour a moment after the bar appeared.
+    host = await _host_colors(label)
+    if host is None and label:
+        print(f"mux-indicator: {label} has no usable colour pair "
+              f"(drawing host-neutral)", flush=True)
+    item = Indicator(label=label, host=host)
     bus.export(ITEM_PATH, item)
     name = f"org.kde.StatusNotifierItem-{os.getpid()}-{index}"
     await bus.request_name(name)

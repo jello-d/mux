@@ -24,7 +24,7 @@ The three that matter most:
 import unittest
 
 from mux_indicator.render import (STATE_BADGE, STATE_FRAME, icon_pixmap,
-                                  _to_argb)
+                                  parse_pair, _prompt, _screen, _to_argb)
 
 try:
     from PIL import Image
@@ -196,6 +196,105 @@ class UnknownInputIsSurvivable(unittest.TestCase):
 
     def test_empty_state_does_not_raise(self):
         self.assertTrue(icon_pixmap("", None))
+
+
+GREY = "#d0d0d0 #303030"      # what `mux host-color` gives for a greyscale row
+CREAM = "#ffffd7 #5f3a1a"     # a deliberately unalike pair
+
+
+class HostIdentity(unittest.TestCase):
+    """The host colour pair, which answers "WHICH machine is this?" at a glance.
+
+    The pair comes from `mux host-color`, so the same rule that paints a host's
+    status-bar chip paints its tray item -- otherwise the two disagree about
+    which machine is which and neither looks broken. The bg becomes the screen
+    and the fg paints the `>_`, which is what each colour is FOR: the pair
+    exists so fg is legible on bg, so that legibility comes for free instead of
+    being re-derived by a lift heuristic here.
+
+    THE INVARIANT THAT MATTERS MOST is the last test: host colour must never be
+    able to make one state look like another. Identity and state are separate
+    dimensions -- frame and badge carry state, screen and prompt carry identity
+    -- and a change that let them collide would quietly cost the icon its job.
+    """
+
+    def test_parses_the_pair(self):
+        self.assertEqual(parse_pair(GREY),
+                         ((0xD0, 0xD0, 0xD0, 0xFF), (0x30, 0x30, 0x30, 0xFF)))
+
+    def test_a_refusal_is_not_a_colour(self):
+        """`mux host-color` exits 1 for colours 0-15 (the terminal's own, which
+        every theme remaps, so there is no correct hex) and prints nothing. The
+        answer to that is the neutral look, never a guess: a wrong colour on the
+        thing whose job is identifying a machine is worse than no colour."""
+        for bad in ("", "   ", "#d0d0d0", "nope nope", "#d0d0d0 #30303",
+                    "#d0d0d0 303030", "#gggggg #303030",
+                    "#d0d0d0 #303030 #extra"):
+            self.assertIsNone(parse_pair(bad), f"{bad!r} parsed as a colour")
+
+    def test_two_hosts_do_not_look_alike(self):
+        """The whole feature. Two tray items that render identically leave you
+        hovering each one to find out which box is which."""
+        a = icon_pixmap("idle", None, host=parse_pair(GREY))[0][2]
+        b = icon_pixmap("idle", None, host=parse_pair(CREAM))[0][2]
+        self.assertNotEqual(a, b)
+
+    def test_a_host_differs_from_the_neutral_look(self):
+        """Otherwise the pair is being parsed and then ignored -- which would
+        pass every "it renders" check while the feature did nothing."""
+        self.assertNotEqual(
+            icon_pixmap("idle", None, host=parse_pair(GREY))[0][2],
+            icon_pixmap("idle", None)[0][2])
+
+    # THE NEXT TWO ARE SPLIT ON PURPOSE, and the tile-level assertion above is
+    # why they have to be. The host pair reaches the glyph through TWO
+    # independent places -- the screen takes its bg, the prompt takes its fg --
+    # and either one alone is enough to make the whole tile differ from neutral.
+    # So a single tile-level check kills NEITHER: delete one and the other still
+    # carries it. Measured, not guessed, one commit after the same shape
+    # survived a mutation in unknown's frame-vs-badge pair.
+    def test_the_SCREEN_takes_the_hosts_background(self):
+        """Which is literally what that colour is for: it is the bg of that
+        host's status-bar chip."""
+        self.assertNotEqual(_screen("idle", parse_pair(GREY)),
+                            _screen("idle"))
+
+    def test_the_PROMPT_takes_the_hosts_foreground(self):
+        """And exactly the fg, not a lift of it -- the pair exists so fg is
+        legible on bg, so pairing them here gets that legibility for free
+        instead of re-deriving it and risking a pale host colour."""
+        fg, _bg = parse_pair(GREY)
+        self.assertEqual(_prompt("idle", parse_pair(GREY)), fg)
+
+    def test_none_host_is_the_historical_look(self):
+        """A single-host install must render exactly as it always did, so the
+        multi-host work cannot change what one user already sees."""
+        self.assertEqual(icon_pixmap("working", 3, host=None),
+                         icon_pixmap("working", 3))
+
+    def test_STATE_STILL_READS_UNDER_EVERY_HOST(self):
+        """The invariant. Identity tints the screen and the prompt; STATE owns
+        the frame and the badge. If a host colour could collapse two states the
+        icon would stop answering the question it exists for, and it would do so
+        silently -- on one host only, which is the hardest kind to notice."""
+        for pair in (GREY, CREAM):
+            host = parse_pair(pair)
+            seen = {}
+            for state in STATES:
+                key = bytes(icon_pixmap(state, 2, host=host)[0][2])
+                clash = seen.get(key)
+                self.assertIsNone(
+                    clash, f"under host {pair}, {state} == {clash}")
+                seen[key] = state
+
+    def test_unreachable_keeps_its_host_colour(self):
+        """`unknown` still has to say WHICH host is unreachable -- that is the
+        one moment identity matters most. It also stays distinct from the
+        reachable states on the same host."""
+        host = parse_pair(GREY)
+        unk = icon_pixmap("unknown", None, host=host)[0][2]
+        self.assertNotEqual(unk, icon_pixmap("unknown", None)[0][2])
+        self.assertNotEqual(unk, icon_pixmap("idle", None, host=host)[0][2])
 
 
 class Deterministic(unittest.TestCase):
