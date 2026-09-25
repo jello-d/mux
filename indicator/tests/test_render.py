@@ -374,6 +374,79 @@ class MarkOnTheTile(unittest.TestCase):
                               f"{st} == {seen.get(k)} under a mark")
             seen[k] = st
 
+    def test_the_STRIP_itself_is_drawn(self):
+        """Separate from the letters, because either alone makes a marked tile
+        differ from an unmarked one -- so a single "they differ" assertion
+        kills NEITHER. Same shape as unknown's frame-vs-badge and the host
+        pair's screen-vs-prompt: when a feature reaches the output through more
+        than one path, assert each path.
+
+        Sampled at the left edge, mid-height, which is inside the strip and
+        beside the middle letter rather than on it. Without a mark that pixel
+        is the state's FRAME; with one it is the strip.
+        """
+        from mux_indicator.render import _MARK_BACK, _tile
+        pair = parse_pair("#ffffff #005f87")
+        for s in (22, 32, 48):
+            marked = _tile("working", 2, s, True, pair, "MLD").load()
+            plain = _tile("working", 2, s, True, pair).load()
+            self.assertEqual(marked[1, s // 2], _MARK_BACK,
+                             f"{s}px: no strip behind the mark")
+            self.assertNotEqual(plain[1, s // 2], _MARK_BACK,
+                                f"{s}px: the UNMARKED tile already has one")
+
+    def test_the_mark_is_sized_by_HEIGHT_not_width(self):
+        """The one choice that made it legible. Fitting the glyph to a narrow
+        column gave a 7px capital on a 32px tile -- present, unreadable, and
+        indistinguishable between hosts at the size a tray actually draws. The
+        letters are sized to a third of the tile and allowed to be as wide as
+        they need, because the strip beneath them means width costs nothing.
+        """
+        from mux_indicator.render import _mark_metrics
+        for s in (32, 48):
+            f, _w = _mark_metrics(s, "MLD")
+            bb = f.getbbox("M")
+            cap = bb[3] - bb[1]
+            self.assertGreaterEqual(
+                cap, 0.70 * (s / 3.0),
+                f"{s}px: cap height {cap} is far below a third of the tile, "
+                "which is what a width-constrained fit produces")
+
+    def test_THE_OVERLAY_IS_CONFINED_TO_ITS_STRIP(self):
+        """The base icon is not negotiated with, it is COVERED -- and only
+        where the strip is. Every pixel to the right of the strip must be
+        identical to the no-mark tile.
+
+        That is the property the whole design rests on. The mark is allowed to
+        obliterate the chevron precisely BECAUSE removing it restores the
+        standard icon exactly; if the overlay could disturb anything outside
+        its own band, "strip the letters to revert" would stop being true and
+        the single-host icon would quietly drift from the multi-host one.
+        """
+        from mux_indicator.render import _mark_metrics, _tile
+        pair = parse_pair("#ffffff #005f87")
+        for s in (22, 32, 48):
+            plain = _tile("working", 2, s, True, pair).load()
+            marked = _tile("working", 2, s, True, pair, "MLD").load()
+            _f, w = _mark_metrics(s, "MLD")
+            for x in range(int(w) + 1, s):
+                for y in range(s):
+                    self.assertEqual(
+                        plain[x, y], marked[x, y],
+                        f"{s}px: the mark changed a pixel at x={x} y={y}, "
+                        f"outside its {w}px strip")
+
+    def test_the_strip_is_sized_from_the_LETTERS(self):
+        """Strip and glyphs come from one measurement. Computed apart they
+        drift, and a letter hanging off the end of its own background is the
+        exact failure the strip exists to prevent."""
+        from mux_indicator.render import _mark_metrics
+        for s in (22, 32, 48, 64):
+            f, w = _mark_metrics(s, "MLD")
+            widest = max(f.getbbox(c)[2] - f.getbbox(c)[0] for c in "MLD")
+            self.assertGreaterEqual(w, widest,
+                                    f"{s}px: strip {w} narrower than a letter")
+
     def test_it_draws_at_every_offered_size(self):
         """Including the smallest, where it is cramped: a tray host picks the
         size, and returning a buffer that ignored the mark at one size would be

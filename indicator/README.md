@@ -113,10 +113,23 @@ say *which* host it cannot see.
 ### Telling hosts apart
 
 With more than one item in the tray, each tile carries a **three-character
-mark** down its left edge, in a fixed cyan: `manifold` is `MLD`, `manifestor`
-is `MTR`, `rover` is `RVR`. It is the first character plus the last two
-consonants of the rest — the *tail*, because fleets share prefixes and the
-first letters are exactly the ones that do not distinguish.
+mark** reading downward on a black strip at its left edge, in cyan: `manifold`
+is `MLD`, `manifestor` is `MTR`, `rover` is `RVR`. It is the first character
+plus the last two consonants of the rest — the *tail*, because fleets share
+prefixes and the first letters are exactly the ones that do not distinguish.
+
+**It is an overlay, not a redesign.** The icon underneath is drawn exactly as
+it always was, and the mark is composited on top in a fixed order: the icon,
+then the strip, then the badge (so the count is never clipped), then the
+letters. The strip covers the left border and the `>` chevron outright rather
+than trying to fit around them — which is what lets the glyphs be sized to a
+third of the tile instead of being squeezed into a column, the difference
+between a 13px capital and an unreadable 7px one at a 32px tray size.
+
+Because it only ever *covers*, removing it restores the standard icon exactly.
+That is asserted two ways: every no-mark tile is byte-identical to the
+pre-overlay renderer, and every pixel to the right of the strip is identical
+between a marked and an unmarked tile.
 
 **Colour alone cannot do this job.** mux derives one of eight pairs by hashing,
 so with only three machines `manifold` and `manifestor` already collide, and a

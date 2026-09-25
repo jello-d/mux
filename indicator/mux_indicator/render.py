@@ -67,7 +67,9 @@ STATE_INK = {
 # enough of a cue even where it is not fully legible, which is what buys the
 # letters their full size instead of a squeezed column.
 MARK_INK = (0x6F, 0xD9, 0xFF, 0xFF)
-_MARK_COL = 0.215    # the left strip the mark runs down, as a fraction
+_MARK_BACK = (0x00, 0x00, 0x00, 0xFF)   # the strip the letters sit on
+_MARK_CAP = 0.86     # cap height as a fraction of the third of the tile
+_MARK_PAD = 0.03     # breathing room each side of the widest letter
 _BASE = (0x14, 0x15, 0x19)           # near-black screen
 _PROMPT_LIFT = 0.55  # how far the ornamental >_ lifts from the screen toward
                      # white; higher = brighter/less recessive. Derived off the
@@ -94,8 +96,8 @@ _SANS = ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
          "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf")
 # Condensed and bold for the mark: three capitals have to fit a strip a fifth
 # of the tile wide, and weight is what keeps them readable at 32px.
-_COND = ("/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf",
-         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+_COND = ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+         "/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf",
          "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf")
 
 
@@ -145,26 +147,63 @@ def host_mark(name):
     return "".join(alnum[:3]).upper()
 
 
-def _mark_font(maxw, maxh):
-    """The largest condensed bold that fits an `M` in the strip."""
+def _mark_font(maxh):
+    """The largest bold whose cap height fits a third of the tile.
+
+    SIZED BY HEIGHT, NOT WIDTH, and that one choice is what makes the mark
+    readable. Fitting it to a narrow column instead gave a 7px capital on a
+    32px tile -- present, but impossible to tell MLD from MTR at the size a
+    tray actually draws. The letters are allowed to be as WIDE as they need
+    because they are allowed to cover what is beneath them.
+    """
     probe = ImageDraw.Draw(Image.new("RGB", (8, 8)))
-    for px in range(int(maxh) + 8, 3, -1):
+    for px in range(int(maxh) + 10, 3, -1):
         f = _font(_COND, px)
         bb = probe.textbbox((0, 0), "M", font=f)
-        if bb[2] - bb[0] <= maxw and bb[3] - bb[1] <= maxh:
+        if bb[3] - bb[1] <= maxh:
             return f
     return _font(_COND, 5)
 
 
-def _mark(d, s, text):
-    """Three characters stacked down the left strip, over the prompt."""
-    col = int(round(s * _MARK_COL))
+def _mark_metrics(s, text):
+    """-> (font, strip width). ONE place, because the strip is sized from the
+    letters: computing them apart is how the two drift and the letters start
+    hanging off the end of their own background."""
+    f = _mark_font((s / 3.0) * _MARK_CAP)
+    probe = ImageDraw.Draw(Image.new("RGB", (8, 8)))
+    widest = 0
+    for ch in text[:3]:
+        bb = probe.textbbox((0, 0), ch, font=f)
+        widest = max(widest, bb[2] - bb[0])
+    return f, widest + 2 * max(1, int(round(s * _MARK_PAD)))
+
+
+def _mark_strip(d, s, text):
+    """The black band the letters sit on, drawn UNDER the badge.
+
+    A FIXED BACKDROP rather than an outline on each glyph. An outline works,
+    but its contrast depends on what happens to be behind that particular
+    letter -- the frame in one place, the screen in another, the chevron in a
+    third -- so legibility varies down the word. A strip makes every letter
+    the same problem.
+
+    Its left corners follow the tile's radius so it reads as part of the icon
+    rather than a rectangle dropped on top of one.
+    """
+    _, w = _mark_metrics(s, text)
+    rad = max(2, s // 7)
+    d.rounded_rectangle([0, 0, w, s - 1], rad, fill=_MARK_BACK)
+    d.rectangle([w - rad, 0, w, s - 1], fill=_MARK_BACK)
+
+
+def _mark_letters(d, s, text):
+    """The three characters, centred on the strip, drawn LAST."""
+    f, w = _mark_metrics(s, text)
     cell = s / 3.0
-    f = _mark_font(col * 0.92, cell * 0.90)
     for i, ch in enumerate(text[:3]):
         bb = d.textbbox((0, 0), ch, font=f)
-        w, h = bb[2] - bb[0], bb[3] - bb[1]
-        d.text(((col - w) / 2 - bb[0], i * cell + (cell - h) / 2 - bb[1]),
+        cw, chh = bb[2] - bb[0], bb[3] - bb[1]
+        d.text(((w - cw) / 2 - bb[0], i * cell + (cell - chh) / 2 - bb[1]),
                ch, font=f, fill=MARK_INK)
 
 
@@ -324,15 +363,30 @@ def _tile(state, count, size, cursor=True, host=None, mark=None):
                         fill=_screen(state, host), outline=frame,
                         width=max(1, s // 11))
     _hero(d, s, m, _prompt(state, host), cursor)
-    # AFTER the prompt, so the mark sits on top where they cross, and BEFORE
-    # the badge, which keeps its corner.
+
+    # THE ORDER BELOW IS THE DESIGN, not an implementation detail:
+    #
+    #   1. the icon as it has always been      (above)
+    #   2. the strip, over the frame and the prompt
+    #   3. the badge, so the COUNT is never clipped by the strip
+    #   4. the letters, above everything
+    #
+    # The badge moved into this sequence purely so something can be slipped
+    # beneath it. With no mark the drawing is byte-for-byte what it was, which
+    # is the property the whole overlay rests on: removing the mark restores
+    # the standard icon exactly, and that is what makes it safe for the mark to
+    # COVER the chevron rather than negotiate with it.
     if mark:
-        _mark(d, s, mark)
+        _mark_strip(d, s, mark)
     bcol = STATE_BADGE.get(state)
     if bcol is not None:              # blocked/working (number), idle (check)
         _badge(img, s, bcol, STATE_INK.get(state, _BADGE_INK), count,
                check=(state == "idle"),
                mark="?" if state == "unknown" else None)
+    if mark:
+        # A fresh Draw: _badge composites its own layer onto img, so the
+        # handle taken above no longer sees what is on the canvas.
+        _mark_letters(ImageDraw.Draw(img), s, mark)
     return img
 
 
