@@ -171,4 +171,70 @@ _o=$(mux "$T/elsewhere" resume) \
 case $_o in *"no sessions recorded"*) ;; *) fail "unhelpful message: [$_o]" ;;
 esac
 
+# --- a rebuild is a MUTATION, so it is logged -----------------------------
+# At the worst possible moment to be unobservable. `mux resume` runs after a
+# reboot, when "did my sessions come back?" is the only question anyone has, and
+# the terminal that answered it has usually scrolled away or been closed by the
+# time the question is asked. A set surviving intact while sessions are simply
+# absent is indistinguishable, afterwards, from resume never having been run --
+# which is exactly the ambiguity this removes.
+MUX_LOG=$T/resume.log; export MUX_LOG
+rm -f "$T"/state/sessions.*
+: >"$LIVE"
+mkdir -p "$T/tree/logged"
+mux "$T/tree/logged" go >/dev/null || fail "go logged failed"
+: >"$LIVE"                       # the reboot
+: >"$MUX_LOG"
+_o=$(mux "$T/elsewhere" resume 2>&1 || true)
+_lg=$(cat "$MUX_LOG" 2>/dev/null || true)
+case $_lg in
+*' resume['*) ;;
+*) fail "a rebuild wrote nothing to the log:
+  said: $_o
+  log:  $_lg" ;;
+esac
+
+# NAMES, NOT JUST COUNTS. "rebuilt 5" cannot say WHICH five, and the useful
+# post-mortem is always about the one that is missing.
+case $_lg in
+*logged*) ;;
+*) fail "the rebuild was logged without naming the sessions: $_lg" ;;
+esac
+
+# --- and what it could NOT do ---------------------------------------------
+# The other half of the log's rule. A session whose ROOT has moved fails here
+# and nowhere else, and a rebuild that quietly came back short is precisely what
+# cannot be reconstructed later.
+rm -f "$T"/state/sessions.*
+: >"$LIVE"
+mkdir -p "$T/tree/ghost"
+mux "$T/tree/ghost" go >/dev/null || fail "go ghost failed"
+: >"$LIVE"
+rm -rf "$T/tree/ghost"           # the root goes away under it
+: >"$MUX_LOG"
+_o=$(mux "$T/elsewhere" resume 2>&1 || true)
+_lg=$(cat "$MUX_LOG" 2>/dev/null || true)
+case $_lg in
+*"could NOT build"*ghost*) ;;
+*) fail "a session that failed to rebuild was not logged BY NAME:
+  said: $_o
+  log:  $_lg" ;;
+esac
+
+# --- nothing recorded is a failure to do what was asked, and says so ------
+# A reboot that lost the set looks exactly like this from the outside, and the
+# difference between "the set was empty" and "resume was never run" is the
+# whole question a post-mortem is trying to settle.
+rm -f "$T"/state/sessions.*
+: >"$MUX_LOG"
+_o=$(mux "$T/elsewhere" resume 2>&1 || true)
+_lg=$(cat "$MUX_LOG" 2>/dev/null || true)
+case $_lg in
+*"nothing recorded"*) ;;
+*) fail "an empty set logged nothing:
+  said: $_o
+  log:  $_lg" ;;
+esac
+unset MUX_LOG
+
 pass

@@ -731,3 +731,17 @@ t mux-latch
 - 	if [ "$_TTY" -eq 0 ] || [ "${1:-0}" -le 1 ]; then
 + 	if false; then
 m drew escape sequences into a
+
+= resume-rebuild-not-logged
+f bin/mux
+t mux-resume
+-                 && mux_log resume "rebuilt$rs_builtn ($rs_up already up)"
++                 && true
+m rebuild wrote nothing to the log
+
+= resume-failure-not-logged
+f bin/mux
+t mux-resume
+-                 mux_log resume "could NOT build:$(printf '%s' "$rs_failed" \
++                 true "$(printf '%s' "$rs_failed" \
+m failed to rebuild was not logged

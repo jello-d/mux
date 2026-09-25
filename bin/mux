@@ -99,7 +99,7 @@ set -eu
 # The ONE version string. The man page footer and `mux --version` both read it
 # from here, so they cannot drift apart the way a hardcoded "mux 0.1" in the
 # man page already had.
-MUX_VERSION=0.45
+MUX_VERSION=0.46
 
 # EXIT 3: THE NAME YOU GAVE IS NOT KNOWN HERE. A standard code rather than a
 # per-verb one, because it is one CONDITION that many verbs can trip on -- go,
@@ -343,7 +343,7 @@ fi
 # mode, a data resolver has none (it would silently resolve nothing), so a
 # missing lib is a broken install and says so.
 for _l in mux-paths.sh mux-data.sh mux-profiles.sh mux-scan.sh \
-		mux-sessions.sh; do
+		mux-sessions.sh mux-log.sh; do
         [ -r "$LIBEXEC/$_l" ] || {
                 echo "mux: $LIBEXEC/$_l missing (incomplete install)" >&2
                 exit 1; }
@@ -2392,6 +2392,7 @@ _resume_rebuild() {     # <partition key> <recorded names, one per line>
         _rk=$1
         rs_built=0
         rs_up=0
+        rs_builtn=
         rs_failed=
         # LINE by line. `for rs_n in $*` word-splits, so a recorded session
         # named `my project` was rebuilt as two phantoms -- `my` and
@@ -2410,6 +2411,7 @@ _resume_rebuild() {     # <partition key> <recorded names, one per line>
                 if [ -n "$rs_root" ] && [ -d "$rs_root" ] \
                    && "$_self" go --no-attach "$rs_root" >/dev/null 2>&1; then
                         rs_built=$((rs_built + 1))
+                        rs_builtn="$rs_builtn $rs_n"
                 else
                         # Keep going: one unbuildable session (a root that
                         # moved, a profile since deleted) must not cost you the
@@ -2445,14 +2447,33 @@ cmd_resume() {
                 echo "mux: no sessions recorded for this partition" >&2
                 echo "mux: they are recorded as you open them; nothing to" \
                         "resume yet" >&2
+                # Asked to restore and could not: a reboot that lost the set
+                # looks exactly like this, and the difference between "the set
+                # was empty" and "resume was never run" is the whole question.
+                mux_log resume "nothing recorded for partition ${part:-?}"
                 exit 1
         fi
         _resume_rebuild "$rs_key" "$rs_set"
         printf 'mux: resumed %s, %s already up\n' "$rs_built" "$rs_up"
+        # LOGGED BECAUSE IT IS A MUTATION, and one that happens at the worst
+        # moment to be unobservable: after a reboot, when the question "did my
+        # sessions come back?" is the only question, and the terminal that
+        # answered it has usually scrolled away or been closed since.
+        #
+        # NAMES, NOT JUST COUNTS. "resumed 5" cannot tell you WHICH five, and
+        # the useful post-mortem is always about the one that is missing.
+        [ "$rs_built" -gt 0 ] \
+                && mux_log resume "rebuilt$rs_builtn ($rs_up already up)"
         if [ -n "$rs_failed" ]; then
                 echo "mux: could NOT build:" >&2
                 printf '%s' "$rs_failed" | sed 's/^/mux:   /' >&2
                 echo "mux: see why with  mux go <name>" >&2
+                # The other half of the log's rule: what mux could NOT do. A
+                # session whose root moved or whose profile went fails here and
+                # nowhere else, and a rebuild that silently came back short is
+                # exactly the thing you cannot reconstruct afterwards.
+                mux_log resume "could NOT build:$(printf '%s' "$rs_failed" \
+                        | tr '\n' ' ')"
         fi
         name=$(_resume_landing "$rs_set")
         [ -n "$name" ] || { echo "mux: nothing to attach" >&2; exit 1; }

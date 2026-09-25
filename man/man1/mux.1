@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.45" "User Commands"
+.TH MUX 1 "" "mux 0.46" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -143,11 +143,16 @@ filters on that FIELD, not on the line, so a message merely mentioning
 .B latch
 is not reported as a latch entry. Current subsystems are
 .B latch
-(every state transition) and
+(every state transition),
 .B doctor
 (each record
 .B \-\-repair
-rewrites).
+rewrites) and
+.B resume
+(which sessions a rebuild brought back, and which it could not). That last one
+matters because a rebuild runs after a REBOOT: "did my sessions come back?" is
+the only question anyone has then, and the terminal that answered it has
+usually scrolled away by the time it is asked.
 .IP
 It REPORTS ITS OWN SILENCES rather than printing nothing, because "logging is
 off", "nothing has happened yet", "the file is empty" and "no entries for that
@@ -903,7 +908,7 @@ It always exits 0: it is a pure report, and a non\-zero exit would be
 indistinguishable from the transport.
 .PP
 .EX
-mux 0.45
+mux 0.46
 capabilities 1
 agent\-list 1
 agent\-summary 1
