@@ -704,13 +704,6 @@ t mux-undo-pane
 + 	if false; then
 m added a pane to a window that was already whole
 
-= indicator-mark-not-drawn
-f indicator/mux_indicator/render.py
-t mux-indicator
--     if mark:
-+     if False:
-m test_TWO_HOSTS_WITH_THE_SAME_COLOUR_DIFFER
-
 = indicator-mark-uses-the-prefix
 f indicator/mux_indicator/render.py
 t mux-indicator
@@ -745,3 +738,24 @@ t mux-resume
 -                 mux_log resume "could NOT build:$(printf '%s' "$rs_failed" \
 +                 true "$(printf '%s' "$rs_failed" \
 m failed to rebuild was not logged
+
+= indicator-mark-not-drawn
+f indicator/mux_indicator/render.py
+t mux-indicator
+-         _mark_strip(d, s, mark)
++         pass
+m test_the_STRIP_itself_is_drawn
+
+= indicator-mark-overlay-escapes-strip
+f indicator/mux_indicator/render.py
+t mux-indicator
+-     d.rounded_rectangle([0, 0, w, s - 1], rad, fill=_MARK_BACK)
++     d.rounded_rectangle([0, 0, s - 1, s - 1], rad, fill=_MARK_BACK)
+m test_THE_OVERLAY_IS_CONFINED_TO_ITS_STRIP
+
+= indicator-mark-sized-by-width-again
+f indicator/mux_indicator/render.py
+t mux-indicator
+-         if bb[3] - bb[1] <= maxh:
++         if bb[2] - bb[0] <= maxh:
+m test_the_mark_is_sized_by_HEIGHT_not_width
