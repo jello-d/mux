@@ -303,6 +303,18 @@ async def _query(argv):
             # very freeze the timeout exists to prevent, reintroduced through
             # the reaping path. A source is an arbitrary command, so a
             # wrapper that spawns a child is not an edge case.
+            #
+            # AND IT IS WHAT MAKES THE killpg BELOW SAFE, which is the half
+            # that was never written down. Without a session of its own the
+            # child inherits OUR process group, so `killpg(getpgid(child))`
+            # resolves to the DAEMON'S group and SIGKILLs the indicator
+            # itself. Measured, 2026-09-26: deleting this argument turns a
+            # source timeout into suicide, and it would fire for the first
+            # time at the exact moment a host became unreachable.
+            #
+            # These two lines are a PAIR. Neither may be "simplified" without
+            # the other, and the failure mode is not a stall but a daemon that
+            # vanishes whenever the network does.
             start_new_session=True)
     except OSError:
         return UNKNOWN
@@ -312,7 +324,23 @@ async def _query(argv):
         # Reap it rather than leaving a wedged ssh per poll, which over hours
         # would be a process leak dressed up as a slow host.
         try:
-            os.killpg(os.getpgid(proc.pid), SIGKILL)
+            # THE GROUP ID IS THE CHILD'S OWN PID, and asking the kernel for it
+            # instead is a bug. `start_new_session=True` makes the child a
+            # session and process-group LEADER, so pgid == pid by definition.
+            #
+            # `os.getpgid(proc.pid)` raises ProcessLookupError the moment the
+            # direct child has exited and been reaped -- which is EXACTLY the
+            # case this reaping exists for: a wrapper that backgrounds its work
+            # and returns leaves asyncio's child watcher to reap it within
+            # milliseconds, long before a timeout fires. The group kill was
+            # then skipped entirely and the fallback `proc.kill()` ran against
+            # a process already gone, so every descendant still holding the
+            # stdout pipe SURVIVED: one leaked process per poll, for as long as
+            # the host stayed in that state. Measured 2026-09-26.
+            #
+            # A process GROUP outlives its reaped leader as long as it still
+            # has members, so killing by pid-as-pgid reaches them.
+            os.killpg(proc.pid, SIGKILL)
         except (OSError, ProcessLookupError):
             try:
                 proc.kill()
@@ -363,6 +391,46 @@ async def _host_colors(label):
     if proc.returncode != 0:
         return None
     return parse_pair(out.decode("utf-8", "replace"))
+
+
+def reconcile(want, live):
+    """-> (drop, add): labels to withdraw, and (label, argv) pairs to publish.
+
+    Lifted out of the supervisor for the same reason mark_plan was: the loop
+    needs a bus, so nothing left inside it can be asserted, and this is the
+    decision the whole daemon turns on.
+
+    THE RULE THAT IS NOT OBVIOUS IS THE THIRD ONE: a label in BOTH is left
+    exactly alone. Tearing an item down and republishing it every tick would
+    still converge on the right set, so no set-based assertion would notice,
+    while the tray flickered every DISCOVER seconds and leaked a bus connection
+    per host per pass. "Already correct" has to mean "untouched", not
+    "recreated identically".
+    """
+    drop = [lab for lab in live if lab not in want]
+    add = [(lab, argv) for lab, argv in want.items() if lab not in live]
+    return drop, add
+
+
+def item_bus_name(pid, index):
+    """The SNI bus name for one item.
+
+    ONE-BASED, matching the convention every other SNI producer uses, and the
+    `-1` suffix in `org.kde.StatusNotifierItem-<pid>-1` is a per-process item
+    INDEX -- which is what makes several items from one process legal at all.
+    """
+    return f"org.kde.StatusNotifierItem-{pid}-{index}"
+
+
+def wants_reregister(name, new_owner):
+    """Should a NameOwnerChanged signal make us announce ourselves again?
+
+    Only for the WATCHER, and only when it ARRIVES. Re-registering on every
+    name change on the session bus would be a storm; doing it when `new_owner`
+    is empty would fire on the watcher DEPARTING, which is when registering is
+    both pointless and guaranteed to fail.
+    """
+    return name == WATCHER and bool(new_owner)
 
 
 def mark_plan(labels, local, slots):
@@ -420,7 +488,7 @@ async def _publish(index, label, argv):
               f"(drawing host-neutral)", flush=True)
     item = Indicator(label=label, host=host)
     bus.export(ITEM_PATH, item)
-    name = f"org.kde.StatusNotifierItem-{os.getpid()}-{index}"
+    name = item_bus_name(os.getpid(), index)
     await bus.request_name(name)
 
     async def register():
@@ -443,7 +511,7 @@ async def _publish(index, label, argv):
     dbus = dobj.get_interface("org.freedesktop.DBus")
 
     def on_owner(n, old, new):
-        if n == WATCHER and new:
+        if wants_reregister(n, new):
             asyncio.get_event_loop().create_task(register())
     dbus.on_name_owner_changed(on_owner)
 
@@ -494,24 +562,26 @@ async def _supervise():
             await asyncio.sleep(DISCOVER)
             continue
 
-        if not announced or set(want) != set(live):
+        drop, add = reconcile(want, live)
+
+        # ANNOUNCED OFF THE SAME DIFF, rather than recomputing `set(want) !=
+        # set(live)` beside it: two expressions for one fact is how the log
+        # starts disagreeing with what the daemon actually did.
+        if not announced or drop or add:
             _names = ", ".join(sorted(want)) or "none"
             print(f"mux-indicator: watching {_names}", flush=True)
             announced = True
 
-        for label in list(live):
-            if label not in want:
-                bus, task, _item = live.pop(label)
-                task.cancel()
-                try:
-                    bus.disconnect()
-                except Exception:
-                    pass
-                print(f"mux-indicator: - {label} (latch ended)", flush=True)
+        for label in drop:
+            bus, task, _item = live.pop(label)
+            task.cancel()
+            try:
+                bus.disconnect()
+            except Exception:
+                pass
+            print(f"mux-indicator: - {label} (latch ended)", flush=True)
 
-        for label, argv in want.items():
-            if label in live:
-                continue
+        for label, argv in add:
             index += 1
             try:
                 live[label] = await _publish(index, label, argv)

@@ -199,6 +199,80 @@ class Query(unittest.TestCase):
             asyncio.run(sni._query([self._stub("idle 0\n", 0, sleep=30)])),
             ("unknown", None))
 
+    def test_A_GRANDCHILD_HOLDING_THE_PIPE_CANNOT_STALL_US(self):
+        """The 30s freeze, which the test above could not see.
+
+        `test_A_HANG_BECOMES_UNKNOWN` asserts the VERDICT and not the DURATION,
+        so it passed happily while this bug was live: _query did return
+        `unknown`, thirty seconds later. Its stub also sleeps in the DIRECT
+        child, which `proc.kill()` reaps by itself, so it never reached the
+        mechanism that was broken.
+
+        What broke it: killing the direct child leaves a GRANDCHILD holding the
+        stdout pipe, and `communicate()` then waits for the grandchild rather
+        than the child -- measured at 30s against a `sleep 30` source with the
+        0.3s timeout firing correctly all along. The whole host's poll loop
+        stalls for the grandchild's lifetime, which is the exact freeze the
+        timeout exists to prevent, reintroduced through the reaping path. The
+        fix is `start_new_session=True` plus a process-GROUP kill.
+
+        The shell below exits IMMEDIATELY and leaves a background sleep holding
+        the pipe. A source is an arbitrary command, so a wrapper that spawns a
+        child is the normal case, not an edge one.
+        """
+        import shutil
+        import subprocess
+        import time
+        # A duration nothing else on this machine will be sleeping for, so the
+        # survivor check below cannot match somebody else's process.
+        mark = "4919"
+        sni = _fresh(MUX_INDICATOR_TIMEOUT="0.3")
+        began = time.monotonic()
+        got = asyncio.run(sni._query(["sh", "-c", f"sleep {mark} & exit 0"]))
+        took = time.monotonic() - began
+        self.assertEqual(got, ("unknown", None))
+        # THE DURATION IS ONE ASSERTION. Generous against a loaded machine and
+        # still far below the 30s the bug produced.
+        self.assertLess(took, 5.0,
+                        f"_query took {took:.1f}s: a grandchild is holding "
+                        "the stdout pipe and the group kill is not reaping it")
+
+        # AND THE SURVIVOR IS THE OTHER, because they fail differently and a
+        # single assertion would kill neither mutation. The bounded wait after
+        # the kill already caps the DURATION even with no group kill at all, so
+        # timing alone cannot see `killpg` being lost -- what is lost then is
+        # the grandchild, which outlives the query as a leaked process, one per
+        # poll, for as long as the host stays unreachable.
+        # `-xf`, an EXACT full-command-line match, not a substring one. A bare
+        # `-f` also matches any shell whose own argv happens to mention the
+        # pattern -- including the process running this suite -- which is the
+        # self-match trap this project has already paid for once with
+        # `pkill -f "python -m mux_indicator"`. Measured here: 3 matches loose
+        # against 1 exact.
+        if shutil.which("pgrep"):
+            alive = subprocess.run(["pgrep", "-xf", f"sleep {mark}"],
+                                   capture_output=True, text=True)
+            for pid in alive.stdout.split():
+                try:                      # never leave one behind on failure
+                    os.kill(int(pid), 9)
+                except (OSError, ValueError):
+                    pass
+            self.assertEqual(alive.returncode, 1,
+                             "the grandchild SURVIVED the timeout: the group "
+                             "kill did not reach it, so every poll against an "
+                             "unreachable host leaks a process")
+
+    def test_the_hang_path_is_BOUNDED_not_merely_correct(self):
+        """The same omission for the ordinary hang: assert it returns promptly,
+        not just that it eventually says `unknown`. A deadline nobody times is
+        indistinguishable from no deadline at all."""
+        import time
+        sni = _fresh(MUX_INDICATOR_TIMEOUT="0.3")
+        began = time.monotonic()
+        asyncio.run(sni._query([self._stub("idle 0\n", 0, sleep=30)]))
+        self.assertLess(time.monotonic() - began, 5.0,
+                        "the timeout did not bound the call")
+
     def test_a_state_word_mux_NEVER_EMITS_is_unknown(self):
         """A feed can return plausible garbage. A mis-quoted ssh source ran the
         remote session PICKER, whose output parsed to the state `1)`, which the
@@ -427,3 +501,91 @@ class Identity(unittest.TestCase):
 
 if __name__ == "__main__":                              # pragma: no cover
     unittest.main()
+
+
+class Reconcile(unittest.TestCase):
+    """The supervisor's set diff, which is what the whole daemon turns on.
+
+    Extracted from the async loop for the same reason mark_plan was: it needs a
+    bus, so nothing inside it could be asserted at all. `_supervise` and
+    `_publish` held every live bug this feature has ever had -- the ignored exit
+    code, the hanging source, the SIGKILL AttributeError -- and a 2026-09-26
+    coverage sweep put them at the bottom of the file at 56%.
+    """
+
+    def setUp(self):
+        self.sni = _fresh()
+
+    def test_a_new_host_is_added(self):
+        drop, add = self.sni.reconcile({"rover": ["a"]}, {})
+        self.assertEqual(drop, [])
+        self.assertEqual(add, [("rover", ["a"])])
+
+    def test_a_departed_host_is_dropped(self):
+        drop, add = self.sni.reconcile({}, {"rover": object()})
+        self.assertEqual(drop, ["rover"])
+        self.assertEqual(add, [])
+
+    def test_AN_UNCHANGED_HOST_IS_LEFT_ALONE(self):
+        """The rule no set-based assertion would catch. Tearing every item down
+        and republishing it each tick still converges on the right set, while
+        the tray flickers every DISCOVER seconds and leaks a bus connection per
+        host per pass. Already correct must mean untouched, not recreated."""
+        want = {"rover": ["a"], "atlas": ["b"]}
+        live = {"rover": object(), "atlas": object()}
+        self.assertEqual(self.sni.reconcile(want, live), ([], []))
+
+    def test_a_mixed_tick_does_both_and_nothing_else(self):
+        want = {"rover": ["a"], "atlas": ["b"]}
+        live = {"rover": object(), "nimbus": object()}
+        drop, add = self.sni.reconcile(want, live)
+        self.assertEqual(drop, ["nimbus"])
+        self.assertEqual(add, [("atlas", ["b"])])
+
+    def test_the_argv_travels_with_the_label(self):
+        """The pair is what gets published. Dropping the argv would publish a
+        host against whatever command happened to be next."""
+        _d, add = self.sni.reconcile({"a": ["x", "1"], "b": ["y"]}, {})
+        self.assertEqual(dict(add), {"a": ["x", "1"], "b": ["y"]})
+
+    def test_an_empty_tick_is_quiet(self):
+        """Nothing latched and nothing published is not an event. This is the
+        condition the 'watching ...' line is gated on, so a truthy answer here
+        would log every DISCOVER seconds forever."""
+        self.assertEqual(self.sni.reconcile({}, {}), ([], []))
+
+
+class BusName(unittest.TestCase):
+    def setUp(self):
+        self.sni = _fresh()
+
+    def test_the_name_is_one_based_and_per_process(self):
+        self.assertEqual(self.sni.item_bus_name(42, 1),
+                         "org.kde.StatusNotifierItem-42-1")
+
+    def test_every_index_gives_a_DIFFERENT_name(self):
+        """Two items on one connection resolve to the same exported object if
+        they share a name, and you get the same tray icon twice."""
+        names = {self.sni.item_bus_name(7, i) for i in range(1, 6)}
+        self.assertEqual(len(names), 5)
+
+
+class Reregister(unittest.TestCase):
+    """Re-announce when the tray watcher appears, and only then."""
+
+    def setUp(self):
+        self.sni = _fresh()
+
+    def test_the_watcher_ARRIVING_triggers_it(self):
+        self.assertTrue(self.sni.wants_reregister(self.sni.WATCHER, ":1.42"))
+
+    def test_the_watcher_LEAVING_does_not(self):
+        """An empty new owner is the watcher going away, which is when
+        registering is both pointless and guaranteed to fail."""
+        self.assertFalse(self.sni.wants_reregister(self.sni.WATCHER, ""))
+
+    def test_ANOTHER_name_changing_does_not(self):
+        """The session bus is busy. Reacting to every NameOwnerChanged would
+        be a registration storm against a watcher that never moved."""
+        self.assertFalse(self.sni.wants_reregister("org.example.Thing",
+                                                   ":1.9"))
