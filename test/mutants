@@ -822,3 +822,17 @@ t mux-indicator-code-check
 - 	if [ "$_cc_dir" = "$PKG_DIR/mux_indicator" ]; then
 + 	if false; then
 m a self-comparison reported a verdict
+
+= latch-spinner-doubled-backslash
+f libexec/mux-latch
+t mux-latch
+- 	*) _g=\\ ;;
++ 	*) _g='\\' ;;
+m DOUBLED backslash
+
+= latch-spinner-does-not-cycle
+f libexec/mux-latch
+t mux-latch
+- 	_spin=$(( (_spin + 1) % 4 ))
++ 	_spin=0
+m not cycling
