@@ -23,7 +23,8 @@ The three that matter most:
 """
 import unittest
 
-from mux_indicator.render import (MARK_INK, STATE_BADGE, STATE_FRAME,
+from mux_indicator.render import (MARK_LOCAL_INK, MARK_PALETTE,
+                                  STATE_BADGE, STATE_FRAME, mark_ink,
                                   host_mark, icon_pixmap, parse_pair,
                                   _prompt, _screen, _to_argb)
 
@@ -356,13 +357,49 @@ class MarkOnTheTile(unittest.TestCase):
         self.assertEqual(icon_pixmap("idle", None, host=pair, mark=None),
                          icon_pixmap("idle", None, host=pair))
 
-    def test_the_mark_ink_is_no_state_colour(self):
-        """It must not read as a state. A state-coloured mark was tried and
-        rejected: it was the most legible option of all, and it made host
+    def test_no_mark_ink_is_a_state_colour(self):
+        """None of them may read as a state. A state-coloured mark was tried
+        and rejected: it was the most legible option of all, and it made host
         identity flicker as the agent worked -- the one thing identity may not
-        do."""
-        self.assertNotIn(MARK_INK, STATE_FRAME.values())
-        self.assertNotIn(MARK_INK, STATE_BADGE.values())
+        do. Widening the palette is the way that creeps back in, one plausible
+        hue at a time, so every slot is checked rather than the first one."""
+        for c in (MARK_LOCAL_INK,) + tuple(MARK_PALETTE):
+            self.assertNotIn(c, STATE_FRAME.values())
+            self.assertNotIn(c, STATE_BADGE.values())
+
+    def test_local_is_reserved_and_not_in_the_rotation(self):
+        """White is home's, and only home's. If it were also a palette slot a
+        remote could be drawn as the local box, which is the one confusion this
+        whole colour scheme exists to prevent."""
+        self.assertNotIn(MARK_LOCAL_INK, MARK_PALETTE)
+        self.assertIs(mark_ink(None), MARK_LOCAL_INK)
+        for slot in range(len(MARK_PALETTE)):
+            self.assertNotEqual(mark_ink(slot), MARK_LOCAL_INK)
+
+    def test_every_palette_slot_is_distinct(self):
+        """The palette's entire job is telling hosts apart, so two equal
+        entries would be a silent regression: the tray would still draw, and
+        two machines would quietly share an identity."""
+        self.assertEqual(len(set(MARK_PALETTE)), len(MARK_PALETTE))
+
+    def test_a_slot_past_the_end_WRAPS(self):
+        """More remotes than slots must degrade, never crash or blank. Colour
+        is a redundant hint and the letters stay unique, so a shared hue is the
+        correct answer at that point."""
+        n = len(MARK_PALETTE)
+        self.assertEqual(mark_ink(n), mark_ink(0))
+        self.assertEqual(mark_ink(n + 3), mark_ink(3))
+
+    def test_the_ink_actually_reaches_the_pixels(self):
+        """Two hosts with the same LETTERS and different slots must differ.
+
+        Separate from the palette-table assertions above, which prove the table
+        is sane and prove nothing about whether _tile consults it. Passing the
+        slot and ignoring it would leave every one of them green."""
+        a = icon_pixmap("working", 2, mark="MLD", ink=0)
+        b = icon_pixmap("working", 2, mark="MLD", ink=1)
+        self.assertNotEqual(a, b)
+        self.assertNotEqual(icon_pixmap("working", 2, mark="MLD", ink=None), a)
 
     def test_state_still_reads_under_a_mark(self):
         """The mark must not swallow the signal it sits beside."""
@@ -413,28 +450,48 @@ class MarkOnTheTile(unittest.TestCase):
                 "which is what a width-constrained fit produces")
 
     def test_THE_OVERLAY_IS_CONFINED_TO_ITS_STRIP(self):
-        """The base icon is not negotiated with, it is COVERED -- and only
-        where the strip is. Every pixel to the right of the strip must be
-        identical to the no-mark tile.
+        """Outside its own band the marked tile is the HOST-NEUTRAL tile,
+        pixel for pixel, at every size and state.
 
         That is the property the whole design rests on. The mark is allowed to
-        obliterate the chevron precisely BECAUSE removing it restores the
-        standard icon exactly; if the overlay could disturb anything outside
-        its own band, "strip the letters to revert" would stop being true and
-        the single-host icon would quietly drift from the multi-host one.
+        obliterate the chevron precisely BECAUSE stripping the letters restores
+        a standard icon; if the overlay could disturb anything outside its own
+        band, "remove the mark to revert" would stop being true.
+
+        Compared against the NEUTRAL tile rather than the tinted one, which is
+        the 0.48 change: a marked tile deliberately drops the host tint, so the
+        old comparison would now fail for the right reason and hide this one.
         """
         from mux_indicator.render import _mark_metrics, _tile
         pair = parse_pair("#ffffff #005f87")
-        for s in (22, 32, 48):
-            plain = _tile("working", 2, s, True, pair).load()
-            marked = _tile("working", 2, s, True, pair, "MLD").load()
-            _f, w = _mark_metrics(s, "MLD")
-            for x in range(int(w) + 1, s):
-                for y in range(s):
-                    self.assertEqual(
-                        plain[x, y], marked[x, y],
-                        f"{s}px: the mark changed a pixel at x={x} y={y}, "
-                        f"outside its {w}px strip")
+        for st in STATES:
+            for s in (22, 32, 48):
+                plain = _tile(st, 2, s, True, None).load()
+                marked = _tile(st, 2, s, True, pair, "MLD", 1).load()
+                _f, w = _mark_metrics(s, "MLD")
+                for x in range(int(w) + 1, s):
+                    for y in range(s):
+                        self.assertEqual(
+                            plain[x, y], marked[x, y],
+                            f"{st} {s}px: the mark changed a pixel at x={x} "
+                            f"y={y}, outside its {w}px strip")
+
+    def test_a_marked_tile_DROPS_the_host_tint(self):
+        """Two host colours on one tile disagree with each other, so while a
+        mark is up the tint steps aside and the mark is the only host channel.
+
+        Asserted in both directions, because each is a different bug: still
+        tinting means the tile says two things at once, and dropping the tint
+        when UNMARKED would change the single-host icon that must not move.
+        """
+        a = icon_pixmap("working", 2, host=parse_pair("#ffffff #005f87"),
+                        mark="MLD", ink=1)
+        b = icon_pixmap("working", 2, host=parse_pair("#ffffff #870000"),
+                        mark="MLD", ink=1)
+        self.assertEqual(a, b, "the host tint survived under a mark")
+        c = icon_pixmap("working", 2, host=parse_pair("#ffffff #005f87"))
+        d = icon_pixmap("working", 2, host=parse_pair("#ffffff #870000"))
+        self.assertNotEqual(c, d, "the UNMARKED tile stopped using its tint")
 
     def test_the_strip_is_sized_from_the_LETTERS(self):
         """Strip and glyphs come from one measurement. Computed apart they

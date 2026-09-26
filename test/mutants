@@ -759,3 +759,52 @@ t mux-indicator
 -         if bb[3] - bb[1] <= maxh:
 +         if bb[2] - bb[0] <= maxh:
 m test_the_mark_is_sized_by_HEIGHT_not_width
+
+= indicator-local-takes-a-palette-slot
+f indicator/mux_indicator/sni.py
+t mux-indicator
+-                   None if lab == local else slots.slot(lab))
++                   slots.slot(lab))
+m test_the_LOCAL_host_takes_no_slot
+
+= indicator-ink-ignored-by-the-tile
+f indicator/mux_indicator/render.py
+t mux-indicator
+-         _mark_letters(ImageDraw.Draw(img), s, mark, mark_ink(ink))
++         _mark_letters(ImageDraw.Draw(img), s, mark, mark_ink(None))
+m test_the_ink_actually_reaches_the_pixels
+
+= indicator-host-tint-survives-a-mark
+f indicator/mux_indicator/render.py
+t mux-indicator
+-     tint = None if mark else host
++     tint = host
+m test_a_marked_tile_DROPS_the_host_tint
+
+= indicator-slot-ignores-the-name-seed
+f indicator/mux_indicator/slots.py
+t mux-indicator
+-         want = self.preferred(name)
++         want = 0
+m test_a_free_preferred_slot_is_ACTUALLY_TAKEN
+
+= indicator-slot-not-sticky
+f indicator/mux_indicator/slots.py
+t mux-indicator
+-         if name in self.table:
++         if False:
+m test_A_NEW_HOST_DOES_NOT_RESHUFFLE_THE_OLD_ONES
+
+= indicator-slot-collision-not-bumped
+f indicator/mux_indicator/slots.py
+t mux-indicator
+-             if cand not in taken:
++             if True:
+m test_a_collision_is_bumped_not_shared
+
+= indicator-ink-change-does-not-repaint
+f indicator/mux_indicator/sni.py
+t mux-indicator
+-         if mark == self._mark and ink == self._ink:
++         if mark == self._mark:
+m test_a_CHANGED_INK_repaints_even_when_the_mark_is_the_same

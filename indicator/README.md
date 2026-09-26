@@ -96,27 +96,34 @@ tray daemon can never answer a prompt.
 
 ### Which machine is this?
 
-Each item wears its host's identity colours: the host's **background** tints the
-screen, its **foreground** paints the `>_`. Those come from `mux host-color`, so
-the tray and the status bar agree -- one rule, one owner. The pair exists so fg
-is legible on bg, so using each half for its actual purpose gets that legibility
-for free.
+**With one item in the tray**, it wears its host's identity colours: the host's
+**background** tints the screen, its **foreground** paints the `>_`. Those come
+from `mux host-color`, so the tray and the status bar agree -- one rule, one
+owner. The pair exists so fg is legible on bg, so using each half for its actual
+purpose gets that legibility for free.
 
 State keeps the **frame** and the **badge**, so the two dimensions never
 collide: nothing about a host's colour can make a blocked agent look calm.
 
-The lookup runs **locally**, even for a remote host: the colour derives from the
-NAME by hashing, so this box can colour a remote host with nothing shared. That
-matters most when the host is unreachable: the `unknown` glyph still has to
-say *which* host it cannot see.
+**With several items** the tint steps aside and the host mark below becomes the
+only host channel. Carrying both would put two independent host colours on one
+tile that do not agree with each other -- a salmon mark on a dark green screen
+says two different things about one machine -- and the mark is the better
+channel, since it survives being small and the letters already name the host.
 
 ### Telling hosts apart
 
 With more than one item in the tray, each tile carries a **three-character
-mark** reading downward on a black strip at its left edge, in cyan: `manifold`
-is `MLD`, `manifestor` is `MTR`, `rover` is `RVR`. It is the first character
-plus the last two consonants of the rest — the *tail*, because fleets share
-prefixes and the first letters are exactly the ones that do not distinguish.
+mark** reading downward on a black strip at its left edge: `manifold` is `MLD`,
+`manifestor` is `MTR`, `rover` is `RVR`. It is the first character plus the last
+two consonants of the rest — the *tail*, because fleets share prefixes and the
+first letters are exactly the ones that do not distinguish.
+
+**Three characters, not four.** A fourth costs 22% of the cap height even with
+the letters touching (9px down to 7px at a 32px tile, and 5px at 22px), which
+lands back on the unreadable size the overlay exists to escape. Stacking them
+two-by-two is the only arrangement where four get *bigger*, and its strip would
+be 39px wide on a 32px tile.
 
 **It is an overlay, not a redesign.** The icon underneath is drawn exactly as
 it always was, and the mark is composited on top in a fixed order: the icon,
@@ -137,18 +144,51 @@ wider palette does not save you — the birthday paradox beats you long before
 the colours run out. The mark is derived from the name alone, so it is stable,
 identical on every machine, and needs no configuration.
 
-The cyan is fixed and belongs to no state. A state-coloured mark was tried and
-rejected: it was the most legible option of all, and it made host identity
-flicker as the agent worked, which is the one thing identity may not do.
-
 **One host in the tray gets no mark at all** — the tile is exactly what it has
-always been. The mark appears when a second host joins and goes when you
-detach. It is drawn straight over the `>_`, which shows through; a fragment of
-the prompt is enough of a cue, and that is what lets the letters keep their
-full size instead of being squeezed into a column of their own.
+always been, tint included. The mark appears when a second host joins and goes
+when you detach.
 
-**Colours still help**, and two hosts can still land on the same pair. Pin the
-ones you care about in `$MUX_DIR/hosts`:
+### The mark's colour
+
+The local host is always **white**, reserved. Home is the absence of a hue, it
+is the one item you never have to look up, and a palette slot would mean the
+machine you are sitting at changed colour when you latched somewhere new.
+
+Every remote takes one of **five** — cyan, pink, lilac, mint, salmon — as a
+second, redundant hint, so you can pick a tile out before reading its letters.
+The palette is small because STATE already owns red, amber, green, purple and
+slate blue across the frame and badge: a warm mark reads as `blocked`, a green
+one as `idle`. Every slot sits on the black strip and never on the screen, so
+contrast is a property of the strip rather than of the hue.
+
+No mark colour belongs to any state, for the reason a state-coloured mark was
+rejected outright: it was the most legible option tried, and it made host
+identity flicker as the agent worked, which is the one thing identity may not
+do.
+
+Slots are **seeded by name, bumped only on collision, and then sticky**:
+
+- **Seeded**, so on a box where your hosts do not collide, every host is the
+  same colour on *every* box, with nothing shared and nothing to sync. A purely
+  first-come rule would make the colour depend on the order you latched.
+- **Bumped**, because a derived rule alone cannot promise distinctness, and
+  distinctness is the entire point. The bump is confined to the hosts that
+  actually collide — exactly where the derived rule was already broken.
+- **Sticky**, recorded in `$XDG_STATE_HOME/mux/indicator-slots`, so latching a
+  third host never moves the second one's colour, and a host you unlatch for an
+  afternoon comes back the colour you learned. Delete that file to reshuffle.
+
+Past five remotes the palette wraps and two share a hue. That is the right
+degradation: colour here is a hint and the letters stay unique.
+
+This deliberately does **not** agree with `mux host-color`. The status bar
+carries the host *name* in text beside its chip, so colour there is decoration
+and here it is load-bearing; constraining the decorative channel to serve the
+load-bearing one is backwards. The two surfaces already share the identifier
+that is stable everywhere — the three letters.
+
+**Host colours still matter for the single-host tile**, and two hosts can land
+on the same pair. Pin the ones you care about in `$MUX_DIR/hosts`:
 
 ```
 manifold    fg=colour252,bg=colour236

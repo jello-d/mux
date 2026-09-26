@@ -313,6 +313,72 @@ class Mark(unittest.TestCase):
         i.set_mark("MLD")
         self.assertIs(first, i._pixmap)
 
+    def test_a_CHANGED_INK_repaints_even_when_the_mark_is_the_same(self):
+        """Separate from the assertion above, and the pair of them is the
+        point: comparing only the mark makes the no-repaint shortcut pin a
+        host to the first colour it was ever drawn with, so a reshuffle would
+        be invisible until something unrelated forced a repaint."""
+        i = self.sni.Indicator(label="manifold")
+        i.set_mark("MLD", 0)
+        first = i._pixmap
+        i.set_mark("MLD", 2)
+        self.assertNotEqual(first, i._pixmap)
+
+    def test_the_ink_reaches_the_icon(self):
+        """Two items, same letters, different slots. Storing the ink and never
+        passing it to the renderer would leave every host one colour."""
+        a, b = (self.sni.Indicator(label="x") for _ in range(2))
+        a.set_mark("MLD", 0)
+        b.set_mark("MLD", 1)
+        self.assertNotEqual(a._pixmap, b._pixmap)
+
+
+class MarkPlan(unittest.TestCase):
+    """Who gets a mark, and which slot -- the supervisor's two rules, lifted
+    out of its async loop so they can be asserted at all."""
+
+    def setUp(self):
+        import tempfile
+        from mux_indicator.slots import Slots
+        self.sni = _fresh()
+        self.s = Slots(5, os.path.join(tempfile.mkdtemp(), "slots"))
+
+    def test_one_host_gets_no_mark_at_all(self):
+        """The single-host tray must not change, and that includes the local
+        box being alone: nothing to be told apart from."""
+        self.assertEqual(self.sni.mark_plan(["manifold"], "manifold", self.s),
+                         {"manifold": (None, None)})
+
+    def test_the_LOCAL_host_takes_no_slot(self):
+        """White is reserved for home. Giving it a palette slot would mean the
+        machine you are sitting at changed colour when you latched elsewhere."""
+        p = self.sni.mark_plan(["manifold", "rover"], "manifold", self.s)
+        self.assertEqual(p["manifold"], ("MLD", None))
+        self.assertIsNotNone(p["rover"][1])
+
+    def test_every_remote_gets_a_mark_AND_a_slot(self):
+        p = self.sni.mark_plan(["manifold", "rover", "atlas"], "manifold",
+                               self.s)
+        self.assertEqual(p["manifold"][1], None)
+        self.assertEqual(sorted(p), ["atlas", "manifold", "rover"])
+        for lab in ("rover", "atlas"):
+            self.assertEqual(p[lab][0], self.sni.host_mark(lab))
+            self.assertIn(p[lab][1], range(5))
+
+    def test_remotes_do_not_collide_with_each_other(self):
+        labs = ["manifold", "rover", "atlas", "nimbus"]
+        p = self.sni.mark_plan(labs, "manifold", self.s)
+        inks = [p[lab][1] for lab in labs if lab != "manifold"]
+        self.assertEqual(len(set(inks)), len(inks))
+
+    def test_a_tray_with_no_local_host_still_works(self):
+        """`local` naming nobody present is not an error: the local item can be
+        absent from a tray built entirely of remotes, and every one of them
+        must then get a slot rather than one silently claiming white."""
+        p = self.sni.mark_plan(["rover", "atlas"], "manifold", self.s)
+        for lab in ("rover", "atlas"):
+            self.assertIsNotNone(p[lab][1])
+
 
 class Identity(unittest.TestCase):
     """What a tray host and a human see when there are SEVERAL items.

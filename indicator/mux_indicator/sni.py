@@ -34,8 +34,9 @@ from dbus_next import BusType, PropertyAccess
 from dbus_next.aio import MessageBus
 from dbus_next.service import ServiceInterface, dbus_property, method, signal
 
-from .render import host_mark, icon_pixmap, parse_pair
-from .sources import load as load_sources
+from .render import MARK_PALETTE, host_mark, icon_pixmap, parse_pair
+from .slots import Slots
+from .sources import load as load_sources, local_label
 
 WATCHER = "org.kde.StatusNotifierWatcher"
 WATCHER_PATH = "/StatusNotifierWatcher"
@@ -83,6 +84,10 @@ class Indicator(ServiceInterface):
         # again when you detach, so one item never carries a label it does not
         # need.
         self._mark = None
+        # The palette slot the mark wears, or None for the LOCAL host. Carried
+        # beside the mark because the two turn on together and neither means
+        # anything without the other.
+        self._ink = None
         self._state = state
         self._count = count
         self._pixmap = icon_pixmap(state, count, host=host)
@@ -93,15 +98,20 @@ class Indicator(ServiceInterface):
 
     def _paint(self, cursor=True):
         self._pixmap = icon_pixmap(self._state, self._count, cursor=cursor,
-                                   host=self._host, mark=self._mark)
+                                   host=self._host, mark=self._mark,
+                                   ink=self._ink)
         self.NewIcon()
 
-    def set_mark(self, mark):
+    def set_mark(self, mark, ink=None):
         """Show or hide the host mark. Repaints only on a real change, so the
-        discovery loop can call this every tick without churning the tray."""
-        if mark == self._mark:
+        discovery loop can call this every tick without churning the tray.
+
+        BOTH fields decide that. Comparing only the mark would pin a host to
+        the first colour it was ever drawn with, and a reshuffle would then be
+        invisible until something else forced a repaint."""
+        if mark == self._mark and ink == self._ink:
             return
-        self._mark = mark
+        self._mark, self._ink = mark, ink
         self._paint()
 
     def set(self, state, count):
@@ -355,6 +365,31 @@ async def _host_colors(label):
     return parse_pair(out.decode("utf-8", "replace"))
 
 
+def mark_plan(labels, local, slots):
+    """-> {label: (mark, ink)} for the whole tray at once.
+
+    A PURE FUNCTION, deliberately lifted out of the supervisor's loop: the loop
+    is async and needs a bus, so anything left inside it is untestable, and the
+    two rules below are the whole feature. mux has already paid for this once,
+    when both shipped latch hooks turned out never to have executed because
+    every test stubbed the seam around them.
+
+    ONE HOST NEEDS NO MARK. It exists to tell several apart, so a single-host
+    tray -- the common case, and every new user's first impression -- keeps
+    exactly the look it always had, tint and all.
+
+    THE LOCAL HOST TAKES NO SLOT, which is what reserves white for it. Matched
+    by NAME rather than by position: `labels` comes from a dict, so a host that
+    drops and returns re-enters somewhere else and would otherwise inherit
+    whichever identity happened to sit at that index.
+    """
+    if len(labels) < 2:
+        return {lab: (None, None) for lab in labels}
+    return {lab: (host_mark(lab),
+                  None if lab == local else slots.slot(lab))
+            for lab in labels}
+
+
 async def _watch(item, argv, label=""):
     """Feed one icon: the override file if present, else this item's source.
     Only repaints when the (state, count) actually changes."""
@@ -444,6 +479,11 @@ async def _supervise():
     live = {}          # label -> (bus, task)
     index = 0
     announced = False
+    # ONE Slots FOR THE PROCESS, so the in-memory table is the same object
+    # every tick. Re-reading the file per pass would work and would also mean a
+    # host assigned this tick is invisible to the next one until the write
+    # lands, which is a race for nothing.
+    _slots = Slots(len(MARK_PALETTE))
     while True:
         try:
             want = {label: argv for label, argv in load_sources(mux_bin=MUX)}
@@ -481,17 +521,13 @@ async def _supervise():
                 print(f"mux-indicator: could not publish {label}: {e}",
                       flush=True)
 
-        # ONE HOST NEEDS NO LABEL. The mark exists to tell several apart, so a
-        # single-host tray -- the common case, and every new user's first
-        # impression -- keeps exactly the look it always had.
-        #
         # AFTER publishing, not before: a host joining is the tick that turns
         # the marks ON, and marking only the previously-live items would leave
         # the newcomer blank until the next pass -- the one item you are
         # looking at precisely because it just appeared.
-        _show = len(live) > 1
+        plan = mark_plan(live, local_label(), _slots)
         for _label, (_b, _t, _item) in live.items():
-            _item.set_mark(host_mark(_label) if _show else None)
+            _item.set_mark(*plan[_label])
         await asyncio.sleep(DISCOVER)
 
 
