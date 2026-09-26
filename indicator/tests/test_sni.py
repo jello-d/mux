@@ -589,3 +589,57 @@ class Reregister(unittest.TestCase):
         be a registration storm against a watcher that never moved."""
         self.assertFalse(self.sni.wants_reregister("org.example.Thing",
                                                    ":1.9"))
+
+
+class TraySort(unittest.TestCase):
+    """The LOCAL item sorts first.
+
+    Most trays alpha-sort by Id and offer no way to say otherwise, so position
+    has to be bought in the string. The box you are sitting at is the one you
+    look at most, and it should not wander into the middle of the row as you
+    latch and detach elsewhere.
+    """
+
+    def setUp(self):
+        self.sni = _fresh()
+
+    def test_local_gets_the_sort_prefix(self):
+        self.assertEqual(self.sni.item_id("manifold", local=True),
+                         "mux--manifold")
+
+    def test_a_remote_does_not(self):
+        self.assertEqual(self.sni.item_id("manifold"), "mux-manifold")
+
+    def test_unlabelled_keeps_the_historical_id(self):
+        self.assertEqual(self.sni.item_id(None), "mux-indicator")
+        self.assertEqual(self.sni.item_id("", local=True), "mux-indicator")
+
+    def test_the_mux_prefix_SURVIVES_the_sort_prefix(self):
+        """A bar's `order` array is keyed on `mux-`. Buying sort position by
+        breaking that would trade one ordering problem for another."""
+        for lab, loc in (("manifold", True), ("rover", False)):
+            self.assertTrue(self.sni.item_id(lab, loc).startswith("mux-"))
+
+    def test_LOCAL_SORTS_FIRST_against_awkward_hostnames(self):
+        """The assertion that picked the character. `_` and a leading digit
+        both look right against ordinary lowercase names and both lose: `_`
+        (0x5F) sorts after `7bravo` and after every capitalised name, and a
+        digit loses to a lower digit. `-` is 0x2D, below digits, uppercase and
+        lowercase alike, so it beats any legal hostname."""
+        remotes = ["Atlas", "7bravo", "rover", "manifestor", "ZZZ", "0a"]
+        ids = [self.sni.item_id(h) for h in remotes]
+        me = self.sni.item_id("manifold", local=True)
+        self.assertEqual(sorted(ids + [me])[0], me)
+
+    def test_the_item_reports_it_through_Id(self):
+        """Separate from item_id: the pure function can be perfect while the
+        property ignores it, and Id is what a tray host actually reads."""
+        loc = self.sni.Indicator(label="manifold", local=True)
+        rem = self.sni.Indicator(label="manifold")
+        self.assertEqual(loc.Id, "mux--manifold")
+        self.assertEqual(rem.Id, "mux-manifold")
+
+    def test_an_item_is_remote_unless_told_otherwise(self):
+        """The default must not hand the sort prefix to a remote host, which
+        would put a random box first and defeat the whole thing."""
+        self.assertFalse(self.sni.Indicator(label="rover")._local)

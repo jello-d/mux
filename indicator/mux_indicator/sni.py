@@ -69,7 +69,8 @@ BLINK_MS = int(os.environ.get("MUX_INDICATOR_BLINK_MS", "250"))
 
 
 class Indicator(ServiceInterface):
-    def __init__(self, state="none", count=None, label=None, host=None):
+    def __init__(self, state="none", count=None, label=None, host=None,
+                 local=False):
         super().__init__("org.kde.StatusNotifierItem")
         # The label names the host this item speaks for. None keeps the old
         # unlabelled identity, which is what the existing tests construct.
@@ -79,6 +80,10 @@ class Indicator(ServiceInterface):
         # cannot change while the daemon runs, and re-querying it per poll would
         # be a subprocess per host per tick for an answer that never moves.
         self._host = host
+        # Whether this item speaks for THIS box. Fixed for the item's life --
+        # a host does not stop being local -- and needed at construction
+        # because Id is read the moment a tray host sees the item.
+        self._local = local
         # The three-character host mark, or None for the single-host look.
         # Set later too: it appears when a second host joins the tray and goes
         # again when you detach, so one item never carries a label it does not
@@ -143,12 +148,7 @@ class Indicator(ServiceInterface):
 
     @dbus_property(access=PropertyAccess.READ)
     def Id(self) -> "s":
-        # `mux-<label>`, so the id is SELF-DESCRIBING on the bus: a human
-        # reading the watcher's item list can tell which host each speaks for
-        # without introspecting it, which is exactly what you want when working
-        # out why one icon is stale. It also keeps the `mux-` prefix a bar can
-        # order on. Unlabelled stays `mux-indicator`, the historical id.
-        return f"mux-{self._label}" if self._label else "mux-indicator"
+        return item_id(self._label, self._local)
 
     @dbus_property(access=PropertyAccess.READ)
     def Title(self) -> "s":
@@ -412,6 +412,30 @@ def reconcile(want, live):
     return drop, add
 
 
+# LOCAL SORTS FIRST, and a hyphen is the only prefix that reliably does it.
+# Most trays alpha-sort by Id and offer no way to say otherwise, so position is
+# bought in the string or not at all. In ASCII `-` is 0x2D, BELOW the digits
+# (0x30), the uppercase letters (0x41) and the lowercase ones (0x61) -- so it
+# beats any legal hostname. `_` (0x5F) does not: it loses to `7bravo` and to
+# every capitalised name. A leading digit loses to a lower digit. Measured
+# rather than assumed, because the obvious two both look fine against a set of
+# ordinary lowercase names and fail on the first host somebody names `Atlas`.
+_LOCAL_SORT = "-"
+
+
+def item_id(label, local=False):
+    """The tray Id: `mux-<label>`, and `mux--<label>` for the local host.
+
+    SELF-DESCRIBING ON THE BUS, which is the point of carrying the label at
+    all: a human reading the watcher's item list can tell which host each item
+    speaks for without introspecting it. The `mux-` prefix a bar can order on
+    survives the sort prefix, so an `order` array keyed on it still matches.
+    """
+    if not label:
+        return "mux-indicator"          # the historical unlabelled id
+    return f"mux-{_LOCAL_SORT if local else ''}{label}"
+
+
 def item_bus_name(pid, index):
     """The SNI bus name for one item.
 
@@ -486,7 +510,8 @@ async def _publish(index, label, argv):
     if host is None and label:
         print(f"mux-indicator: {label} has no usable colour pair "
               f"(drawing host-neutral)", flush=True)
-    item = Indicator(label=label, host=host)
+    item = Indicator(label=label, host=host,
+                     local=(label == local_label()))
     bus.export(ITEM_PATH, item)
     name = item_bus_name(os.getpid(), index)
     await bus.request_name(name)
