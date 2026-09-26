@@ -79,6 +79,13 @@ skipped, so a crashed latch cannot leave a phantom host in the tray.
 anywhere. It needs no transport and it is what the indicator showed before it
 could show anything else.
 
+The local item also sorts **first**: its tray id is `mux--<host>` rather than
+`mux-<host>`. Most trays alpha-sort by id with no way to say otherwise, so
+position has to be bought in the string, and a leading `-` (0x2D) sorts below
+every digit, capital and lowercase letter, so it beats any legal hostname. `_`
+does not: it loses to `7bravo` and to anything capitalised. The `mux-` prefix a
+bar's `order` array keys on is unaffected.
+
 The remote command is composed from a template, so ssh is a default and not a
 law -- set `indicator-transport` in `$MUX_DIR/config` (or
 `MUX_INDICATOR_TRANSPORT`) to anything that carries a command to a host:

@@ -857,3 +857,17 @@ t mux-indicator
 -             os.killpg(proc.pid, SIGKILL)
 +             os.killpg(os.getpgid(proc.pid), SIGKILL)
 m grandchild SURVIVED
+
+= indicator-local-sort-prefix-weak
+f indicator/mux_indicator/sni.py
+t mux-indicator
+- _LOCAL_SORT = "-"
++ _LOCAL_SORT = "_"
+m test_LOCAL_SORTS_FIRST_against_awkward_hostnames
+
+= indicator-id-ignores-localness
+f indicator/mux_indicator/sni.py
+t mux-indicator
+-         return item_id(self._label, self._local)
++         return item_id(self._label)
+m test_the_item_reports_it_through_Id
