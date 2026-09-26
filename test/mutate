@@ -123,6 +123,22 @@ _run_one() {   # name file tests old new msg
 	_n=$1; _f=$2; _ts=$3; _old=$4; _new=$5; _msg=$6
 
 	[ -f "$HERE/$_f" ] || { _err "$_n: $_f does not exist"; return; }
+
+	# A REPLACEMENT IDENTICAL TO ITS TARGET MUTATES NOTHING, and without this
+	# the run reports SURVIVED -- indicting the test for not catching a change
+	# that was never made. Sixth way a mutation silently no-ops, found
+	# 2026-09-26: the corpus is line-based, so a generator that wrote a `\n`
+	# into the `+` value produced a replacement equal to the `-` line with the
+	# intended second line orphaned below it, where the parser ignored it.
+	if [ "$_new" = "$_old" ]; then
+		_err "$_n: the replacement is IDENTICAL to the target" \
+		  "[$_old]" \
+		  "This mutates nothing, so the named test cannot fail and the" \
+		  "record would be reported as SURVIVED -- blaming the test for" \
+		  "a change that never happened. One line per directive: a" \
+		  "multi-line replacement is not supported."
+		return
+	fi
 	_cnt=$(_occurrences "$HERE/$_f" "$_old")
 	if [ "$_cnt" = 0 ]; then
 		_err "$_n: the line is not in $_f" \
