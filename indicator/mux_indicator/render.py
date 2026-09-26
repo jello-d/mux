@@ -55,18 +55,33 @@ STATE_INK = {
     "idle":    (0xF4, 0xF4, 0xF6, 0xFF),   # white check
     "unknown": (0xC8, 0xD2, 0xE8, 0xFF),   # pale slate, reads on the dark badge
 }
-# THE HOST MARK'S INK. Fixed, and deliberately outside every STATE_FRAME hue:
-# the mark answers "WHICH machine", so it must not change as the agent works.
-# A state-coloured mark was tried and rejected for exactly that -- it was the
-# most legible option of the lot, and it made host identity flicker with state,
-# which is the one thing identity may not do.
+# THE HOST MARK'S INK. It answers "WHICH machine", so it never changes as the
+# agent works: a state-coloured mark was tried and rejected for exactly that --
+# it was the most legible option of the lot, and it made host identity flicker
+# with state, which is the one thing identity may not do.
 #
-# Cyan also separates it from the `>_`, which wears the host's FOREGROUND (a
-# near-white on every derived pair). The mark is drawn straight over the prompt
-# rather than beside it: the chevron shows through, and a fragment of it is
-# enough of a cue even where it is not fully legible, which is what buys the
-# letters their full size instead of a squeezed column.
-MARK_INK = (0x6F, 0xD9, 0xFF, 0xFF)
+# LOCAL IS WHITE, and reserved. Home is the absence of a hue, it is the one
+# item on the bar you never have to look up, and giving it a palette slot would
+# mean the machine you are sitting at changed colour when you latched somewhere
+# new. A single-host install draws no mark at all, so this ink is only ever
+# seen next to at least one remote.
+MARK_LOCAL_INK = (0xF4, 0xF6, 0xFA, 0xFF)
+# AND THE REMOTES ROTATE THESE FIVE. The palette is small because it has to be:
+# STATE already owns red, amber, green, purple and slate blue across the frame
+# and the badge, so a warm mark reads as `blocked` and a green one as `idle`.
+# What is left is the cool and magenta side of the wheel. Five was measured at
+# 22px and 32px rather than chosen -- see mark_ink() for what happens past it.
+#
+# Every one of them sits on the black strip, never on the screen, so contrast
+# is a property of the strip and not of the hue. That is what lets the palette
+# be picked for DISTINCTNESS from each other instead of legibility on a tint.
+MARK_PALETTE = (
+    (0x6F, 0xD9, 0xFF, 0xFF),   # cyan
+    (0xFF, 0x8C, 0xD0, 0xFF),   # pink
+    (0xC9, 0xA8, 0xFF, 0xFF),   # lilac
+    (0x7C, 0xE8, 0xC8, 0xFF),   # mint
+    (0xFF, 0xA8, 0x8C, 0xFF),   # salmon
+)
 _MARK_BACK = (0x00, 0x00, 0x00, 0xFF)   # the strip the letters sit on
 _MARK_CAP = 0.86     # cap height as a fraction of the third of the tile
 _MARK_PAD = 0.03     # breathing room each side of the widest letter
@@ -147,6 +162,20 @@ def host_mark(name):
     return "".join(alnum[:3]).upper()
 
 
+def mark_ink(slot):
+    """Palette slot -> the ink its letters wear. None is the LOCAL host.
+
+    PAST THE END OF THE PALETTE IT WRAPS, and that is deliberate rather than an
+    oversight. With more remotes than slots two of them share a hue, which
+    costs nothing that matters: colour here is a redundant HINT and the letters
+    are the identity. Refusing to draw, or growing the palette into the state
+    hues, would both trade a working tile for a tidy rule.
+    """
+    if slot is None:
+        return MARK_LOCAL_INK
+    return MARK_PALETTE[slot % len(MARK_PALETTE)]
+
+
 def _mark_font(maxh):
     """The largest bold whose cap height fits a third of the tile.
 
@@ -196,7 +225,7 @@ def _mark_strip(d, s, text):
     d.rectangle([w - rad, 0, w, s - 1], fill=_MARK_BACK)
 
 
-def _mark_letters(d, s, text):
+def _mark_letters(d, s, text, ink):
     """The three characters, centred on the strip, drawn LAST."""
     f, w = _mark_metrics(s, text)
     cell = s / 3.0
@@ -204,7 +233,7 @@ def _mark_letters(d, s, text):
         bb = d.textbbox((0, 0), ch, font=f)
         cw, chh = bb[2] - bb[0], bb[3] - bb[1]
         d.text(((w - cw) / 2 - bb[0], i * cell + (cell - chh) / 2 - bb[1]),
-               ch, font=f, fill=MARK_INK)
+               ch, font=f, fill=ink)
 
 
 def parse_pair(text):
@@ -353,16 +382,26 @@ def _badge(img, s, fill, ink, count, check=False, mark=None):
         _number(d, box, str(count), _font(_SANS, int(bd * _NUM)), ink)
 
 
-def _tile(state, count, size, cursor=True, host=None, mark=None):
+def _tile(state, count, size, cursor=True, host=None, mark=None, ink=None):
     s = size
     img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     frame = STATE_FRAME.get(state, STATE_FRAME["none"])
     m = max(0, round(s * _MARGIN))
+    # A MARKED TILE IS HOST-NEUTRAL UNDERNEATH. The screen tint and the `>_`
+    # both wear `mux host-color`, so a marked tile would carry TWO independent
+    # host colours that do not agree with each other: a salmon mark on a dark
+    # green screen says two different things about one machine. The mark is the
+    # better channel (it survives being small, and it is what the letters
+    # already encode), so it becomes the only one, and the tint steps aside.
+    #
+    # Only while marked. With one host there is no mark, nothing to disagree
+    # with, and the tinted tile is exactly what it has always been.
+    tint = None if mark else host
     d.rounded_rectangle([m, m, s - 1 - m, s - 1 - m], max(2, s // 7),
-                        fill=_screen(state, host), outline=frame,
+                        fill=_screen(state, tint), outline=frame,
                         width=max(1, s // 11))
-    _hero(d, s, m, _prompt(state, host), cursor)
+    _hero(d, s, m, _prompt(state, tint), cursor)
 
     # THE ORDER BELOW IS THE DESIGN, not an implementation detail:
     #
@@ -386,7 +425,7 @@ def _tile(state, count, size, cursor=True, host=None, mark=None):
     if mark:
         # A fresh Draw: _badge composites its own layer onto img, so the
         # handle taken above no longer sees what is on the canvas.
-        _mark_letters(ImageDraw.Draw(img), s, mark)
+        _mark_letters(ImageDraw.Draw(img), s, mark, mark_ink(ink))
     return img
 
 
@@ -402,7 +441,7 @@ def _to_argb(img):
 
 
 def icon_pixmap(state, count, sizes=(22, 32, 48), cursor=True, host=None,
-                mark=None):
+                mark=None, ink=None):
     """SNI IconPixmap for a state + count. idle/none draw no badge. cursor=False
     renders the blink OFF frame (the `_` cursor hidden).
 
@@ -413,6 +452,11 @@ def icon_pixmap(state, count, sizes=(22, 32, 48), cursor=True, host=None,
 
     `mark` is the three-character host mark from host_mark(), drawn down the
     left strip. None when there is only ONE item in the tray, which is the
-    common case and must look exactly as it always has."""
-    return [[s, s, _to_argb(_tile(state, count, s, cursor, host, mark))]
+    common case and must look exactly as it always has.
+
+    `ink` is that host's palette SLOT (see slots.py), or None for the local
+    host. It is an index rather than a colour so the assignment rule never has
+    to know what the palette looks like, and render.py stays the one owner of
+    every colour on the tile."""
+    return [[s, s, _to_argb(_tile(state, count, s, cursor, host, mark, ink))]
             for s in sizes]
