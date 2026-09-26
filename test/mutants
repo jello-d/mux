@@ -15,6 +15,14 @@
 #   restoring one of two files a mutation touched, so it leaked into the
 #     next case.
 #
+# A SIXTH, found 2026-09-26 and worse than the five above because it accuses
+# the innocent: a replacement IDENTICAL to its target. The records are line
+# based, so a generator that put a `\n` inside the `+` value wrote a
+# replacement equal to the `-` line and orphaned the intended second line,
+# which the parser ignored. Nothing was mutated, so the named test passed, and
+# the run reported SURVIVED -- blaming a perfectly good test for not catching a
+# change that never happened. `mutate` now refuses it. One line per directive.
+#
 # Each of those produced a "passing" test that proved nothing. This file turns
 # confirming a guard from something to remember into something that fails.
 #
@@ -871,3 +879,24 @@ t mux-indicator
 -         return item_id(self._label, self._local)
 +         return item_id(self._label)
 m test_the_item_reports_it_through_Id
+
+= indicator-watch-repaints-every-tick
+f indicator/mux_indicator/sni.py
+t mux-indicator
+-         if cur != last:
++         if True:
+m test_AN_UNCHANGED_VALUE_IS_NOT_REPAINTED
+
+= indicator-override-ignored
+f indicator/mux_indicator/sni.py
+t mux-indicator
+-         cur = _read_override() or await _query(argv)
++         cur = await _query(argv)
+m test_the_OVERRIDE_wins_over_the_source
+
+= indicator-advertises-a-menu-it-lacks
+f indicator/mux_indicator/sni.py
+t mux-indicator
+-         return False
++         return True
+m test_it_does_NOT_advertise_a_menu

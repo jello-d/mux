@@ -643,3 +643,177 @@ class TraySort(unittest.TestCase):
         """The default must not hand the sort prefix to a remote host, which
         would put a random box first and defeat the whole thing."""
         self.assertFalse(self.sni.Indicator(label="rover")._local)
+
+
+class Watch(unittest.TestCase):
+    """The per-item poll loop: what it repaints, and how often.
+
+    Tested as the real loop rather than through an extraction, because the loop
+    IS the rule -- there is nothing left once you lift the decision out of it.
+    Driven with a tiny POLL and cancelled, so it runs in milliseconds.
+    """
+
+    def _source(self, body):
+        import stat
+        import tempfile
+        fd, path = tempfile.mkstemp(prefix="muxwatch", suffix=".sh")
+        with os.fdopen(fd, "w") as fh:
+            fh.write("#!/bin/sh\n" + body + "\n")
+        os.chmod(path, os.stat(path).st_mode | stat.S_IEXEC)
+        self.addCleanup(os.unlink, path)
+        return path
+
+    class _Item:
+        def __init__(self):
+            self.calls = []
+
+        def set(self, state, count):
+            self.calls.append((state, count))
+
+    def _spin(self, sni, item, argv, seconds=0.25):
+        """Runs the loop briefly and cancels it. stdout is swallowed: the loop
+        logs every change by design, and a suite that prints is a suite whose
+        real output you stop reading."""
+        import contextlib
+        import io
+
+        async def go():
+            task = asyncio.ensure_future(sni._watch(item, argv, "test"))
+            await asyncio.sleep(seconds)
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        with contextlib.redirect_stdout(io.StringIO()):
+            asyncio.run(go())
+
+    def test_AN_UNCHANGED_VALUE_IS_NOT_REPAINTED(self):
+        """The loop polls every POLL seconds forever. Repainting regardless
+        would emit NewIcon at the poll rate for every host, which churns the
+        tray and defeats the blink that is supposed to mean "look at me"."""
+        sni = _fresh(MUX_INDICATOR_POLL="0.01", MUX_INDICATOR_CTL=None)
+        item = self._Item()
+        self._spin(sni, item, [self._source("printf 'working 2\\n'")])
+        self.assertEqual(item.calls, [("working", 2)],
+                         f"repainted {len(item.calls)} times for one value")
+
+    def test_a_CHANGED_value_is_repainted(self):
+        """The other half, and it has to be asserted separately: a loop that
+        never repaints at all satisfies the test above perfectly."""
+        sni = _fresh(MUX_INDICATOR_POLL="0.01", MUX_INDICATOR_CTL=None)
+        import tempfile
+        counter = tempfile.mktemp(prefix="muxwatchn")
+        self.addCleanup(lambda: os.path.exists(counter) and os.unlink(counter))
+        src = self._source(
+            f'n=$(cat {counter} 2>/dev/null || echo 0)\n'
+            f'echo $((n + 1)) >{counter}\n'
+            f'if [ "$n" -lt 2 ]; then printf "working 1\\n"\n'
+            f'else printf "blocked 3\\n"; fi')
+        item = self._Item()
+        self._spin(sni, item, [src])
+        self.assertIn(("working", 1), item.calls)
+        self.assertIn(("blocked", 3), item.calls)
+
+    def test_an_UNREACHABLE_source_becomes_unknown_here_too(self):
+        """End to end through the loop, not just _query: the path from a failed
+        transport to a repainted icon is what the feature promises."""
+        sni = _fresh(MUX_INDICATOR_POLL="0.01", MUX_INDICATOR_CTL=None)
+        item = self._Item()
+        self._spin(sni, item, ["/nonexistent/mux-for-a-test"])
+        self.assertEqual(item.calls, [("unknown", None)])
+
+    def test_the_OVERRIDE_wins_over_the_source(self):
+        """The override exists to pin a value for testing. A source that
+        disagreed and won would make it useless and very confusing."""
+        import tempfile
+        with tempfile.NamedTemporaryFile("w", suffix=".ctl",
+                                         delete=False) as fh:
+            fh.write("blocked 9\n")
+            path = fh.name
+        self.addCleanup(os.unlink, path)
+        sni = _fresh(MUX_INDICATOR_POLL="0.01", MUX_INDICATOR_CTL=path)
+        item = self._Item()
+        self._spin(sni, item, [self._source("printf 'idle 0\\n'")])
+        self.assertEqual(item.calls, [("blocked", 9)])
+
+
+class Pixmap(unittest.TestCase):
+    """What a tray host actually reads to draw the icon."""
+
+    def setUp(self):
+        self.sni = _fresh()
+
+    def test_IconPixmap_is_the_current_render(self):
+        i = self.sni.Indicator(label="manifold")
+        self.assertEqual(i.IconPixmap, i._pixmap)
+        self.assertTrue(i.IconPixmap, "the item exposed an EMPTY pixmap")
+
+    def test_it_FOLLOWS_a_state_change(self):
+        """The property must read the live attribute, not a copy taken at
+        construction -- that would freeze every icon at `none` forever."""
+        i = self.sni.Indicator(label="manifold")
+        before = i.IconPixmap
+        i._state, i._count = "blocked", 4
+        i._paint()
+        self.assertNotEqual(before, i.IconPixmap)
+
+    def test_the_ATTENTION_pixmap_is_the_same_image(self):
+        """A host in NeedsAttention reads AttentionIconPixmap instead. Serving
+        an empty one there is how a blocked item goes blank at exactly the
+        moment it matters most."""
+        i = self.sni.Indicator(state="blocked", count=2, label="manifold")
+        self.assertEqual(i.AttentionIconPixmap, i.IconPixmap)
+        self.assertTrue(i.AttentionIconPixmap)
+
+    def test_no_icon_NAME_is_advertised(self):
+        """We ship pixmaps, not themed icon names. A non-empty name would make
+        a host look for a theme icon that does not exist and draw nothing."""
+        i = self.sni.Indicator(label="manifold")
+        self.assertEqual(i.IconName, "")
+        self.assertEqual(i.AttentionIconName, "")
+        self.assertEqual(i.OverlayIconName, "")
+
+    def test_the_category_is_ApplicationStatus(self):
+        self.assertEqual(self.sni.Indicator().Category, "ApplicationStatus")
+
+    def test_it_does_NOT_advertise_a_menu(self):
+        """There is no dbusmenu yet, so ItemIsMenu must stay false or a host
+        will introspect a Menu property that is not there and left-click will
+        stop reaching Activate."""
+        self.assertFalse(self.sni.Indicator().ItemIsMenu)
+
+
+class Entry(unittest.TestCase):
+    """__main__: the daemon's front door, previously 0% covered."""
+
+    def test_ctrl_c_exits_cleanly(self):
+        """A KeyboardInterrupt escaping asyncio.run would print a traceback on
+        every Ctrl-C and exit non-zero, which for a systemd --user unit reads
+        as a crash and triggers the restart policy."""
+        import mux_indicator.__main__ as m
+
+        async def boom():
+            raise KeyboardInterrupt
+        old = m.run
+        m.run = boom
+        try:
+            m.main()          # must simply return
+        finally:
+            m.run = old
+
+    def test_a_real_error_is_NOT_swallowed(self):
+        """Only KeyboardInterrupt is caught. Catching more would turn a broken
+        daemon into a silently exiting one, which systemd would report as a
+        clean stop and nobody would investigate."""
+        import mux_indicator.__main__ as m
+
+        async def boom():
+            raise RuntimeError("the bus went away")
+        old = m.run
+        m.run = boom
+        try:
+            with self.assertRaises(RuntimeError):
+                m.main()
+        finally:
+            m.run = old
