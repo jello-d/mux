@@ -81,12 +81,33 @@ uninstall() {
 # The interpreter is ASKED where the package landed rather than globbing a
 # python version out of the venv path -- one less thing to break when the
 # interpreter moves.
+# THE PROBE RUNS FROM `/`, WHICH IS LOAD-BEARING. Python puts the current
+# directory FIRST on sys.path for `python -c`, so running this check from inside
+# the package tree imports the SOURCE copy, and the comparison below then holds
+# each file against ITSELF and passes no matter how stale the venv is. That is
+# the very tautology this function exists to destroy, and it is worst in the
+# case it is most used: `./setup.sh check` in a checkout, while iterating on the
+# code, is exactly when a false [OK] costs the most.
+#
+# `cd /` rather than `-P` or PYTHONSAFEPATH, which are 3.11+; this package
+# supports 3.8.
 _code_current() {
-	_cc_dir=$("$VENV/bin/python" -c \
+	_cc_dir=$(cd / && "$VENV/bin/python" -c \
 		'import mux_indicator,os;print(os.path.dirname(mux_indicator.__file__))' \
 		2>/dev/null || true)
 	if [ -z "$_cc_dir" ] || [ ! -d "$_cc_dir" ]; then
 		bad "installed code not found (the venv cannot import it)"
+		return 0
+	fi
+	# AND REFUSE A SELF-COMPARISON OUTRIGHT, which covers every OTHER way the
+	# two paths can converge -- an editable install, a symlinked site-packages,
+	# a future change to where the venv lives. Fixing only the cwd would leave a
+	# check that is correct today and silently vacuous the next time something
+	# moves. A comparison with no two sides cannot answer the question, so it
+	# says so instead of reporting agreement.
+	if [ "$_cc_dir" = "$PKG_DIR/mux_indicator" ]; then
+		bad "the venv imports the SOURCE tree ($_cc_dir)"
+		bad "  nothing here can be stale or current; this check is vacuous"
 		return 0
 	fi
 	_cc_drift=
