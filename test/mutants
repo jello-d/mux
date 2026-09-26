@@ -900,3 +900,38 @@ t mux-indicator
 -         return False
 +         return True
 m test_it_does_NOT_advertise_a_menu
+
+= indicator-cancelled-blink-leaves-cursor-off
+f indicator/mux_indicator/sni.py
+t mux-indicator
+-             self._paint(cursor=True)
++             pass
+m test_A_CANCELLED_BLINK_ALSO_SETTLES_CURSOR_ON
+
+= indicator-blinks-stack
+f indicator/mux_indicator/sni.py
+t mux-indicator
+-             self._blink.cancel()
++             pass
+m test_a_SECOND_set_does_not_stack_blinks
+
+= indicator-config-transport-ignored
+f indicator/mux_indicator/sources.py
+t mux-indicator
+-                     return parts[1]
++                     break
+m test_the_config_key_is_READ
+
+= indicator-foreign-pid-read-as-dead
+f indicator/mux_indicator/sources.py
+t mux-indicator
+-         return True          # exists, owned by someone else
++         return False
+m test_a_pid_owned_by_SOMEONE_ELSE_counts_as_alive
+
+= indicator-no-font-fallback
+f indicator/mux_indicator/render.py
+t mux-indicator
+-     return ImageFont.load_default()
++     raise OSError('no font')
+m test_a_TILE_STILL_RENDERS_with_no_fonts_at_all
