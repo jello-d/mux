@@ -1009,4 +1009,69 @@ case $_e in
 *) fail "the retry path was not reached, so this proves nothing: $_e" ;;
 esac
 
+# --- the ANIMATION itself, which needs a real tty -----------------------
+# `_tick` was found DARK by the 2026-09-26 coverage sweep: every assertion
+# above runs with stderr on a pipe, so `_TTY` is 0 and the whole spinner is
+# skipped. It had already shipped a bug for exactly that reason -- `'\\'` in
+# single quotes is TWO backslashes in POSIX sh, so it drew `\\` -- caught by a
+# live run and shellcheck rather than by this file.
+#
+# A pty is the only way in, the same device the `help palette` test needs, and
+# the suite skips where `script` is absent rather than pretending to cover it.
+if command -v script >/dev/null 2>&1; then
+	cat >"$T/bin/spinrun" <<EOF
+#!/bin/sh
+env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \\
+	T_AUTH="$T_AUTH" T_PROBE="$T_PROBE" STATES="$STATES" \\
+	TRIES="$TRIES" AUTHLOG="$AUTHLOG" SCRIPT="$SCRIPT" \\
+	MUX_LATCH_TRANSPORT="$T/bin/transport %h %s" \\
+	MUX_LATCH_AUTH="$T/bin/auth" MUX_LATCH_PROBE="$T/bin/probe" \\
+	MUX_LATCH_STATUS="$T/bin/status" MUX_LATCH_SLEEP="$T/bin/nosleep" \\
+	MUX_LATCH_BACKOFF=4 MUX_LATCH_BLOCKED_WAIT=1 MUX_LATCH_MAX_TRIES=2 \\
+	"$HERE/libexec/mux-latch" box:proj
+exit 0
+EOF
+	chmod +x "$T/bin/spinrun"
+	# A four-second wait, so the loop turns four times and every glyph in
+	# the cycle is drawn at least once.
+	printf '%s\n%s\n' "$_drop" "$_drop" >"$SCRIPT"
+	script -qc "$T/bin/spinrun" "$T/spin.raw" >/dev/null 2>&1 || true
+	_sp=$(cat "$T/spin.raw" 2>/dev/null || true)
+
+	case $_sp in
+	*'retrying in'*) ;;
+	*) fail "the animated wait never ran under a pty, so nothing below
+proves anything: [$_sp]" ;;
+	esac
+
+	# THE BUG THAT SHIPPED. One backslash, never two. Asserted on the raw
+	# bytes: a doubled backslash is visible on a terminal and invisible to
+	# anything comparing rendered words.
+	#
+	# The disable is the POINT of the assertion, not an escape from it:
+	# SC1003 fires because '\\' in single quotes is two backslashes, which
+	# is precisely the byte pair being searched for. Writing it any other
+	# way would stop matching the bug.
+	# shellcheck disable=SC1003
+	case $_sp in
+	*'\\'*) fail "the spinner drew a DOUBLED backslash, which is the
+SC1003 bug 0.45 shipped: '\\\\' inside single quotes is two characters" ;;
+	esac
+
+	# And every glyph of the cycle appears, which is what makes it read as
+	# motion. A _tick stuck on one character animates nothing while still
+	# satisfying every assertion above.
+	#
+	# Same reason: '\' here is ONE literal backslash, the glyph _tick draws.
+	# shellcheck disable=SC1003
+	for _g in '|' '/' '-' '\'; do
+		case $_sp in
+		*"$_g"*) ;;
+		*) fail "the spinner never drew [$_g], so it is not cycling" ;;
+		esac
+	done
+else
+	printf 'skip %s: no script(1) for a pty\n' "$_name" >&2
+fi
+
 pass
