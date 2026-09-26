@@ -523,3 +523,53 @@ class Deterministic(unittest.TestCase):
 
 if __name__ == "__main__":                              # pragma: no cover
     unittest.main()
+
+
+class FontFallback(unittest.TestCase):
+    """The icon must still draw on a box with no DejaVu installed.
+
+    A minimal container or a different distro is not an edge case, and the
+    failure here is total: _font raising takes out the first render, which
+    happens before the item is exported, so the tray gets nothing at all and
+    the daemon dies at startup rather than degrading.
+    """
+
+    def test_a_missing_font_falls_back_to_the_default(self):
+        from mux_indicator.render import _font
+        f = _font(("/nonexistent/NotAFont.ttf",), 13)
+        self.assertIsNotNone(f)
+
+    def test_the_FIRST_readable_path_wins(self):
+        """The list is ordered by preference, so a fallback that ignored the
+        order would silently pick the wrong face on every machine."""
+        from mux_indicator.render import _COND, _font
+        good = _font((_COND[0],), 13)
+        both = _font(("/nonexistent/NotAFont.ttf", _COND[0]), 13)
+        self.assertEqual(both.getbbox("M"), good.getbbox("M"))
+
+    def test_a_TILE_STILL_RENDERS_with_no_fonts_at_all(self):
+        """End to end, because the fallback being reachable is not the same as
+        the renderer surviving it: every glyph path has to tolerate a bitmap
+        default font, including the mark's height-fitting loop."""
+        import mux_indicator.render as R
+        old = R._COND
+        R._COND = ("/nonexistent/NotAFont.ttf",)
+        try:
+            got = icon_pixmap("working", 3, sizes=(32,), mark="NWD", ink=1)
+            self.assertEqual(len(got), 1)
+            self.assertEqual(got[0][0], 32)
+            self.assertTrue(got[0][2], "rendered an empty pixmap")
+        finally:
+            R._COND = old
+
+    def test_the_mark_font_loop_TERMINATES_on_a_default_font(self):
+        """_mark_font walks sizes down looking for one whose cap height fits.
+        A bitmap default font ignores the requested size, so the loop can run
+        to the bottom -- it must return the floor rather than fall off."""
+        import mux_indicator.render as R
+        old = R._COND
+        R._COND = ("/nonexistent/NotAFont.ttf",)
+        try:
+            self.assertIsNotNone(R._mark_font(2))
+        finally:
+            R._COND = old

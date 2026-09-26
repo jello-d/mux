@@ -199,6 +199,132 @@ class RemoteCommand(unittest.TestCase):
                     os.environ[k] = v
 
 
+class TransportFromConfig(unittest.TestCase):
+    """`indicator-transport` in $MUX_DIR/config -- the MIDDLE layer of the
+    three, and the only one that had never been read.
+
+    The env override and the shipped default were both covered; a 2026-09-26
+    coverage sweep showed the `return` inside the config parser had never once
+    executed, so the documented config key worked only by assumption. Same
+    shape as the two shipped latch hooks that turned out to be completely dark.
+    """
+
+    def _conf(self, text):
+        d = tempfile.mkdtemp(prefix="muxconf")
+        with open(os.path.join(d, "config"), "w") as fh:
+            fh.write(text)
+        old_dir = os.environ.get("MUX_DIR")
+        old_env = os.environ.get("MUX_INDICATOR_TRANSPORT")
+        os.environ["MUX_DIR"] = d
+        os.environ.pop("MUX_INDICATOR_TRANSPORT", None)
+
+        def restore():
+            for k, v in (("MUX_DIR", old_dir),
+                         ("MUX_INDICATOR_TRANSPORT", old_env)):
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+        self.addCleanup(restore)
+        return d
+
+    def test_the_config_key_is_READ(self):
+        self._conf("indicator-transport kubectl exec %h -- %q\n")
+        self.assertEqual(transport(), "kubectl exec %h -- %q")
+
+    def test_it_reaches_the_argv(self):
+        """Separate from reading it: a value parsed and then dropped on the
+        floor looks identical from the config's side."""
+        self._conf("indicator-transport kubectl exec %h -- %q\n")
+        self.assertEqual(remote_argv("pod")[:3], ["kubectl", "exec", "pod"])
+
+    def test_ENV_STILL_BEATS_THE_CONFIG(self):
+        """The precedence the whole seam claims: environment, then config,
+        then shipped. With the config now actually being read, this is the
+        first test that can fail for the right reason."""
+        self._conf("indicator-transport from-the-config %h %q\n")
+        os.environ["MUX_INDICATOR_TRANSPORT"] = "from-the-env %h %q"
+        self.assertEqual(transport(), "from-the-env %h %q")
+
+    def test_a_COMMENTED_OUT_key_is_not_read(self):
+        """`# indicator-transport ...` is how somebody disables it. Reading it
+        anyway would silently ignore the disabling."""
+        self._conf("  # indicator-transport kubectl exec %h -- %q\n")
+        self.assertEqual(transport(), DEFAULT_TRANSPORT)
+
+    def test_an_INLINE_comment_is_stripped(self):
+        self._conf("indicator-transport ssh %h %q   # the usual\n")
+        self.assertEqual(transport(), "ssh %h %q")
+
+    def test_OTHER_directives_are_ignored(self):
+        """mux's config holds every seam, so the file this reads is full of
+        keys that are none of its business."""
+        self._conf("context-command severance current\n"
+                   "latch-transport ssh -t %h sh -lc %q\n"
+                   "\n"
+                   "indicator-transport mine %h %q\n")
+        self.assertEqual(transport(), "mine %h %q")
+
+    def test_a_key_with_NO_VALUE_is_ignored(self):
+        """A bare key is not a template. Returning an empty one would make
+        remote_argv produce an empty argv and every host go unknown."""
+        self._conf("indicator-transport\n")
+        self.assertEqual(transport(), DEFAULT_TRANSPORT)
+
+    def test_an_UNREADABLE_config_falls_back(self):
+        """A directory where the file should be: the tray must still come up
+        on the default rather than refusing to start."""
+        d = self._conf("indicator-transport nope %h %q\n")
+        os.remove(os.path.join(d, "config"))
+        os.mkdir(os.path.join(d, "config"))
+        self.assertEqual(transport(), DEFAULT_TRANSPORT)
+
+
+class LockReading(unittest.TestCase):
+    """The error paths in latch-lock discovery, which decide whether a host
+    appears in the tray at all."""
+
+    def test_an_unreadable_lock_is_SKIPPED_not_fatal(self):
+        """One bad lock must not cost every other host its tray item."""
+        d = tempfile.mkdtemp(prefix="muxlock")
+        os.mkdir(os.path.join(d, "bad.lock"))          # a dir, not a file
+        with open(os.path.join(d, "good.lock"), "w") as fh:
+            fh.write("%d\nrover\n" % os.getpid())
+        self.assertEqual(latched(d), [("rover", "rover")])
+
+    def test_a_pid_owned_by_SOMEONE_ELSE_counts_as_alive(self):
+        """`os.kill(pid, 0)` raises PermissionError for a live process owned by
+        another uid. Reading that as dead would drop a host from the tray
+        because of who started it -- pid 1 is always there and never ours."""
+        d = tempfile.mkdtemp(prefix="muxlock")
+        with open(os.path.join(d, "init.lock"), "w") as fh:
+            fh.write("1\nrover\n")
+        self.assertEqual(latched(d), [("rover", "rover")])
+
+    def test_a_NON_NUMERIC_pid_is_skipped(self):
+        d = tempfile.mkdtemp(prefix="muxlock")
+        with open(os.path.join(d, "junk.lock"), "w") as fh:
+            fh.write("not-a-pid\nrover\n")
+        self.assertEqual(latched(d), [])
+
+    def test_the_default_run_dir_is_derived_from_XDG(self):
+        """The no-argument call is what the daemon actually makes; every other
+        test here passes a path and never exercises it."""
+        old = os.environ.get("XDG_RUNTIME_DIR")
+        d = tempfile.mkdtemp(prefix="muxrun")
+        os.mkdir(os.path.join(d, "mux-latch"))
+        with open(os.path.join(d, "mux-latch", "r.lock"), "w") as fh:
+            fh.write("%d\nrover\n" % os.getpid())
+        os.environ["XDG_RUNTIME_DIR"] = d
+        try:
+            self.assertEqual(latched(), [("rover", "rover")])
+        finally:
+            if old is None:
+                os.environ.pop("XDG_RUNTIME_DIR", None)
+            else:
+                os.environ["XDG_RUNTIME_DIR"] = old
+
+
 class Label(unittest.TestCase):
     def test_local_label_is_a_short_hostname(self):
         """It keys `mux host-color`, so it has to be the token the status bar

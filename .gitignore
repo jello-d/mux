@@ -9,3 +9,6 @@ build/
 dist/
 CLAUDE.local.md
 .claude/
+
+# coverage measurement output (see CLAUDE.md, "Measuring coverage")
+.coverage

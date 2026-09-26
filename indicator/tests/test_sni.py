@@ -817,3 +817,102 @@ class Entry(unittest.TestCase):
                 m.main()
         finally:
             m.run = old
+
+
+class Blink(unittest.TestCase):
+    """set() and the cursor blink: the "look at me" on a state change.
+
+    Uncovered until 2026-09-26. The blink is the only motion the tray ever
+    makes, and every way it can fail is quiet -- it stops blinking, or it never
+    stops, or it settles with the cursor hidden and the icon looks subtly wrong
+    forever after.
+    """
+
+    def _item(self, sni, **kw):
+        return sni.Indicator(label="northwood", **kw)
+
+    def test_set_updates_the_state_and_repaints(self):
+        sni = _fresh(MUX_INDICATOR_BLINK="1", MUX_INDICATOR_BLINK_MS="1")
+
+        async def go():
+            i = self._item(sni)
+            before = i._pixmap
+            i.set("blocked", 4)
+            self.assertEqual((i._state, i._count), ("blocked", 4))
+            self.assertNotEqual(before, i._pixmap)
+            i._blink.cancel()
+        asyncio.run(go())
+
+    def test_blocked_becomes_NeedsAttention(self):
+        """The status a tray host reads to decide whether to highlight the
+        item. Getting it wrong makes the loudest state look ordinary."""
+        sni = _fresh(MUX_INDICATOR_BLINK="1", MUX_INDICATOR_BLINK_MS="1")
+
+        async def go():
+            i = self._item(sni)
+            i.set("blocked", 1)
+            self.assertEqual(i.Status, "NeedsAttention")
+            i._blink.cancel()
+            i.set("idle", None)
+            self.assertEqual(i.Status, "Active")
+            i._blink.cancel()
+        asyncio.run(go())
+
+    def test_THE_BLINK_SETTLES_CURSOR_ON(self):
+        """It runs a fixed number of frames and stops with the cursor SHOWING.
+        Finishing on the hidden frame would leave that host's icon permanently
+        missing its cursor, which looks like a rendering bug rather than the
+        end of an animation."""
+        sni = _fresh(MUX_INDICATOR_BLINK="2", MUX_INDICATOR_BLINK_MS="1")
+
+        async def go():
+            i = self._item(sni)
+            i.set("working", 2)
+            await i._blink
+            self.assertEqual(
+                i._pixmap,
+                sni.icon_pixmap("working", 2, cursor=True, host=i._host,
+                                mark=i._mark, ink=i._ink),
+                "the blink finished on the cursor-OFF frame")
+        asyncio.run(go())
+
+    def test_A_CANCELLED_BLINK_ALSO_SETTLES_CURSOR_ON(self):
+        """A second change cancels the first blink mid-frame, and that is the
+        common case, not the rare one -- a busy agent changes state faster than
+        the animation runs. Cancelling on the hidden frame without restoring
+        would leave the cursor off until something else repainted."""
+        sni = _fresh(MUX_INDICATOR_BLINK="50", MUX_INDICATOR_BLINK_MS="1")
+
+        async def go():
+            i = self._item(sni)
+            i.set("working", 2)
+            await asyncio.sleep(0.01)      # land mid-animation
+            i._blink.cancel()
+            try:
+                await i._blink
+            except asyncio.CancelledError:
+                pass
+            self.assertEqual(
+                i._pixmap,
+                sni.icon_pixmap("working", 2, cursor=True, host=i._host,
+                                mark=i._mark, ink=i._ink),
+                "a cancelled blink left the cursor hidden")
+        asyncio.run(go())
+
+    def test_a_SECOND_set_does_not_stack_blinks(self):
+        """Two overlapping animations would fight over the same pixmap and the
+        icon would flicker at twice the rate, then keep flickering after the
+        newer one finished."""
+        sni = _fresh(MUX_INDICATOR_BLINK="50", MUX_INDICATOR_BLINK_MS="1")
+
+        async def go():
+            i = self._item(sni)
+            i.set("working", 2)
+            first = i._blink
+            i.set("blocked", 1)
+            self.assertIsNot(first, i._blink)
+            await asyncio.sleep(0)
+            self.assertTrue(first.cancelled() or first.done(),
+                            "the previous blink was left running")
+            i._blink.cancel()
+        asyncio.run(go())
