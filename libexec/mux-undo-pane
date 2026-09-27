@@ -99,6 +99,9 @@ _record() {   # <window id>
 	_lay=$(tmux show-options -wqv -t "$_w" @mux-ul 2>/dev/null || true)
 	_cmds=$(tmux show-options -wqv -t "$_w" @mux-up 2>/dev/null || true)
 	_cwds=$(tmux show-options -wqv -t "$_w" @mux-uc 2>/dev/null || true)
+	# The dead pane's OWN options. Absent on a server whose hooks predate
+	# this, which is why nothing below requires it.
+	_opts=$(tmux show-options -wqv -t "$_w" @mux-uo 2>/dev/null || true)
 	# No tracked state means the hooks are not loaded (an old tmux.conf, or a
 	# server started before this version). Nothing to record, and nothing to
 	# say about it here: a missing hook is `mux check`'s business.
@@ -133,6 +136,12 @@ EOF
 		printf 'layout\t%s\n' "$_lay"
 		printf 'cwd\t%s\n' "$(_lookup "$_gone" "$_cwds")"
 		printf 'command\t%s\n' "$(_unquote "$(_lookup "$_gone" "$_cmds")")"
+		# TWO FIELDS, not one packed value: the record is itself
+		# tab-separated, so nesting a second delimiter inside a value
+		# is how a reader ends up splitting on the wrong one.
+		_go=$(_lookup "$_gone" "$_opts")
+		printf 'optbottom\t%s\n' "$(printf '%s' "$_go" | cut -f1)"
+		printf 'optagent\t%s\n' "$(printf '%s' "$_go" | cut -f2)"
 	} 2>/dev/null >"$(_recfile "$_w")" || return 0
 	return 0
 }
@@ -144,12 +153,14 @@ _restore() {
 	_f=$(_recfile "$_w")
 	[ -f "$_f" ] || _die "nothing to undo in this window"
 
-	_idx= _cwd= _lay= _cmd= _n=
+	_idx= _cwd= _lay= _cmd= _n= _ob= _oa=
 	while IFS="$_tab" read -r _k _v; do
 		case ${_k:-} in
 		slot)    _idx=$_v ;;
 		panes)   _n=$_v ;;
 		cwd)     _cwd=$_v ;;
+		optbottom) _ob=$_v ;;
+		optagent)  _oa=$_v ;;
 		layout)  _lay=$_v ;;
 		command) _cmd=$_v ;;
 		esac
@@ -212,6 +223,16 @@ _restore() {
 		_new=$(tmux "$@" 2>/dev/null || true)
 	fi
 	[ -n "$_new" ] || _die "could not create the pane"
+
+	# THE PANE'S OWN OPTIONS, BEFORE THE GEOMETRY. @mux-bottom is what the
+	# layout pass reads to tell the bottom pane from the row above, so a
+	# pane put back without it freezes the window: `mux pin` skips it and
+	# the width balance refuses, both silently and both for good. Restoring
+	# it here is what stops `mux even` having to adopt one from a sibling.
+	[ -n "${_ob:-}" ] && tmux set-option -p -t "$_new" \
+		@mux-bottom "$_ob" 2>/dev/null || true
+	[ -n "${_oa:-}" ] && tmux set-option -p -t "$_new" \
+		@mux-agent "$_oa" 2>/dev/null || true
 
 	# The geometry last, once the pane count matches what the layout expects.
 	tmux select-layout -t "$_w" "$_lay" >/dev/null 2>&1 \

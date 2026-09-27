@@ -1045,3 +1045,31 @@ t mux-session-names
 - 	if [ "$((_bnow - _bfirst))" -le "$_BEAT_WINDOW" ] \
 + 	if true \
 m far outside the window
+
+= undo-pane-drops-the-pane-options
+f libexec/mux-undo-pane
+t mux-undo-pane
+- 	[ -n "${_ob:-}" ] && tmux set-option -p -t "$_new" \
++ 	[ -z "${_ob:-}" ] && tmux set-option -p -t "$_new" \
+m @mux-bottom did not come back
+
+= even-does-not-balance
+f libexec/mux-even
+t mux-even
+- 	_balance "$_w"
++ 	:
+m the drifted row was not evened
+
+= even-only-current-window
+f libexec/mux-even
+t mux-even
+- 	_wins=$(tmux list-windows -a -F '#{window_id}' 2>/dev/null || true)
++ 	_wins=$(tmux display-message -p '#{window_id}' 2>/dev/null || true)
+m did not reach a session the client is not on
+
+= even-invents-a-spec
+f libexec/mux-even
+t mux-even
+- 		if [ -n "$_consensus" ]; then
++ 		if true; then
+m it claimed to restore a spec

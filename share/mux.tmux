@@ -58,6 +58,20 @@ bind u run-shell "mux undo-pane"
 bind r run-shell "mux refresh"
 bind R run-shell "mux refresh --force"
 
+# prefix+E = EVEN EVERYTHING OUT, across every session on the server.
+#
+# prefix+r and +R act on the window in front of you, which is the wrong scope
+# for the drift you actually notice: a window is only ever "wrong" compared to
+# ANOTHER one, and what you see is the borders jumping as you cycle sessions.
+# A row that drifted to 79|81 in a session you were not looking at stayed that
+# way, because nothing ever visited it.
+#
+# OVERRIDES a tmux default, the same way ( and ) above do: stock E is
+# `select-layout -E`, which spreads the CURRENT pane's group in the CURRENT
+# window. `mux even --all` is that question asked of every window, plus the
+# bottom-pane height, which tmux has no way to know about.
+bind E run-shell "mux even --all"
+
 # --- colour themes ---------------------------------------------------------
 # THE COLOUR IS NOT THE BOUNDARY (see mux-style). It is cosmetic: a default that
 # any session may override with a `theme` directive in its layout. A theme names
@@ -208,6 +222,20 @@ set-hook -ag window-layout-changed \
   'set -wF @mux-up "#{P:#{pane_id}	#{pane_start_command}\n}"'
 set-hook -ag window-layout-changed \
   'set -wF @mux-uc "#{P:#{pane_id}	#{pane_current_path}\n}"'
+
+# AND THE PANE'S OWN OPTIONS. Losing @mux-bottom when a pane is put back is
+# not cosmetic: `mux pin` then skips that pane AND the width balance refuses
+# too (with no marker it cannot tell the bottom pane from the row above), so
+# one dropped option freezes the whole window's geometry, silently and for
+# good. @mux-agent matters the same way at one remove: without it `mux save`
+# reads the running command, and an agent that has exited looks like a plain
+# shell, so a round trip turns `pane agent` into `pane`.
+# TAB-SEPARATED, NEVER COMMA. A comma inside a format is tmux's modifier
+# ARGUMENT separator, so `#{P:...,...}` truncates the loop: measured, a
+# comma form returned one bogus entry for a two-pane window while the tab
+# form returned both correctly.
+set-hook -ag window-layout-changed \
+  'set -wF @mux-uo "#{P:#{pane_id}	#{@mux-bottom}	#{@mux-agent}\n}"'
 
 # The one subprocess, and only on a real death. `pane-exited` fires when a
 # pane's program exits (^D, `exit`) and NOT on kill-pane, which is exactly the
