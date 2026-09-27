@@ -21,7 +21,7 @@ _name=mux-undo-pane
 command -v tmux >/dev/null 2>&1 || {
 	printf 'skip %s (no tmux)\n' "$_name"; exit 0; }
 
-SOCK=muxundo$$
+SOCK=$(tmux_fresh_socket muxundo)
 XDG_RUNTIME_DIR=$T/run; export XDG_RUNTIME_DIR
 mkdir -p "$XDG_RUNTIME_DIR"
 PATH=$HERE/bin:$PATH; export PATH
@@ -29,6 +29,16 @@ PATH=$HERE/bin:$PATH; export PATH
 tm() { tmux -L "$SOCK" "$@"; }
 cleanup() { tmux -L "$SOCK" kill-server 2>/dev/null || true; }
 trap 'cleanup' EXIT INT TERM
+
+# A SERVER ON A NAME NOBODY HAS KILLED. build() used to `cleanup` and then
+# immediately create on the SAME socket, which races tmux's teardown -- see
+# tmux_fresh_socket in lib.sh. That is what made this file flake under the full
+# suite and never in isolation. The old server is killed and NOT waited for,
+# because there is nothing reliable to wait on.
+rotate() {
+	cleanup
+	SOCK=$(tmux_fresh_socket muxundo)
+}
 
 # POLLED, NOT SLEPT. Every wait here is for a condition that is observable, so
 # waiting for the condition is both faster than a fixed sleep and less flaky
@@ -79,7 +89,7 @@ state() { tm list-panes -t t -F '#{pane_height}:#{pane_current_path}' \
 # the restore quietly re-evened the window, every assertion on a declared
 # layout would still pass while the user's arrangement was lost.
 build() {
-	cleanup
+	rotate
 	tm new-session -d -s t -x 120 -y 60 -c /tmp
 	tm source-file "$HERE/share/mux.tmux"
 	tm split-window -t t -c /etc "echo MARK_A; exec \"\${SHELL:-/bin/sh}\""
