@@ -1016,3 +1016,32 @@ t mux-latch-stall
 - _DEF_ALIVE="$_DEF_ALIVE -o ConnectTimeout=10"
 + _DEF_ALIVE="$_DEF_ALIVE -o ConnectTimeout=0"
 m stalling at [silent] was NOT bounded
+
+
+= beat-never-corroborates
+f libexec/agent-state-emit
+t mux-session-names
+- 		rm -f "$_beatf" 2>/dev/null || true
++ 		exit 0
+m a SECOND beat did not corroborate
+
+= beat-mark-survives-a-transition
+f libexec/agent-state-emit
+t mux-session-names
+- [ "$state" = "${_pstate:-}" ] || rm -f "$_beatf" 2>/dev/null || true
++ 	:
+m did not clear the beat mark
+
+= beat-never-marks-the-first
+f libexec/agent-state-emit
+t mux-session-names
+- 	if [ -z "$_bfirst" ]; then
++ 	if true; then
+m a SECOND beat did not corroborate
+
+= beat-window-ignored
+f libexec/agent-state-emit
+t mux-session-names
+- 	if [ "$((_bnow - _bfirst))" -le "$_BEAT_WINDOW" ] \
++ 	if true \
+m far outside the window
