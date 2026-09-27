@@ -1,0 +1,56 @@
+#!/bin/sh
+# mux-agent-hook: an agent lifecycle EVENT, translated to mux's state.
+#
+#   mux agent-hook <EventName>
+#
+# THE MAPPING IS MUX'S, WHICH IS THE WHOLE POINT. Until now an integrator's
+# hooks.json spelled out mux's own vocabulary -- which event means `working`,
+# which means `idle`, which is only a `--beat` -- so the state machine was
+# written down in somebody else's repo and mux could not change it without a
+# coordinated release. Here the wiring says only WHAT HAPPENED and mux decides
+# what that means, which is the direction already settled for this contract:
+# mux defines what wiring must promise, never the reverse.
+#
+# It also means a rule change ships as a mux release. When `--beat` stopped
+# being able to resurrect a turn, that was a plugin edit; the next such change
+# is a line in the table below.
+#
+# --source travels automatically, so a transition in `mux log` names the hook
+# that caused it. `Stop` and `SessionStart` both resolve to `idle`, and
+# telling them apart afterwards is exactly what the breadcrumb is for: a
+# record that went idle MID-TURN is one of them and the record alone cannot
+# say which.
+set -eu
+
+_lib=$(dirname "$0")
+
+_ev=${1:-}
+[ -n "$_ev" ] || {
+	echo "usage: mux agent-hook <EventName>" >&2; exit 2; }
+[ $# -eq 1 ] || {
+	echo "mux: agent-hook takes one event name" >&2; exit 2; }
+
+# THE TABLE. A beat is an event that merely WITNESSES activity; only a turn
+# START may create `working` out of `idle`, which is why PostToolUse and
+# SubagentStop are beats and UserPromptSubmit is not.
+case $_ev in
+UserPromptSubmit) set -- working ;;
+PostToolUse)      set -- working --beat ;;
+SubagentStop)     set -- working --beat ;;
+Notification)     set -- blocked ;;
+Stop)             set -- idle ;;
+SessionStart)     set -- idle ;;
+*)
+	# LOUD, not silent. An unset seam means nobody asked for anything and
+	# says nothing; a NAMED event mux does not know is a wiring error, and
+	# the integrator is claiming a contract that does not exist. The hook
+	# ends in `|| true` on its side, so the agent is never harmed by this.
+	if [ -r "$_lib/mux-log.sh" ]; then
+		. "$_lib/mux-log.sh"
+		mux_log agent "unknown hook event: $_ev"
+	fi
+	echo "mux: agent-hook: unknown event: $_ev" >&2
+	exit 2 ;;
+esac
+
+exec "$_lib/agent-state-emit" "$@" --source "$_ev"

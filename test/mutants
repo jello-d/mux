@@ -1087,3 +1087,31 @@ t mux-check
 - 	_want_keys=$(sed -n \
 + 	_want_keys=$(printf '( ) b r R' \
 m not bound to mux
+
+= agent-hook-notification-not-blocked
+f libexec/mux-agent-hook
+t mux-agent-hook
+- Notification)     set -- blocked ;;
++ Notification)     set -- working ;;
+m Notification mapped to
+
+= agent-hook-posttooluse-not-a-beat
+f libexec/mux-agent-hook
+t mux-agent-hook
+- PostToolUse)      set -- working --beat ;;
++ PostToolUse)      set -- working ;;
+m PostToolUse is not being passed as a --beat
+
+= agent-hook-drops-the-source
+f libexec/mux-agent-hook
+t mux-agent-hook
+- exec "$_lib/agent-state-emit" "$@" --source "$_ev"
++ exec "$_lib/agent-state-emit" "$@"
+m did not reach the log
+
+= agent-hook-unknown-event-silent
+f libexec/mux-agent-hook
+t mux-agent-hook
+- 	echo "mux: agent-hook: unknown event: $_ev" >&2
++ 	exit 0
+m an unknown event must exit 2
