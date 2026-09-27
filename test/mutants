@@ -1073,3 +1073,17 @@ t mux-even
 - 		if [ -n "$_consensus" ]; then
 + 		if true; then
 m it claimed to restore a spec
+
+= check-blind-to-hooks
+f libexec/mux-check
+t mux-check
+- 			| grep -qE 'mux |@mux-' || _nh="$_nh $_h"
++ 			| grep -qE '.' || _nh="$_nh $_h"
+m a foreign hook was accepted
+
+= check-keys-hardcoded
+f libexec/mux-check
+t mux-check
+- 	_want_keys=$(sed -n \
++ 	_want_keys=$(printf '( ) b r R' \
+m not bound to mux
