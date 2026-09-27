@@ -136,18 +136,30 @@ _hook() {   # <value> -> the value with its command resolved
 # channel and give up on their own schedule: 5s x 3 means ssh returns 255 in
 # about 15 seconds and latch is back in `probing` where it belongs.
 #
-# AND ConnectTimeout, WHICH COVERS A DIFFERENT PHASE. ServerAlive probes do not
-# start until a session EXISTS, so they do nothing about a peer that accepts the
-# connection and then says nothing -- a half-open NAT entry, a wedged sshd, an
-# MTU blackhole during key exchange. Measured against exactly that:
+# AND ConnectTimeout, WHICH COVERS A DIFFERENT PHASE -- a NARROWER one than
+# this comment used to claim. Re-measured 2026-09-27 against a peer that stalls
+# at a CHOSEN point, because the original test only ever used a peer that sent
+# nothing at all, and both conclusions drawn from it were over-general:
 #
-#   no timeouts at all      still waiting after 40s
-#   ConnectTimeout=5        gives up in 5s
-#   ServerAliveInterval=5   still waiting after 40s
+#   peer stalls at        no timeouts   ConnectTimeout=5   ServerAlive 2 x 2
+#   silent (no banner)    hangs         5s                 hangs
+#   banner, then stall    hangs         HANGS              4s
+#   kexinit, then stall   hangs         HANGS              4s
 #
-# ConnectTimeout governs the whole SETUP including the banner exchange, despite
-# its name, and it is safe on a long-lived attach because it stops applying once
-# the session is up. Together the two bound both hang modes.
+# So ConnectTimeout covers only up to RECEIVING THE BANNER; the moment one
+# arrives it is satisfied and stops, which is the opposite of "governs the whole
+# setup". And ServerAlive does NOT need a session -- it bounds the post-banner
+# handshake perfectly well, which is the opposite of "not until a session
+# exists". Each old claim was true of the one peer it was tested against.
+#
+# They are still BOTH needed, for the two halves above, and the pairing is what
+# the table shows: neither covers the other's column.
+#
+# WHAT NEITHER COVERS is a peer that is CONNECTED AND ANSWERING but not making
+# progress -- a box mid-boot whose sshd completes key exchange and then blocks
+# in authentication. ServerAlive cannot help by construction: the peer replies
+# to every probe, so no probe goes unanswered and ssh waits. That is the
+# 342s attempt in the log, and bounding it is latch's job, not an ssh option's.
 _DEF_ALIVE='-o ServerAliveInterval=5 -o ServerAliveCountMax=3'
 _DEF_ALIVE="$_DEF_ALIVE -o ConnectTimeout=10"
 _DEF_TRANSPORT="ssh -t $_DEF_ALIVE %h sh -lc %q"
