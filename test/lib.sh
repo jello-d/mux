@@ -66,3 +66,28 @@ agent_rec() {   # FILE STATE PANE EPOCH SESSION [NOTIF]
 	mkdir -p -- "$(dirname -- "$1")"
 	printf '%s 0 %s %s %s %s\n' "$2" "$3" "$4" "${6:--}" "$5" >"$1"
 }
+
+# tmux_fresh_socket [PREFIX] -> a socket name this test run has not used.
+#
+# NEVER REUSE A SOCKET YOU HAVE KILLED. `tmux kill-server` returns to the
+# CLIENT before the server has finished exiting, so killing a socket and
+# immediately starting a session on the SAME name races the teardown: the new
+# client connects to the dying server and gets "server exited unexpectedly".
+#
+# MEASURED 2026-09-26, and the window is not narrow: 30 failures in 60 tight
+# kill-then-create cycles, failing on every SECOND iteration because a failed
+# create leaves no server for the next kill to race. With a fresh name each
+# time, 0 in 60.
+#
+# This is what made mux-undo-pane.t flake under the full suite and never alone:
+# its build() killed and recreated one socket four times per run, and load
+# widens the window. It cost two no-verdict failures before being chased.
+#
+# The caller kills the old server FIRE AND FORGET and must not wait for it.
+# Waiting is the part that cannot be done: the socket FILE outlives the server
+# by seconds (checked, still present after 2s), so it is not the signal either.
+_tmux_sock_n=0
+tmux_fresh_socket() {   # [prefix]
+	_tmux_sock_n=$((_tmux_sock_n + 1))
+	printf '%s%s-%s' "${1:-muxt}" "$$" "$_tmux_sock_n"
+}

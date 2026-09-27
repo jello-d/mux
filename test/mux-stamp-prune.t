@@ -23,7 +23,7 @@ _name=mux-stamp-prune
 command -v tmux >/dev/null 2>&1 || {
 	printf 'skip %s (no tmux)\n' "$_name"; exit 0; }
 
-SOCK=muxprune$$
+SOCK=$(tmux_fresh_socket muxprune)
 cleanup() { tmux -L "$SOCK" kill-server 2>/dev/null || true; rm -rf "$T"; }
 trap cleanup EXIT INT TERM
 
@@ -37,7 +37,11 @@ n_stamps() {
 	echo "$_n"
 }
 
-tmux -L "$SOCK" kill-server 2>/dev/null || true
+# NO DEFENSIVE kill-server FIRST. The name is fresh, so there is nothing to
+# kill -- and killing then immediately creating on one socket races tmux's
+# teardown (see tmux_fresh_socket). Here that race was WORSE than a failure:
+# the create is guarded by a skip, so losing it reported "cannot start a tmux
+# server" and quietly dropped the whole file's coverage.
 tmux -L "$SOCK" new-session -d -s keepme 'sleep 120' 2>/dev/null \
 	|| { printf 'skip %s (cannot start a tmux server)\n' "$_name"; exit 0; }
 
