@@ -167,7 +167,7 @@ if [ -d "$MUX_DIR" ]; then
 			[ -e "$_b" ] || continue
 			_bn=${_b##*/}; _bn=${_bn%.profile}
 			if awk '!/^[[:space:]]*#/ && NF {print $1}' \
-				"$MUX_DIR/profiles" | grep -qxF "$_bn"; then
+				"$MUX_DIR/profiles" | grep -qxF -- "$_bn"; then
 				warn "'$_bn' is both a row and a breakout file"
 				warn "  the file wins; drop the row"
 			fi

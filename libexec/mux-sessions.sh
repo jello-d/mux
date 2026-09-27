@@ -77,7 +77,7 @@ mux_sess_has() {        # <name> [key]
 	[ -n "${1:-}" ] || return 1
 	_sf=$(mux_sess_file "${2:-}")
 	[ -f "$_sf" ] || return 1
-	cut -f1 "$_sf" 2>/dev/null | grep -qxF "$1"
+	cut -f1 "$_sf" 2>/dev/null | grep -qxF -- "$1"
 }
 
 # mux_sess_add NAME ROOT [key] -> record NAME if it is not already there.

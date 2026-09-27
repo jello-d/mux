@@ -74,7 +74,7 @@ mux_prof_get() {        # <name> <key>
 
 # mux_prof_has NAME -> true when the table carries a row for NAME.
 mux_prof_has() {        # <name>
-	mux_prof_names | grep -qxF "$1"
+	mux_prof_names | grep -qxF -- "$1"
 }
 
 # mux_prof_by_root DIR -> the name of the row whose `root` IS DIR, or empty.
