@@ -315,6 +315,57 @@ emit working --beat
 [ "$(recstate)" = working ] \
 	|| fail "--beat dropped a live 'working'"
 
+# --- ONE beat is a straggler; TWO are work -------------------------------
+# The refusal above is right about a trailing event and wrong about the other
+# half, which is live: an agent continuing in AUTO MODE starts its turn with no
+# UserPromptSubmit, so nothing may ever create `working` again and the session
+# reads DONE while it works. Seen on manifold 2026-09-27 -- vigilance idle for
+# 9 minutes of a 34-minute turn, unrecoverable until a human typed something.
+#
+# So a beat over `idle` leaves a MARK, and a second beat inside the window
+# corroborates it. Asserted as a sequence, because each step is a different
+# failure: promoting on the first beat is the straggler bug returning, and
+# never promoting is the bug this exists to fix.
+BEATF=$T/run/agent-state/global/30.beat
+agent_rec "$T/run/agent-state/global/30" idle %30 100 vicus
+rm -f "$BEATF"
+emit working --beat
+[ "$(recstate)" = idle ] \
+	|| fail "the FIRST beat promoted; a lone straggler must not"
+[ -f "$BEATF" ] || fail "the first beat left no mark to corroborate"
+
+emit working --beat
+[ "$(recstate)" = working ] \
+	|| fail "a SECOND beat did not corroborate the first, so an agent
+working in auto mode can never be seen again"
+[ -f "$BEATF" ] && fail "the mark survived the promotion it caused"
+
+# A LAPSED window does not corroborate. Two beats far apart are two
+# stragglers, not sustained work, and the whole discriminator is sustained.
+agent_rec "$T/run/agent-state/global/30" idle %30 100 vicus
+printf '1\n' >"$BEATF"          # an ancient first beat
+emit working --beat
+[ "$(recstate)" = idle ] \
+	|| fail "a beat corroborated a mark far outside the window"
+
+# A REAL TRANSITION CLEARS THE MARK. Otherwise a mark left by a beat during
+# one turn lets a straggler in the NEXT turn find corroboration it never
+# earned -- the straggler bug, reintroduced through the back door.
+agent_rec "$T/run/agent-state/global/30" idle %30 100 vicus
+rm -f "$BEATF"
+emit working --beat               # leaves a mark
+[ -f "$BEATF" ] || fail "setup: expected a mark"
+# A GENUINE transition. Not `blocked`, which this emit path deliberately
+# downgrades to `idle` when the record is already idle (the "waiting for
+# input" nudge), so it changes nothing and correctly clears nothing.
+emit working                      # the bare compatibility form
+[ "$(recstate)" = working ] || fail "setup: expected the bare form to promote"
+[ -f "$BEATF" ] && fail "a state transition did not clear the beat mark"
+agent_rec "$T/run/agent-state/global/30" idle %30 100 vicus
+emit working --beat
+[ "$(recstate)" = idle ] \
+	|| fail "a single beat promoted using a mark from a previous turn"
+
 # And `blocked` -> `working` is a LEGITIMATE promotion: you approved a
 # permission prompt and the tool ran. Scoped to idle, nothing wider.
 agent_rec "$T/run/agent-state/global/30" blocked %30 100 vicus

@@ -8,10 +8,26 @@ set -eu
 
 # STATE, plus an optional --beat. Parsed rather than taken as $1 so a
 # hook can pass them in either order.
-state= _beat=
+state= _beat= _src=
 while [ $# -gt 0 ]; do
 	case $1 in
 	--beat) _beat=1 ;;
+	# --source NAME: which hook is speaking. OPTIONAL, and mux never
+	# requires it -- an integrator that does not pass one is not broken,
+	# it is just quieter. THE CONTRACT IS MUX'S TO OWN: this defines the
+	# shape of the answer now, so wiring it later is a plugin edit and not
+	# a negotiation.
+	#
+	# WHY IT IS NEEDED. `Stop` and `SessionStart` BOTH send plain `idle`,
+	# so a record that went idle mid-turn cannot be blamed on either. That
+	# exact ambiguity is live: on 2026-09-27 a vigilance session on
+	# manifold went idle 9 minutes into a 34-minute auto-mode turn and the
+	# two candidates were indistinguishable from the record alone.
+	--source) shift
+		[ $# -gt 0 ] || {
+			echo "agent-state-emit: --source wants a name" >&2
+			exit 2; }
+		_src=$1 ;;
 	-*) echo "agent-state-emit: unknown option: $1" >&2; exit 2 ;;
 	*)
 		[ -z "$state" ] || {
@@ -21,7 +37,8 @@ while [ $# -gt 0 ]; do
 	shift
 done
 [ -n "$state" ] || {
-	echo "usage: agent-state-emit STATE [--beat]" >&2; exit 2; }
+	echo "usage: agent-state-emit STATE [--beat] [--source NAME]" >&2
+	exit 2; }
 
 # No tmux pane means nothing to track. Exit clean so the hook never fails.
 [ -n "${TMUX_PANE:-}" ] || exit 0
@@ -30,6 +47,10 @@ done
 _lib=$(dirname "$0")
 . "$_lib/mux-agent-state.sh"
 . "$_lib/mux-notify.sh"
+# mux_log, for TRANSITIONS only -- see the write below. A beat that merely
+# refreshes an unchanged state is not a change and is not logged, or a busy
+# session would fill the log with "still working" at tool-call rate.
+. "$_lib/mux-log.sh"
 
 # The state dir, namespaced by tmux socket so a work session and a personal one
 # -- separate tmux servers sharing this runtime dir -- never collide on pane
@@ -79,8 +100,60 @@ fi
 # promotion is LEGITIMATE (you approved a permission prompt and the tool ran),
 # and an absent record means the turn start was missed, where recording
 # something beats recording nothing.
+# A SINGLE trailing beat is a straggler; SUSTAINED beats are work. Refusing
+# every beat over `idle` was right about the straggler and wrong about the
+# other half, and the other half is live: an agent continuing in AUTO MODE
+# starts a turn with no UserPromptSubmit at all, so nothing is ever allowed to
+# create `working` again and the session reads DONE while it works. Seen on
+# manifold 2026-09-27: vigilance idle for 9 minutes of a 34-minute turn, and
+# unrecoverable until a human typed something.
+#
+# The two are distinguishable without guessing at clocks. A straggler is ONE
+# event arriving after the turn ended and then silence; an agent actually
+# working keeps calling tools. So a beat over `idle` does not promote on its
+# own -- it leaves a mark, and a SECOND beat within the window corroborates it.
+#
+# The mark is a sidecar, not a new record field: the record's format is read by
+# a single `read -r` in several programs and widening it has already cost this
+# codebase a day (see the session-name field move).
+#
+# WHAT THIS STILL DOES NOT COVER, said plainly: a turn that makes no tool calls
+# at all. The 34-minute case above was one long model call, so there were no
+# beats to corroborate and the record stayed idle until the first tool ran.
+# mux can only know what the agent tells it, and in auto mode tool calls are
+# the only thing it says.
+_beatf=$file.beat
+_BEAT_WINDOW=${MUX_AGENT_BEAT_WINDOW:-300}
 if [ -n "$_beat" ] && [ "$_pstate" = idle ]; then
-	exit 0
+	_bnow=$(date +%s 2>/dev/null || echo 0)
+	_bfirst=
+	[ -f "$_beatf" ] && read -r _bfirst 2>/dev/null <"$_beatf"
+	case ${_bfirst:-} in
+	''|*[!0-9]*) _bfirst= ;;
+	esac
+	# The no-mark case is handled FIRST and on its own, rather than folded
+	# into the window test below. Folded, it was redundant: an absent mark
+	# reads as 0 in the arithmetic, so the age comes out enormous and the
+	# window test already rejects it -- which made the guard impossible to
+	# kill, the corpus said so, and belt-and-braces that measures as
+	# untestable is the shape this codebase deletes rather than defends.
+	if [ -z "$_bfirst" ]; then
+		printf '%s\n' "$_bnow" 2>/dev/null >"$_beatf" || true
+		exit 0
+	fi
+	if [ "$((_bnow - _bfirst))" -le "$_BEAT_WINDOW" ] \
+	   && [ "$_bnow" -ge "$_bfirst" ]; then
+		# Corroborated: fall through and write `working`.
+		rm -f "$_beatf" 2>/dev/null || true
+		mux_log agent \
+			"beat corroborated: ${_ps:-?} back to working" \
+			"${_src:+(}${_src:-}${_src:+)}"
+	else
+		# The window lapsed. Two beats this far apart are two
+		# stragglers, not sustained work: restart the clock.
+		printf '%s\n' "$_bnow" 2>/dev/null >"$_beatf" || true
+		exit 0
+	fi
 fi
 
 # Claude Code fires Notification for TWO things: a permission prompt (mid-work),
@@ -214,6 +287,23 @@ fi
 # notif is `-` when absent, never empty. An empty field collapses in the
 # whitespace run and shifts everything after it, which would reintroduce the
 # same bug from the other end.
+# A REAL TRANSITION CLEARS THE BEAT MARK. The mark only means "one unexplained
+# beat landed on an idle record"; once the state moves for any reason the
+# question it was asking is answered, and a stale mark would let a much later
+# straggler find corroboration it never earned.
+[ "$state" = "${_pstate:-}" ] || rm -f "$_beatf" 2>/dev/null || true
+
+# THE TRANSITION IS THE LOG LINE, never the refresh. A beat landing on an
+# unchanged `working` is the common case and says nothing new; logging it would
+# fill the file at tool-call rate. `--source` is included when the caller named
+# itself, which is the whole point of accepting it: `Stop` and `SessionStart`
+# both write plain `idle`, and only the caller can say which one did.
+if [ "$state" != "${_pstate:-}" ]; then
+	mux_log agent \
+		"${_sess:-?} ${_pstate:--} -> $state" \
+		"${_src:+via }${_src:-}"
+fi
+
 _tmp=$file.$$
 printf '%s %s %s %s %s %s\n' \
         "$state" "$_win" "$TMUX_PANE" "$epoch" "${notif:--}" "$_sess" \
