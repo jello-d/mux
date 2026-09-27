@@ -257,15 +257,56 @@ else
 				if (index($0, "mux ") > 0) found = 1 }
 			END { exit !found }'
 	}
+	# THE LIST IS READ OUT OF share/mux.tmux, NOT WRITTEN DOWN HERE, and
+	# that is the whole repair. A hand-kept list went stale exactly as you
+	# would expect: it said `( ) b r R` while the fragment had also bound
+	# `u` (0.43) and `E` (0.50), so a server missing both passed clean.
+	# Deriving it means the assertion grows with the fragment and cannot
+	# drift from it again.
+	_want_keys=$(sed -n \
+		's/^bind \([^ -][^ ]*\) run-shell "mux .*/\1/p' \
+		"$MUX_SHARE/mux.tmux" 2>/dev/null | sort -u | tr '\n' ' ')
 	_nb=
-	for _k in '(' ')' b r R; do
+	for _k in $_want_keys; do
 		_bound "$_k" || _nb="$_nb $_k"
 	done
-	if [ -z "$_nb" ]; then
-		ok "key bindings live (prefix ( ) b r R)"
+	if [ -z "$_want_keys" ]; then
+		warn "cannot read $MUX_SHARE/mux.tmux to learn the bindings"
+	elif [ -z "$_nb" ]; then
+		ok "key bindings live (prefix $_want_keys)"
 	else
 		bad "key binding(s) not bound to mux:$_nb"
 		bad "  the fragment is not sourced: source-file .../share/mux.tmux"
+	fi
+
+	# AND THE HOOKS, which nothing checked at all until 2026-09-27. The
+	# bindings above are the visible half; the hooks are the half that
+	# carries `mux undo-pane`'s trackers and its recorder, the bottom-pane
+	# pin, and the status style. A server started before a feature landed
+	# keeps running without them and every other marker stays green --
+	# which is exactly what happened: `prefix u` and the whole
+	# window-layout-changed set were absent from a live server while this
+	# reported clean, for two releases.
+	#
+	# INSTALLING A FILE DOES NOT RELOAD A SERVER, and that gap is the whole
+	# point. `tackup` updating mux.tmux on disk changes nothing about a
+	# tmux that has been up for weeks; only `mux reload` does.
+	_want_hooks=$(sed -n 's/^set-hook -[ag]* \([a-z-]*\) .*/\1/p' \
+		"$MUX_SHARE/mux.tmux" 2>/dev/null | sort -u)
+	_nh=
+	for _h in $_want_hooks; do
+		# Present AND mux's: a hook tmux kept from another config is
+		# not this one, the same reasoning the binding check uses.
+		_vt show-hooks -g "$_h" 2>/dev/null \
+			| grep -qE 'mux |@mux-' || _nh="$_nh $_h"
+	done
+	if [ -z "$_want_hooks" ]; then
+		:                       # already warned about the fragment
+	elif [ -z "$_nh" ]; then
+		ok "tmux hooks live ($(printf '%s' "$_want_hooks" | tr '\n' ' '))"
+	else
+		bad "tmux hook(s) missing or not mux's:$_nh"
+		bad "  this server predates them -- run: mux reload"
 	fi
 
 	# The status bar is drawn by two #() jobs. If either is not mux's, the

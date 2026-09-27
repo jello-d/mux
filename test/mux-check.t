@@ -23,14 +23,19 @@ cp -R "$HERE/share/." "$T/share/"
 # present a BROKEN server without any other case inheriting it. With the files
 # absent it prints nothing and exits 0, which is what every case before the
 # tmux-state section expects (and what "no server attached" looks like).
-KEYS=$T/keys; SROPT=$T/sropt; SLOPT=$T/slopt
-export KEYS SROPT SLOPT
+KEYS=$T/keys; SROPT=$T/sropt; SLOPT=$T/slopt; HOOKS=$T/hooks
+export KEYS SROPT SLOPT HOOKS
 cat >"$T/bin/tmux" <<'EOF'
 #!/bin/sh
 case "$*" in
 *list-keys*)                       [ -f "$KEYS" ]  && cat "$KEYS" ;;
 *"show-options -gv status-right"*) [ -f "$SROPT" ] && cat "$SROPT" ;;
 *"show-options -gv status-left"*)  [ -f "$SLOPT" ] && cat "$SLOPT" ;;
+# FILTERED BY THE HOOK ASKED FOR, like the real thing. Returning the whole
+# file whatever was requested made a "missing hook" case pass, because some
+# OTHER hook's line mentioned mux and the grep found it.
+*show-hooks*) [ -f "$HOOKS" ] && { for _a in "$@"; do :; done
+              grep "^$_a" "$HOOKS" 2>/dev/null || true; } ;;
 esac
 exit 0
 EOF
@@ -204,13 +209,31 @@ check >/dev/null
 has "status-right is not mux's renderer" "a foreign status-right passed"
 
 # A healthy server: every binding reaches a mux verb, both status jobs are ours.
-cat >"$KEYS" <<'EOF'
-bind-key    -T prefix (       run-shell "mux cycle prev '#{client_name}'"
-bind-key    -T prefix )       run-shell "mux cycle next '#{client_name}'"
-bind-key    -T prefix b       run-shell "mux next-blocked '#{client_name}'"
-bind-key    -T prefix r       run-shell "mux refresh"
-bind-key    -T prefix R       run-shell "mux refresh --force"
-EOF
+# BUILT FROM share/mux.tmux, not typed. A hand-written fixture here is the
+# same mistake the check itself was making: this file listed ( ) b r R while
+# the fragment had also bound u and E, so the test would have gone on passing
+# a server missing both -- asserting a green check against a stale idea of
+# what green means.
+_healthy_keys() {
+	: >"$KEYS"
+	sed -n 's/^bind \([^ -][^ ]*\) run-shell "\(mux .*\)"$/\1 \2/p' \
+		"$HERE/share/mux.tmux" | while read -r _k _cmd; do
+		printf 'bind-key    -T prefix %s       run-shell "%s"\n' \
+			"$_k" "$_cmd"
+	done >>"$KEYS"
+}
+_healthy_keys
+# Every hook the fragment installs, as tmux would report it. A FUNCTION, so
+# the cases below can put the server back: this file's own rule is that one
+# case must never leave a broken server for the next to inherit.
+_healthy_hooks() {
+	: >"$HOOKS"
+	sed -n 's/^set-hook -[ag]* \([a-z-]*\) .*/\1/p' \
+		"$HERE/share/mux.tmux" | sort -u | while read -r _h; do
+		printf '%s[0] run-shell -b "mux pin"\n' "$_h"
+	done >>"$HOOKS"
+}
+_healthy_hooks
 printf '#(mux agent-render #S #{client_name})\n' >"$SROPT"
 printf '#(mux style #S #{pane_pid})#[bold]#S\n' >"$SLOPT"
 check >/dev/null
@@ -218,6 +241,41 @@ has "key bindings live" "a correctly bound server was not recognised"
 has "status-right draws the agent strip" "a correct status-right was not seen"
 has "status-left draws the session chip" "a correct status-left was not seen"
 no_has "not bound to mux" "a healthy server reported broken bindings"
+has "tmux hooks live" "a correctly hooked server was not recognised"
+
+# --- A SERVER CARRYING AN OLDER SET OF BINDINGS ---------------------------
+# The exact live failure, and the one a hardcoded list cannot see: the server
+# has the bindings it was started with, the FRAGMENT has gained more. This
+# check listed `( ) b r R` by hand while mux.tmux had also bound u (0.43) and
+# E (0.50), so a server missing both reported clean for two releases.
+#
+# Asserted by dropping whatever the fragment binds BEYOND that old five, so
+# the case keeps working as more are added rather than pinning today's set.
+grep -vE '^bind-key +-T prefix [uE] ' "$KEYS" >"$KEYS.t"
+mv "$KEYS.t" "$KEYS"
+check >/dev/null
+has "not bound to mux" "a server missing the newer bindings passed clean:
+the wanted list is hardcoded, so it cannot notice a binding the fragment
+gained after it was written"
+_healthy_keys
+
+# --- A HOOK THE SERVER NEVER GOT ------------------------------------------
+# The failure that was invisible for two releases: installing mux.tmux does
+# NOT reload a running server, so a tmux up since before a feature landed
+# keeps running without its hooks while every other marker stays green.
+# Measured live on 2026-09-27 -- `prefix u` and the whole
+# window-layout-changed set were absent and this check said nothing.
+grep -v '^window-layout-changed' "$HOOKS" >"$HOOKS.t"; mv "$HOOKS.t" "$HOOKS"
+check >/dev/null
+has "tmux hook(s) missing" "a server missing a hook passed clean"
+has "mux reload" "the fix was not named"
+
+# ... and a hook that EXISTS but is somebody else's is not ours either, the
+# same reasoning the binding check already uses.
+printf 'window-layout-changed[0] run-shell "something-else"\n' >>"$HOOKS"
+check >/dev/null
+has "tmux hook(s) missing" "a foreign hook was accepted as mux's"
+_healthy_hooks                  # ... and hand the next case a sound server
 
 # status-left is cosmetic, so its absence is a WARN and must NOT fail the run.
 printf '#S\n' >"$SLOPT"
