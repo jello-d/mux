@@ -196,6 +196,43 @@ sleep 0.3
 record alone does not mean something is missing -- the hole may have been
 filled by hand since."
 
+# --- THE PANE'S OWN OPTIONS COME BACK WITH IT -----------------------------
+# Losing @mux-bottom is not cosmetic and not recoverable by looking: `mux pin`
+# skips an unmarked pane AND the width balance refuses (with no marker it
+# cannot tell the bottom pane from the row above), so one dropped option
+# freezes that window's geometry silently and for good. Found on a live
+# session whose panes had drifted to 81|79 with prefix-R doing nothing.
+#
+# Asserted on the OPTION, not on the resulting size: the pane comes back at
+# the right size either way, because the saved LAYOUT sets it. The damage only
+# shows later, the next time something tries to hold that size.
+build
+_bot=$(tm list-panes -t t -F '#{pane_id}' | tail -1)
+tm set-option -p -t "$_bot" @mux-bottom 5-10
+tm set-option -p -t "$_bot" @mux-agent 1
+# A LAYOUT CHANGE IS WHAT LATCHES THE TRACKER. Setting a pane option is not
+# one, so the value is picked up on the next geometry event -- which in mux's
+# own build path is the next split, and in life is any resize. Forced here so
+# the test asserts the restore rather than the hook's timing.
+tm resize-pane -t t.0 -y 29
+_until 5 sh -c 'tmux -L '"$SOCK"' show-options -wqv -t t @mux-uo \
+	| grep -q 5-10' || fail "the option tracker never saw @mux-bottom"
+
+tm send-keys -t "$_bot" 'exit' Enter
+_until 10 _npanes 2 || fail "the bottom pane did not close"
+_until 10 _recorded || fail "no undo record was written"
+tm run-shell "mux undo-pane" >/dev/null 2>&1 || true
+_until 10 _npanes 3 || fail "undo restored no pane"
+
+_new=$(tm list-panes -t t -F '#{pane_id}' | tail -1)
+[ "$(tm show-options -pqv -t "$_new" @mux-bottom)" = 5-10 ] \
+	|| fail "@mux-bottom did not come back on the restored pane, so
+mux pin will skip it and the width balance will refuse -- that window's
+geometry is frozen and nothing says so"
+[ "$(tm show-options -pqv -t "$_new" @mux-agent)" = 1 ] \
+	|| fail "@mux-agent did not come back, so 'mux save' would read the
+running command and record an exited agent as a plain shell"
+
 # --- with nothing closed, it says so --------------------------------------
 build
 _rc=0

@@ -1,0 +1,160 @@
+#!/bin/sh
+# mux-even: put the panes back to the shape the layout asked for.
+#
+#   (no arg)  this window
+#   --all     every window on the server -- the point of the verb, because the
+#             drift you actually NOTICE is between sessions: borders jump as
+#             you cycle, and a window is only ever wrong compared to another.
+#
+# TWO HALVES, and only one of them was reachable before.
+#
+#   HEIGHT is already global: `mux pin` walks every pane on the server and
+#   re-applies @mux-bottom. It runs from the attach and resize hooks, so a
+#   marked bottom pane is held everywhere, always.
+#
+#   WIDTH was not. The balance lived inside `mux refresh`, which acts on the
+#   CURRENT window only, so a row that drifted to 79|81 in a session you were
+#   not looking at stayed that way. That is the gap this closes, and it is why
+#   `--all` is the interesting form rather than a convenience.
+#
+# NOT RUN FROM THE HOOKS, deliberately, and this is the same call `mux refresh`
+# already made: hooks fire on every layout change, so balancing there would
+# silently undo any pane resize the instant you made it. mux pins the bottom
+# HEIGHT automatically because a layout states it; nobody stated these widths,
+# so they are restored when asked for and not before.
+#
+# A WINDOW THAT LOST ITS MARKER IS ADOPTED BACK, FROM ITS SIBLINGS. Losing
+# @mux-bottom breaks BOTH halves, which is worse than it sounds: `mux pin`
+# skips the pane, AND the width balance refuses too, because with no marker it
+# cannot tell which pane is the bottom, sees three panes of unequal height and
+# declines to mangle an arrangement it cannot model. So one lost option freezes
+# the whole window, silently and permanently. Measured on a live session.
+#
+# Inventing a height would be wrong -- it would cement whatever drift is there.
+# But this verb's whole question is "what do the other windows agree on", and
+# the answer is sitting on every other bottom pane on the server. Adopting the
+# server's most common spec IS restoring uniformity, and it is reported rather
+# than done quietly. With nothing to learn from, it reports and changes
+# nothing.
+set -eu
+
+_lib=$(dirname "$0")
+
+_all=0
+case "${1:-}" in
+--all|-a) _all=1 ;;
+'') ;;
+*) echo "usage: mux even [--all]" >&2; exit 2 ;;
+esac
+
+# Even out the widths of one window's TOP ROW -- every pane that is not the
+# mux bottom pane.
+#
+# mux builds a row with `split-window -h` then `select-layout even-horizontal`,
+# so even IS the canonical state; nothing in a layout can ask for an uneven
+# one. tmux redistributes width proportionally on resize, and rounding means a
+# window resized a few times drifts off even and STAYS there. With border-drag
+# unbound there is no way to put it back by hand.
+_balance() {   # <window id>
+	_w=$1
+	_bw=$(tmux display-message -p -t "$_w" '#{window_width}' \
+		2>/dev/null) || return 0
+	case $_bw in ''|*[!0-9]*) return 0 ;; esac
+	_rows=$(tmux list-panes -t "$_w" \
+		-F '#{pane_id} #{pane_height} #{@mux-bottom}' \
+		2>/dev/null | awk 'NF < 3 { print $1, $2 }')
+	_n=$(printf '%s\n' "$_rows" | grep -c .) || _n=0
+	[ "$_n" -gt 1 ] || return 0             # one pane balances itself
+	# Only a single ROW is safe to even this way: if the non-bottom panes
+	# differ in height they are stacked, not side by side, and setting
+	# widths would mangle an arrangement this does not model. Refuse
+	# rather than guess.
+	_h=$(printf '%s\n' "$_rows" | awk 'NR==1 { print $2 }')
+	printf '%s\n' "$_rows" | awk -v h="$_h" '$2 != h { exit 1 }' || return 0
+	# Width less the one column each border costs, split as evenly as it
+	# goes; the remainder lands on the leftmost panes, which is what
+	# even-horizontal does too.
+	_avail=$((_bw - (_n - 1)))
+	_base=$((_avail / _n))
+	_rem=$((_avail % _n))
+	[ "$_base" -ge 1 ] || return 0
+	_i=0
+	printf '%s\n' "$_rows" | while read -r _pid _ph; do
+		_i=$((_i + 1))
+		[ "$_i" -lt "$_n" ] || break     # the last takes what is left
+		_want=$_base
+		[ "$_i" -le "$_rem" ] && _want=$((_base + 1))
+		tmux resize-pane -t "$_pid" -x "$_want" 2>/dev/null || true
+	done
+	return 0
+}
+
+# A window whose bottom pane lost @mux-bottom: full width, lowest on screen,
+# and unmarked. Reported by NAME because it is actionable -- that window's
+# height cannot be held by `mux pin` and never will be until the option is
+# back. Empty when the window is fine.
+_unpinned() {   # <window id> -> the window's name, or nothing
+	tmux list-panes -t "$1" -F '#{@mux-bottom}' 2>/dev/null \
+		| grep -q . && return 0
+	tmux list-panes -t "$1" \
+		-F '#{pane_width} #{window_width} #{pane_top}' 2>/dev/null \
+		| awk '$1 == $2 && $3 > 0 { found = 1 } END { exit !found }' \
+		|| return 0
+	tmux display-message -p -t "$1" '#{session_name}:#{window_name}' \
+		2>/dev/null || true
+}
+
+if [ "$_all" -eq 1 ]; then
+	_wins=$(tmux list-windows -a -F '#{window_id}' 2>/dev/null || true)
+else
+	_wins=$(tmux display-message -p '#{window_id}' 2>/dev/null || true)
+fi
+[ -n "$_wins" ] || exit 0
+
+# The spec the rest of the server agrees on: most common wins, and ties go to
+# whichever sorts first, because any consistent answer beats an arbitrary one.
+_consensus=$(tmux list-panes -a -F '#{@mux-bottom}' 2>/dev/null \
+	| grep . | sort | uniq -c | sort -rn \
+	| awk 'NR == 1 { print $2 }')
+
+_lost= _healed=
+for _w in $_wins; do
+	_u=$(_unpinned "$_w")
+	if [ -n "$_u" ]; then
+		if [ -n "$_consensus" ]; then
+			_bp=$(tmux list-panes -t "$_w" \
+				-F '#{pane_width} #{window_width} #{pane_top} #{pane_id}' \
+				2>/dev/null | awk '$1 == $2 && $3 > 0 \
+					{ p = $4; t = $3 } END { print p }')
+			if [ -n "$_bp" ]; then
+				tmux set-option -p -t "$_bp" @mux-bottom \
+					"$_consensus" 2>/dev/null \
+					&& _healed="$_healed $_u"
+			fi
+		else
+			_lost="$_lost $_u"
+		fi
+	fi
+	# AFTER the marker is back, never before: the balance needs it to tell
+	# the bottom pane from the row above.
+	_balance "$_w"
+done
+
+# HEIGHT LAST, and through mux-pin rather than a second copy of its rules: it
+# already walks every pane on the server and knows how a MIN-MAX spec tracks
+# the window. Running it after the widths means one settle, not two.
+[ -x "$_lib/mux-pin" ] && "$_lib/mux-pin" 2>/dev/null || true
+
+if [ -n "$_healed" ]; then
+	echo "mux: restored @mux-bottom=$_consensus (from the other windows)" \
+		>&2
+	echo "mux:  on:$_healed" >&2
+fi
+if [ -n "$_lost" ]; then
+	# stderr, so the useful case stays silent: tmux run-shell pops any
+	# stdout into a view-mode buffer over the active pane, which for a key
+	# binding is a popup you did not ask for.
+	echo "mux: no @mux-bottom, so the height cannot be held:$_lost" >&2
+	echo "mux:   that pane was recreated without its options." >&2
+fi
+exit 0
