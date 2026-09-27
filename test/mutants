@@ -1002,3 +1002,17 @@ t mux-sessions
 - 	cut -f1 "$_sf" 2>/dev/null | grep -qxF -- "$1"
 + 	cut -f1 "$_sf" 2>/dev/null | grep -qxF "$1"
 m a session named -n is not recognised
+
+= latch-serveralive-disabled
+f libexec/mux-latch
+t mux-latch-stall
+- _DEF_ALIVE='-o ServerAliveInterval=5 -o ServerAliveCountMax=3'
++ _DEF_ALIVE='-o ServerAliveInterval=0 -o ServerAliveCountMax=3'
+m stalling at [banner] was NOT bounded
+
+= latch-connecttimeout-disabled
+f libexec/mux-latch
+t mux-latch-stall
+- _DEF_ALIVE="$_DEF_ALIVE -o ConnectTimeout=10"
++ _DEF_ALIVE="$_DEF_ALIVE -o ConnectTimeout=0"
+m stalling at [silent] was NOT bounded
