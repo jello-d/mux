@@ -50,22 +50,32 @@ ssh -O check "$_host" >/dev/null 2>&1 && exit 0
 # NOT this hook's job -- auth has its own hook, and answering 1 for an auth
 # problem would park latch in a retry loop for something only a human can fix.
 # So only a plain connection failure is 1, and everything else is 78.
-# ConnectTimeout IS the bound that matters, and it covers more than its name
-# suggests. Measured against a peer that accepts the TCP connection and then
-# says nothing (a half-open NAT entry, a wedged sshd, an MTU blackhole during
-# key exchange):
+# ConnectTimeout IS NOT THE BOUND THAT MATTERS HERE, which a re-measurement
+# corrected on 2026-09-27. It covers only up to RECEIVING THE BANNER; the moment
+# one arrives it is satisfied and stops. Against a peer that stalls at a chosen
+# point in the handshake:
 #
-#   no timeouts at all      still waiting after 40s
-#   ConnectTimeout=5        gives up in 5s
-#   ServerAliveInterval=5   still waiting after 40s
+#   peer stalls at        no timeouts   ConnectTimeout=5   ServerAlive 2 x 2
+#   silent (no banner)    hangs         5s                 hangs
+#   banner, then stall    hangs         HANGS              4s
+#   kexinit, then stall   hangs         HANGS              4s
 #
-# So ConnectTimeout governs the whole connection SETUP including the banner
-# exchange, not just the TCP handshake, while ServerAlive probes do nothing
-# until a session exists. Both are needed, for different phases.
+# The older note here claimed it "governs the whole connection SETUP including
+# the banner exchange" and that ServerAlive does nothing until a session exists.
+# Both were generalised from the single silent peer they were tested against.
 #
-# timeout(1) stays as a backstop anyway, because a probe is bounded BY CONTRACT
-# and should not depend on which ssh option happens to enforce it. A probe that
-# has not answered in ten seconds has already answered.
+# SO timeout(1) IS DOING THE REAL WORK, not merely backing up an ssh option that
+# already covers it. This probe sets no ServerAlive, so past the banner NOTHING
+# in ssh bounds it and only the wrapper does. That is the case the open 342s
+# hang lives in -- a box mid-boot whose sshd completes key exchange and then
+# blocks in authentication, answering every keepalive while making no progress.
+# Verified: against a post-banner stall this exits 124 at the bound, which maps
+# to 1 below and parks latch in a visible backoff instead of a silent wait.
+#
+# Which is the general principle the original comment already had right, for
+# better reasons than it knew: a probe is bounded BY CONTRACT and must not
+# depend on which ssh option happens to enforce it. A probe that has not
+# answered in ten seconds has already answered.
 _PROBE_MAX=${MUX_SSH_PROBE_TIMEOUT:-10}
 _bound() {
 	if command -v timeout >/dev/null 2>&1; then
