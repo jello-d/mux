@@ -128,6 +128,34 @@ if [ -s "$_bad" ]; then
 	exit 1
 fi
 
+# --- a grep PATTERN that came from a name needs `--` ---------------------
+# `grep -qxF "$name"` parses a leading-dash name as OPTIONS: the match silently
+# fails and grep prints a usage block to stderr. Seven shipped instances when
+# this was added (2026-09-26), across profiles, the session set, check, views
+# and three in bin/mux.
+#
+# The worst was mux_sess_has, because mux_sess_add consults it for idempotence:
+# such a name would be re-appended on EVERY attach and the recorded set would
+# grow without bound, taking `mux resume` with it. tmux refuses to create the
+# name, so all seven were latent -- which is exactly why a rule is worth more
+# than a memory here.
+#
+# Matches a -F/-x/-q grep whose pattern is a "$..." expansion with no `--`
+# before it. A literal pattern is fine, and so is one already guarded.
+_dash=$T/dashgrep
+( cd "$HERE" && grep -rnE \
+	'grep( +-[a-zA-Z]+)* +"\$' \
+	bin libexec share setup.sh 2>/dev/null \
+	| grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' \
+	| grep -vE 'grep( +-[a-zA-Z]+)* +-- ' ) >"$_dash" || true
+if [ -s "$_dash" ]; then
+	printf 'FAIL %s: grep pattern from a variable, with no `--`:\n' "$_name" >&2
+	sed 's/^/  /' "$_dash" >&2
+	printf 'A name starting with `-` is read as OPTIONS.\n' >&2
+	printf 'Write it as: grep -qxF -- "$x"\n' >&2
+	exit 1
+fi
+
 # --- the exit-code contract, mechanically -------------------------------
 # mux uses exactly 0, 1, 2 and 3. The ABSENCE of everything else is what lets a
 # caller attribute 255 to ssh and 127 to a missing binary rather than to mux,

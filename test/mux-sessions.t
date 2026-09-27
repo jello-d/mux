@@ -73,6 +73,30 @@ mux_sess_add spacey "$T/has space" $K
 eq spaced-root "$(mux_sess_root spacey $K)" "$T/has space"
 eq spaced-name "$(mux_sess_list $K | tr '\n' ' ')" "spacey "
 
+# --- A NAME THAT BEGINS WITH A DASH IS A NAME, NOT AN OPTION -------------
+# `grep -qxF "$1"` parses a leading-dash pattern as FLAGS: the match silently
+# fails and grep prints a usage block to stderr. The consequence here is the
+# worst of the seven places this shape appeared, because mux_sess_add consults
+# mux_sess_has for idempotence -- so such a name is re-appended on EVERY
+# attach and the recorded set grows without bound, taking `mux resume` with it.
+#
+# tmux refuses to CREATE such a session (checked: rename-session reads it as a
+# flag), so this is latent rather than live. It is asserted anyway because the
+# lib is a public seam reachable from callers other than tmux, and because the
+# fix is one token.
+mux_sess_clear dashkey
+mux_sess_add "-n" /root/dash dashkey
+mux_sess_has "-n" dashkey \
+	|| fail "a session named -n is not recognised: grep read it as an option"
+mux_sess_add "-n" /root/dash dashkey          # idempotent, or the set grows
+_c=$(mux_sess_list dashkey | grep -c . || true)
+[ "$_c" = 1 ] || fail "a dash-named session was recorded $_c times"
+[ "$(mux_sess_root "-n" dashkey)" = /root/dash ] \
+	|| fail "a dash-named session lost its root"
+mux_sess_drop "-n" dashkey
+[ "$(mux_sess_list dashkey | grep -c . || true)" = 0 ] \
+	|| fail "a dash-named session could not be dropped"
+
 # --- membership is NOT "has a root" -------------------------------------
 # mux_sess_has answers whether a name is RECORDED. A record may legitimately
 # carry an EMPTY root (tmux could not report session_path when it was added),

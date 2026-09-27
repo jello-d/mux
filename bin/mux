@@ -1998,12 +1998,12 @@ hide|show)
                         echo "mux: no such session: $name" >&2
                         exit "$MUX_EX_NONAME"; }
                 if [ "$cmd" = hide ]; then
-                        grep -qxF "$name" "$_f" 2>/dev/null \
+                        grep -qxF -- "$name" "$_f" 2>/dev/null \
                                 || printf '%s\n' "$name" >> "$_f"
                         echo "mux: hid $name for this client"
                 else
                         if [ -f "$_f" ]; then
-                                grep -vxF "$name" "$_f" > "$_f.new" || true
+                                grep -vxF -- "$name" "$_f" > "$_f.new" || true
                                 mv -f "$_f.new" "$_f"
                         fi
                         echo "mux: showing $name for this client"
@@ -2344,7 +2344,7 @@ cmd_new() {
                 # Binding it to the directory it already means is a harmless
                 # no-op, so only a conflicting root is refused.
                 _other=$(mux_scan_lookup "$name" "$part" \
-                        | grep -vxF "$base" | head -1)
+                        | grep -vxF -- "$base" | head -1)
                 if [ -n "$_other" ]; then
                         echo "mux: '$name' already means $_other" >&2
                         echo "mux: choose another name, or --force to" \

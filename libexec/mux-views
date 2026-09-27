@@ -63,7 +63,7 @@ next)
 	exit 0 ;;
 --detach)
 	[ -n "${2:-}" ] || { echo "mux: views --detach CLIENT" >&2; exit 2; }
-	mux_view_clients | awk '{print $1}' | grep -qxF "$2" || {
+	mux_view_clients | awk '{print $1}' | grep -qxF -- "$2" || {
 		echo "mux: no such client: $2" >&2
 		echo "mux: see them with  mux views" >&2
 		exit 1; }
