@@ -132,6 +132,27 @@ case $(tm list-panes -t far -F '#{pane_width}' | tr '\n' ' ') in
 list-panes -t far -F '#{pane_width}' | tr '\n' ' ')]" ;;
 esac
 
+# --- HEADLESS: outside tmux it must still reach the right server ----------
+# `mux even` is mostly a key binding, so the case that works hid the one that
+# did not: every tmux call was bare, which outside tmux reaches the DEFAULT
+# socket. `mux even --all` from a shell therefore found no windows and exited
+# 0 having done nothing -- silent, and indistinguishable from "already tidy".
+# Headless the socket comes from MUX_CTX_PARTITION, which is the partition
+# this verb is scoped to.
+build
+tm resize-pane -t t.0 -x 81
+case $(geom) in
+"81x"*) ;;
+*) fail "setup: expected a drifted row, got [$(geom)]" ;;
+esac
+env -u TMUX MUX_CTX_PARTITION="$SOCK" "$HERE/libexec/mux-even" --all \
+	>/dev/null 2>&1 || true
+case $(geom) in
+"80x"*"80x"*) ;;
+*) fail "headless did not reach the partition's server: [$(geom)] -- it
+went to the default socket, found nothing, and exited 0" ;;
+esac
+
 # --- an unknown option is an error ----------------------------------------
 _rc=0
 mux even --nope >/dev/null 2>&1 || _rc=$?

@@ -1158,3 +1158,10 @@ t mux-indicator
 -         await _fire(shlex.split(hook) + [label or me], f"focus {label or me}")
 +         await _fire(["sh", "-c", hook, label or me], "focus")
 m test_the_hook_is_SPLIT_not_shelled
+
+= even-headless-wrong-socket
+f libexec/mux-even
+t mux-even
+- 	else tmux -L "$_ns" "$@"; fi
++ 	else tmux "$@"; fi
+m headless did not reach the partition's server
