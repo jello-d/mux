@@ -19,10 +19,17 @@
 # Without it kitten exits non-zero, which the indicator reports rather than
 # swallowing, so a misconfigured hook says so instead of doing nothing.
 #
-# MATCHED ON THE TITLE, because that is the only thing a latch terminal and
-# this script reliably agree on. `mux latch <host>` leaves the host name in
-# the window title; if yours does not, match on something that does -- this
-# is a sample, and the match is the part most likely to need changing.
+# MATCHED ON `[host]`, WHICH MUX ITSELF EMITS. share/mux.tmux sets
+#
+#     set-titles-string '#{@mux-prefix}#S:#W....[#{host_short}]'
+#
+# so every mux window's title ends in the host in SQUARE BRACKETS -- and
+# host_short is the tmux SERVER's hostname, so a latched session advertises
+# the REMOTE's name in the terminal in front of you. That is exactly the label
+# the indicator hands this hook.
+#
+# The brackets are not decoration: matching the bare name would also match a
+# SESSION called `manifold`, or a path in the title. Anchor on what mux emits.
 set -eu
 
 _label=${1:-}
@@ -32,5 +39,5 @@ command -v kitten >/dev/null 2>&1 || {
 
 # 78 is "cannot answer", the same code latch's hooks use for it: not being
 # able to find the window is different from failing to raise one.
-kitten @ focus-window --match "title:$_label" 2>/dev/null || {
+kitten @ focus-window --match "title:\\[$_label\\]" 2>/dev/null || {
 	echo "focus-kitty: no kitty window titled '$_label'" >&2; exit 78; }
