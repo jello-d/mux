@@ -7,7 +7,8 @@ belongs.
 NO CONFIG FILE. The set is `mux latch`'s own lock directory, which is already a
 live registry of what this box is attached to: `mux latch` writes
 $XDG_RUNTIME_DIR/mux-latch/<target>.lock at start (pid on line 1, the target
-verbatim on line 2) and removes it via a trap on every exit path. So a host
+verbatim on line 2, and since 0.56 the session on line 3) and removes it via a
+trap on every exit path. So a host
 appears in the tray when you latch to it and leaves when you detach, with
 nothing to stand up, tear down, or keep in sync -- and nothing to edit on each
 machine. A second job for a file that already did it perfectly.

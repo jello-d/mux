@@ -631,7 +631,7 @@ m trap deleted the HOLDER's lock
 = latch-lock-omits-the-target
 f libexec/mux-latch
 t mux-latch
-- printf '%s\n%s\n' "$$" "$_target" >"$_lock"
+- printf '%s\n%s\n%s\n' "$$" "$_target" "$_sess" >"$_lock"
 + printf '%s\n' "$$" >"$_lock"
 m line 2 must be the target
 
@@ -1207,3 +1207,53 @@ t mux-resume
 - elif [ "$cmd" = resume ] && [ "${MUX_CTX_SRC:-baseline}" = failed ]; then
 + elif false; then
 m a FAILED context-command should refuse
+
+= latch-colon-is-a-session-again
+f libexec/mux-latch
+t mux-latch
+- 	if [ -n "$_part" ]; then
++ 	if false; then
+m the colon must name a PARTITION
+
+= latch-bare-host-grows-a-partition
+f libexec/mux-latch
+t mux-latch
+# The EXACT-COMMAND assertion in the %c argv case sees this before the target
+# grammar block does -- every `latch box` in the file becomes `mux resume box`
+# -- so `m` names that one. It owns the bare form's composed command just as
+# legitimately; naming the later assertion would make this record fail for
+# being caught too early.
+- [ "$_part" = "$_target" ] && _part=
++ :
+m %c must arrive as ONE argv element
+
+= latch-partition-takes-the-last-colon
+f libexec/mux-latch
+t mux-latch
+- _part=${_target#*:}
++ _part=${_target##*:}
+m only the FIRST colon splits host from partition
+
+= latch-extra-arguments-ignored
+f libexec/mux-latch
+t mux-latch
+- [ "$#" -le 2 ] || {
++ [ "$#" -le 9 ] || {
+m three arguments must be a usage error
+
+= latch-lock-key-drops-the-session
+f libexec/mux-latch
+t mux-latch
+# Caught by the SINGLE-FLIGHT case before the registry one: with the session
+# gone from the key, `latch box proj` no longer sees the seeded box_proj.lock,
+# which IS the collision this guard prevents, one release earlier in the file.
+- _lockkey=$_target${_sess:+ $_sess}
++ _lockkey=$_target
+m a concurrent latch should refuse
+
+= latch-lock-omits-the-session-line
+f libexec/mux-latch
+t mux-latch
+- printf '%s\n%s\n%s\n' "$$" "$_target" "$_sess" >"$_lock"
++ printf '%s\n%s\n' "$$" "$_target" >"$_lock"
+m line 3 must be the session

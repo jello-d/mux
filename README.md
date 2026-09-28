@@ -494,23 +494,36 @@ mode; `mux views --detach <client>` ends a claim outright.
 
 ### Remote sessions: latch
 
-`mux latch HOST[:SESSION]` holds an attachment to a mux session on another
-machine open across network drops. **Bring your own transport:** mux owns the
-state machine and the attach semantics, and ssh, mosh, Eternal Terminal or
-anything else supplies the pipe. latch never carries a keystroke and knows
+`mux latch HOST[:PARTITION] [SESSION]` holds an attachment to a mux session on
+another machine open across network drops. **Bring your own transport:** mux
+owns the state machine and the attach semantics, and ssh, mosh, Eternal Terminal
+or anything else supplies the pipe. latch never carries a keystroke and knows
 nothing about hosts, addresses or MTUs.
 
 The first field is always the host and the colon is optional; everything after
-the first colon is the session name. What that asks the far side to run:
+the first colon is the **partition**, and the session is a separate second
+argument. What that asks the far side to run:
 
 ```
-mux latch box        ->  mux resume     bring back what that box had
-mux latch box:api    ->  mux go api     that session specifically
+mux latch box             ->  mux resume            what that box had
+mux latch box api         ->  mux go api            that session specifically
+mux latch box:work        ->  mux resume work       another partition's set
+mux latch box:work api    ->  mux resume work api   ... landing on `api`
 ```
+
+**The colon held the session until 0.56**, so `mux latch box:api` changed
+meaning. The partition took the slot because it is the field a remote command
+cannot otherwise reach — every verb but `resume` acts on whatever the far side's
+own context resolved — while a session needs no slot. Which partitions exist is
+the far side's question, so latch does not validate the name: one the remote
+does not know exits 3 there, reported as `gone` with the remote's own message
+naming the partitions it does have.
 
 With no session named it is `mux resume`, and that is the right verb *because*
 of how it creates: after a reboot it restores the sessions you actually had,
-where `go` would build a single empty one.
+where `go` would build a single empty one. Attach-only therefore applies to the
+bare named form only, and nothing is lost either way: `resume` never invents
+anything, and a focus session it does not hold exits 3 rather than creating one.
 
 The question that partitions its states is not which exit code came back, but:
 does resolving this need **a human**, or **patience**?
@@ -598,7 +611,7 @@ mux reload                   re-source tmux.conf on every mux server
 mux kill NAME | kill-all     tear down a session, or all (prompts)
 mux sane                     put the terminal back after a wedged session
 mux go --attach-only [NAME]  attach if live, else refuse (never create)
-mux latch HOST[:SESSION]     hold a remote attachment open across drops
+mux latch HOST[:PART] [SESS] hold a remote attachment open across drops
 mux capabilities             what this mux supports, for other programs
 ```
 
