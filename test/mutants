@@ -1063,8 +1063,8 @@ m the drifted row was not evened
 = even-only-current-window
 f libexec/mux-even
 t mux-even
-- 	_wins=$(tmux list-windows -a -F '#{window_id}' 2>/dev/null || true)
-+ 	_wins=$(tmux display-message -p '#{window_id}' 2>/dev/null || true)
+- 	_wins=$(_tx list-windows -a -F '#{window_id}' 2>/dev/null || true)
++ 	_wins=$(_tx display-message -p '#{window_id}' 2>/dev/null || true)
 m did not reach a session the client is not on
 
 = even-invents-a-spec
