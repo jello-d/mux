@@ -41,8 +41,13 @@ MUX_STATE=$T/state
 export MUX_STATE
 mkdir -p "$MUX_STATE"
 _name=${_name:-$(basename -- "$0")}
-fail() { printf 'FAIL %s: %s\n' "$_name" "$1" >&2; exit 1; }
-pass() { printf 'ok   %s\n' "$_name"; exit 0; }
+# MUX_T_SAID records that a verdict was reached, so a test with an EXIT trap
+# can tell "I already reported" from "I died silently". Under `set -e` any
+# failing command takes a file down with no output at all, and the runner can
+# then only say WHICH file went quiet, never where. A test that drives
+# something contended (a real tmux) can use this to name the step it died on.
+fail() { MUX_T_SAID=1; printf 'FAIL %s: %s\n' "$_name" "$1" >&2; exit 1; }
+pass() { MUX_T_SAID=1; printf 'ok   %s\n' "$_name"; exit 0; }
 
 # agent_rec FILE STATE PANE EPOCH SESSION [NOTIF] -- write ONE per-pane
 # agent-state record, in the current format, to FILE.
