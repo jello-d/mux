@@ -26,15 +26,28 @@ set -eu
 _lib=$(dirname "$0")
 . "$_lib/mux-agent-state.sh"
 
-# No NS given: resolve the caller's partition rather than guessing a name.
+# ARGUMENTS: [--all] [NS]
+#
+#   (none)   the caller's own partition, as "<state> <count>"
+#   NS       that partition, same shape
+#   --all    EVERY partition that has agent state, as
+#            "<partition> <state> <count>" -- one line each.
+#
+# --all EXISTS FOR ONE ROUND TRIP. The tray indicator polls a remote host over
+# ssh, and asking per partition would multiply that cost by the number of
+# partitions on every tick -- for a signal that changes on human timescales
+# and whose poll was deliberately slowed to 5s for exactly this reason. One
+# question, one answer, however many partitions.
+_all=0
+case "${1:-}" in
+--all|-a) _all=1; shift ;;
+esac
 _ns=${1:-}
 if [ -z "$_ns" ] && [ -r "$_lib/mux-context.sh" ]; then
 	. "$_lib/mux-context.sh"
 	mux_ctx_resolve 2>/dev/null && _ns=$MUX_CTX_PARTITION
 fi
-dir=$(mux_agent_dir "$_ns")
 
-# The distinct sessions that have a tracked agent (field 2 of each state file).
 # The distinct sessions, NEWLINE separated and counted line by line. A session
 # name may contain a space, so neither joining them with spaces nor iterating
 # the result with a bare `for` is safe: one session called `my project` would
@@ -43,39 +56,73 @@ dir=$(mux_agent_dir "$_ns")
 # is the delimiter.
 _NL='
 '
-sessions=
-if [ -d "$dir" ]; then
-	for f in "$dir"/*; do
-		[ -e "$f" ] || continue
-		# session LAST, so it survives containing a space.
-		read -r st win pane ep nid ss <"$f" || continue
-		[ -n "${ss:-}" ] || continue
-		case "$_NL$sessions$_NL" in
-		*"$_NL$ss$_NL"*) ;;
-		*) sessions="$sessions$_NL$ss" ;;
-		esac
-	done
-fi
-sessions=${sessions#"$_NL"}
 
-# Worst state across sessions, and how many sessions sit in it.
-worst= wr=-1 count=0
-while IFS= read -r s; do
-	[ -n "$s" ] || continue
-	state=$(mux_agent_state "$dir" "$s")
-	state=${state%% *}
-	[ -n "$state" ] || continue
-	r=$(mux_agent_rank "$state")
-	if [ "$r" -gt "$wr" ]; then
-		wr=$r; worst=$state; count=1
-	elif [ "$r" -eq "$wr" ]; then
-		count=$((count + 1))
+# _summarise DIR -> "<state> <count>": the worst live state in that namespace
+# and how many sessions sit in it, else "none 0".
+#
+# ONE FUNCTION, because --all asks the same question of several directories
+# and a second copy of the ranking walk would be a second place for the
+# "worst wins" rule to drift from mux-agent-state.sh.
+_summarise() {   # <dir>
+	_sd=$1
+	_sessions=
+	if [ -d "$_sd" ]; then
+		for _f in "$_sd"/*; do
+			[ -e "$_f" ] || continue
+			# session LAST, so it survives containing a space.
+			read -r _st _win _pane _ep _nid _ss <"$_f" || continue
+			[ -n "${_ss:-}" ] || continue
+			case "$_NL$_sessions$_NL" in
+			*"$_NL$_ss$_NL"*) ;;
+			*) _sessions="$_sessions$_NL$_ss" ;;
+			esac
+		done
 	fi
-# A here-doc, not a pipe: `worst` and `count` are carried out of this loop and
-# a pipe would run it in a subshell and discard both.
-done <<EOF
-$sessions
-EOF
+	_sessions=${_sessions#"$_NL"}
 
-[ -n "$worst" ] || { echo "none 0"; exit 0; }
-printf '%s %s\n' "$worst" "$count"
+	_worst= _wr=-1 _count=0
+	while IFS= read -r _s; do
+		[ -n "$_s" ] || continue
+		_state=$(mux_agent_state "$_sd" "$_s")
+		_state=${_state%% *}
+		[ -n "$_state" ] || continue
+		_r=$(mux_agent_rank "$_state")
+		if [ "$_r" -gt "$_wr" ]; then
+			_wr=$_r; _worst=$_state; _count=1
+		elif [ "$_r" -eq "$_wr" ]; then
+			_count=$((_count + 1))
+		fi
+	# A here-doc, not a pipe: `_worst` and `_count` are carried out of this
+	# loop and a pipe would run it in a subshell and discard both.
+	done <<EOF
+$_sessions
+EOF
+	[ -n "$_worst" ] || { echo "none 0"; return 0; }
+	printf '%s %s\n' "$_worst" "$_count"
+}
+
+if [ "$_all" -eq 0 ]; then
+	_summarise "$(mux_agent_dir "$_ns")"
+	exit 0
+fi
+
+# --all: every namespace that EXISTS, plus the caller's own partition even if
+# it has none yet. State DIRECTORIES are the truth here rather than the
+# configured partition list: a partition file with no agents has nothing to
+# report, and a namespace can exist without a file (the directory is created
+# by the first emit). Reporting what is actually there is the honest answer.
+#
+# The caller's own is guaranteed present so a consumer always gets at least
+# one line -- the same reason the tray always carries the local host.
+_root=$(dirname "$(mux_agent_dir "$_ns")")
+_seen=
+for _d in "$_root"/*; do
+	[ -d "$_d" ] || continue
+	_p=${_d##*/}
+	_seen="$_seen $_p"
+	printf '%s %s\n' "$_p" "$(_summarise "$_d")"
+done
+case " $_seen " in
+*" ${_ns:-global} "*) ;;
+*) printf '%s %s\n' "${_ns:-global}" "none 0" ;;
+esac
