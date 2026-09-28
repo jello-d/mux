@@ -171,6 +171,13 @@ always **A**; everything else follows alphabetically. Past Z there is no letter
 rather than a second alphabet -- 27 partitions is a different problem, and
 drawing `AA` would make it look solved.
 
+It is **chartreuse**, not white, and that was measured rather than picked:
+almost every light hue on the tile already means something (state owns amber,
+red, green, purple and slate; the mark palette owns cyan, pink, lilac, mint and
+salmon; the near-whites are the idle check, the count and the local host's
+mark), so the ink is ranked by CIELAB distance from all eighteen and this is
+the furthest from any of them while staying bright enough to read at 11px.
+
 It sat *in* the cursor's slot in 0.56 and was too small to read on a live tray.
 Being boxed in on three sides capped it at 0.30 of the tile; moving it into the
 corner and drawing it after the badge removed the ceiling instead of

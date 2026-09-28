@@ -117,9 +117,21 @@ _PART_BASE = 0.90
 # to be byte-identical to _BADGE_INK, which is not a cosmetic point: two
 # overlays sharing an ink cannot be told apart by any pixel assertion, so a
 # test counting the letter's pixels was crediting the badge's count as well
-# and had to be written around the ambiguity. Pure white is unique on the
-# tile, brightest of the three identity inks, and exactly countable.
-_PART_INK = (0xFF, 0xFF, 0xFF, 0xFF)
+# and had to be written around the ambiguity. This value is unique on the
+# tile, which makes the letter exactly countable.
+#
+# CHARTREUSE, AND THE CHOICE WAS MEASURED, because almost every light hue on
+# this tile already MEANS something: state owns amber, red, green, purple and
+# slate across the frame, the badge and the count; the mark palette owns cyan,
+# pink, lilac, mint and salmon; and the near-whites are the idle check, the
+# count and the LOCAL host's mark. Ranked by CIELAB distance to all eighteen,
+# this is the furthest from any of them (dE 28.8, nearest being the light
+# yellow inside a `blocked` badge) while staying bright enough to read at 11px
+# on a near-black screen. Candidates that scored well and LOOKED wrong were
+# rejected by rendering: olive is muddy on the amber and green tiles, teal
+# reads as the cyan mark slot sitting beside it, and every warm off-white is
+# just a dimmer version of the white it replaces.
+_PART_INK = (0xC8, 0xE8, 0x6A, 0xFF)
 _MARK_PAD = 0.03     # breathing room each side of the widest letter
 _BASE = (0x14, 0x15, 0x19)           # near-black screen
 _PROMPT_LIFT = 0.55  # how far the ornamental >_ lifts from the screen toward
