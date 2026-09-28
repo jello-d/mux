@@ -625,6 +625,64 @@ class PartitionLetter(unittest.TestCase):
                    for x in range(tile.width)
                    for y in range(tile.height))
 
+    def test_the_INK_COLLIDES_WITH_NOTHING_THAT_MEANS_SOMETHING(self):
+        """Almost every light hue on this tile already carries meaning, and
+        the letter must not borrow one.
+
+        STATE owns amber, red, green, purple and slate across the frame, the
+        badge and the count; the MARK palette owns cyan, pink, lilac, mint and
+        salmon; and the near-whites are the idle check, the count and the
+        LOCAL host's mark. A letter that drifted into any of those would read
+        as an urgency or as a machine, which is the one thing a partition
+        label may not do.
+
+        Asserted as a DISTANCE rather than as non-membership, because the
+        failure is a near miss, not an exact match: a hue two shades off
+        `blocked`'s amber collides for a reader and passes any `not in`
+        check. CIELAB, with a floor well under the measured 28.8 so this
+        documents the rule without going brittle over a nudge.
+        """
+        import math
+        from mux_indicator.render import (MARK_LOCAL_INK, MARK_PALETTE,
+                                          STATE_INK, _PART_INK)
+
+        def lab(c):
+            def lin(u):
+                u /= 255.0
+                return u/12.92 if u <= 0.04045 else ((u+0.055)/1.055)**2.4
+            r, g, b = lin(c[0]), lin(c[1]), lin(c[2])
+            x = (0.4124*r + 0.3576*g + 0.1805*b) / 0.95047
+            y = (0.2126*r + 0.7152*g + 0.0722*b)
+            z = (0.0193*r + 0.1192*g + 0.9505*b) / 1.08883
+
+            def f(t):
+                return t ** (1/3) if t > 0.008856 else (7.787*t + 16/116)
+            fx, fy, fz = f(x), f(y), f(z)
+            return (116*fy - 16, 500*(fx - fy), 200*(fy - fz))
+
+        def de(a, b):
+            la, lb = lab(a), lab(b)
+            return math.sqrt(sum((la[i]-lb[i])**2 for i in range(3)))
+
+        meaning = {}
+        for k, v in STATE_FRAME.items():
+            meaning[f"the {k} frame"] = v
+        for k, v in STATE_BADGE.items():
+            meaning[f"the {k} badge"] = v
+        for k, v in STATE_INK.items():
+            meaning[f"the {k} count"] = v
+        meaning["the local host's mark"] = MARK_LOCAL_INK
+        for i, v in enumerate(MARK_PALETTE):
+            meaning[f"mark slot {i}"] = v
+        meaning["white"] = (0xFF, 0xFF, 0xFF, 0xFF)
+
+        for what, col in meaning.items():
+            got = de(_PART_INK, col)
+            self.assertGreater(
+                got, 15.0,
+                f"the partition letter is only dE {got:.1f} from {what}, "
+                "so it will read as that rather than as a partition")
+
     def test_the_INK_belongs_to_the_letter_alone(self):
         """Nothing else on a tile wears it, which is what makes every count
         below exact rather than approximate."""

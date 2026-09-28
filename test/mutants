@@ -1303,9 +1303,16 @@ m test_it_KEEPS_CLEAR_OF_THE_MARK_STRIP
 = indicator-partition-ink-shared-with-the-badge
 f indicator/mux_indicator/render.py
 t mux-indicator
-- _PART_INK = (0xFF, 0xFF, 0xFF, 0xFF)
+- _PART_INK = (0xC8, 0xE8, 0x6A, 0xFF)
 + _PART_INK = (0xF4, 0xF4, 0xF6, 0xFF)
 m test_the_INK_belongs_to_the_letter_alone
+
+= indicator-partition-ink-reads-as-a-state
+f indicator/mux_indicator/render.py
+t mux-indicator
+- _PART_INK = (0xC8, 0xE8, 0x6A, 0xFF)
++ _PART_INK = (0xFF, 0xB4, 0x28, 0xFF)
+m will read as that rather than as a partition
 
 = indicator-partition-letter-survives-the-blink
 f indicator/mux_indicator/render.py
