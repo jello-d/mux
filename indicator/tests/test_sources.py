@@ -108,7 +108,9 @@ class Load(unittest.TestCase):
         it is what the indicator did before it could do anything else. A tray
         that went empty when you detached would be a regression."""
         got = load(self.d)
-        self.assertEqual(got, [(local_label(), ["mux", "agent-summary"])])
+        self.assertEqual(got,
+                         [(local_label(),
+                           ["mux", "agent-summary", "--all"])])
 
     def test_local_comes_first(self):
         """So the left-hand item does not move as latches come and go."""
@@ -396,9 +398,35 @@ class ActivateCommand(unittest.TestCase):
         is what distinguishes a poll from a click -- passing the wrong one
         would make every click silently re-read the state it already had."""
         argv = sources.remote_argv("box", template="ssh %h %q",
-                                   cmd=sources.ACTIVATE_CMD)
+                                   cmd=sources.activate_cmd())
         self.assertIn("mux next-blocked", " ".join(argv))
         self.assertNotIn("agent-summary", " ".join(argv))
+
+    def test_the_PARTITION_travels_with_the_click(self):
+        """Without it every item on a host does the same thing: the far side's
+        login shell resolves its own default and jumps there, landing on a
+        real session that is not the one clicked. Plausible, and silent."""
+        argv = sources.remote_argv("box", template="ssh %h %q",
+                                   cmd=sources.activate_cmd("work"))
+        self.assertIn("mux next-blocked --partition work", " ".join(argv))
+
+    def test_a_partition_that_is_not_a_LABEL_is_refused(self):
+        """These names arrive from another machine and go straight back out
+        inside `sh -lc`, so this is untrusted input crossing into a shell. The
+        click still happens -- it simply asks for the host's own default,
+        which is what an item with no partition asks for anyway."""
+        for bad in ("a b", "a;rm -rf /", "a'b", "../x", "A", ""):
+            got = sources.activate_cmd(bad)
+            self.assertEqual(got, sources.activate_cmd(),
+                             f"{bad!r} reached the remote command line")
+
+    def test_the_poll_asks_for_EVERY_partition(self):
+        """One round trip per host, not one per partition. That is the whole
+        reason `--all` exists: a reader on another box cannot know the names
+        to ask for, and over a transport N partitions must not mean N ssh
+        connections."""
+        argv = sources.remote_argv("box", template="ssh %h %q")
+        self.assertIn("mux agent-summary --all", " ".join(argv))
 
     def test_the_poll_still_asks_for_agent_summary(self):
         """The other direction, asserted separately: a default that leaked the

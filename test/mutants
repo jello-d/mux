@@ -645,7 +645,7 @@ m test_A_STALE_LOCK_IS_SKIPPED
 = indicator-local-host-dropped
 f indicator/mux_indicator/sources.py
 t mux-indicator
--     out = [(local, [mux_bin, "agent-summary"])]
+-     out = [(local, [mux_bin, *LOCAL_CMD])]
 +     out = []
 m test_the_local_host_is_always_there
 
@@ -771,8 +771,8 @@ m test_the_mark_is_sized_by_HEIGHT_not_width
 = indicator-local-takes-a-palette-slot
 f indicator/mux_indicator/sni.py
 t mux-indicator
--                   None if lab == local else slots.slot(lab))
-+                   slots.slot(lab))
+-                   None if host_of(lab) == local else slots.slot(host_of(lab)))
++                   slots.slot(host_of(lab)))
 m test_the_LOCAL_host_takes_no_slot
 
 = indicator-ink-ignored-by-the-tile
@@ -813,8 +813,8 @@ m test_a_collision_is_bumped_not_shared
 = indicator-ink-change-does-not-repaint
 f indicator/mux_indicator/sni.py
 t mux-indicator
--         if mark == self._mark and ink == self._ink:
-+         if mark == self._mark:
+-         if mark == self._mark and ink == self._ink and part == self._part:
++         if mark == self._mark and part == self._part:
 m test_a_CHANGED_INK_repaints_even_when_the_mark_is_the_same
 
 = indicator-code-check-cwd-tautology
@@ -890,8 +890,8 @@ m test_AN_UNCHANGED_VALUE_IS_NOT_REPAINTED
 = indicator-override-ignored
 f indicator/mux_indicator/sni.py
 t mux-indicator
--         cur = _read_override() or await _query(argv)
-+         cur = await _query(argv)
+-         cur = _read_override() or feed.row(part)
++         cur = feed.row(part)
 m test_the_OVERRIDE_wins_over_the_source
 
 = indicator-advertises-a-menu-it-lacks
@@ -1141,8 +1141,8 @@ m expected a non-zero exit
 = indicator-click-polls-instead
 f indicator/mux_indicator/sni.py
 t mux-indicator
--         argv = remote_argv(label, cmd=ACTIVATE_CMD)
-+         argv = remote_argv(label)
+-         argv = remote_argv(host, cmd=activate_cmd(part))
++         argv = remote_argv(host)
 m mux next-blocked
 
 = indicator-click-ignores-the-hook
@@ -1155,8 +1155,8 @@ m test_the_hook_RUNS_AFTER_and_is_given_the_label
 = indicator-click-shells-the-hook
 f indicator/mux_indicator/sni.py
 t mux-indicator
--         await _fire(shlex.split(hook) + [label or me], f"focus {label or me}")
-+         await _fire(["sh", "-c", hook, label or me], "focus")
+-         await _fire(shlex.split(hook) + args, f"focus {label or me}")
++         await _fire(["sh", "-c", hook] + args, "focus")
 m test_the_hook_is_SPLIT_not_shelled
 
 = even-headless-wrong-socket
@@ -1313,3 +1313,87 @@ t mux-next-blocked
 - [ "$_pflag" = 0 ] || [ -n "$_part" ] || {
 + true || {
 m --partition with no name must exit 2
+
+= indicator-partition-letters-no-baseline
+f indicator/mux_indicator/sni.py
+t mux-indicator
+-     ordered = sorted(parts, key=lambda p: (p != BASELINE, p))
++     ordered = sorted(parts)
+m test_A_IS_ALWAYS_THE_BASELINE
+
+= indicator-one-partition-still-lettered
+f indicator/mux_indicator/sni.py
+t mux-indicator
+-     if len(parts) < 2:
++     if False:
+m test_ONE_PARTITION_GETS_NO_LETTER
+
+= indicator-solo-key-carries-the-partition
+f indicator/mux_indicator/sni.py
+t mux-indicator
+-     return host if solo else f"{host}:{part}"
++     return f"{host}:{part}"
+m test_the_solo_form_is_the_OLD_key_unchanged
+
+= indicator-mark-counted-in-items-not-hosts
+f indicator/mux_indicator/sni.py
+t mux-indicator
+-     if len({host_of(lab) for lab in labels}) < 2:
++     if len(labels) < 2:
+m test_TWO_PARTITIONS_ON_ONE_HOST_GET_NO_MARK
+
+= indicator-missing-partition-reads-calm
+f indicator/mux_indicator/sni.py
+t mux-indicator
+-         return self.rows.get(part, UNKNOWN)
++         return self.rows.get(part, ("idle", None))
+m test_a_partition_MISSING_from_a_good_answer_is_unknown
+
+= indicator-solo-row-takes-the-first-of-many
+f indicator/mux_indicator/sni.py
+t mux-indicator
+-             if len(self.rows) != 1:
++             if False:
+m test_a_solo_item_whose_host_grew_a_partition_is_unknown
+
+= indicator-all-rows-trusted
+f indicator/mux_indicator/sni.py
+t mux-indicator
+-         if len(fields) < 2 or not valid_partition(fields[0]):
++         if len(fields) < 2:
+m test_a_partition_that_is_not_a_LABEL_is_DROPPED
+
+= indicator-all-junk-state-dropped
+f indicator/mux_indicator/sni.py
+t mux-indicator
+-         out[fields[0]] = got if got and got[0] in KNOWN else UNKNOWN
++         out[fields[0]] = got if got and got[0] in KNOWN else None
+m test_a_STATE_mux_would_never_emit_is_unknown_not_dropped
+
+= indicator-item-paints-before-the-first-answer
+f indicator/mux_indicator/sni.py
+t mux-indicator
+-         if not feed.asked:
++         if False:
+m repainted
+
+= indicator-unreachable-host-loses-its-items
+f indicator/mux_indicator/sni.py
+t mux-indicator
+-             parts = known.get(host)
++             parts = None
+m test_AN_UNREACHABLE_HOST_KEEPS_ITS_ITEMS
+
+= indicator-unknown-host-invents-an-item
+f indicator/mux_indicator/sni.py
+t mux-indicator
+-             if parts is None:
++             if False:
+m test_a_host_that_has_NEVER_answered_publishes_nothing
+
+= indicator-known-partitions-never-shrink
+f indicator/mux_indicator/sni.py
+t mux-indicator
+-             known[host] = parts
++             known[host] = sorted(set(known.get(host, [])) | set(parts))
+m test_a_host_that_LOSES_a_partition_loses_its_item

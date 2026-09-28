@@ -84,14 +84,16 @@ pulled in automatically. Sub-commands:
 
 Requires: `python3`, a systemd **user** manager (for the service), a running
 StatusNotifierItem host (waybar's tray, or any desktop's), and `mux` on `PATH`
-(the daemon polls `mux agent-summary` for state). Prefer `pipx`? `pipx install
-.` then `./setup.sh service` works too -- both land the command at the same
+(the daemon polls `mux agent-summary --all` for state). Prefer `pipx`? `pipx
+install .` then `./setup.sh service` works too -- both land the command at the
+same
 `~/.local/bin/mux-indicator` the unit runs.
 
-The feed is `mux agent-summary` (the aggregate worst state + session count),
-polled every `MUX_INDICATOR_POLL` seconds (default 5). Overrides via env:
-`MUX_BIN` (path to `mux`), `MUX_INDICATOR_BLINK` / `_BLINK_MS` (the cursor blink
-on change), `MUX_INDICATOR_TIMEOUT` (per-source deadline, default 10s). Writing
+The feed is `mux agent-summary --all` (one `<partition> <state> <count>` line
+per partition), polled every `MUX_INDICATOR_POLL` seconds (default 5).
+Overrides via env: `MUX_BIN` (path to `mux`), `MUX_INDICATOR_BLINK` /
+`_BLINK_MS` (the cursor blink on change), `MUX_INDICATOR_TIMEOUT` (per-source
+deadline, default 10s). Writing
 `"<state> <count>"` to `/tmp/mux-indicator.ctl` forces a value for testing;
 remove the file to revert to the live feed.
 
@@ -112,14 +114,15 @@ mux-indicator: watching northgate, northwood
 mux-indicator: + northgate
 mux-indicator: northgate = working 1
                                      # ... you detach
-mux-indicator: - northgate (latch ended)
+mux-indicator: - northgate (withdrawn)
 ```
 
 That works because `mux latch` already writes
 `$XDG_RUNTIME_DIR/mux-latch/<target>.lock` at start and removes it via a trap on
-every exit path, with the pid on line 1 and the target on line 2. A second job
-for a file that already did it perfectly. A lock whose process is gone is
-skipped, so a crashed latch cannot leave a phantom host in the tray.
+every exit path, with the pid on line 1, the target on line 2 and the session
+on line 3. A second job for a file that already did it perfectly. A lock whose
+process is gone is skipped, so a crashed latch cannot leave a phantom host in
+the tray.
 
 **Your own machine is always there**, first, whether or not you are latched
 anywhere. It needs no transport and it is what the indicator showed before it
@@ -146,6 +149,49 @@ passing the words through made the far side run mux's bare session picker. The
 default also uses `sh -lc`, because sshd runs a remote command *without* a login
 shell and `~/.local/bin` is then not on `PATH`; and `BatchMode=yes`, because a
 tray daemon can never answer a prompt.
+
+### Several partitions, one host
+
+A host can run more than one mux partition (a separate tmux server, a separate
+set of sessions, its own agent state), and each gets **its own tray item**:
+`northwood`, or `northwood:global` and `northwood:work`. The colon grammar is
+`mux latch`'s own.
+
+One query answers for all of them. `mux agent-summary --all` prints one
+`<partition> <state> <count>` line per partition, so a host with three
+partitions still costs **one** ssh connection per poll -- that is the whole
+reason the verb exists, since a reader on another machine cannot know the
+partition names to ask for in the first place.
+
+**The letter is the cursor.** Each item carries an A-Z badge where the `_`
+cursor sits, and it blinks on the same phase, so it costs no space: the prompt
+is ornament, and the one glyph on it that already moves is free to carry a
+letter. `global` is the reserved baseline partition and is always **A**;
+everything else follows alphabetically. Past Z there is no letter rather than a
+second alphabet -- 27 partitions is a different problem, and drawing `AA` would
+make it look solved.
+
+**One partition gets no letter at all**, the same rule as the host mark: a
+letter distinguishing a thing from nothing is noise, and the common install
+keeps the icon it has always had, byte for byte.
+
+**And the host mark is counted in hosts, not items.** Two partitions on one box
+get no mark, because marking them would put the same three letters and the same
+colour on both -- they *are* the same machine. With a second host present both
+of that host's items wear the *same* mark and the *same* palette slot, or the
+tray would be saying there are three machines.
+
+**A click carries the partition**: `mux next-blocked --partition work`. Without
+it every item on a host does the same thing -- the far side's login shell
+resolves its own default and jumps there, landing on a real session that is not
+the one you clicked. The focus hook still gets the **host** as its first
+argument (the shipped examples match a terminal title against `[host]`), with
+the partition as a second one it may ignore.
+
+**An unreachable host keeps its items.** The partition set lives on the other
+machine, so a failed query means "could not ask", never "it has none" --
+withdrawing them would empty the tray at the exact moment it has something to
+say. They stay and draw `unknown`.
 
 ### Which machine is this?
 

@@ -589,7 +589,7 @@ Read\-only and headless: derived from the state files, never from
 so it answers with no server, no client and no
 .BR $TMUX .
 .TP
-.B mux agent-summary " [" \fINS\fR ]
+.B mux agent-summary " [" \-\-all "] [" \fINS\fR ]
 One line,
 .BR "<state> <count>" :
 the worst live state across the namespace and how many sessions sit in it, or
@@ -597,6 +597,16 @@ the worst live state across the namespace and how many sessions sit in it, or
 when nothing is tracked. The feed the tray indicator polls. Same derivation and
 same ranking as
 .BR "mux agent-list" .
+.IP
+.B \-\-all
+answers for EVERY partition instead, one
+.BR "<partition> <state> <count>"
+line each. That is one round trip rather than one per partition, which is the
+point of it: a reader on another machine cannot know the partition names to
+ask for, and over a transport N partitions must not mean N connections. THE
+CALLER'S OWN PARTITION ALWAYS APPEARS, even with nothing tracked in it \(em
+"quiet" and "not there" are different answers, and a presenter that saw
+nothing for the partition it is sitting in would have to guess which.
 .TP
 .B mux check
 Audit the install: tmux, mux's own presence on PATH, the desktop notification
