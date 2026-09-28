@@ -24,7 +24,7 @@ command -v tmux >/dev/null 2>&1 || {
 	printf 'skip %s (no tmux)\n' "$_name"; exit 0; }
 
 SOCK=$(tmux_fresh_socket muxprune)
-cleanup() { tmux -L "$SOCK" kill-server 2>/dev/null || true; rm -rf "$T"; }
+cleanup() { tmux_drop_socket "$SOCK"; rm -rf "$T"; }
 trap cleanup EXIT INT TERM
 
 STAMPS=$T/cache
