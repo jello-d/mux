@@ -94,5 +94,25 @@ agent_rec() {   # FILE STATE PANE EPOCH SESSION [NOTIF]
 _tmux_sock_n=0
 tmux_fresh_socket() {   # [prefix]
 	_tmux_sock_n=$((_tmux_sock_n + 1))
-	printf '%s%s-%s' "${1:-muxt}" "$$" "$_tmux_sock_n"
+	_tmux_sock_last=${1:-muxt}$$-$_tmux_sock_n
+	printf '%s' "$_tmux_sock_last"
+}
+
+# tmux_drop_socket [NAME] -- kill that server AND remove the socket file.
+#
+# THE FILE OUTLIVES THE SERVER, which is the same fact that forced fresh names
+# in the first place: `kill-server` returns before the server is gone and the
+# socket lingers for seconds afterwards. Fresh names dodge the RACE and do
+# nothing about the LITTER, so every run of the three tests that drive a real
+# tmux left its sockets behind for good. Measured: 123 dead ones in
+# /tmp/tmux-$(id -u) against 2 live servers, from a single day of test runs,
+# and 247 had been swept by hand once before.
+#
+# mux's own rule, turned on its own suite: mux clears the litter mux makes.
+# The name is never reused, so removing the file cannot race anything.
+tmux_drop_socket() {   # [name]
+	_ds=${1:-${_tmux_sock_last:-}}
+	[ -n "$_ds" ] || return 0
+	tmux -L "$_ds" kill-server 2>/dev/null || true
+	rm -f "${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)/$_ds" 2>/dev/null || true
 }

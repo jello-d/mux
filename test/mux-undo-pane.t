@@ -27,7 +27,7 @@ mkdir -p "$XDG_RUNTIME_DIR"
 PATH=$HERE/bin:$PATH; export PATH
 
 tm() { tmux -L "$SOCK" "$@"; }
-cleanup() { tmux -L "$SOCK" kill-server 2>/dev/null || true; }
+cleanup() { tmux_drop_socket "$SOCK"; }
 
 # WHERE IT DIED, because this file has now gone NO VERDICT three times under a
 # loaded full-suite run and never once in isolation -- twice during a mutation

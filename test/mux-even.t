@@ -25,7 +25,7 @@ command -v tmux >/dev/null 2>&1 || {
 SOCK=$(tmux_fresh_socket muxeven)
 PATH=$HERE/bin:$PATH; export PATH
 tm() { tmux -L "$SOCK" "$@"; }
-cleanup() { tmux -L "$SOCK" kill-server 2>/dev/null || true; }
+cleanup() { tmux_drop_socket "$SOCK"; }
 trap 'cleanup' EXIT INT TERM
 
 # RUN THROUGH run-shell, which is how the key binding invokes it: a bare
@@ -152,6 +152,19 @@ case $(geom) in
 *) fail "headless did not reach the partition's server: [$(geom)] -- it
 went to the default socket, found nothing, and exited 0" ;;
 esac
+
+# --- the socket FILE goes too, not just the server ------------------------
+# `kill-server` returns before the server is gone and the socket lingers for
+# seconds after it, which is why every test here takes a FRESH name. That
+# dodges the race and does nothing about the LITTER: 123 dead sockets had
+# piled up in one day of test runs against 2 live servers, and 247 had been
+# swept by hand once before. mux's own rule, turned on its own suite.
+_s=$SOCK
+cleanup
+[ ! -e "${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)/$_s" ] \
+	|| fail "cleanup killed the server and left its socket behind:
+${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)/$_s -- every run leaks one, forever"
+build
 
 # --- an unknown option is an error ----------------------------------------
 _rc=0
