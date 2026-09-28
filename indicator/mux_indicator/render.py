@@ -84,6 +84,24 @@ MARK_PALETTE = (
 )
 _MARK_BACK = (0x00, 0x00, 0x00, 0xFF)   # the strip the letters sit on
 _MARK_CAP = 0.86     # cap height as a fraction of the third of the tile
+# The partition letter, which takes the `_` cursor's slot. Both numbers were
+# settled by rendering at 22, 32 and 48 and LOOKING, not by arithmetic -- 0.44
+# shipped a mark that was unreadable at 32 because every render it was judged
+# on had been zoomed 5x.
+#
+# 0.30 is the ceiling, not a preference. The letter is boxed on three sides:
+# the count badge is 0.65 of the tile and overhangs the top right, the mark
+# strip owns the left edge, and the screen ends below. At 0.34 the letter
+# starts disappearing under the badge on `idle` and `blocked`; at 0.38 it is
+# behind it.
+_PART_CAP = 0.30
+# BRIGHTER THAN THE `_` IT REPLACES, deliberately breaking with the cursor it
+# stands in for: a cursor only has to be NOTICED and a letter has to be READ.
+# The lifted prompt colour is recessive by design (it is ornament), and at 7px
+# on a dark screen it was present and illegible. It still blinks on the
+# cursor's phase, which is what keeps it reading as the cursor rather than as
+# a fourth thing on the tile.
+_PART_INK = (0xF4, 0xF4, 0xF6, 0xFF)
 _MARK_PAD = 0.03     # breathing room each side of the widest letter
 _BASE = (0x14, 0x15, 0x19)           # near-black screen
 _PROMPT_LIFT = 0.55  # how far the ornamental >_ lifts from the screen toward
@@ -176,14 +194,18 @@ def mark_ink(slot):
     return MARK_PALETTE[slot % len(MARK_PALETTE)]
 
 
-def _mark_font(maxh):
-    """The largest bold whose cap height fits a third of the tile.
+def _cap_font(maxh):
+    """The largest bold whose cap height fits `maxh`.
 
     SIZED BY HEIGHT, NOT WIDTH, and that one choice is what makes the mark
     readable. Fitting it to a narrow column instead gave a 7px capital on a
     32px tile -- present, but impossible to tell MLD from MTR at the size a
     tray actually draws. The letters are allowed to be as WIDE as they need
     because they are allowed to cover what is beneath them.
+
+    ONE OWNER, used by the host mark and by the partition letter. They ask for
+    different heights and are the same question, and a second copy of this
+    search is a second place for the height/width slip above to come back.
     """
     probe = ImageDraw.Draw(Image.new("RGB", (8, 8)))
     for px in range(int(maxh) + 10, 3, -1):
@@ -198,7 +220,7 @@ def _mark_metrics(s, text):
     """-> (font, strip width). ONE place, because the strip is sized from the
     letters: computing them apart is how the two drift and the letters start
     hanging off the end of their own background."""
-    f = _mark_font((s / 3.0) * _MARK_CAP)
+    f = _cap_font((s / 3.0) * _MARK_CAP)
     probe = ImageDraw.Draw(Image.new("RGB", (8, 8)))
     widest = 0
     for ch in text[:3]:
@@ -318,7 +340,7 @@ def _number(d, box, text, fnt, fill):
         x += advs[i] - gap
 
 
-def _hero(d, s, m, col, cursor=True):
+def _hero(d, s, m, col, cursor=True, part=None):
     # A TALL custom '>' chevron (the font's is too squat) + an underscore cursor
     # to its RIGHT. The chevron is the prompt colour; the cursor is lifted a
     # touch brighter (_CURSOR_LIFT). The cursor is drawn only when `cursor` is
@@ -336,6 +358,23 @@ def _hero(d, s, m, col, cursor=True):
     cx = x + w + int(s * 0.12)
     cw, ch = int(s * 0.28), max(2, int(s * 0.09))      # wider underscore
     rlim = s - m - int(s * 0.14)
+    if part:
+        # THE PARTITION LETTER IS THE CURSOR, not a fourth thing on the tile.
+        # It takes the `_`'s slot, its colour and its blink phase, which is the
+        # user's framing and the reason it costs no space: the prompt is
+        # ornament, so the one glyph on it that already moves is free to carry
+        # a letter instead. Drawing it BESIDE the cursor was the alternative
+        # and there is nowhere to put it -- the badge owns the top right at
+        # 0.65 of the tile and the mark strip owns the left edge.
+        f = _cap_font(s * _PART_CAP)
+        bb = d.textbbox((0, 0), part, font=f)
+        # A one-pixel drop shadow, for the single place the letter cannot be
+        # kept clear of: the badge's rounded corner comes down to meet it on
+        # `idle` and `blocked`. Same argument as the mark's strip -- contrast
+        # must not depend on what happens to be behind this particular glyph.
+        d.text((cx - bb[0] + 1, bot - bb[3] + 1), part, font=f, fill=_SHADOW)
+        d.text((cx - bb[0], bot - bb[3]), part, font=f, fill=_PART_INK)
+        return
     d.rectangle([cx, bot - ch, min(cx + cw, rlim), bot], fill=cur)
 
 
@@ -382,7 +421,8 @@ def _badge(img, s, fill, ink, count, check=False, mark=None):
         _number(d, box, str(count), _font(_SANS, int(bd * _NUM)), ink)
 
 
-def _tile(state, count, size, cursor=True, host=None, mark=None, ink=None):
+def _tile(state, count, size, cursor=True, host=None, mark=None, ink=None,
+          part=None):
     s = size
     img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
@@ -401,7 +441,7 @@ def _tile(state, count, size, cursor=True, host=None, mark=None, ink=None):
     d.rounded_rectangle([m, m, s - 1 - m, s - 1 - m], max(2, s // 7),
                         fill=_screen(state, tint), outline=frame,
                         width=max(1, s // 11))
-    _hero(d, s, m, _prompt(state, tint), cursor)
+    _hero(d, s, m, _prompt(state, tint), cursor, part)
 
     # THE ORDER BELOW IS THE DESIGN, not an implementation detail:
     #
@@ -441,7 +481,7 @@ def _to_argb(img):
 
 
 def icon_pixmap(state, count, sizes=(22, 32, 48), cursor=True, host=None,
-                mark=None, ink=None):
+                mark=None, ink=None, part=None):
     """SNI IconPixmap for a state + count. idle/none draw no badge. cursor=False
     renders the blink OFF frame (the `_` cursor hidden).
 
@@ -457,6 +497,14 @@ def icon_pixmap(state, count, sizes=(22, 32, 48), cursor=True, host=None,
     `ink` is that host's palette SLOT (see slots.py), or None for the local
     host. It is an index rather than a colour so the assignment rule never has
     to know what the palette looks like, and render.py stays the one owner of
-    every colour on the tile."""
-    return [[s, s, _to_argb(_tile(state, count, s, cursor, host, mark, ink))]
+    every colour on the tile.
+
+    `part` is a single character naming this item's PARTITION (A for the
+    baseline, then alphabetically). None when the host has only one, which is
+    the common case: a letter distinguishing a thing from nothing is noise, and
+    it must look exactly as it always has. It replaces the `_` cursor rather
+    than sitting beside it, so it blinks on the same phase and costs no
+    space."""
+    return [[s, s, _to_argb(_tile(state, count, s, cursor, host, mark, ink,
+                                  part))]
             for s in sizes]

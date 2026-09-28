@@ -1257,3 +1257,38 @@ t mux-latch
 - printf '%s\n%s\n%s\n' "$$" "$_target" "$_sess" >"$_lock"
 + printf '%s\n%s\n' "$$" "$_target" >"$_lock"
 m line 3 must be the session
+
+= indicator-partition-letter-not-drawn
+f indicator/mux_indicator/render.py
+t mux-indicator
+-         d.text((cx - bb[0], bot - bb[3]), part, font=f, fill=_PART_INK)
++         pass
+m test_ENOUGH_OF_THE_LETTER_SURVIVES_THE_BADGE
+
+= indicator-partition-letter-ignores-which
+f indicator/mux_indicator/render.py
+t mux-indicator
+-         f = _cap_font(s * _PART_CAP)
++         part = "A"; f = _cap_font(s * _PART_CAP)
+m test_two_partitions_DIFFER
+
+= indicator-partition-letter-does-not-blink
+f indicator/mux_indicator/render.py
+t mux-indicator
+-     if not cursor:
++     if False:
+m test_it_BLINKS_on_the_cursor_phase
+
+= indicator-partition-letter-hidden-by-the-badge
+f indicator/mux_indicator/render.py
+t mux-indicator
+- _PART_CAP = 0.30
++ _PART_CAP = 0.04
+m test_ENOUGH_OF_THE_LETTER_SURVIVES_THE_BADGE
+
+= indicator-partition-letter-buried-by-the-strip
+f indicator/mux_indicator/render.py
+t mux-indicator
+-     cx = x + w + int(s * 0.12)
++     cx = 0
+m test_it_STAYS_OUT_OF_THE_MARK_STRIP

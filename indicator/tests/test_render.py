@@ -515,6 +515,130 @@ class MarkOnTheTile(unittest.TestCase):
             self.assertNotEqual(buf, plain[w], f"no mark drawn at {w}px")
 
 
+class PartitionLetter(unittest.TestCase):
+    """The A-Z badge that says WHICH partition an item speaks for.
+
+    It exists because one host can now publish several items, and the host mark
+    cannot tell them apart -- they are the same machine, so it is the same
+    three letters and the same colour. The letter is the only channel left.
+
+    IT TAKES THE `_` CURSOR'S SLOT rather than sitting beside it. There is
+    nowhere beside it to sit: the count badge owns the top right at 0.65 of the
+    tile and the mark strip owns the left edge. Standing in for the one glyph
+    that already blinks is what makes it cost nothing.
+    """
+
+    def test_no_letter_renders_EXACTLY_as_before(self):
+        """The revert property, and the reason the letter is safe to add: a
+        host with ONE partition keeps the icon it has always had, byte for
+        byte. A letter distinguishing a thing from nothing is noise."""
+        pair = parse_pair("#d0d0d0 #303030")
+        for st in STATES:
+            self.assertEqual(
+                icon_pixmap(st, 2, host=pair, part=None),
+                icon_pixmap(st, 2, host=pair),
+                f"{st}: passing part=None changed the tile")
+
+    def test_the_letter_REPLACES_the_cursor(self):
+        """Asserted separately from "A differs from B" below, because either
+        alone makes a lettered tile differ from an unlettered one and a single
+        "they differ" assertion would kill NEITHER mutation. Same shape as the
+        strip-vs-letters pair above.
+
+        Sampled where the `_` is: the cursor row, at the cursor's own x. With
+        no letter that pixel is the cursor; with one it is not, because the
+        underscore is not drawn at all.
+        """
+        from mux_indicator.render import _tile
+        for s in (32, 48):
+            bot = s - int(s * 0.20)
+            cx = int(s * 0.18) + int(s * 0.20) + int(s * 0.12)
+            plain = _tile("none", None, s, True).load()
+            lettered = _tile("none", None, s, True, part="A").load()
+            self.assertNotEqual(
+                plain[cx + 1, bot - 1], lettered[cx + 1, bot - 1],
+                f"{s}px: the cursor row is unchanged, so the letter is not "
+                "standing in for the underscore")
+
+    def test_two_partitions_DIFFER(self):
+        """The whole point: two items for one host must be tellable apart.
+        They share a host mark and a palette slot by construction."""
+        for st in STATES:
+            a = icon_pixmap(st, 2, mark="MLD", ink=0, part="A")
+            b = icon_pixmap(st, 2, mark="MLD", ink=0, part="B")
+            self.assertNotEqual(a, b, f"{st}: A and B render identically")
+
+    def test_it_BLINKS_on_the_cursor_phase(self):
+        """The user's framing, and the reason it reads as the cursor rather
+        than as a fourth thing on the tile. On the OFF frame there is no
+        cursor, so there is no letter either -- and the off frame is then
+        byte-identical to an unlettered one, which is what proves the letter
+        is drawn on that phase and nowhere else."""
+        for st in STATES:
+            self.assertEqual(
+                icon_pixmap(st, 2, cursor=False, part="A"),
+                icon_pixmap(st, 2, cursor=False),
+                f"{st}: the letter survived the blink's OFF frame")
+
+    def test_it_STAYS_OUT_OF_THE_MARK_STRIP(self):
+        """The mark's own confinement test asserts the strip changes nothing
+        outside its band; this is the other direction. The letter is drawn
+        BEFORE the strip, so an oversized one would simply vanish underneath
+        it -- silently, and only on the multi-host tray, which is exactly the
+        case the letter exists for.
+        """
+        from mux_indicator.render import _mark_metrics, _tile
+        for s in (22, 32, 48):
+            _f, w = _mark_metrics(s, "MLD")
+            plain = _tile("none", None, s, True, None, "MLD", 0).load()
+            lettered = _tile("none", None, s, True, None, "MLD", 0,
+                             part="B").load()
+            seen = False
+            for x in range(int(w) + 1, s):
+                for y in range(s):
+                    if plain[x, y] != lettered[x, y]:
+                        seen = True
+            self.assertTrue(
+                seen,
+                f"{s}px: the letter changed nothing right of the {w}px mark "
+                "strip, so it is drawn entirely underneath it")
+
+    def test_ENOUGH_OF_THE_LETTER_SURVIVES_THE_BADGE(self):
+        """Counted in the letter's own INK, at every size and every state.
+
+        Two failures this closes, and neither is visible to a "the tiles
+        differ" assertion. The letter carries a one-pixel drop SHADOW, so
+        removing the glyph and keeping the shadow still changes the tile --
+        two guards for one condition, and a plain difference check kills
+        neither. And the badge is drawn AFTER the letter, so a letter sized by
+        eye on `none` (which draws no badge) is simply painted over on
+        `idle`'s check: it would still "differ", by its shadow, while being
+        invisible.
+
+        A DELTA against the unlettered tile, because _PART_INK and the badge's
+        own ink are the same value: counting absolutely would credit the
+        letter with the count's pixels.
+        """
+        from mux_indicator.render import _PART_INK, _tile
+
+        def ink(tile):
+            px = tile.load()
+            return sum(px[x, y] == _PART_INK
+                       for x in range(tile.width)
+                       for y in range(tile.height))
+
+        for s in (22, 32, 48):
+            floor = max(6, int(s * 0.3))
+            for st in STATES:
+                got = (ink(_tile(st, 9, s, True, part="B"))
+                       - ink(_tile(st, 9, s, True)))
+                self.assertGreaterEqual(
+                    got, floor,
+                    f"{st} {s}px: only {got} pixels of the letter survive "
+                    f"(want {floor}). Either it is not drawn at all, it is "
+                    "too small to read, or the badge painted over it.")
+
+
 class Deterministic(unittest.TestCase):
     def test_same_input_same_bytes(self):
         """No clock, no randomness. A repaint must not flicker the picture."""
@@ -562,14 +686,14 @@ class FontFallback(unittest.TestCase):
         finally:
             R._COND = old
 
-    def test_the_mark_font_loop_TERMINATES_on_a_default_font(self):
-        """_mark_font walks sizes down looking for one whose cap height fits.
+    def test_the_cap_font_loop_TERMINATES_on_a_default_font(self):
+        """_cap_font walks sizes down looking for one whose cap height fits.
         A bitmap default font ignores the requested size, so the loop can run
         to the bottom -- it must return the floor rather than fall off."""
         import mux_indicator.render as R
         old = R._COND
         R._COND = ("/nonexistent/NotAFont.ttf",)
         try:
-            self.assertIsNotNone(R._mark_font(2))
+            self.assertIsNotNone(R._cap_font(2))
         finally:
             R._COND = old
