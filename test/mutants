@@ -820,8 +820,8 @@ m test_a_CHANGED_INK_repaints_even_when_the_mark_is_the_same
 = indicator-code-check-cwd-tautology
 f indicator/setup.sh
 t mux-indicator-code-check
-- 	_cc_dir=$(cd / && "$VENV/bin/python" -c \
-+ 	_cc_dir=$("$VENV/bin/python" -c \
+- 	(cd / && "$VENV/bin/python" -c \
++ 	("$VENV/bin/python" -c \
 m stale code passed when checked from INSIDE
 
 = indicator-code-check-self-comparison
@@ -1425,3 +1425,25 @@ t mux-indicator
 -             known[host] = parts
 +             known[host] = sorted(set(known.get(host, [])) | set(parts))
 m test_a_host_that_LOSES_a_partition_loses_its_item
+
+= indicator-running-daemon-not-checked
+f indicator/setup.sh
+t mux-indicator-setup
+- 	_running_current
++ 	:
+m a stopped unit was not reported as such
+
+= indicator-stale-daemon-compared-backwards
+f indicator/setup.sh
+t mux-indicator-setup
+- 		[ "$_rn_f" -nt "/proc/$_rn_pid" ] || continue
++ 		[ "$_rn_f" -ot "/proc/$_rn_pid" ] || continue
+m code older than the process was called stale
+
+= indicator-service-restart-unreported
+f indicator/setup.sh
+t mux-indicator-setup
+- 		echo "mux-indicator: service $UNIT installed, enabled, RESTARTED"
++ 		echo "mux-indicator: service $UNIT installed + enabled"
+m the restart happened and was not reported
+

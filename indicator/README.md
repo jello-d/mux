@@ -89,6 +89,14 @@ install .` then `./setup.sh service` works too -- both land the command at the
 same
 `~/.local/bin/mux-indicator` the unit runs.
 
+`setup.sh check` asks three separate questions about the code, not one: does
+the package match what is INSTALLED, and does the RUNNING daemon predate what
+is installed. A long-lived process is a third copy, and a daemon that was
+never restarted after an install passes every presence marker while drawing
+last week's icon. `setup.sh service` says which of `RESTARTED`, "starts at the
+next login" (no user manager here) and `RESTART FAILED` actually happened --
+it used to print the same sentence for all three.
+
 The feed is `mux agent-summary --all` (one `<partition> <state> <count>` line
 per partition), polled every `MUX_INDICATOR_POLL` seconds (default 5).
 Overrides via env: `MUX_BIN` (path to `mux`), `MUX_INDICATOR_BLINK` /

@@ -34,6 +34,17 @@ cat >"$T/bin/systemctl" <<'EOF'
 #!/bin/sh
 printf '%s\n' "$*" >>"$SCTL"
 if [ "${2:-}" = is-enabled ]; then printf '%s\n' "${SCTL_ENABLED:-disabled}"; fi
+# `show -p MainPID --value`, which is how the check finds the running daemon.
+case "$*" in
+*MainPID*) printf '%s\n' "${SCTL_PID:-0}" ;;
+*restart*)
+	# A restart that FAILS, on demand: the message decides which of the two
+	# failure answers the script is supposed to give.
+	if [ -n "${SCTL_FAIL:-}" ]; then
+		printf '%s\n' "$SCTL_FAIL" >&2
+		exit 1
+	fi ;;
+esac
 exit 0
 EOF
 chmod +x "$T/bin/systemctl"
@@ -48,10 +59,19 @@ run() {   # <verb ...>
 	OUT=$(env PATH="$T/bin" HOME="$HOME" XDG_CONFIG_HOME="$T/xdg" \
 		MUX_INDICATOR_VENV="$T/venv" MUX_INDICATOR_BIN="$T/bin" \
 		SCTL="$SCTL" SCTL_ENABLED="${SCTL_ENABLED:-disabled}" \
+		SCTL_PID="${SCTL_PID:-0}" SCTL_FAIL="${SCTL_FAIL:-}" \
 		"$SETUP" "$@" 2>&1) || RC=$?
 }
-has() { case $OUT in *"$1"*) ;; *) fail "$2:
-$OUT" ;; esac; }
+# has PATTERN MESSAGE. NOT `has "$OUT" PATTERN MESSAGE`, which eleven calls in
+# this file used to do: `case $OUT in *"$OUT"*)` matches unconditionally, so
+# every one of them was VACUOUS -- they read as coverage and asserted nothing.
+# Found by mutation, which is the only thing that can tell those apart: two
+# guards removed from setup.sh SURVIVED against a green suite.
+has() {
+	[ "$#" -eq 2 ] || fail "has takes PATTERN MESSAGE, got $#: $*"
+	case $OUT in *"$1"*) ;; *) fail "$2:
+$OUT" ;; esac
+}
 
 # --- an unknown verb is a usage error, not a silent install -------------
 # The dispatch defaults to `install` when given NOTHING, so a typo'd verb must
@@ -109,6 +129,43 @@ precisely so an edited-then-forgotten unit cannot look installed." ;;
 esac
 cp "$HERE/indicator/$UNIT" "$UNITF"
 
+# --- `service` SAYS WHAT IT DID, and the restart is the point -----------
+# It used to print "installed + enabled" unconditionally while also running
+# `systemctl restart`, so the one action anybody watches for after a code
+# change was invisible -- and a restart that FAILED printed the same sentence
+# as one that worked. Found by a human reading a provisioning run and
+# concluding, reasonably, that the daemon had not been restarted. It had.
+#
+# A message that cannot distinguish success from failure is the same defect as
+# a presence check that cannot distinguish installed from working, one layer
+# out, and this package already has that rule written down.
+run service
+[ "$RC" = 0 ] || fail "service should succeed with a working systemctl, got $RC"
+grep -q 'restart' "$SCTL" || fail "service never asked systemctl to restart:
+$(cat "$SCTL")"
+has "RESTARTED" "the restart happened and was not reported:
+$OUT"
+
+# NO USER MANAGER IS THE THIRD ANSWER, not a failure: a headless or pre-login
+# install cannot start anything, the unit is enabled, and it comes up at the
+# next login. That case is the reason the call was wrapped in `|| true` at
+# all; the mistake was letting it silence every other case too.
+SCTL_FAIL='Failed to connect to bus: No medium found' run service
+[ "$RC" = 0 ] || fail "no user manager is not an error, got $RC"
+has "next login" "a headless install did not say when it would start"
+case $OUT in
+*RESTARTED*) fail "it claimed a RESTART that could not have happened" ;;
+esac
+
+# ... and anything else is loud and non-zero, because a service that will not
+# start is drift the provisioner has to see.
+SCTL_FAIL='Job for mux-indicator.service failed' run service
+[ "$RC" = 1 ] || fail "a failed restart must exit non-zero, got $RC"
+has "RESTART FAILED" "a failed restart was not reported as one"
+has "OLD code" "the failure did not say what it means for the running daemon"
+has "Job for mux-indicator.service failed" \
+	"systemctl's own reason was swallowed"
+
 # --- uninstall removes what it installed, and is idempotent ------------
 ln -sf "$T/venv/bin/mux-indicator" "$T/bin/mux-indicator"
 run uninstall
@@ -159,7 +216,7 @@ chmod +x "$T/venv/bin/python"
 # In step: every package file has an identical installed copy.
 for _f in "$HERE"/indicator/mux_indicator/*.py; do cp "$_f" "$SITE/"; done
 run check
-has "$OUT" "installed code matches" "identical copies were not reported current"
+has "installed code matches" "identical copies were not reported current"
 
 # DRIFTED: one file differs. This is the northwood case exactly -- present,
 # importable, wrong.
@@ -169,20 +226,20 @@ case $OUT in
 *"installed code matches"*) fail "a DRIFTED file read as current. The whole
 point is that content is compared; presence was already covered above." ;;
 esac
-has "$OUT" "STALE" "drifted code was not called stale"
-has "$OUT" "render.py" "the stale report did not name the file that drifted"
+has "STALE" "drifted code was not called stale"
+has "render.py" "the stale report did not name the file that drifted"
 [ "$RC" = 1 ] || fail "stale installed code must fail the check, got $RC.
 Passing is what stopped a provisioner from ever re-running apply."
 # It must say what to DO. A check that reports drift without the remedy makes
 # two reasonable people close it two different ways.
-has "$OUT" "setup.sh indicator install" "the stale report named no remedy"
+has "setup.sh indicator install" "the stale report named no remedy"
 
 # MISSING: a new module that was never installed. Same verdict as drifted --
 # a half-updated install is not a working one.
 cp "$HERE"/indicator/mux_indicator/render.py "$SITE/render.py"
 rm -f "$SITE/sources.py"
 run check
-has "$OUT" "sources.py" "a MISSING module was not reported"
+has "sources.py" "a MISSING module was not reported"
 [ "$RC" = 1 ] || fail "a missing module must fail the check, got $RC"
 
 # An UNIMPORTABLE package is its own verdict, not a silent pass: if the venv
@@ -193,8 +250,57 @@ exit 0
 EOF
 chmod +x "$T/venv/bin/python"
 run check
-has "$OUT" "not found" "an unimportable package did not report so"
+has "not found" "an unimportable package did not report so"
 [ "$RC" = 1 ] || fail "an unimportable package must fail the check, got $RC"
+
+# --- and the RUNNING daemon is checked against the installed code ---------
+# THE LAYER ABOVE THE ONE ABOVE. The block above closed "installed versus
+# package"; a long-lived process is a THIRD copy, and nothing compared it to
+# either -- so a daemon that was never restarted after an install passed every
+# marker in this file while drawing last week's icon. Reported by a human, in
+# exactly those words: "it did not restart the indicator, which I would expect
+# it to".
+#
+# /proc/<pid>'s mtime IS the process start time on Linux, so this drives the
+# real comparison with THIS TEST SHELL as the daemon: files stamped before it
+# are code the process could have loaded, files stamped after it are not.
+cat >"$T/venv/bin/python" <<EOF
+#!/bin/sh
+case "\$*" in
+*mux_indicator*os.path.dirname*) echo "$SITE" ;;
+esac
+exit 0
+EOF
+chmod +x "$T/venv/bin/python"
+for _f in "$HERE"/indicator/mux_indicator/*.py; do cp "$_f" "$SITE/"; done
+
+if [ -d "/proc/$$" ]; then
+	# NOT RUNNING is not stale: there is no process to be wrong about, and a
+	# headless box with no graphical session is a healthy version of this.
+	SCTL_PID=0 run check
+	has "not running" "a stopped unit was not reported as such"
+	case $OUT in
+	*"RUNNING daemon started BEFORE"*) fail "a unit that is not running was
+called stale; there is no process there to be stale" ;;
+	esac
+
+	# Code the daemon could have loaded: everything predates it.
+	find "$SITE" -name '*.py' -exec touch -t 197001020000 {} +
+	SCTL_PID=$$ run check
+	has "running daemon is on the installed code" \
+		"code older than the process was called stale"
+
+	# ... and now an install lands UNDER a daemon that is still running: the
+	# file is newer than the process, so the process cannot be running it.
+	touch "$SITE/render.py"
+	SCTL_PID=$$ run check
+	has "RUNNING daemon started BEFORE" \
+		"a daemon older than its own code was not reported"
+	has "render.py" "the stale-process report did not name the file"
+	[ "$RC" = 1 ] || fail "a daemon running code it predates must fail the
+check, got $RC. Passing is what stops a provisioner ever restarting it."
+	has "setup.sh service" "the stale-process report named no remedy"
+fi
 rm -rf "$T/site"
 
 pass
