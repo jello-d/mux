@@ -60,6 +60,10 @@ DEFAULT_TRANSPORT = (
     "-o StrictHostKeyChecking=accept-new %h %q"
 )
 REMOTE_CMD = "sh -lc 'mux agent-summary'"
+# The click's remote half. `mux next-blocked` resolves its own client when it
+# has no pane to read one from (mux 0.53), which is the whole reason a tray
+# click can reach a latched host at all.
+ACTIVATE_CMD = "sh -lc 'mux next-blocked'"
 
 
 def local_label():
@@ -75,12 +79,13 @@ def _mux_dir():
         or os.path.join(os.path.expanduser("~"), ".config"), "mux")
 
 
-def transport():
-    """The remote-command template: env, then $MUX_DIR/config, then the default.
-    The same environment-over-config-over-shipped order every mux seam uses."""
-    env = os.environ.get("MUX_INDICATOR_TRANSPORT")
-    if env:
-        return env
+def _conf(key):
+    """A directive from $MUX_DIR/config, or None.
+
+    ONE READER, because there are two keys now and a second copy of the
+    comment-stripping would be a second place for it to drift. mux's config
+    grammar is the whole file's business, not any one directive's.
+    """
     try:
         with open(os.path.join(_mux_dir(), "config")) as fh:
             for line in fh:
@@ -90,14 +95,46 @@ def transport():
                 if not line:
                     continue
                 parts = line.split(None, 1)
-                if len(parts) == 2 and parts[0] == "indicator-transport":
+                if len(parts) == 2 and parts[0] == key:
                     return parts[1]
     except OSError:
         pass
-    return DEFAULT_TRANSPORT
+    return None
 
 
-def remote_argv(host, template=None):
+def transport():
+    """The remote-command template: env, then $MUX_DIR/config, then the default.
+    The same environment-over-config-over-shipped order every mux seam uses."""
+    return (os.environ.get("MUX_INDICATOR_TRANSPORT")
+            or _conf("indicator-transport") or DEFAULT_TRANSPORT)
+
+
+def activate_hook():
+    """What to run LOCALLY after a click, or None. Env, then config, UNSET.
+
+    THE SEAM EXISTS BECAUSE THE USEFUL HALF IS NOT MUX'S. Clicking a tray item
+    switches that host's tmux client to whatever needs you -- but if the
+    terminal showing it is behind three windows or on another workspace, the
+    switch is invisible and the click feels broken. Raising that window means
+    knowing about a compositor, and mux does not get to know about compositors:
+    it manages sessions inside terminals and has no opinion about where a
+    terminal sits. That boundary is already written down here in blood, from
+    the time window placement was chased into wayfire's config and turned out
+    to be usher's job.
+
+    So mux specifies the SHAPE of the answer and the integrator supplies the
+    mechanism, exactly as MUX_NOTIFY_SEND and context-command already do. The
+    hook is handed the LABEL as its one argument.
+
+    UNSET BY DEFAULT, and that is the third answer rather than a missing one:
+    nobody asked for a focus change, so none happens, and the click still does
+    the part mux legitimately owns.
+    """
+    return (os.environ.get("MUX_INDICATOR_ACTIVATE")
+            or _conf("indicator-activate"))
+
+
+def remote_argv(host, template=None, cmd=None):
     """host -> the argv that asks it for `mux agent-summary`.
 
     BUILT AS ARGV, never joined into a string: every delimiter is a bug waiting
@@ -108,7 +145,7 @@ def remote_argv(host, template=None):
     out = []
     for word in shlex.split(template or transport()):
         if word == "%q":
-            out.append(REMOTE_CMD)
+            out.append(cmd or REMOTE_CMD)
         elif word == "%h":
             out.append(host)
         else:

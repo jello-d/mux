@@ -652,8 +652,8 @@ m test_the_local_host_is_always_there
 = indicator-remote-cmd-word-split
 f indicator/mux_indicator/sources.py
 t mux-indicator
--             out.append(REMOTE_CMD)
-+             out.extend(REMOTE_CMD.split())
+-             out.append(cmd or REMOTE_CMD)
++             out.extend((cmd or REMOTE_CMD).split())
 m test_the_command_is_ONE_argv_element
 
 = indicator-code-drift-not-recorded
@@ -862,8 +862,8 @@ m test_the_watcher_LEAVING_does_not
 = indicator-query-leaks-the-grandchild
 f indicator/mux_indicator/sni.py
 t mux-indicator
--             os.killpg(proc.pid, SIGKILL)
-+             os.killpg(os.getpgid(proc.pid), SIGKILL)
+-         os.killpg(proc.pid, SIGKILL)
++         os.killpg(os.getpgid(proc.pid), SIGKILL)
 m grandchild SURVIVED
 
 = indicator-local-sort-prefix-weak
@@ -1137,3 +1137,24 @@ t mux-next-blocked
 - 		echo "mux: no attached client to switch" >&2; exit 1; }
 + 		echo "mux: no attached client to switch" >&2; exit 0; }
 m expected a non-zero exit
+
+= indicator-click-polls-instead
+f indicator/mux_indicator/sni.py
+t mux-indicator
+-         argv = remote_argv(label, cmd=ACTIVATE_CMD)
++         argv = remote_argv(label)
+m mux next-blocked
+
+= indicator-click-ignores-the-hook
+f indicator/mux_indicator/sni.py
+t mux-indicator
+-     if hook:
++     if False:
+m test_the_hook_RUNS_AFTER_and_is_given_the_label
+
+= indicator-click-shells-the-hook
+f indicator/mux_indicator/sni.py
+t mux-indicator
+-         await _fire(shlex.split(hook) + [label or me], f"focus {label or me}")
++         await _fire(["sh", "-c", hook, label or me], "focus")
+m test_the_hook_is_SPLIT_not_shelled

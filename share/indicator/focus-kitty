@@ -1,0 +1,36 @@
+#!/bin/sh
+# share/indicator/focus-kitty - raise the kitty window showing a host's latch.
+#
+# A `mux-indicator` ACTIVATE hook. Called as `focus-kitty LABEL`, on the box
+# with the tray, AFTER the click has already switched that host's session.
+#
+# SHIPPED BUT NOT WIRED, which is the point of a hook library: mux ships this
+# so you do not have to write it, and whether it RUNS is your config's
+# decision. Wire it in $MUX_DIR/config:
+#
+#     indicator-activate   focus-kitty
+#
+# WHY MUX DOES NOT DO THIS ITSELF. Raising a window means knowing about a
+# compositor, and mux manages sessions inside terminals with no opinion about
+# where a terminal sits -- the same boundary that put window placement in
+# usher rather than in mux. Every mechanism here is yours to replace.
+#
+# REQUIRES `allow_remote_control yes` in kitty.conf (or `--listen-on`).
+# Without it kitten exits non-zero, which the indicator reports rather than
+# swallowing, so a misconfigured hook says so instead of doing nothing.
+#
+# MATCHED ON THE TITLE, because that is the only thing a latch terminal and
+# this script reliably agree on. `mux latch <host>` leaves the host name in
+# the window title; if yours does not, match on something that does -- this
+# is a sample, and the match is the part most likely to need changing.
+set -eu
+
+_label=${1:-}
+[ -n "$_label" ] || { echo "usage: focus-kitty LABEL" >&2; exit 78; }
+command -v kitten >/dev/null 2>&1 || {
+	echo "focus-kitty: kitten is not on PATH" >&2; exit 78; }
+
+# 78 is "cannot answer", the same code latch's hooks use for it: not being
+# able to find the window is different from failing to raise one.
+kitten @ focus-window --match "title:$_label" 2>/dev/null || {
+	echo "focus-kitty: no kitty window titled '$_label'" >&2; exit 78; }

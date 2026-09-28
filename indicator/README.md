@@ -12,6 +12,38 @@ It is a **separate, opt-in component**: mux itself stays POSIX shell with no
 daemon. This is the one piece that runs as a small background service (a D-Bus
 tray item needs one), so it lives here and installs on its own.
 
+## Clicking an item
+
+Left-click jumps that host to whatever has been waiting longest — `mux
+next-blocked`, run locally for your own box and over the same transport for a
+latched one. That works because **a tray item exists only when a latch does**,
+so a client is attached and you are already looking at it.
+
+**Raising the terminal is not mux's job.** If the window showing that latch is
+behind three others or on another workspace, the switch happens invisibly and
+the click feels broken — but fixing that means knowing about a compositor, and
+mux manages sessions inside terminals with no opinion about where a terminal
+sits. So it is a seam, unset by default:
+
+```
+indicator-activate   focus-kitty
+```
+
+The hook is handed the **label** as its one argument and runs *after* the
+switch, so the window already shows the right session when it comes forward.
+Two samples ship in `share/indicator/`, trading different requirements:
+
+- `focus-kitty` — kitty remote control (needs `allow_remote_control`),
+  matches on the window title
+- `focus-wayfire` — asks the compositor instead, so it is terminal-neutral,
+  but needs wayfire's IPC plugin
+
+Both are *samples*: the title match is the part most likely to need changing
+for your setup, and every mechanism in them is yours to replace. They follow
+the same contract as latch's hooks — 0 done, 78 cannot tell — and the
+indicator reports a non-zero exit rather than swallowing it, so a
+misconfigured hook says so instead of doing nothing.
+
 ## Install
 
 One command, all userspace (no sudo):
