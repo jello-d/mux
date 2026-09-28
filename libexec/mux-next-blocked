@@ -6,7 +6,7 @@
 # repeat press walks to the next-most-urgent. Silent by contract: it runs from a
 # key binding, whose stdout tmux would pop in a view-mode buffer over the pane.
 #
-#   mux next-blocked [CLIENT [CURRENT]]
+#   mux next-blocked [--partition NAME] [CLIENT [CURRENT]]
 #
 # CLIENT defaults to the client of the pane we are running in, so the bare CLI
 # form resolves itself; the `b` binding passes it explicitly (#{client_name})
@@ -19,6 +19,37 @@ set -eu
 
 # Sibling libs in this script's own (colocated) libexec dir.
 _lib=$(dirname "$0")
+
+# --partition NAME scopes the whole run to another partition's server and
+# state. THE TRAY IS THE CALLER: one host can publish several items now, one
+# per partition, and a click on the `work` item must jump to work's blocked
+# session rather than to whichever partition the far side's login shell
+# resolved. Without it every item on a host did the same thing.
+#
+# AUTHORITATIVE WHEN GIVEN, even inside tmux: you named a partition, you get
+# that partition's server. The bare form is unchanged and still follows $TMUX.
+_part=
+_pflag=0
+while [ $# -gt 0 ]; do
+	case $1 in
+	--partition)
+		_pflag=1; _part=${2:-}
+		# GUARDED, because `shift 2` on a bare `--partition` is a shell
+		# error that also exits 2 -- the right code for the wrong
+		# reason, and one no mutation of the real guard could ever be
+		# distinguished from.
+		if [ $# -gt 1 ]; then shift; fi ;;
+	--) shift; break ;;
+	-*) echo "mux: next-blocked: unknown option: $1" >&2; exit 2 ;;
+	*)  break ;;
+	esac
+	shift
+done
+# A bare --partition is a usage error, not a silent fall back to the caller's
+# own partition: a click composed without its name would jump somewhere
+# plausible and wrong, which is this codebase's recurring failure shape.
+[ "$_pflag" = 0 ] || [ -n "$_part" ] || {
+	echo "mux: next-blocked: --partition needs a name" >&2; exit 2; }
 
 client=${1:-}
 current=${2:-}
@@ -38,11 +69,11 @@ current=${2:-}
 # uishable from "nothing needs you".
 #
 # Empty inside tmux, where $TMUX governs both and mux_agent_dir already knows.
-_ns=
-[ -n "${TMUX:-}" ] || _ns=${MUX_CTX_PARTITION:-global}
+_ns=$_part
+[ -n "$_ns" ] || [ -n "${TMUX:-}" ] || _ns=${MUX_CTX_PARTITION:-global}
 _nb() {
-	if [ -n "${TMUX:-}" ]; then tmux "$@"
-	else tmux -L "$_ns" "$@"; fi
+	if [ -n "$_ns" ]; then tmux -L "$_ns" "$@"
+	else tmux "$@"; fi
 }
 # No CLIENT given (the bare `mux next-blocked`): resolve the client of the pane
 # we are in, which means we have to BE in one -- switch-client needs a target.
