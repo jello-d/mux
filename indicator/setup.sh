@@ -48,10 +48,37 @@ service() {
 	install -m 0644 "$PKG_DIR/$UNIT" "$UNIT_DIR/$UNIT"
 	systemctl --user daemon-reload 2>/dev/null || true
 	systemctl --user enable "$UNIT" 2>/dev/null || true
-	# restart (not just enable --now) so a re-run picks up a unit/code change; a
-	# headless install (no user bus yet) falls through to the next login.
-	systemctl --user restart "$UNIT" 2>/dev/null || true
-	echo "mux-indicator: service $UNIT installed + enabled"
+	# RESTART, not `enable --now`: a re-run has to pick up a unit OR a code
+	# change, and `--now` only starts something that is not already running.
+	#
+	# AND IT SAYS WHICH OF THE THREE HAPPENED, which it did not before. This
+	# printed "installed + enabled" unconditionally, so the RESTART -- the one
+	# action anybody is watching for after a code change -- was invisible, and
+	# a restart that FAILED printed the same sentence as one that worked.
+	# Reported from a real run: the daemon had in fact been restarted onto the
+	# new code, and the only evidence on screen said it had not been.
+	#
+	# A message that cannot distinguish success from failure is the same bug
+	# as a presence check that cannot distinguish installed from working, one
+	# layer out, and this package already has that rule written down.
+	_svc_err=$(systemctl --user restart "$UNIT" 2>&1) && {
+		echo "mux-indicator: service $UNIT installed, enabled, RESTARTED"
+		return 0; }
+	# NO USER MANAGER IS NOT A FAILURE. A headless or pre-login install
+	# legitimately cannot start anything, the unit is enabled, and it comes up
+	# at the next login. That is the third answer, and it is why this was
+	# wrapped in `|| true` in the first place -- the mistake was letting that
+	# one real case silence every other one too.
+	case $_svc_err in
+	*"Failed to connect to"*|*"not been booted"*|*"No such file or dir"*)
+		echo "mux-indicator: service $UNIT installed + enabled; no user" \
+			"manager here, so it starts at the next login"
+		return 0 ;;
+	esac
+	echo "mux-indicator: service $UNIT installed + enabled, but the" \
+		"RESTART FAILED -- it is still running the OLD code:" >&2
+	printf '%s\n' "$_svc_err" | sed 's/^/mux-indicator:   /' >&2
+	return 1
 }
 
 uninstall() {
@@ -91,10 +118,14 @@ uninstall() {
 #
 # `cd /` rather than `-P` or PYTHONSAFEPATH, which are 3.11+; this package
 # supports 3.8.
-_code_current() {
-	_cc_dir=$(cd / && "$VENV/bin/python" -c \
+_installed_dir() {
+	(cd / && "$VENV/bin/python" -c \
 		'import mux_indicator,os;print(os.path.dirname(mux_indicator.__file__))' \
-		2>/dev/null || true)
+		2>/dev/null) || true
+}
+
+_code_current() {
+	_cc_dir=$(_installed_dir)
 	if [ -z "$_cc_dir" ] || [ ! -d "$_cc_dir" ]; then
 		bad "installed code not found (the venv cannot import it)"
 		return 0
@@ -125,6 +156,59 @@ _code_current() {
 	fi
 }
 
+# _running_current: is the RUNNING daemon on the code that is INSTALLED?
+#
+# THE LAYER THIS FILE'S OWN CHECK WAS MISSING. _code_current closed "installed
+# versus package"; a long-lived process is a THIRD copy and nothing compared it
+# to either, so a daemon that was never restarted after an install passed every
+# marker here -- venv current, unit matching, service enabled -- while drawing
+# last week's icon. That is precisely the bug this file was written to fix, one
+# layer out, and it was found the way the first one was: by a human saying "it
+# did not restart, and I would expect it to".
+#
+# The same trap the agent-plugin notes already record: both copies being
+# present on disk proves nothing whatever about what a live process is running.
+#
+# MTIME OF /proc/<pid> IS THE PROCESS START TIME on Linux, so `-nt` answers this
+# with no date arithmetic and no systemd timestamp format to keep tracking.
+_running_current() {
+	# THE INSTALLED CODE FIRST, and silently when there is none: with nothing
+	# installed there is nothing for a process to be stale against, and
+	# _code_current has already said so. Saying it twice would make one
+	# problem look like two, and on an empty prefix it would put an [OK] on a
+	# box where nothing whatever is installed.
+	_rn_dir=$(_installed_dir)
+	[ -n "$_rn_dir" ] && [ -d "$_rn_dir" ] || return 0
+	_rn_pid=$(systemctl --user show -p MainPID --value "$UNIT" 2>/dev/null \
+		|| true)
+	case ${_rn_pid:-0} in
+	''|0|*[!0-9]*)
+		# NOT RUNNING IS NOT STALE: there is no process to be wrong about.
+		# Whether it OUGHT to be running is the `enabled` marker's question,
+		# and a headless box with no graphical session is a healthy version
+		# of this. Reported rather than passed over, the same way `mux check`
+		# reports the checks it skips for want of a server.
+		ok "$UNIT is not running (nothing to be stale)"
+		return 0 ;;
+	esac
+	if [ ! -d "/proc/$_rn_pid" ]; then
+		ok "$UNIT: cannot see pid $_rn_pid (no /proc here)"
+		return 0
+	fi
+	_rn_stale=
+	for _rn_f in "$_rn_dir"/*.py; do
+		[ -f "$_rn_f" ] || continue
+		[ "$_rn_f" -nt "/proc/$_rn_pid" ] || continue
+		_rn_stale="$_rn_stale ${_rn_f##*/}"
+	done
+	if [ -n "$_rn_stale" ]; then
+		bad "the RUNNING daemon started BEFORE this code:$_rn_stale"
+		bad "  it is still drawing the old icon; run: setup.sh service"
+	else
+		ok "the running daemon is on the installed code"
+	fi
+}
+
 # check: the [OK]/[FAIL] MARKER contract (same as `mux check`) -- coloured ONLY
 # on a real terminal, so a caller that captures the output repaints the plain
 # markers itself. mux owns this copy; no integrator dependency.
@@ -149,6 +233,7 @@ check() {
 	if cmp -s "$PKG_DIR/$UNIT" "$UNIT_DIR/$UNIT" 2>/dev/null
 	then ok "$UNIT current"; else bad "$UNIT missing or stale"; fi
 	_code_current
+	_running_current
 	_st=$(systemctl --user is-enabled "$UNIT" 2>/dev/null || true)
 	if [ "$_st" = enabled ]; then ok "$UNIT enabled"
 	else bad "$UNIT not enabled (${_st:-unknown})"; fi
