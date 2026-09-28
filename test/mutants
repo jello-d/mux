@@ -1261,15 +1261,15 @@ m line 3 must be the session
 = indicator-partition-letter-not-drawn
 f indicator/mux_indicator/render.py
 t mux-indicator
--         d.text((cx - bb[0], bot - bb[3]), part, font=f, fill=_PART_INK)
-+         pass
-m test_ENOUGH_OF_THE_LETTER_SURVIVES_THE_BADGE
+-     d.text((bx - bb[0], by - bb[3]), text, font=f, fill=_PART_INK)
++     pass
+m test_the_letter_IS_BIG_ENOUGH_TO_READ
 
 = indicator-partition-letter-ignores-which
 f indicator/mux_indicator/render.py
 t mux-indicator
--         f = _cap_font(s * _PART_CAP)
-+         part = "A"; f = _cap_font(s * _PART_CAP)
+-     f = _part_font(s, text, s - fw - 1 - avoid)
++     text = "A"; f = _part_font(s, text, s - fw - 1 - avoid)
 m test_two_partitions_DIFFER
 
 = indicator-partition-letter-does-not-blink
@@ -1279,19 +1279,40 @@ t mux-indicator
 +     if False:
 m test_it_BLINKS_on_the_cursor_phase
 
-= indicator-partition-letter-hidden-by-the-badge
+= indicator-partition-letter-too-small-again
 f indicator/mux_indicator/render.py
 t mux-indicator
-- _PART_CAP = 0.30
+- _PART_CAP = 0.46
 + _PART_CAP = 0.04
-m test_ENOUGH_OF_THE_LETTER_SURVIVES_THE_BADGE
+m test_the_letter_IS_BIG_ENOUGH_TO_READ
 
 = indicator-partition-letter-buried-by-the-strip
 f indicator/mux_indicator/render.py
 t mux-indicator
--     cx = x + w + int(s * 0.12)
-+     cx = 0
-m test_it_STAYS_OUT_OF_THE_MARK_STRIP
+-     bx = s - fw - 1 - (bb[2] - bb[0])
++     bx = 0
+m test_it_KEEPS_CLEAR_OF_THE_MARK_STRIP
+
+= indicator-partition-letter-clamp-removed
+f indicator/mux_indicator/render.py
+t mux-indicator
+-             _avoid = _mark_metrics(s, mark)[1] + 1
++             _avoid = 0
+m test_it_KEEPS_CLEAR_OF_THE_MARK_STRIP
+
+= indicator-partition-ink-shared-with-the-badge
+f indicator/mux_indicator/render.py
+t mux-indicator
+- _PART_INK = (0xFF, 0xFF, 0xFF, 0xFF)
++ _PART_INK = (0xF4, 0xF4, 0xF6, 0xFF)
+m test_the_INK_belongs_to_the_letter_alone
+
+= indicator-partition-letter-survives-the-blink
+f indicator/mux_indicator/render.py
+t mux-indicator
+-     if part and cursor:
++     if part:
+m test_it_BLINKS_on_the_cursor_phase
 
 = next-blocked-partition-ignored
 f libexec/mux-next-blocked
