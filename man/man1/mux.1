@@ -286,9 +286,22 @@ row.
 .RB ( \-p / \-\-persist
 is retired \(em accepted and ignored, since it is now the default.)
 .TP
-.B mux next-blocked
+.B mux next-blocked " [" \-\-partition " " \fINAME\fR ]
 Jump to the session whose agent has needed you longest \(em the loudest chip on
 the strip. Repeat to walk down the urgency order.
+.IP
+.B \-\-partition
+scopes the whole run to another partition: its SERVER and its STATE, which
+resolve from different places and have disagreed once already (asking the right
+server and then reading another partition's records finds nothing blocked and
+exits 0 having done nothing, indistinguishable from "nothing needs you"). It is
+authoritative even inside tmux; the bare form still follows
+.BR $TMUX .
+The tray is the caller: one host publishes one item per partition, so a click
+on the
+.B work
+item has to jump to work's blocked session rather than to whichever partition
+the far side's login shell resolved.
 .TP
 .B mux hide " " \fISESSION\fR ", " mux show " " \fISESSION\fR
 Hide or unhide

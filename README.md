@@ -604,7 +604,8 @@ mux save [NAME]              snapshot this session (records only deltas)
 mux edit [NAME]              open a profile in $EDITOR
 mux rename [OLD] NEW         rename a session and its profile
 mux theme [NAME|next|prev]   set/cycle/show the theme (always remembered)
-mux next-blocked             jump to the session that has needed you longest
+mux next-blocked [--partition NAME]
+                             jump to the session that has needed you longest
 mux hide/show SESSION        hide/unhide a session for this client
 mux show-all                 clear this client's hidden sessions
 mux reload                   re-source tmux.conf on every mux server

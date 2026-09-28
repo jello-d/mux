@@ -14,7 +14,11 @@ mkdir -p "$T/bin" "$T/rt/agent-state/default"
 cat >"$T/bin/tmux" <<'EOF'
 #!/bin/sh
 case "$*" in
-*list-sessions*)    printf 'alpha\nbravo\ncharlie\n' ;;
+# `worksess` lives in the `work` partition and is listed here because the
+# stub answers one set for every socket. It is invisible to the default
+# partition's cases either way: the choice comes from the state RECORDS,
+# and its record is written under agent-state/work.
+*list-sessions*)    printf 'alpha\nbravo\ncharlie\nworksess\n' ;;
 # ORDER MATTERS, and it bit: the list-clients FORMAT contains
 # `#{client_name}`, so a `*client_name*` arm placed first swallows it and
 # returns a single tty -- the headless case then looked like it could not
@@ -118,6 +122,48 @@ case "$(cat "$TMUXLOG")" in
 *) fail "headless did not pick the most recently active client: got
 [$(cat "$TMUXLOG")] -- wanted the one with the highest client_activity" ;;
 esac
+
+# --- --partition SCOPES THE WHOLE RUN --------------------------------------
+# One host publishes one tray item per partition now, so a click on the `work`
+# item has to jump to WORK's blocked session. Without this every item on a
+# host did the same thing -- and did it plausibly, landing on a real session
+# that simply was not the one you clicked.
+#
+# BOTH HALVES ARE ASSERTED, because they resolve from different places and
+# have already disagreed once: the SOCKET (`tmux -L work`) and the STATE
+# DIRECTORY (agent-state/work). Asking the right server and then reading
+# another partition's records finds nothing blocked and exits 0 having done
+# nothing, which is indistinguishable from "nothing needs you".
+#
+# The discriminator is the `default` record left live above: if the option
+# were ignored, this would switch to charlie rather than to worksess.
+mkdir -p "$T/rt/agent-state/work"
+agent_rec "$T/rt/agent-state/work/p1" blocked %1 50 worksess x
+: >"$TMUXLOG"
+env -u MUX_SHARE -u TMUX MUX_CTX_PARTITION=default \
+	"$HERE/libexec/mux-next-blocked" --partition work >/dev/null 2>&1 || true
+case "$(cat "$TMUXLOG")" in
+*"=worksess"*) ;;
+*) fail "--partition did not reach the partition's STATE: got
+[$(cat "$TMUXLOG")] -- it read another partition's records" ;;
+esac
+case "$(cat "$TMUXLOG")" in
+*"-L work"*) ;;
+*) fail "--partition did not reach the partition's SERVER: got
+[$(cat "$TMUXLOG")] -- the switch went to whichever socket was default" ;;
+esac
+
+# A bare --partition is a usage error, not a silent fall back to the caller's
+# own partition: a click composed without its name would then jump somewhere
+# plausible and wrong.
+_rc=0
+env -u MUX_SHARE -u TMUX "$HERE/libexec/mux-next-blocked" --partition \
+	>/dev/null 2>&1 || _rc=$?
+[ "$_rc" = 2 ] || fail "--partition with no name must exit 2, got $_rc"
+_rc=0
+env -u MUX_SHARE -u TMUX "$HERE/libexec/mux-next-blocked" --nope \
+	>/dev/null 2>&1 || _rc=$?
+[ "$_rc" = 2 ] || fail "an unknown option must exit 2, got $_rc"
 
 # ... and with nothing attached at all it says so rather than switching blind.
 cat >"$T/bin/tmux" <<'EOF'

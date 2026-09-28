@@ -1292,3 +1292,24 @@ t mux-indicator
 -     cx = x + w + int(s * 0.12)
 +     cx = 0
 m test_it_STAYS_OUT_OF_THE_MARK_STRIP
+
+= next-blocked-partition-ignored
+f libexec/mux-next-blocked
+t mux-next-blocked
+- _ns=$_part
++ _ns=
+m --partition did not reach the partition's STATE
+
+= next-blocked-partition-wrong-socket
+f libexec/mux-next-blocked
+t mux-next-blocked
+- 	if [ -n "$_ns" ]; then tmux -L "$_ns" "$@"
++ 	if [ -n "$_ns" ]; then tmux "$@"
+m --partition did not reach the partition's SERVER
+
+= next-blocked-bare-partition-accepted
+f libexec/mux-next-blocked
+t mux-next-blocked
+- [ "$_pflag" = 0 ] || [ -n "$_part" ] || {
++ true || {
+m --partition with no name must exit 2
