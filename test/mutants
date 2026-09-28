@@ -682,7 +682,7 @@ f libexec/mux-latch
 t mux-latch
 - 	[ "$_stale" = "$_lock" ] && continue
 + 	[ "$_stale" = "$_lock" ] && rm -f "$_stale"
-m no lock file existed while latch was running
+m no lock existed at hostwith_part_sess.lock
 
 = latch-sweep-reaps-live-locks
 f libexec/mux-latch
