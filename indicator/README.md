@@ -29,8 +29,22 @@ sits. So it is a seam, unset by default:
 indicator-activate   focus-kitty
 ```
 
-The hook is handed the **label** as its one argument and runs *after* the
-switch, so the window already shows the right session when it comes forward.
+The hook is handed the **label** — the host's short name — as its **one and
+only** argument, and runs *after* the switch so the window already shows the
+right session when it comes forward. Always one argument, including for your
+own box; there is no partition or session in it, and no argument-less form.
+
+That is sufficient because mux already puts the label in the window title.
+`share/mux.tmux` sets:
+
+```
+set-titles-string '#{@mux-prefix}#S:#W⠀⠀⠀⠀[#{host_short}]'
+```
+
+and `host_short` is the **tmux server's** hostname — so a latched session
+advertises the *remote's* name in the terminal sitting in front of you. The
+samples match `[label]` with the brackets, because the bare name would also
+match a session called `northwood` or a path in the title.
 Two samples ship in `share/indicator/`, trading different requirements:
 
 - `focus-kitty` — kitty remote control (needs `allow_remote_control`),

@@ -20,6 +20,6 @@ _label=${1:-}
 command -v wf-msg >/dev/null 2>&1 || {
 	echo "focus-wayfire: wf-msg is not on PATH" >&2; exit 78; }
 
-wf-msg focus-window "title:$_label" 2>/dev/null || {
+wf-msg focus-window "title:\\[$_label\\]" 2>/dev/null || {
 	echo "focus-wayfire: could not focus a window titled '$_label'" >&2
 	exit 78; }
