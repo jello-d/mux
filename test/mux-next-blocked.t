@@ -15,6 +15,12 @@ cat >"$T/bin/tmux" <<'EOF'
 #!/bin/sh
 case "$*" in
 *list-sessions*)    printf 'alpha\nbravo\ncharlie\n' ;;
+# ORDER MATTERS, and it bit: the list-clients FORMAT contains
+# `#{client_name}`, so a `*client_name*` arm placed first swallows it and
+# returns a single tty -- the headless case then looked like it could not
+# resolve a client when the code was fine. Most specific arm first.
+*list-clients*)     [ -n "${MUX_NB_NOCLIENTS:-}" ] && exit 0
+                    printf '100 /dev/pts/1\n900 /dev/pts/9\n300 /dev/pts/3\n' ;;
 *client_name*)      printf '/dev/pts/7\n' ;;
 *client_session*)   printf 'alpha\n' ;;
 *switch-client*)    printf 'SWITCH %s\n' "$*" >>"$TMUXLOG" ;;
@@ -68,9 +74,66 @@ rm -f "$T/rt/agent-state/default/p1"
 _got=$(run '/dev/pts/7')
 [ -z "$_got" ] || fail "nothing blocked: expected no switch, got [$_got]"
 
-# No client and no session to resolve one from: fail loud, non-zero.
-if env -u MUX_SHARE -u TMUX "$HERE/bin/mux" next-blocked >/dev/null 2>&1; then
-	fail "no client outside a session: expected a non-zero exit"
+# No client and NOTHING ATTACHED to resolve one from: fail loud, non-zero.
+#
+# This used to read "no session to resolve one from", because outside tmux the
+# verb refused outright. It does not any more -- a remote caller arriving over
+# a transport has no pane and never will, and a tray item exists only when a
+# latch does, so there IS a client. The refusal now turns on whether anything
+# is ATTACHED, which is the fact that actually decides whether a switch is
+# possible. Asserted with the stub answering no clients at all.
+if env -u MUX_SHARE -u TMUX MUX_NB_NOCLIENTS=1 \
+	"$HERE/bin/mux" next-blocked >/dev/null 2>&1; then
+	fail "no client attached anywhere: expected a non-zero exit"
 fi
+
+# --- HEADLESS: no pane, no $TMUX, which is how a REMOTE caller arrives -----
+# The tray indicator reaches a latched host over the same transport it polls
+# with, so there is no pane to resolve a client from. That used to exit 1 and
+# say "must run in a session", which made the whole cross-machine click
+# impossible -- and a tray item exists ONLY when a latch does, so a client is
+# by definition attached.
+#
+# The partition is `default` here, matching the namespace the records above
+# were written under: headless, the socket comes from MUX_CTX_PARTITION rather
+# than from $TMUX, and pointing it elsewhere finds an empty state dir and
+# correctly does nothing -- which reads exactly like a broken client lookup.
+#
+# MOST RECENTLY ACTIVE wins. Asserted with the busiest client deliberately NOT
+# first in the list, so an implementation that just takes the first line fails
+# here rather than passing by accident.
+: >"$TMUXLOG"
+# Seed its own blocked session: the cases above deliberately clear both, so
+# without this the helper correctly does nothing and the assertion below
+# would fail for a reason that has nothing to do with client resolution.
+agent_rec "$T/rt/agent-state/default/p9" blocked %9 100 charlie x
+# The HELPER directly, not through `bin/mux`: the front end resolves the
+# partition itself and would override MUX_CTX_PARTITION here, pointing at an
+# empty state dir. That the verb REACHES the helper is already proved by the
+# cases above; what is under test here is how it picks a client.
+env -u MUX_SHARE -u TMUX MUX_CTX_PARTITION=default \
+	"$HERE/libexec/mux-next-blocked" >/dev/null 2>&1 || true
+case "$(cat "$TMUXLOG")" in
+*"/dev/pts/9"*) ;;
+*) fail "headless did not pick the most recently active client: got
+[$(cat "$TMUXLOG")] -- wanted the one with the highest client_activity" ;;
+esac
+
+# ... and with nothing attached at all it says so rather than switching blind.
+cat >"$T/bin/tmux" <<'EOF'
+#!/bin/sh
+case "$*" in
+*list-sessions*) printf 'alpha\n' ;;
+*list-clients*)  ;;
+*switch-client*) printf 'SWITCH %s\n' "$*" >>"$TMUXLOG" ;;
+esac
+EOF
+chmod +x "$T/bin/tmux"
+: >"$TMUXLOG"
+_rc=0
+env -u MUX_SHARE -u TMUX MUX_CTX_PARTITION=default \
+	"$HERE/libexec/mux-next-blocked" >/dev/null 2>&1 || _rc=$?
+[ "$_rc" = 1 ] || fail "with no client attached it must exit 1, got $_rc"
+[ ! -s "$TMUXLOG" ] || fail "it switched something with no client attached"
 
 pass

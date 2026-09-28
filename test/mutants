@@ -1115,3 +1115,25 @@ t mux-agent-hook
 - 	echo "mux: agent-hook: unknown event: $_ev" >&2
 + 	exit 0
 m an unknown event must exit 2
+
+
+= next-blocked-headless-takes-first
+f libexec/mux-next-blocked
+t mux-next-blocked
+- 			| sort -rn | awk 'NR == 1 { print $2 }')
++ 			| awk 'NR == 1 { print $2 }')
+m did not pick the most recently active
+
+= next-blocked-ns-split-again
+f libexec/mux-next-blocked
+t mux-next-blocked
+- dir=$(mux_agent_dir "$_ns")
++ dir=$(mux_agent_dir)
+m did not pick the most recently active
+
+= next-blocked-headless-refuses
+f libexec/mux-next-blocked
+t mux-next-blocked
+- 		echo "mux: no attached client to switch" >&2; exit 1; }
++ 		echo "mux: no attached client to switch" >&2; exit 0; }
+m expected a non-zero exit

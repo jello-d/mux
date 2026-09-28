@@ -22,17 +22,58 @@ _lib=$(dirname "$0")
 
 client=${1:-}
 current=${2:-}
+
+# EVERY tmux CALL GOES THROUGH THIS. Inside tmux, $TMUX names the socket and a
+# bare call is right. HEADLESS -- which is how a remote caller arrives over a
+# transport -- a bare call reaches the DEFAULT socket, which is not where mux's
+# server lives, so every query came back empty and this reported "no attached
+# client" on a box with clients attached. Same wrapper the doctor already uses,
+# for the same reason.
+# ONE NAMESPACE, COMPUTED ONCE, because the socket and the STATE DIRECTORY
+# must agree and they were resolving from different places: this wrapper used
+# `$MUX_CTX_PARTITION` while mux_agent_dir independently defaults to `global`.
+# Headless with a partition of `default` that asked the right server for its
+# clients and then read an empty state dir -- so it resolved a client, found
+# nothing blocked, and exited 0 having done nothing. Silent, and indisting-
+# uishable from "nothing needs you".
+#
+# Empty inside tmux, where $TMUX governs both and mux_agent_dir already knows.
+_ns=
+[ -n "${TMUX:-}" ] || _ns=${MUX_CTX_PARTITION:-global}
+_nb() {
+	if [ -n "${TMUX:-}" ]; then tmux "$@"
+	else tmux -L "$_ns" "$@"; fi
+}
 # No CLIENT given (the bare `mux next-blocked`): resolve the client of the pane
 # we are in, which means we have to BE in one -- switch-client needs a target.
 if [ -z "$client" ]; then
-	[ -n "${TMUX:-}" ] || {
-		echo "mux: next-blocked must run in a session" >&2; exit 1; }
-	client=$(tmux display-message -p '#{client_name}' 2>/dev/null || true)
+	if [ -n "${TMUX:-}" ]; then
+		client=$(_nb display-message -p '#{client_name}' \
+			2>/dev/null || true)
+	else
+		# HEADLESS, which is how a REMOTE caller arrives. The tray
+		# indicator reaches a latched host over the same transport it
+		# polls with, so there is no pane to resolve from -- and there
+		# does not need to be, because a tray item EXISTS only when a
+		# latch does, which means a client is attached and the human is
+		# looking at it.
+		#
+		# MOST RECENTLY ACTIVE, and the limitation is worth stating:
+		# with several clients on that box (a latch and someone sitting
+		# at its console) this picks the one used last, which is
+		# usually but not always the one you meant. Precise attribution
+		# would need the attach to record its own $SSH_TTY, which is
+		# more plumbing than the ambiguity has so far been worth --
+		# revisit if it ever picks wrong in practice.
+		client=$(_nb list-clients \
+			-F '#{client_activity} #{client_name}' 2>/dev/null \
+			| sort -rn | awk 'NR == 1 { print $2 }')
+	fi
 	[ -n "$client" ] || {
-		echo "mux: could not identify the client" >&2; exit 1; }
+		echo "mux: no attached client to switch" >&2; exit 1; }
 fi
 if [ -z "$current" ]; then
-	current=$(tmux display-message -c "$client" -p '#{client_session}' \
+	current=$(_nb display-message -c "$client" -p '#{client_session}' \
 		2>/dev/null || true)
 fi
 
@@ -42,7 +83,7 @@ if [ -r "$_lib/mux-exclude.sh" ]; then
 	. "$_lib/mux-exclude.sh"
 	excluded=$(mux_excluded "$client")
 fi
-dir=$(mux_agent_dir)
+dir=$(mux_agent_dir "$_ns")
 
 # LINE by line, and a here-doc rather than a pipe -- `best` is carried out of
 # this loop, and a pipe would run it in a subshell and discard it. Word
@@ -60,12 +101,12 @@ while IFS= read -r s; do
 	[ -n "$ep" ] || ep=9999999999
 	if [ -z "$best" ] || [ "$ep" -lt "$bestep" ]; then best=$s; bestep=$ep; fi
 done <<EOF
-$(tmux list-sessions -F '#{session_name}' 2>/dev/null)
+$(_nb list-sessions -F '#{session_name}' 2>/dev/null)
 EOF
 
 [ -n "$best" ] || exit 0            # nothing blocked; nowhere to jump
 if [ -n "$client" ]; then
-	tmux switch-client -c "$client" -t "=$best"
+	_nb switch-client -c "$client" -t "=$best"
 else
-	tmux switch-client -t "=$best"
+	_nb switch-client -t "=$best"
 fi
