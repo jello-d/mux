@@ -163,13 +163,21 @@ partitions still costs **one** ssh connection per poll -- that is the whole
 reason the verb exists, since a reader on another machine cannot know the
 partition names to ask for in the first place.
 
-**The letter is the cursor.** Each item carries an A-Z badge where the `_`
-cursor sits, and it blinks on the same phase, so it costs no space: the prompt
-is ornament, and the one glyph on it that already moves is free to carry a
-letter. `global` is the reserved baseline partition and is always **A**;
-everything else follows alphabetically. Past Z there is no letter rather than a
-second alphabet -- 27 partitions is a different problem, and drawing `AA` would
-make it look solved.
+**The letter stands in for the cursor.** Each item carries an A-Z letter set
+into the bottom-right corner, drawn *over* the badge and blinking on the
+cursor's phase -- the `_` is not drawn when a letter is, so there is one
+blinking glyph, not two. `global` is the reserved baseline partition and is
+always **A**; everything else follows alphabetically. Past Z there is no letter
+rather than a second alphabet -- 27 partitions is a different problem, and
+drawing `AA` would make it look solved.
+
+It sat *in* the cursor's slot in 0.56 and was too small to read on a live tray.
+Being boxed in on three sides capped it at 0.30 of the tile; moving it into the
+corner and drawing it after the badge removed the ceiling instead of
+negotiating with it, which is the same move the host mark made in 0.47. It is
+0.46 of the tile now, and on a multi-host tray it shrinks only as far as the
+mark strip requires -- the mark is the host's identity and the letter is drawn
+on top of it, so a wide capital is clamped rather than allowed to cover it.
 
 **One partition gets no letter at all**, the same rule as the host mark: a
 letter distinguishing a thing from nothing is noise, and the common install

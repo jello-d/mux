@@ -603,40 +603,100 @@ class PartitionLetter(unittest.TestCase):
                 f"{s}px: the letter changed nothing right of the {w}px mark "
                 "strip, so it is drawn entirely underneath it")
 
-    def test_ENOUGH_OF_THE_LETTER_SURVIVES_THE_BADGE(self):
-        """Counted in the letter's own INK, at every size and every state.
+    @staticmethod
+    def _ink(tile):
+        """How many pixels wear the letter's own colour.
 
-        Two failures this closes, and neither is visible to a "the tiles
-        differ" assertion. The letter carries a one-pixel drop SHADOW, so
-        removing the glyph and keeping the shadow still changes the tile --
-        two guards for one condition, and a plain difference check kills
-        neither. And the badge is drawn AFTER the letter, so a letter sized by
-        eye on `none` (which draws no badge) is simply painted over on
-        `idle`'s check: it would still "differ", by its shadow, while being
-        invisible.
+        EXACT, because _PART_INK is unique on the tile. It used to be
+        byte-identical to the badge's ink, which forced this to be a DELTA
+        against an unlettered tile and still undercounted wherever the letter
+        overlapped `idle`'s check -- two overlays sharing an ink cannot be
+        told apart by any pixel assertion. Giving the letter its own value
+        made the measurement honest instead of clever.
 
-        A DELTA against the unlettered tile, because _PART_INK and the badge's
-        own ink are the same value: counting absolutely would credit the
-        letter with the count's pixels.
+        A COUNT, not "the tiles differ", for the other reason: the letter
+        carries a one-pixel drop SHADOW, so removing the glyph and keeping the
+        shadow still changes the tile. That is two guards for one condition,
+        and a difference check kills neither mutation.
         """
-        from mux_indicator.render import _PART_INK, _tile
+        from mux_indicator.render import _PART_INK
+        px = tile.load()
+        return sum(px[x, y] == _PART_INK
+                   for x in range(tile.width)
+                   for y in range(tile.height))
 
-        def ink(tile):
-            px = tile.load()
-            return sum(px[x, y] == _PART_INK
-                       for x in range(tile.width)
-                       for y in range(tile.height))
-
+    def test_the_INK_belongs_to_the_letter_alone(self):
+        """Nothing else on a tile wears it, which is what makes every count
+        below exact rather than approximate."""
+        from mux_indicator.render import _tile
         for s in (22, 32, 48):
-            floor = max(6, int(s * 0.3))
             for st in STATES:
-                got = (ink(_tile(st, 9, s, True, part="B"))
-                       - ink(_tile(st, 9, s, True)))
+                self.assertEqual(
+                    self._ink(_tile(st, 12, s, True, None, "MLD", 0)), 0,
+                    f"{st} {s}px: something other than the partition letter "
+                    "is drawn in _PART_INK, so counting it proves nothing")
+
+    def test_the_letter_IS_BIG_ENOUGH_TO_READ(self):
+        """A floor on the glyph's own ink, at every size and every state.
+
+        0.30 of the tile shipped in the cursor slot and was reported as too
+        small from a live tray, which is the failure this holds down: a letter
+        that is present, correct and unreadable passes every structural check
+        ever written about it.
+        """
+        from mux_indicator.render import _tile
+        for s in (22, 32, 48):
+            floor = max(12, int(s * 0.8))
+            for st in STATES:
+                got = self._ink(_tile(st, 9, s, True, part="B"))
                 self.assertGreaterEqual(
                     got, floor,
-                    f"{st} {s}px: only {got} pixels of the letter survive "
-                    f"(want {floor}). Either it is not drawn at all, it is "
-                    "too small to read, or the badge painted over it.")
+                    f"{st} {s}px: only {got} pixels of the letter are drawn "
+                    f"(want {floor}). Either it is not drawn at all, or it is "
+                    "too small to read at the size a tray actually draws.")
+
+    def test_THE_BADGE_DOES_NOT_EAT_IT(self):
+        """A state that draws a badge keeps EVERY pixel of its letter.
+
+        The letter is drawn after the badge, and that ordering is what removed
+        the size ceiling rather than negotiating with it -- the same move the
+        host mark made in 0.47. Drawn before it instead, a 0.46 letter loses
+        about 45% of its ink to the badge's overhang on every state that has
+        one, so an equality here separates the two placements outright.
+        """
+        from mux_indicator.render import _tile
+        for s in (22, 32, 48):
+            base = self._ink(_tile("none", 9, s, True, part="B"))
+            for st in ("idle", "working", "blocked", "unknown"):
+                self.assertEqual(
+                    self._ink(_tile(st, 9, s, True, part="B")), base,
+                    f"{st} {s}px: the badge is being drawn over the letter, "
+                    "which is what capped it at an unreadable size before")
+
+    def test_it_KEEPS_CLEAR_OF_THE_MARK_STRIP(self):
+        """The mark is the HOST's identity and the letter is drawn on top of
+        it, so a wide capital walking left into the strip would cover the one
+        thing that says which machine this is.
+
+        Measured before it was clamped: `W` started 7px inside the strip on a
+        32px tile, at every size. The clamp shrinks the glyph rather than
+        moving it, and it only bites on a marked tile -- height stays the
+        primary rule, because fitting a glyph to a column is what made 0.44
+        unreadable.
+        """
+        from mux_indicator.render import _mark_metrics, _tile
+        for s in (22, 32, 48):
+            _f, w = _mark_metrics(s, "MLD")
+            for ch in ("A", "B", "M", "W"):
+                plain = _tile("none", None, s, True, None, "MLD", 0).load()
+                letd = _tile("none", None, s, True, None, "MLD", 0,
+                             part=ch).load()
+                for x in range(int(w) + 1):
+                    for y in range(s):
+                        self.assertEqual(
+                            plain[x, y], letd[x, y],
+                            f"{ch} {s}px: the letter changed a pixel at "
+                            f"x={x} y={y}, inside the {w}px mark strip")
 
 
 class Deterministic(unittest.TestCase):

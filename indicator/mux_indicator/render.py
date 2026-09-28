@@ -84,24 +84,42 @@ MARK_PALETTE = (
 )
 _MARK_BACK = (0x00, 0x00, 0x00, 0xFF)   # the strip the letters sit on
 _MARK_CAP = 0.86     # cap height as a fraction of the third of the tile
-# The partition letter, which takes the `_` cursor's slot. Both numbers were
-# settled by rendering at 22, 32 and 48 and LOOKING, not by arithmetic -- 0.44
-# shipped a mark that was unreadable at 32 because every render it was judged
-# on had been zoomed 5x.
+# The partition letter. It stands in for the `_` cursor -- the underscore is
+# not drawn when a letter is -- but it does NOT sit in the cursor's slot: it is
+# set into the bottom-right corner, where there is room to be read.
 #
-# 0.30 is the ceiling, not a preference. The letter is boxed on three sides:
-# the count badge is 0.65 of the tile and overhangs the top right, the mark
-# strip owns the left edge, and the screen ends below. At 0.34 the letter
-# starts disappearing under the badge on `idle` and `blocked`; at 0.38 it is
-# behind it.
-_PART_CAP = 0.30
+# Every number here was settled by rendering at 22, 32 and 48 and LOOKING, not
+# by arithmetic. 0.44 shipped a mark that was unreadable at 32 because every
+# render it was judged on had been zoomed 5x.
+#
+# 0.30 IN THE CURSOR SLOT WAS TOO SMALL, reported from a live tray. That
+# placement was boxed in on three sides (the badge overhangs the top right at
+# 0.65 of the tile, the mark strip owns the left edge, the screen ends below)
+# and 0.30 was its ceiling: at 0.34 the glyph began disappearing under the
+# badge. Moving into the corner AND drawing after the badge removes the
+# ceiling rather than negotiating with it -- the same move the host mark made
+# in 0.47, for the same reason.
+#
+# 0.54 IS THE NEW CEILING and 0.46 is the chosen value: at 0.54 a wide capital
+# (`W`, which 26 partitions can reach) crowds the mark strip on a multi-host
+# tray and starts eating a two-digit count.
+_PART_CAP = 0.46
+# The baseline, as a fraction of the tile. 0.90 puts it just inside the frame.
+_PART_BASE = 0.90
 # BRIGHTER THAN THE `_` IT REPLACES, deliberately breaking with the cursor it
 # stands in for: a cursor only has to be NOTICED and a letter has to be READ.
 # The lifted prompt colour is recessive by design (it is ornament), and at 7px
 # on a dark screen it was present and illegible. It still blinks on the
 # cursor's phase, which is what keeps it reading as the cursor rather than as
 # a fourth thing on the tile.
-_PART_INK = (0xF4, 0xF4, 0xF6, 0xFF)
+#
+# AND IT IS ITS OWN VALUE, not a fourth alias for the same near-white. It used
+# to be byte-identical to _BADGE_INK, which is not a cosmetic point: two
+# overlays sharing an ink cannot be told apart by any pixel assertion, so a
+# test counting the letter's pixels was crediting the badge's count as well
+# and had to be written around the ambiguity. Pure white is unique on the
+# tile, brightest of the three identity inks, and exactly countable.
+_PART_INK = (0xFF, 0xFF, 0xFF, 0xFF)
 _MARK_PAD = 0.03     # breathing room each side of the widest letter
 _BASE = (0x14, 0x15, 0x19)           # near-black screen
 _PROMPT_LIFT = 0.55  # how far the ornamental >_ lifts from the screen toward
@@ -127,10 +145,20 @@ _TRACK = 0.28      # inter-digit tracking to pull, e.g., "12" tighter
 
 _SANS = ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
          "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf")
-# Condensed and bold for the mark: three capitals have to fit a strip a fifth
-# of the tile wide, and weight is what keeps them readable at 32px.
-_COND = ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-         "/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf",
+# Condensed and bold: capitals have to fit a narrow strip, and weight is what
+# keeps them readable at 32px.
+#
+# CONDENSED IS FIRST NOW, WHICH IT SAYS AND DID NOT DO. The comment has always
+# claimed condensed; the order put plain Bold ahead of it, so on any box with
+# DejaVu installed (all of them here) the mark has been drawn in the wide face
+# since 0.44. It matters because the strip is sized from the WIDEST glyph, and
+# the strip is what the partition letter has to fit beside: measured, the same
+# cap height in condensed takes the strip from 15px to 13px on a 32px tile,
+# 20 to 17 at 48. That is the whole difference between a partition letter at
+# full size on a marked tile and one squeezed back to where it was reported
+# as too small to read.
+_COND = ("/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf",
+         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
          "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf")
 
 
@@ -359,23 +387,61 @@ def _hero(d, s, m, col, cursor=True, part=None):
     cw, ch = int(s * 0.28), max(2, int(s * 0.09))      # wider underscore
     rlim = s - m - int(s * 0.14)
     if part:
-        # THE PARTITION LETTER IS THE CURSOR, not a fourth thing on the tile.
-        # It takes the `_`'s slot, its colour and its blink phase, which is the
-        # user's framing and the reason it costs no space: the prompt is
-        # ornament, so the one glyph on it that already moves is free to carry
-        # a letter instead. Drawing it BESIDE the cursor was the alternative
-        # and there is nowhere to put it -- the badge owns the top right at
-        # 0.65 of the tile and the mark strip owns the left edge.
-        f = _cap_font(s * _PART_CAP)
-        bb = d.textbbox((0, 0), part, font=f)
-        # A one-pixel drop shadow, for the single place the letter cannot be
-        # kept clear of: the badge's rounded corner comes down to meet it on
-        # `idle` and `blocked`. Same argument as the mark's strip -- contrast
-        # must not depend on what happens to be behind this particular glyph.
-        d.text((cx - bb[0] + 1, bot - bb[3] + 1), part, font=f, fill=_SHADOW)
-        d.text((cx - bb[0], bot - bb[3]), part, font=f, fill=_PART_INK)
+        # THE LETTER STANDS IN FOR THE CURSOR, which is why the underscore is
+        # not drawn here: one blinking glyph, not two. It is drawn later (see
+        # _part_letter, called from _tile after the badge) because anything
+        # drawn at this point is underneath the badge, and being underneath
+        # the badge is what capped the old placement at an unreadable size.
         return
     d.rectangle([cx, bot - ch, min(cx + cw, rlim), bot], fill=cur)
+
+
+def _part_font(s, text, room):
+    """The largest partition letter that fits: cap height FIRST, then clamped
+    by the width available.
+
+    THE CLAMP ONLY BITES ON A MARKED TILE. Height is the primary rule, as it
+    is for the mark, because fitting a glyph to a column is what made 0.44
+    unreadable. But right-aligning a WIDE capital into the corner walks it
+    left into the mark strip -- measured, at every size: `W` starts 7px inside
+    the strip on a 32px tile, and it is drawn after the mark's letters, so it
+    would cover the host's identity with the partition's. A is not the
+    problem; 26 partitions are reachable and W is.
+    """
+    probe = ImageDraw.Draw(Image.new("RGB", (8, 8)))
+    cap = s * _PART_CAP
+    while cap >= 4:
+        f = _cap_font(cap)
+        bb = probe.textbbox((0, 0), text, font=f)
+        if bb[2] - bb[0] <= room:
+            return f
+        cap -= 1
+    return _cap_font(4)
+
+
+def _part_letter(d, s, text, avoid=0):
+    """The A-Z partition letter, set into the BOTTOM-RIGHT corner.
+
+    DRAWN LAST, over the badge, exactly as the host mark's letters are drawn
+    over the chevron and for the same reason: an overlay that negotiates for
+    space loses, and what it loses is legibility. The corner is the one part
+    of the tile nothing else claims -- the badge overhangs the top right, the
+    prompt sits mid-left, and `avoid` keeps it clear of the mark strip.
+
+    RIGHT-ALIGNED to the inner edge of the frame rather than to a fixed x, so
+    a wide capital grows away from the mark strip instead of into it.
+    """
+    fw = max(1, s // 11)                      # the frame's own width
+    f = _part_font(s, text, s - fw - 1 - avoid)
+    bb = d.textbbox((0, 0), text, font=f)
+    bx = s - fw - 1 - (bb[2] - bb[0])
+    by = int(s * _PART_BASE)
+    # A one-pixel drop shadow. The corner is clear of the badge's FILL but not
+    # always of its rim, and on a pale state the two whites meet. Same argument
+    # as the mark's strip: contrast must not depend on what happens to be
+    # behind this particular glyph.
+    d.text((bx - bb[0] + 1, by - bb[3] + 1), text, font=f, fill=_SHADOW)
+    d.text((bx - bb[0], by - bb[3]), text, font=f, fill=_PART_INK)
 
 
 def _badge(img, s, fill, ink, count, check=False, mark=None):
@@ -466,6 +532,18 @@ def _tile(state, count, size, cursor=True, host=None, mark=None, ink=None,
         # A fresh Draw: _badge composites its own layer onto img, so the
         # handle taken above no longer sees what is on the canvas.
         _mark_letters(ImageDraw.Draw(img), s, mark, mark_ink(ink))
+    # ... and the partition letter above everything, on the CURSOR's phase:
+    # it stands in for the underscore _hero did not draw, so it must vanish on
+    # the blink's off frame or the tile stops blinking at all.
+    if part and cursor:
+        # The strip's own width plus ONE pixel: the strip is drawn inclusive
+        # of that column, so +1 is what clears it and anything more is spent
+        # out of a budget the marked tile cannot afford (the strip already
+        # takes 47% of a 32px tile). Wider air would shrink an `A` that fits.
+        _avoid = 0
+        if mark:
+            _avoid = _mark_metrics(s, mark)[1] + 1
+        _part_letter(ImageDraw.Draw(img), s, part, _avoid)
     return img
 
 
