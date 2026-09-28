@@ -355,7 +355,20 @@ The sessions you have open are recorded as you open them, per socket, in
 ```sh
 mux resume           # rebuild them all, then attach the first
 mux resume --list    # just show what would be rebuilt
+mux resume work      # another PARTITION's set, not the one you are in
+mux resume work api  # ... and land on `api` when it is done
 ```
+
+Both arguments are optional and **positional**: the first is always the
+partition, never whichever word happens to name one, since that magic changes
+meaning the day you add a partition. A partition nothing knows exits 3 rather
+than resuming an empty set and reporting "no sessions recorded", which reads
+as data loss when the truth is a typo. The session only says where to *focus*
+afterwards (a resume brings them all back either way), and a name that is not
+in the set is refused **before** the rebuild. `global` is the baseline
+partition, and therefore the reserved word for "not the one my context
+resolved" — needed only where a context mechanism can resolve to something
+other than the baseline in an ordinary login shell.
 
 It is **state, not config**: never in `$MUX_DIR`, never in git, and per
 machine. Recording is additive when a session is built or attached and
@@ -566,7 +579,7 @@ mux                          pick a session to attach (fzf or a menu)
 mux go [NAME|DIR] [PROFILE]   create/attach/switch; agent continues
 mux go --resume [NAME]       same, but the agent resumes (choose a chat)
 mux --no-agent ...           build the panes, plain shell in the agent pane
-mux resume                   rebuild this partition's sessions (--list)
+mux resume [PART [SESS]]     rebuild a partition's sessions (--list)
 mux scan                     rebuild the project discovery map
 mux why [NAME]               show each resolved value and where it came from
 mux views [auto|floor|ceil]  who is attached, at what size, what it costs

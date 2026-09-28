@@ -237,4 +237,76 @@ case $_lg in
 esac
 unset MUX_LOG
 
+# --- the optional PARTITION and SESSION (0.56) ----------------------------
+# `mux resume` grew two optional positional arguments. The first is ALWAYS
+# the partition -- never "whichever of these names one" -- because that magic
+# changes meaning the day you add a partition, and a session sharing a name
+# with one would silently resume the wrong set. mux latch has already shipped
+# a default that succeeded at the wrong thing and said nothing.
+
+# An unknown partition is exit 3, mux's cross-cutting "the name is not known
+# here". NOT an empty resume reporting "no sessions recorded" -- that reads as
+# data loss when the truth is a typo.
+_rc=0
+mux "$T/elsewhere" resume nosuchpartition >"$T/out" 2>&1 || _rc=$?
+[ "$_rc" = 3 ] || fail "an unknown partition should exit 3, got $_rc"
+grep -q "no such partition" "$T/out" \
+	|| fail "it did not say which: $(cat "$T/out")"
+grep -q "known:" "$T/out" || fail "it did not list the known partitions"
+
+# A SESSION that is not in the set is also exit 3, and refused BEFORE the
+# rebuild: doing the work and then failing the one thing asked for would be
+# reported as success with a footnote.
+#
+# SEEDED FIRST. The cases above end with an EMPTY set, and the empty-set
+# refusal (exit 1) fires before the focus check is ever reached -- so without
+# a seed this passes or fails for a reason that has nothing to do with the
+# focus target, while reading exactly like the case it claims to be.
+mkdir -p "$T/tree/focus"
+mux "$T/tree/focus" go >/dev/null || fail "seed: go focus failed"
+: >"$LIVE"                       # the reboot, so a rebuild is observable
+# The partition is DISCOVERED, not hardcoded: a literal would name a
+# partition this fixture never records into, and the empty-set refusal would
+# then fire again for the wrong reason.
+_part=$(mux "$T/elsewhere" why 2>/dev/null \
+	| awk '$1 == "partition" { print $2; exit }')
+[ -n "$_part" ] || fail "could not learn the fixture's partition"
+mux "$T/elsewhere" resume --list | grep -qxF focus \
+	|| fail "precondition: the seeded session was not recorded"
+_rc=0
+mux "$T/elsewhere" resume "$_part" nosuchsession >"$T/out" 2>&1 || _rc=$?
+[ "$_rc" = 3 ] \
+	|| fail "an unknown focus session should exit 3, got $_rc:
+$(cat "$T/out")"
+grep -q "no such session recorded here" "$T/out" \
+	|| fail "it did not name the problem: $(cat "$T/out")"
+# ... and it refused BEFORE rebuilding, which is the half that matters: the
+# set is non-empty here, so a check made afterwards would have built `focus`
+# and only then complained about the name it was given.
+[ ! -s "$LIVE" ] || fail "it rebuilt before checking the focus target:
+[$(cat "$LIVE")]"
+
+# The NAMED partition with a session that IS in the set succeeds, so the
+# check above is not simply refusing everything.
+_rc=0
+mux "$T/elsewhere" resume "$_part" focus >"$T/out" 2>&1 || _rc=$?
+[ "$_rc" = 0 ] || fail "a valid partition and session failed ($_rc):
+$(cat "$T/out")"
+grep -q "^focus	" "$LIVE" || fail "the named form did not rebuild:
+[$(cat "$LIVE")]"
+
+# A FAILED context-command refuses rather than resuming the baseline.
+# `baseline` and `declined` are real answers meaning global; `failed` is the
+# ABSENCE of an answer, and acting on it hands you somebody else's sessions
+# while looking like success.
+printf '#!/bin/sh\nexit 1\n' >"$T/conf/ctxfail"
+chmod +x "$T/conf/ctxfail"
+printf 'context-command ctxfail\n' >"$T/conf/config"
+_rc=0
+mux "$T/elsewhere" resume >"$T/out" 2>&1 || _rc=$?
+rm -f "$T/conf/config"
+[ "$_rc" = 1 ] || fail "a FAILED context-command should refuse, got $_rc"
+grep -q "context-command FAILED" "$T/out" \
+        || fail "the refusal did not say why: $(cat "$T/out")"
+
 pass

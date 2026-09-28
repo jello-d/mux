@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.55" "User Commands"
+.TH MUX 1 "" "mux 0.56" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -77,16 +77,50 @@ are identical. A row is written only when
 .I NAME
 is not what this directory already derives.
 .TP
-.B mux resume " [" \-\-list ]
-Rebuild every session this partition had recorded, then attach the first.
+.B mux resume " [" \-\-list "] [" \fIPARTITION\fR "] [" \fISESSION\fR ]
+Rebuild every session a partition had recorded, then attach the first.
 Sessions are recorded automatically as you open them and forgotten on
 .BR "mux kill" ,
-so after a reboot this brings back what you had. It acts on the CURRENT
-partition and takes no way to name another. The set is state, not config:
+so after a reboot this brings back what you had. The set is state, not config:
 .IR $MUX_STATE/sessions.<socket> ,
 one
 .RI NAME <TAB> ROOT
 per line, per machine and never in git.
+.IP
+The BARE form always acts on the partition you are in, which is what a context
+is for. Both arguments are POSITIONAL and the first is ALWAYS the
+.IR PARTITION ,
+never whichever word happens to name one: that magic changes meaning the day a
+partition is added, and a session sharing a partition's name would resume the
+wrong set and say nothing.
+.I PARTITION
+must be one
+.B mux partitions
+lists, or the exit is 3 (the name is not known here) rather than an empty
+rebuild reporting
+.RB \(lq "no sessions recorded" \(rq,
+which reads as data loss when the truth is a typo.
+.B global
+is the baseline partition and is therefore also the reserved word for
+.RI \(lq not " the one my context resolved" \(rq :
+needed only where a context mechanism can resolve to something other than the
+baseline in an ordinary login shell.
+.IP
+.I SESSION
+only says where to FOCUS once the rebuild is done \(em a resume brings them all
+back either way \(em so its real job is failing loud: a name that is not in the
+set exits 3 BEFORE anything is built, since discovering the typo afterwards
+would mean the work happened and the one thing asked for did not.
+.IP
+A context\-command that FAILED refuses instead of resuming the baseline.
+.B baseline
+and
+.B declined
+are real answers meaning
+.BR global ;
+.B failed
+is the ABSENCE of an answer, and acting on it hands you another partition's
+sessions while looking like success. Name one explicitly, or fix the command.
 .TP
 .B mux go \-\-attach\-only " [" \fINAME\fR ]
 Attach
@@ -908,7 +942,7 @@ It always exits 0: it is a pure report, and a non\-zero exit would be
 indistinguishable from the transport.
 .PP
 .EX
-mux 0.55
+mux 0.56
 capabilities 1
 agent\-list 1
 agent\-summary 1
@@ -1376,12 +1410,14 @@ A usage error, or a verb this mux does not know.
 .TP
 .B 3
 THE NAME YOU GAVE IS NOT KNOWN HERE \(em no such session, and nothing that
-could be resolved into one.
+could be resolved into one. A PARTITION nobody knows is the same condition and
+returns the same code.
 .BR go ,
 .BR kill ,
 .BR rename ,
 .BR hide ,
-.B show
+.BR show ,
+.B resume
 and
 .B why
 all return it, because it is one CONDITION rather than one verb's failure, and

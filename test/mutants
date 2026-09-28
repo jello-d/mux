@@ -1180,3 +1180,30 @@ t mux-agent-summary
 + 	*) ;;
 m --all should still answer once
 
+= resume-unknown-partition-accepted
+f bin/mux
+t mux-resume
+-         case " $(mux_ctx_partitions | tr '\n' ' ') " in
++         case " $rs_want " in
+m an unknown partition should exit 3
+
+= resume-focus-check-removed
+f bin/mux
+t mux-resume
+-            && ! mux_sess_has "$rs_focus" "$rs_key"; then
++            && false; then
+m an unknown focus session should exit 3
+
+= resume-focus-checked-after-the-rebuild
+f bin/mux
+t mux-resume
+-                 printf '%s\n' "$rs_set" | sed 's/^/mux:   /' >&2
++                 _resume_rebuild "$rs_key" "$rs_set"
+m it rebuilt before checking the focus target
+
+= resume-failed-context-resumes-anyway
+f bin/mux
+t mux-resume
+- elif [ "$cmd" = resume ] && [ "${MUX_CTX_SRC:-baseline}" = failed ]; then
++ elif false; then
+m a FAILED context-command should refuse

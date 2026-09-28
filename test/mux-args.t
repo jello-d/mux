@@ -77,9 +77,15 @@ grep -q '^lay ' "$T/conf/profiles" || fail "positional: no row for lay"
 # It used to be an alias that set cmd=go and the --resume flag, and internally
 # the flag was ALSO carried as cmd=resume. Renaming the session rebuild onto
 # `resume` collided with both, so the flag now lives only in $resume. These
-# pin the two apart: the verb takes no arguments and owns --list, and the flag
-# is rejected everywhere except go.
-no resume-arity  "resume takes no arguments" resume foo
+# pin the two apart: the verb owns --list, and the flag is rejected everywhere
+# except go.
+#
+# The verb used to take NO arguments; since 0.56 it takes an optional
+# PARTITION and SESSION. So the arity assertion moved to the real boundary
+# (three is too many) and the first argument is checked as a PARTITION --
+# positionally, never by guessing which of the words names one.
+no resume-arity  "resume [PARTITION [SESSION]]" resume a b c
+no resume-part   "no such partition"            resume nosuchpartition
 no resume-flag   "--resume is only for go"   resume --resume
 no resume-flag2  "--resume is only for go"   new --resume lay5
 no list-gate     "--list is only for resume" kill --list lay4
