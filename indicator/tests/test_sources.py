@@ -22,6 +22,7 @@ import os
 import tempfile
 import unittest
 
+from mux_indicator import sources
 from mux_indicator.sources import (DEFAULT_TRANSPORT, latched, load,
                                    local_label, remote_argv, transport)
 
@@ -335,3 +336,72 @@ class Label(unittest.TestCase):
 
 if __name__ == "__main__":                              # pragma: no cover
     unittest.main()
+
+
+class ActivateSeam(unittest.TestCase):
+    """The focus hook: mux says WHAT, the integrator says HOW.
+
+    Clicking a tray item switches that host's session, which mux owns. Raising
+    the terminal that shows it means knowing about a compositor, which mux
+    does not get to know about -- the same boundary that put window placement
+    in usher. So it is a seam, unset by default, and a click still does the
+    half mux legitimately owns when nobody wired one.
+    """
+
+    def _conf(self, text):
+        d = tempfile.mkdtemp(prefix="muxact")
+        with open(os.path.join(d, "config"), "w") as fh:
+            fh.write(text)
+        old_dir = os.environ.get("MUX_DIR")
+        old_env = os.environ.get("MUX_INDICATOR_ACTIVATE")
+        os.environ["MUX_DIR"] = d
+        os.environ.pop("MUX_INDICATOR_ACTIVATE", None)
+
+        def restore():
+            for k, v in (("MUX_DIR", old_dir),
+                         ("MUX_INDICATOR_ACTIVATE", old_env)):
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+        self.addCleanup(restore)
+        return d
+
+    def test_UNSET_IS_THE_DEFAULT(self):
+        """The third answer, not a missing one: nobody asked for a focus
+        change, so none happens. A default here would make mux reach into a
+        compositor on every install."""
+        self._conf("context-command severance current\n")
+        self.assertIsNone(sources.activate_hook())
+
+    def test_the_config_key_is_read(self):
+        self._conf("indicator-activate focus-kitty\n")
+        self.assertEqual(sources.activate_hook(), "focus-kitty")
+
+    def test_env_beats_config(self):
+        self._conf("indicator-activate from-the-config\n")
+        os.environ["MUX_INDICATOR_ACTIVATE"] = "from-the-env"
+        self.assertEqual(sources.activate_hook(), "from-the-env")
+
+    def test_a_hook_with_ARGUMENTS_survives(self):
+        """It is a command LINE, not a program name: `focus-window --title`
+        has to reach the hook as two words."""
+        self._conf("indicator-activate focus-window --raise\n")
+        self.assertEqual(sources.activate_hook(), "focus-window --raise")
+
+
+class ActivateCommand(unittest.TestCase):
+    def test_the_remote_click_asks_for_next_blocked(self):
+        """Not agent-summary. The same transport carries both, so the COMMAND
+        is what distinguishes a poll from a click -- passing the wrong one
+        would make every click silently re-read the state it already had."""
+        argv = sources.remote_argv("box", template="ssh %h %q",
+                                   cmd=sources.ACTIVATE_CMD)
+        self.assertIn("mux next-blocked", " ".join(argv))
+        self.assertNotIn("agent-summary", " ".join(argv))
+
+    def test_the_poll_still_asks_for_agent_summary(self):
+        """The other direction, asserted separately: a default that leaked the
+        activate command would break the feed itself."""
+        argv = sources.remote_argv("box", template="ssh %h %q")
+        self.assertIn("mux agent-summary", " ".join(argv))

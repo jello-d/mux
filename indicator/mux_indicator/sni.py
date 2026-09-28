@@ -22,6 +22,7 @@ every host as slow as the worst one, which over ssh is the normal case.
 """
 import asyncio
 import os
+import shlex
 # SIGKILL by NAME, not the `signal` module: dbus_next.service exports a `signal`
 # DECORATOR (imported below) which shadows it, so `signal.SIGKILL` raises
 # AttributeError. That is not caught by the OSError/ProcessLookupError guard at
@@ -36,7 +37,8 @@ from dbus_next.service import ServiceInterface, dbus_property, method, signal
 
 from .render import MARK_PALETTE, host_mark, icon_pixmap, parse_pair
 from .slots import Slots
-from .sources import load as load_sources, local_label
+from .sources import (ACTIVATE_CMD, activate_hook, load as load_sources,
+                      local_label, remote_argv)
 
 WATCHER = "org.kde.StatusNotifierWatcher"
 WATCHER_PATH = "/StatusNotifierWatcher"
@@ -201,7 +203,16 @@ class Indicator(ServiceInterface):
 
     @method()
     def Activate(self, x: "i", y: "i"):
-        print(f"mux-indicator: Activate at {x},{y}", flush=True)
+        """Left click: jump that host to whatever has been waiting longest.
+
+        FIRE AND FORGET. Activate is a D-Bus method and the tray host is
+        waiting on it, so anything that touches the network has to be handed
+        to the loop rather than awaited here -- an unreachable box would
+        otherwise hang the bar, which is precisely the failure this whole
+        feature exists to make visible.
+        """
+        print(f"mux-indicator: activate {self._label or 'local'}", flush=True)
+        asyncio.ensure_future(activate(self._label))
 
     @method()
     def SecondaryActivate(self, x: "i", y: "i"):
@@ -321,38 +332,7 @@ async def _query(argv):
     try:
         out, _ = await asyncio.wait_for(proc.communicate(), TIMEOUT)
     except asyncio.TimeoutError:
-        # Reap it rather than leaving a wedged ssh per poll, which over hours
-        # would be a process leak dressed up as a slow host.
-        try:
-            # THE GROUP ID IS THE CHILD'S OWN PID, and asking the kernel for it
-            # instead is a bug. `start_new_session=True` makes the child a
-            # session and process-group LEADER, so pgid == pid by definition.
-            #
-            # `os.getpgid(proc.pid)` raises ProcessLookupError the moment the
-            # direct child has exited and been reaped -- which is EXACTLY the
-            # case this reaping exists for: a wrapper that backgrounds its work
-            # and returns leaves asyncio's child watcher to reap it within
-            # milliseconds, long before a timeout fires. The group kill was
-            # then skipped entirely and the fallback `proc.kill()` ran against
-            # a process already gone, so every descendant still holding the
-            # stdout pipe SURVIVED: one leaked process per poll, for as long as
-            # the host stayed in that state. Measured 2026-09-26.
-            #
-            # A process GROUP outlives its reaped leader as long as it still
-            # has members, so killing by pid-as-pgid reaches them.
-            os.killpg(proc.pid, SIGKILL)
-        except (OSError, ProcessLookupError):
-            try:
-                proc.kill()
-            except (OSError, ProcessLookupError):
-                pass
-        # BOUNDED even so. The group kill should make this immediate, but this
-        # function's one promise is that it always answers, and an unbounded
-        # wait here would be a way to break that promise while looking careful.
-        try:
-            await asyncio.wait_for(proc.wait(), 2)
-        except (asyncio.TimeoutError, OSError, ProcessLookupError):
-            pass
+        await _reap(proc)
         return UNKNOWN
     if proc.returncode != 0:          # the transport failed, not the host
         return UNKNOWN
@@ -391,6 +371,104 @@ async def _host_colors(label):
     if proc.returncode != 0:
         return None
     return parse_pair(out.decode("utf-8", "replace"))
+
+
+async def _reap(proc):
+    """Kill a timed-out child AND everything it spawned.
+
+    ONE COPY, because there are two callers now (a poll and a click) and the
+    rules below were learned the hard way -- a second copy is a second place
+    for them to rot. It also stopped the mutation corpus naming which one it
+    meant: the duplicated killpg made an existing record's anchor ambiguous
+    and the rider said so.
+    """
+    try:
+        # THE GROUP ID IS THE CHILD'S OWN PID, and asking the kernel for it
+        # instead is a bug. `start_new_session=True` makes the child a session
+        # and process-group LEADER, so pgid == pid by definition.
+        #
+        # `os.getpgid(proc.pid)` raises ProcessLookupError the moment the
+        # direct child has exited and been reaped -- which is EXACTLY the case
+        # this exists for: a wrapper that backgrounds its work and returns is
+        # reaped by asyncio's child watcher within milliseconds, long before a
+        # timeout fires. The group kill was then skipped entirely and the
+        # fallback ran against a process already gone, so every descendant
+        # still holding the stdout pipe SURVIVED: one leaked process per poll,
+        # for as long as the host stayed in that state. Measured 2026-09-26.
+        #
+        # A process GROUP outlives its reaped leader while it still has
+        # members, so killing by pid-as-pgid reaches them.
+        os.killpg(proc.pid, SIGKILL)
+    except (OSError, ProcessLookupError):
+        try:
+            proc.kill()
+        except (OSError, ProcessLookupError):
+            pass
+    # BOUNDED even so. The group kill should make this immediate, but the
+    # caller's one promise is that it always answers, and an unbounded wait
+    # here would break that promise while looking careful.
+    try:
+        await asyncio.wait_for(proc.wait(), 2)
+    except (asyncio.TimeoutError, OSError, ProcessLookupError):
+        pass
+
+
+async def activate(label):
+    """A click on one item: switch that host, then let the integrator focus.
+
+    TWO HALVES, and only the first is mux's. Switching the client is what mux
+    legitimately owns and works over the same transport the item is already
+    polled with -- a tray item EXISTS only because a latch does, so there is a
+    client attached and a human looking at it.
+
+    Raising the terminal that shows it is NOT mux's: that means knowing about
+    a compositor, and mux manages sessions inside terminals with no opinion
+    about where a terminal sits. It goes through the activate hook, unset by
+    default, so a click still does the half mux owns when nobody wired one.
+    """
+    me = local_label()
+    if label and label != me:
+        argv = remote_argv(label, cmd=ACTIVATE_CMD)
+    else:
+        argv = [MUX, "next-blocked"]
+    await _fire(argv, f"switch {label or me}")
+
+    hook = activate_hook()
+    if hook:
+        # The LABEL as its one argument, and shell-split here rather than run
+        # through a shell: the hook is a command line in config, not a script,
+        # and handing it to `sh -c` would make a host name with a space an
+        # injection rather than an argument.
+        await _fire(shlex.split(hook) + [label or me], f"focus {label or me}")
+
+
+async def _fire(argv, what):
+    """Run something on a click, bounded, and never raise into the bus.
+
+    The same reaping rules as _query, for the same reason: an arbitrary
+    command may spawn a child that holds the pipe, so it gets its own session
+    and the whole GROUP is killed by pid -- see _query for why the pid and not
+    getpgid. A click that hangs would wedge the poll loop it shares.
+    """
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *argv, stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE, start_new_session=True)
+    except OSError as e:
+        print(f"mux-indicator: {what} failed to start: {e}", flush=True)
+        return
+    try:
+        _o, err = await asyncio.wait_for(proc.communicate(), TIMEOUT)
+    except asyncio.TimeoutError:
+        await _reap(proc)
+        print(f"mux-indicator: {what} timed out", flush=True)
+        return
+    if proc.returncode != 0:
+        # SAID OUT LOUD. A click that silently does nothing is the worst
+        # outcome: it reads as the feature not existing.
+        _msg = (err or b"").decode("utf-8", "replace").strip().splitlines()
+        print(f"mux-indicator: {what} exited {proc.returncode}"
+              f"{': ' + _msg[-1] if _msg else ''}", flush=True)
 
 
 def reconcile(want, live):

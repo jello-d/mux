@@ -916,3 +916,76 @@ class Blink(unittest.TestCase):
                             "the previous blink was left running")
             i._blink.cancel()
         asyncio.run(go())
+
+
+class Activate(unittest.TestCase):
+    """What a click actually runs.
+
+    Two halves, and the split is the design: mux switches the host's client,
+    the integrator raises the window. Asserted by capturing the argv rather
+    than by running anything -- what matters is WHICH command goes WHERE.
+    """
+
+    def setUp(self):
+        self.sni = _fresh()
+        self.fired = []
+
+        async def _fake(argv, what):
+            self.fired.append((list(argv), what))
+        self.sni._fire = _fake
+        self._env = os.environ.get("MUX_INDICATOR_ACTIVATE")
+        os.environ.pop("MUX_INDICATOR_ACTIVATE", None)
+
+    def tearDown(self):
+        if self._env is None:
+            os.environ.pop("MUX_INDICATOR_ACTIVATE", None)
+        else:
+            os.environ["MUX_INDICATOR_ACTIVATE"] = self._env
+
+    def test_the_LOCAL_item_runs_mux_directly(self):
+        """No transport for our own box: it is the daemon's own machine, not
+        a host we reach over anything."""
+        asyncio.run(self.sni.activate(self.sni.local_label()))
+        argv, _what = self.fired[0]
+        self.assertIn("next-blocked", argv)
+        self.assertNotIn("ssh", " ".join(argv))
+
+    def test_a_REMOTE_item_goes_over_the_transport(self):
+        """And asks for next-blocked, not agent-summary. The same transport
+        carries both, so the COMMAND is the only thing distinguishing a click
+        from a poll -- send the wrong one and every click silently re-reads
+        state it already had."""
+        os.environ["MUX_INDICATOR_TRANSPORT"] = "ssh %h %q"
+        try:
+            asyncio.run(self.sni.activate("someotherbox"))
+        finally:
+            os.environ.pop("MUX_INDICATOR_TRANSPORT", None)
+        argv, _what = self.fired[0]
+        self.assertEqual(argv[0], "ssh")
+        self.assertIn("someotherbox", argv)
+        self.assertIn("mux next-blocked", " ".join(argv))
+
+    def test_NO_HOOK_MEANS_NO_SECOND_COMMAND(self):
+        """Unset is the third answer, not a missing one. A click still does
+        the half mux owns; nothing reaches for a compositor uninvited."""
+        asyncio.run(self.sni.activate(self.sni.local_label()))
+        self.assertEqual(len(self.fired), 1,
+                         f"something ran besides the switch: {self.fired}")
+
+    def test_the_hook_RUNS_AFTER_and_is_given_the_label(self):
+        """Order matters: switching first means the window you are raising
+        already shows the right session by the time it comes forward."""
+        os.environ["MUX_INDICATOR_ACTIVATE"] = "focus-window --raise"
+        asyncio.run(self.sni.activate("boxname"))
+        self.assertEqual(len(self.fired), 2)
+        (_sw, _), (hook, _w) = self.fired
+        self.assertEqual(hook, ["focus-window", "--raise", "boxname"])
+
+    def test_the_hook_is_SPLIT_not_shelled(self):
+        """A command line in config, not a script. Handing it to `sh -c`
+        would make a label containing a space an injection rather than an
+        argument."""
+        os.environ["MUX_INDICATOR_ACTIVATE"] = "focus-window"
+        asyncio.run(self.sni.activate("a box"))
+        hook, _w = self.fired[1]
+        self.assertEqual(hook, ["focus-window", "a box"])
