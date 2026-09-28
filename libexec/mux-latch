@@ -4,7 +4,7 @@
 # semantics; ssh, mosh, Eternal Terminal or anything else supplies the pipe, and
 # nothing here knows what a host, an IP or an MTU is.
 #
-#   mux latch [HOST[:SESSION]]
+#   mux latch [HOST[:PARTITION]] [SESSION]
 #
 # IT IS NOT A TRANSPORT. It never carries a keystroke. It decides WHEN to
 # (re)establish an attachment and reports WHY it has not, which is what keeps it
@@ -214,7 +214,7 @@ MAX_TRIES=${MUX_LATCH_MAX_TRIES:-0}         # 0 = forever
 SLEEP=${MUX_LATCH_SLEEP:-sleep}
 
 _usage() {
-	echo "usage: mux latch [HOST[:SESSION]]"
+	echo "usage: mux latch [HOST[:PARTITION]] [SESSION]"
 	echo "  hold an attachment to a remote mux session open across drops"
 }
 
@@ -238,13 +238,31 @@ while [ "$#" -gt 0 ]; do
 	shift
 done
 
+# THE TAIL OF THE TARGET IS THE PARTITION, not the session. That is a BREAKING
+# change from 0.55, where `box:api` named a session, and it is deliberate: a
+# partition is the thing a remote command cannot otherwise reach (every verb but
+# `resume` acts on the partition the far side's context resolved), while a
+# session is reachable as a plain second argument. Putting the rarer, structural
+# field in the colon slot keeps the common forms -- a bare host, and a host plus
+# a session -- unambiguous.
+#
+# WHICH PARTITIONS EXIST IS THE FAR SIDE'S QUESTION, so latch does not validate
+# the name. It cannot: the answer lives on the other machine, and a local
+# whitelist would be a second copy of `mux_ctx_valid` drifting against the one
+# that decides. A name the remote does not know exits 3 there, which the
+# classifier already reads as `gone` and reports with the far side's own message
+# naming the partitions it does have.
 _target=${1:-}
 [ -n "$_target" ] || {
-	echo "mux: latch needs a target: HOST[:SESSION]" >&2; _usage >&2
-	exit 2; }
+	echo "mux: latch needs a target: HOST[:PARTITION] [SESSION]" >&2
+	_usage >&2; exit 2; }
+_sess=${2:-}
+[ "$#" -le 2 ] || {
+	echo "mux: latch takes HOST[:PARTITION] and at most one SESSION" >&2
+	_usage >&2; exit 2; }
 _host=${_target%%:*}
-_sess=${_target#*:}
-[ "$_sess" = "$_target" ] && _sess=
+_part=${_target#*:}
+[ "$_part" = "$_target" ] && _part=
 [ -n "$_host" ] || { echo "mux: latch: empty host in '$_target'" >&2; exit 2; }
 
 # SINGLE FLIGHT. A network flap can fire several attach attempts at once (a
@@ -258,14 +276,27 @@ _sess=${_target#*:}
 # every exit path, and carrying a pid so a killed run is detectable. Nothing
 # extra has to be stood up or torn down.
 #
-# TWO LINES: the pid, then the TARGET verbatim. The target is written because
-# the FILENAME CANNOT CARRY IT -- it is sanitised through `tr -c`, so
-# `manifold:api` becomes `manifold_api` and a reader cannot tell that from a
-# host genuinely called `manifold_api`. A reader wanting the host takes
-# everything before the first colon, which is the target grammar's own rule.
+# THREE LINES: the pid, the TARGET verbatim, then the SESSION (empty when none
+# was named). The target is written because the FILENAME CANNOT CARRY IT -- it
+# is sanitised through `tr -c`, so `manifold:work` becomes `manifold_work` and a
+# reader cannot tell that from a host genuinely called `manifold_work`. A reader
+# wanting the host takes everything before the first colon and the partition
+# everything after it, which is the target grammar's own rule.
+#
+# THE SESSION IS A THIRD LINE RATHER THAN PART OF LINE 2, so every existing
+# reader is untouched: `latched()` in the indicator reads two lines and asks
+# line 2 for the host, and folding a space-separated session into it would hand
+# that parse a partition of `work api`.
+#
+# BUT THE LOCK KEY INCLUDES IT, because single flight is per ATTACHMENT. The
+# session left the target string in 0.56, so keying the lock on the target alone
+# would make two latches to the same box -- `box api` and `box web`, which were
+# distinct targets a release ago -- collide, and the second would refuse as a
+# duplicate of the first.
 _run=${XDG_RUNTIME_DIR:-/tmp}/mux-latch
 mkdir -p "$_run" 2>/dev/null || true
-_lock=$_run/$(printf '%s' "$_target" | tr -c 'A-Za-z0-9_.-' '_').lock
+_lockkey=$_target${_sess:+ $_sess}
+_lock=$_run/$(printf '%s' "$_lockkey" | tr -c 'A-Za-z0-9_.-' '_').lock
 if [ -f "$_lock" ]; then
 	# ONE LINE, via read: `$(cat)` would fold both lines into one string, and
 	# the numeric test below would then reject a perfectly live pid (a
@@ -276,13 +307,13 @@ if [ -f "$_lock" ]; then
 	case ${_other:-} in
 	''|*[!0-9]*) ;;
 	*) if kill -0 "$_other" 2>/dev/null; then
-			echo "mux: latch already running for $_target (pid" \
-				"$_other)" >&2
+			echo "mux: latch already running for" \
+				"$_target${_sess:+ $_sess} (pid $_other)" >&2
 			exit 1
 		fi ;;
 	esac
 fi
-printf '%s\n%s\n' "$$" "$_target" >"$_lock"
+printf '%s\n%s\n%s\n' "$$" "$_target" "$_sess" >"$_lock"
 trap 'rm -f "$_lock"' EXIT INT HUP TERM
 
 # MUX CLEARS THE LITTER MUX MAKES. Until now NOTHING removed a stale lock: the
@@ -599,6 +630,18 @@ _remote_can_attach_only() {
 # is already the "do not invent anything" verb, since it only ever rebuilds what
 # was recorded.
 _remote_cmd() {   # -> sets $_cmd
+	# A PARTITION IS ONLY REACHABLE THROUGH `resume`, which is the one verb
+	# that takes one: every other verb acts on whatever the far side's own
+	# context resolved, which for a login shell is its default. So naming a
+	# partition selects the resume form, and attach-only does not apply to
+	# it -- deliberately, because resume is already the verb that invents
+	# nothing. A focus SESSION it does not hold exits 3 there, which the
+	# classifier reads as `gone`, so the loud failure comes from the far
+	# side's own contract rather than from a flag negotiated here.
+	if [ -n "$_part" ]; then
+		_cmd="mux resume $_part${_sess:+ $_sess}"
+		return 0
+	fi
 	if [ -z "$_sess" ]; then
 		_cmd='mux resume'
 		return 0
@@ -795,7 +838,12 @@ while :; do
 		_say ended "the session was closed deliberately"
 		exit 0 ;;
 	gone)
-		_say gone "the session is not there any more; NOT recreating it"
+		# NOT "the session is gone": exit 3 is the far side saying it does
+		# not know the NAME it was given, and since 0.56 that name may be
+		# a partition. Claiming a session used to exist there would be
+		# asserting a history latch cannot know. The far side's own
+		# message follows and says which name it was.
+		_say gone "the far side does not know that name; NOT recreating"
 		exit 1 ;;
 	refused)
 		# WHAT THE FAR SIDE SAID COMES FIRST, ALWAYS. An earlier version

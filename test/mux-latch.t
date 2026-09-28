@@ -86,7 +86,7 @@ n_auth()  { grep -c . "$AUTHLOG" 2>/dev/null || true; }
 # Retrying here would resurrect a session they just closed. This is the case
 # autossh gets wrong by design.
 printf '0\n' >"$SCRIPT"
-_rc=$(latch box:proj)
+_rc=$(latch box proj)
 [ "$_rc" = 0 ] || fail "a deliberate quit should exit 0, got $_rc"
 [ "$(n_tries)" = 1 ] || fail "a quit was retried $(n_tries) times"
 case "$(seq_of)" in
@@ -97,7 +97,7 @@ esac
 # --- the transport drops: that IS retried -------------------------------
 _drop='255 ssh: connect to host box port 22: Connection timed out'
 printf '%s\n%s\n0\n' "$_drop" "$_drop" >"$SCRIPT"
-_rc=$(latch box:proj)
+_rc=$(latch box proj)
 [ "$_rc" = 0 ] || fail "a recovered drop should end 0, got $_rc"
 [ "$(n_tries)" = 3 ] \
 	|| fail "expected 3 attempts across two drops, got $(n_tries)"
@@ -114,7 +114,7 @@ esac
 # the prompt storm wearing a backoff.
 printf '255 jello@box: Permission denied (publickey,password).\n' >"$SCRIPT"
 printf '0\n' >"$T_AUTH"                      # a credential IS live
-_rc=$(MAXT=5 latch box:proj)
+_rc=$(MAXT=5 latch box proj)
 [ "$_rc" = 1 ] || fail "a rejected credential should exit non-zero, got $_rc"
 [ "$(n_tries)" = 1 ] \
 	|| fail "latch offered a rejected credential $(n_tries) times; that is the
@@ -130,7 +130,7 @@ esac
 # as retryable and latch would have spun forever on a problem only a human can
 # fix. Found in a live run against a rebuilt host, not by this suite.
 printf '255 Host key verification failed.\n' >"$SCRIPT"
-_rc=$(latch box:proj)
+_rc=$(latch box proj)
 [ "$_rc" = 1 ] || fail "a host key refusal should exit non-zero, got $_rc"
 [ "$(n_tries)" = 1 ] \
 	|| fail "a host key refusal was retried $(n_tries) times; no amount of
@@ -155,7 +155,7 @@ env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" \
 	MUX_LATCH_TRANSPORT="$T/bin/transport %h %s" \
 	MUX_LATCH_AUTH="$T/bin/auth" MUX_LATCH_PROBE="$T/bin/probe" \
 	MUX_LATCH_SLEEP="$T/bin/nosleep" MUX_LATCH_MAX_TRIES=3 \
-	"$HERE/libexec/mux-latch" box:proj >/dev/null 2>"$_err" || true
+	"$HERE/libexec/mux-latch" box proj >/dev/null 2>"$_err" || true
 grep -q 'retrying a refusal forever' "$_err" \
 	|| fail "the denied explanation was cut off; a wrapped _say call must
 still print whole. Got:
@@ -174,7 +174,7 @@ exit 0
 EOF
 chmod +x "$T/bin/auth"
 printf '0\n' >"$SCRIPT"
-_rc=$(MAXT=8 latch box:proj)
+_rc=$(MAXT=8 latch box proj)
 [ "$_rc" = 0 ] || fail "latch never recovered after the credential appeared"
 [ "$(n_tries)" = 1 ] || fail "it attempted before the credential was live"
 case "$(seq_of)" in
@@ -195,7 +195,7 @@ printf '0\n' >"$T_AUTH"
 # latch does not make the attempt that would raise the prompt.
 printf '1\n' >"$T_AUTH"
 : >"$SCRIPT"
-MAXT=3 latch box:proj >/dev/null
+MAXT=3 latch box proj >/dev/null
 [ "$(n_tries)" = 0 ] \
 	|| fail "latch attempted $(n_tries) times without a live credential"
 printf '0\n' >"$T_AUTH"
@@ -205,7 +205,7 @@ printf '0\n' >"$T_AUTH"
 # rather than attempt, and must not report the target as reachable.
 printf '78\n' >"$T_PROBE"
 : >"$SCRIPT"
-MAXT=3 latch box:proj >/dev/null
+MAXT=3 latch box proj >/dev/null
 [ "$(n_tries)" = 0 ] \
 	|| fail "a probe that could not answer was treated as usable"
 case "$(seq_of)" in
@@ -215,7 +215,7 @@ esac
 # ... and an unrecognised hook exit is also "cannot tell", not a verdict.
 printf '42\n' >"$T_PROBE"
 : >"$SCRIPT"
-MAXT=3 latch box:proj >/dev/null
+MAXT=3 latch box proj >/dev/null
 [ "$(n_tries)" = 0 ] || fail "an unexpected probe exit was treated as usable"
 printf '0\n' >"$T_PROBE"
 
@@ -237,7 +237,7 @@ env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" \
 	MUX_LATCH_STATUS="$T/bin/status" \
 	MUX_LATCH_SLEEP="$T/bin/nosleep" \
 	MUX_LATCH_BACKOFF=1 MUX_LATCH_MAX_TRIES=3 \
-	"$HERE/libexec/mux-latch" box:proj >/dev/null 2>&1 || _lr=$?
+	"$HERE/libexec/mux-latch" box proj >/dev/null 2>&1 || _lr=$?
 [ "$_lr" = 0 ] || fail "with no probe configured latch should just attempt and
 report the session ending; got exit $_lr and states [$(seq_of)]"
 [ "$(n_tries)" = 1 ] \
@@ -247,7 +247,7 @@ no probe means no opinion, so the attempt itself is the probe"
 # --- an unusable target is retried, not escalated ----------------------
 printf '1\n' >"$T_PROBE"
 : >"$SCRIPT"
-MAXT=3 latch box:proj >/dev/null
+MAXT=3 latch box proj >/dev/null
 [ "$(n_tries)" = 0 ] || fail "latch attempted against an unusable target"
 case "$(seq_of)" in
 *probing*) ;;
@@ -259,7 +259,7 @@ printf '0\n' >"$T_PROBE"
 # Exit 3 is mux's unknown-name code, and since 0.35 it is the only signal the
 # classifier consults for this.
 printf '3 mux: no such session: proj\n' >"$SCRIPT"
-_rc=$(latch box:proj)
+_rc=$(latch box proj)
 [ "$_rc" = 1 ] || fail "a vanished session should exit non-zero, got $_rc"
 [ "$(n_tries)" = 1 ] || fail "a vanished session was retried"
 case "$(seq_of)" in
@@ -278,7 +278,7 @@ esac
 # test and two ways to drift, so a remote older than the code reports `refused`
 # with its own message -- worse, but not silent, and the fix is to upgrade it.
 printf '3\n' >"$SCRIPT"
-_rc=$(latch box:proj)
+_rc=$(latch box proj)
 [ "$_rc" = 1 ] || fail "an unknown name should exit non-zero, got $_rc"
 case "$(seq_of)" in
 *gone*) ;;
@@ -291,7 +291,7 @@ esac
 # keeps the compatibility path from creeping back in: if someone re-adds the
 # grep, this goes red.
 printf '1 mux: no such session: proj\n' >"$SCRIPT"
-_rc=$(latch box:proj)
+_rc=$(latch box proj)
 case "$(seq_of)" in
 *"latch: gone"*) fail "exit 1 with the old phrase must NOT be read as gone.
 The code is the contract; re-adding the string match gives one fact two
@@ -345,7 +345,7 @@ amb() {   # -> stderr of a run with the given env
 		MUX_LATCH_TRANSPORT="$T/bin/ambig %h sh -lc %c" \
 		MUX_LATCH_AUTH=/bin/true MUX_LATCH_RESTORE=/bin/true \
 		MUX_LATCH_SLEEP="$T/bin/nosleep" MUX_LATCH_MAX_TRIES=1 \
-		"$HERE/libexec/mux-latch" box:k 2>&1 >/dev/null
+		"$HERE/libexec/mux-latch" box k 2>&1 >/dev/null
 }
 
 # THE FAR SIDE'S OWN MESSAGE IS NEVER REPLACED BY A GUESS. This is the
@@ -450,7 +450,7 @@ esac
 # exit 2 from the far side is a VERSION answer, not a transport failure, so
 # retrying cannot help and latch stops.
 printf '2 mux: unknown verb: go\n' >"$SCRIPT"
-_rc=$(latch box:proj)
+_rc=$(latch box proj)
 [ "$_rc" = 1 ] || fail "an unknown remote verb should exit non-zero, got $_rc"
 [ "$(n_tries)" = 1 ] \
 	|| fail "an unknown remote verb was retried $(n_tries) times"
@@ -461,7 +461,7 @@ esac
 
 # --- the target parses, and a missing one is a usage error -----------
 printf '0\n' >"$SCRIPT"
-latch box:proj >/dev/null
+latch box proj >/dev/null
 grep -q 'box proj' "$TRIES" || fail "host and session were not substituted:
 [$(cat "$TRIES")]"
 printf '0\n' >"$SCRIPT"
@@ -496,7 +496,7 @@ env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
 	MUX_LATCH_TRANSPORT="$T/bin/argv -t %h sh -lc %c" \
 	MUX_LATCH_AUTH=/bin/true MUX_LATCH_SLEEP="$T/bin/nosleep" \
 	MUX_LATCH_MAX_TRIES=1 \
-	"$HERE/libexec/mux-latch" box:proj >/dev/null 2>&1 || true
+	"$HERE/libexec/mux-latch" box proj >/dev/null 2>&1 || true
 _got=$(cat "$TRIES.argv" 2>/dev/null || true)
 [ "$_got" = 'n=5 last=[mux go proj]' ] \
 	|| fail "%c must arrive as ONE argv element. Wanted
@@ -514,7 +514,7 @@ env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
 	MUX_LATCH_TRANSPORT="$T/bin/argv -t %h sh -lc %q" \
 	MUX_LATCH_AUTH=/bin/true MUX_LATCH_SLEEP="$T/bin/nosleep" \
 	MUX_LATCH_MAX_TRIES=1 \
-	"$HERE/libexec/mux-latch" box:proj >/dev/null 2>&1 || true
+	"$HERE/libexec/mux-latch" box proj >/dev/null 2>&1 || true
 _got=$(cat "$TRIES.argv" 2>/dev/null || true)
 [ "$_got" = "n=5 last=['mux go proj']" ] \
 	|| fail "%q must be one element AND quoted for the remote shell. Wanted
@@ -539,7 +539,7 @@ env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
 	MUX_LATCH_TRANSPORT="$T/bin/transport %h %s" \
 	MUX_LATCH_CLASSIFY=no-such-hook-anywhere \
 	MUX_LATCH_SLEEP="$T/bin/nosleep" MUX_LATCH_MAX_TRIES=2 \
-	"$HERE/libexec/mux-latch" box:proj >/dev/null 2>"$_err" || _rc=$?
+	"$HERE/libexec/mux-latch" box proj >/dev/null 2>"$_err" || _rc=$?
 [ "$_rc" = 2 ] \
 	|| fail "a named hook that does not resolve is a config error (exit 2),
 got $_rc"
@@ -548,7 +548,7 @@ grep -q 'no-such-hook-anywhere' "$_err" \
 $(cat "$_err")"
 # An EMPTY seam is the opposite and must stay silent: nobody asked for a hook.
 printf '0\n' >"$SCRIPT"
-_rc=$(MUX_LATCH_PROBE= latch box:proj)
+_rc=$(MUX_LATCH_PROBE= latch box proj)
 [ "$_rc" = 0 ] \
 	|| fail "an unset seam is not a missing hook and must not fail, got $_rc"
 
@@ -562,7 +562,7 @@ printf 'gone'
 EOF
 chmod +x "$T/conf/latch/ssh-classify"
 printf '255 whatever\n' >"$SCRIPT"
-_rc=$(latch box:proj)
+_rc=$(latch box proj)
 case "$(seq_of)" in
 *gone*) ;;
 *) fail "an overlay hook must win over the shipped one of the same name:
@@ -601,7 +601,7 @@ env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
 	MUX_LATCH_STATUS="$T/bin/orderstatus" \
 	MUX_LATCH_SLEEP="$T/bin/nosleep" \
 	MUX_LATCH_BACKOFF=1 MUX_LATCH_MAX_TRIES=3 \
-	"$HERE/libexec/mux-latch" box:proj >/dev/null 2>&1 || true
+	"$HERE/libexec/mux-latch" box proj >/dev/null 2>&1 || true
 
 # The first thing after a drop must be the repair, and the report after it.
 _seq=$(tr '\n' ' ' <"$ORDER")
@@ -630,7 +630,7 @@ env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
 	MUX_LATCH_AUTH=/bin/true \
 	MUX_LATCH_RESTORE="$T/bin/restore" \
 	MUX_LATCH_SLEEP="$T/bin/nosleep" MUX_LATCH_MAX_TRIES=1 \
-	"$HERE/libexec/mux-latch" box:proj >/dev/null 2>&1 || true
+	"$HERE/libexec/mux-latch" box proj >/dev/null 2>&1 || true
 grep -q restore "$ORDER" \
 	|| fail "the terminal repair was skipped on a clean end. A quit through a
 dying connection leaves the same wreckage, and the repair is idempotent."
@@ -653,14 +653,14 @@ EOF
 chmod +x "$T/bin/echocmd"
 CMDS=$T/cmds; export CMDS
 
-sent() {   # <target> -> the remote command latch composed
+sent() {   # <target> [session] -> the remote command latch composed
 	: >"$CMDS"
 	env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
 		CMDS="$CMDS" \
 		MUX_LATCH_TRANSPORT="$T/bin/echocmd %h sh -lc %c" \
 		MUX_LATCH_AUTH=/bin/true MUX_LATCH_SLEEP="$T/bin/nosleep" \
 		MUX_LATCH_MAX_TRIES=1 \
-		"$HERE/libexec/mux-latch" "$1" >/dev/null 2>&1 || true
+		"$HERE/libexec/mux-latch" "$@" >/dev/null 2>&1 || true
 	head -1 "$CMDS"
 }
 
@@ -669,14 +669,45 @@ sent() {   # <target> -> the remote command latch composed
 [$(sent box)]. Sending a go at the HOSTNAME attaches a session that is not
 yours and looks like it worked."
 [ "$(sent box:)" = 'mux resume' ] \
-	|| fail "a trailing colon names no session either, got [$(sent box:)]"
-[ "$(sent box:proj)" = 'mux go proj' ] \
-	|| fail "a named session must be a plain go, got [$(sent box:proj)]"
-# A name containing a colon belongs to the SESSION: the host is the first field
-# only, so everything after the first colon is the name.
-[ "$(sent box:a:b)" = 'mux go a:b' ] \
-	|| fail "only the FIRST colon splits host from session, got
+	|| fail "a trailing colon names no partition either, got [$(sent box:)]"
+[ "$(sent box proj)" = 'mux go proj' ] \
+	|| fail "a named session must be a plain go, got [$(sent box proj)]"
+
+# --- THE COLON NAMES A PARTITION NOW (0.56) --------------------------------
+# A BREAKING change from 0.55, where `box:proj` named a SESSION. The colon slot
+# holds the partition because a partition is the thing a remote command cannot
+# otherwise reach: every verb but `resume` acts on whatever the far side's own
+# context resolved. A session needs no slot, being a plain second argument.
+#
+# THE COMPOSED COMMAND IS THE ASSERTION, not "it attached". Both forms attach
+# successfully against a stub, and latch has already shipped a default that
+# attached to the wrong thing and looked like it worked (`mux latch box` asking
+# for a session named after the host) -- which is exactly what a
+# did-it-attach assertion cannot see.
+[ "$(sent box:work)" = 'mux resume work' ] \
+	|| fail "the colon must name a PARTITION, sent as 'mux resume work':
+got [$(sent box:work)]"
+[ "$(sent box:work api)" = 'mux resume work api' ] \
+	|| fail "a partition AND a session is resume's two-argument form, got
+[$(sent box:work api)]"
+# NOT also asserted separately is "it did not use `go`": the exact-equality
+# above already excludes every other command, and a second guard for one
+# condition is a pair neither of whose mutations can be killed.
+# Everything after the FIRST colon is the partition, so latch itself never has
+# to decide what a partition may contain -- the far side does, and answers 3.
+[ "$(sent box:a:b)" = 'mux resume a:b' ] \
+	|| fail "only the FIRST colon splits host from partition, got
 [$(sent box:a:b)]"
+
+# --- too many arguments is a usage error ----------------------------------
+# The grammar is HOST[:PARTITION] and at most one SESSION. A third word is a
+# typo, and silently ignoring it is how `mux latch box work api` would resume
+# the wrong thing while looking like it understood.
+_rc=0
+env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
+	MUX_LATCH_SLEEP="$T/bin/nosleep" MUX_LATCH_MAX_TRIES=1 \
+	"$HERE/libexec/mux-latch" box a b >/dev/null 2>&1 || _rc=$?
+[ "$_rc" = 2 ] || fail "three arguments must be a usage error, got $_rc"
 
 # --- ATTACH-ONLY IS NEGOTIATED, NOT ASSUMED --------------------------
 # The first attempt may CREATE (you asked to latch onto something). Every
@@ -720,7 +751,7 @@ neg() {   # CAPRC CAPOUT -> the command used on the SECOND attempt
 		MUX_LATCH_AUTH=/bin/true \
 		MUX_LATCH_SLEEP="$T/bin/nosleep" \
 		MUX_LATCH_BACKOFF=1 MUX_LATCH_MAX_TRIES=3 \
-		"$HERE/libexec/mux-latch" box:proj >/dev/null 2>&1 || true
+		"$HERE/libexec/mux-latch" box proj >/dev/null 2>&1 || true
 	grep -v capabilities "$CMDLOG" | tail -1
 }
 
@@ -753,7 +784,7 @@ env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
 	MUX_LATCH_TRANSPORT="$T/bin/negotiate %h sh -lc %c" \
 	MUX_LATCH_AUTH=/bin/true MUX_LATCH_SLEEP="$T/bin/nosleep" \
 	MUX_LATCH_BACKOFF=1 MUX_LATCH_MAX_TRIES=1 \
-	"$HERE/libexec/mux-latch" box:proj >/dev/null 2>&1 || true
+	"$HERE/libexec/mux-latch" box proj >/dev/null 2>&1 || true
 _first=$(grep -v capabilities "$CMDLOG" | head -1)
 [ "$_first" = 'mux go proj' ] \
 	|| fail "the FIRST attempt must create even when the remote supports
@@ -768,7 +799,7 @@ env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
 	MUX_LATCH_TRANSPORT="$T/bin/negotiate %h sh -lc %c" \
 	MUX_LATCH_AUTH=/bin/true MUX_LATCH_SLEEP="$T/bin/nosleep" \
 	MUX_LATCH_BACKOFF=1 MUX_LATCH_MAX_TRIES=4 \
-	"$HERE/libexec/mux-latch" box:proj >/dev/null 2>&1 || true
+	"$HERE/libexec/mux-latch" box proj >/dev/null 2>&1 || true
 [ "$(grep -c capabilities "$CMDLOG")" -ge 2 ] \
 	|| fail "an unreachable capability query must leave the question OPEN and
 ask again, not cache 'no' from a network failure. It asked
@@ -785,7 +816,7 @@ env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
 	MUX_LATCH_TRANSPORT="$T/bin/negotiate %h sh -lc %c" \
 	MUX_LATCH_AUTH=/bin/true MUX_LATCH_SLEEP="$T/bin/nosleep" \
 	MUX_LATCH_BACKOFF=1 MUX_LATCH_MAX_TRIES=4 \
-	"$HERE/libexec/mux-latch" box:proj >/dev/null 2>&1 || true
+	"$HERE/libexec/mux-latch" box proj >/dev/null 2>&1 || true
 [ "$(grep -c capabilities "$CMDLOG")" = 1 ] \
 	|| fail "an ANSWERED capability query must be cached for the run, and it
 was asked $(grep -c capabilities "$CMDLOG") times across $(grep -vc \
@@ -796,13 +827,13 @@ capabilities "$CMDLOG") attempts"
 mkdir -p "$T/run/mux-latch"
 printf '%s\n' "$$" >"$T/run/mux-latch/box_proj.lock"
 printf '0\n' >"$SCRIPT"
-_rc=$(latch box:proj)
+_rc=$(latch box proj)
 [ "$_rc" = 1 ] || fail "a concurrent latch should refuse, got $_rc"
 [ "$(n_tries)" = 0 ] || fail "a concurrent latch still attempted"
 # A STALE lock from a dead pid must not wedge it forever.
 printf '999999\n' >"$T/run/mux-latch/box_proj.lock"
 printf '0\n' >"$SCRIPT"
-_rc=$(latch box:proj)
+_rc=$(latch box proj)
 [ "$_rc" = 0 ] || fail "a stale lock from a dead pid blocked latch, got $_rc"
 
 # --- the lock is also the LIVE REGISTRY of what this box is latched to -----
@@ -812,12 +843,12 @@ _rc=$(latch box:proj)
 # watch, so the format is a contract now, not an implementation detail.
 #
 # THE TARGET IS IN THE FILE BECAUSE THE FILENAME CANNOT HOLD IT. The name is
-# sanitised through `tr -c`, so `manifold:api` becomes `manifold_api` and no
-# reader can tell that from a host genuinely called `manifold_api`. A tray item
+# sanitised through `tr -c`, so `manifold:work` becomes `manifold_work` and no
+# reader can tell that from a host genuinely called `manifold_work`. A tray item
 # polling the wrong hostname would draw `unknown` forever with nothing on screen
 # to say why.
-MAXT=1 _rc=$(latch 'hostwith:sess')
-_lk=$T/run/mux-latch/hostwith_sess.lock
+MAXT=1 _rc=$(latch 'hostwith:part')
+_lk=$T/run/mux-latch/hostwith_part.lock
 [ ! -e "$_lk" ] || fail "the lock outlived the run: the trap must remove it on
 every exit path, or a finished latch leaves a phantom host in the tray"
 
@@ -825,7 +856,8 @@ every exit path, or a finished latch leaves a phantom host in the tray"
 # inspected mid-flight, which is the state the indicator actually sees.
 cat >"$T/bin/slowtransport" <<EOF
 #!/bin/sh
-cat 2>/dev/null "$T/run/mux-latch/hostwith_sess.lock" >"$T/seen.lock" || true
+cat 2>/dev/null "$T/run/mux-latch/hostwith_part_sess.lock" \
+	>"$T/seen.lock" || true
 exit 0
 EOF
 chmod +x "$T/bin/slowtransport"
@@ -836,17 +868,31 @@ MAXT=1 env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
 	MUX_LATCH_AUTH="$T/bin/auth" MUX_LATCH_PROBE="$T/bin/probe" \
 	MUX_LATCH_STATUS="$T/bin/status" MUX_LATCH_SLEEP="$T/bin/nosleep" \
 	MUX_LATCH_BACKOFF=1 MUX_LATCH_MAX_TRIES=1 \
-	"$HERE/libexec/mux-latch" 'hostwith:sess' >/dev/null 2>&1 || :
-[ -s "$T/seen.lock" ] || fail "no lock file existed while latch was running"
+	"$HERE/libexec/mux-latch" 'hostwith:part' sess >/dev/null 2>&1 || :
+# THE PATH IT READ IS THE ASSERTION, and it carries the SESSION:
+# `hostwith_part_sess`, not `hostwith_part`. The session left the target string
+# in 0.56, so a lock keyed on the target alone would make two latches to one
+# box collide -- `box api` and `box web` were distinct targets a release ago,
+# and the second would now refuse as a duplicate of the first. Checked here
+# rather than after the run, because the trap removes the file on the way out.
+[ -s "$T/seen.lock" ] || fail "no lock existed at hostwith_part_sess.lock while
+latch was running: either no lock is written, or the key dropped the SESSION,
+which makes two latches to one host:partition collide"
 _pid=$(sed -n 1p "$T/seen.lock")
 _tgt=$(sed -n 2p "$T/seen.lock")
 case $_pid in
 ''|*[!0-9]*) fail "line 1 of the lock must be the pid, got [$_pid]" ;;
 esac
-[ "$_tgt" = 'hostwith:sess' ] \
+[ "$_tgt" = 'hostwith:part' ] \
 	|| fail "line 2 must be the target VERBATIM, got [$_tgt]. The filename is
-sanitised (hostwith_sess), so the file is the only place a reader can recover
+sanitised (hostwith_part), so the file is the only place a reader can recover
 which host to poll."
+# THE SESSION IS LINE 3, NOT APPENDED TO LINE 2, and that is what keeps every
+# existing reader correct: the indicator asks line 2 for the host and the
+# partition, so folding a space-separated session into it would hand that parse
+# a partition of `part sess`.
+[ "$(sed -n 3p "$T/seen.lock")" = sess ] \
+	|| fail "line 3 must be the session, got [$(sed -n 3p "$T/seen.lock")]"
 
 # --- single flight still holds with two lines ------------------------------
 # THE TRAP THIS GUARDS: reading the pid with `$(cat)` folds both lines into one
@@ -1028,7 +1074,7 @@ env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \\
 	MUX_LATCH_AUTH="$T/bin/auth" MUX_LATCH_PROBE="$T/bin/probe" \\
 	MUX_LATCH_STATUS="$T/bin/status" MUX_LATCH_SLEEP="$T/bin/nosleep" \\
 	MUX_LATCH_BACKOFF=4 MUX_LATCH_BLOCKED_WAIT=1 MUX_LATCH_MAX_TRIES=2 \\
-	"$HERE/libexec/mux-latch" box:proj
+	"$HERE/libexec/mux-latch" box proj
 exit 0
 EOF
 	chmod +x "$T/bin/spinrun"

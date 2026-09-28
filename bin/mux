@@ -620,7 +620,7 @@ usage: mux [OPTION] [VERB] [NAME] [PROFILE]  (OPTION may follow VERB too)
                              rebuild a partition's sessions (--list to see
                              them); SESSION is where to focus afterwards
   sane                       put the terminal back after a wedged session
-  latch HOST[:SESSION]       hold an attachment to a remote mux open across
+  latch HOST[:PART] [SESS]   hold an attachment to a remote mux open across
                              drops (bring your own transport; see man 1 mux)
   why [NAME]                 show each resolved value and where it came from
   views [MODE]               who is attached, and what that costs

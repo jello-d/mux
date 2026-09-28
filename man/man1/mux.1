@@ -237,7 +237,7 @@ at all when no terminal is attached, so it is safe in a script or a pipe.
 .B mux latch
 runs it automatically on every drop; this is the same repair by hand.
 .TP
-.B mux latch " " \fIHOST\fR [: \fISESSION\fR ]
+.B mux latch " " \fIHOST\fR [: \fIPARTITION\fR "] [" \fISESSION\fR ]
 Hold an attachment to a mux session on another machine open across network
 drops, bringing your own transport. It reports what it is waiting on rather
 than retrying in silence, and refuses to retry the two cases where retrying is
@@ -1008,7 +1008,7 @@ asserts every dispatchable verb appears there. So a new verb nobody classified
 fails the suite rather than quietly never being advertised \(em omission is the
 one failure a curated list cannot catch.
 .SH LATCH
-.B mux latch " " \fIHOST\fR [: \fISESSION\fR ]
+.B mux latch " " \fIHOST\fR [: \fIPARTITION\fR "] [" \fISESSION\fR ]
 keeps an attachment to a remote mux session alive as the network allows.
 .PP
 WHILE IT WAITS IT SAYS SO. A backoff of more than a second draws a spinner and
@@ -1033,12 +1033,21 @@ SINGLE FLIGHT, through a lock at
 .IR $XDG_RUNTIME_DIR/mux\-latch/<target>.lock ,
 because a network flap can fire several attach attempts at once (a hook, a key
 binding, a human) and N loops against one target is N credential prompts and N
-reconnect races. The file holds the pid on line 1 and the target verbatim on
-line 2 \(em the target, because the FILENAME is sanitised and cannot carry it:
-.B manifold:api
+reconnect races. The file holds the pid on line 1, the target verbatim on line
+2, and the session on line 3 \(em the target, because the FILENAME is sanitised
+and cannot carry it:
+.B manifold:work
 becomes
-.I manifold_api
+.I manifold_work
 and no reader could tell that from a host genuinely called that.
+.PP
+THE SESSION IS LINE 3 AND NOT PART OF LINE 2, so a reader that asks line 2 for
+the host and the partition is unaffected by the 0.56 grammar change; folding a
+space\-separated session into it would make the partition read
+.IR "work api" .
+The lock's own KEY does include the session, because single flight is per
+ATTACHMENT: a host and two sessions were two targets before 0.56, and keying on
+the target alone would make the second refuse as a duplicate of the first.
 .PP
 THE DIRECTORY IS ALSO A LIVE REGISTRY of what this box is attached to, written
 at start and removed by a trap on every exit path, which is what the optional
@@ -1057,14 +1066,31 @@ decides WHEN to re\-establish an attachment and says WHY it has not, which is
 what keeps it from growing into a transport project.
 .PP
 THE FIRST FIELD IS ALWAYS THE HOST, and the colon is optional. Everything after
-the FIRST colon is the session name, so a name may itself contain one. What
-latch asks the far side to run follows from that:
+the FIRST colon is the PARTITION; the SESSION is a separate second argument.
+What latch asks the far side to run follows from that:
 .PP
 .EX
 mux latch box            \(->  mux resume
-mux latch box:api        \(->  mux go api
 mux latch box:           \(->  mux resume
+mux latch box api        \(->  mux go api
+mux latch box:work       \(->  mux resume work
+mux latch box:work api   \(->  mux resume work api
 .EE
+.PP
+THE COLON HELD THE SESSION UNTIL 0.56, so
+.B mux latch box:api
+changed meaning. The partition took the slot because it is the field a remote
+command cannot otherwise reach \(em every verb but
+.B resume
+acts on whatever the far side's own context resolved, which in a login shell is
+its default \(em while a session needs no slot, being an ordinary argument.
+.PP
+WHICH PARTITIONS EXIST IS THE FAR SIDE'S QUESTION, so latch does not validate
+the name: the answer lives on the other machine, and a local whitelist would be
+a second copy of the rule that decides. A partition the remote does not know
+exits 3 there, which the classifier reads as
+.BR gone ,
+reported with the far side's own message naming the partitions it does have.
 .PP
 WITH NO SESSION NAMED the command is
 .BR "mux resume" ,
@@ -1075,9 +1101,11 @@ had, where
 would build a single empty one. It is deterministic, so a retry lands in the
 same place, and idempotent, so retrying costs nothing.
 .PP
-Attach\-only therefore applies to the NAMED form only, and nothing is lost:
+Attach\-only therefore applies to the bare NAMED form only \(em a host and a
+session, with no partition. Nothing is lost either way:
 .B resume
-already never invents anything, since it only rebuilds what was recorded.
+already never invents anything, since it only rebuilds what was recorded, and a
+focus SESSION it does not hold exits 3 rather than creating one.
 .SS The state machine
 The question that partitions it is not which exit code came back, but: does
 resolving this need a HUMAN, or PATIENCE? Retrying is right in every state
