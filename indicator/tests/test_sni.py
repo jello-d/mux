@@ -454,6 +454,264 @@ class MarkPlan(unittest.TestCase):
             self.assertIsNotNone(p[lab][1])
 
 
+    def test_TWO_PARTITIONS_ON_ONE_HOST_GET_NO_MARK(self):
+        """Counted in HOSTS, not items, which is the 0.56 correction. Marking
+        both would put the same three letters and the same colour on each,
+        which says nothing -- they ARE the same machine. The partition letter
+        is what tells them apart, and the mark stays for the question it
+        actually answers."""
+        p = self.sni.mark_plan(["manifold:global", "manifold:work"],
+                               "manifold", self.s)
+        self.assertEqual(p, {"manifold:global": (None, None),
+                             "manifold:work": (None, None)})
+
+    def test_two_partitions_on_one_host_SHARE_its_identity(self):
+        """With a second host present the marks come back, and both of
+        manifold's items must wear the SAME mark and the SAME slot: a tray
+        that gave them different colours would be saying there are three
+        machines."""
+        p = self.sni.mark_plan(["manifold:global", "manifold:work", "rover"],
+                               "atlas", self.s)
+        self.assertEqual(p["manifold:global"], p["manifold:work"])
+        self.assertEqual(p["manifold:global"][0], self.sni.host_mark(
+            "manifold"))
+        self.assertNotEqual(p["rover"][1], p["manifold:work"][1])
+
+    def test_the_LOCAL_host_keeps_white_across_its_partitions(self):
+        """Every partition of the box you are sitting at is still that box."""
+        p = self.sni.mark_plan(["manifold:global", "manifold:work", "rover"],
+                               "manifold", self.s)
+        self.assertIsNone(p["manifold:global"][1])
+        self.assertIsNone(p["manifold:work"][1])
+
+
+class PartitionNames(unittest.TestCase):
+    """The item KEY and the A-Z letter: pure functions, so the rules the tray
+    turns on are assertable without a bus."""
+
+    def setUp(self):
+        self.sni = _fresh()
+
+    def test_the_solo_form_is_the_OLD_key_unchanged(self):
+        """A host with one partition publishes exactly the item it always
+        did -- same Id, same tooltip. That is what keeps the single-partition
+        case, which is every existing install, from changing at all."""
+        self.assertEqual(self.sni.item_key("manifold", "global", True),
+                         "manifold")
+        self.assertEqual(self.sni.item_key("manifold", "work", False),
+                         "manifold:work")
+
+    def test_the_key_SPLITS_the_way_latch_targets_do(self):
+        """Everything before the FIRST colon is the host, which is mux's own
+        target grammar. One rule, two places that read it."""
+        self.assertEqual(self.sni.host_of("manifold:work"), "manifold")
+        self.assertEqual(self.sni.part_of("manifold:work"), "work")
+        self.assertEqual(self.sni.host_of("manifold"), "manifold")
+        self.assertIsNone(self.sni.part_of("manifold"))
+        self.assertEqual(self.sni.host_of("box:a:b"), "box")
+        self.assertEqual(self.sni.part_of("box:a:b"), "a:b")
+
+    def test_ONE_PARTITION_GETS_NO_LETTER(self):
+        """The same rule as the mark one level up: a letter distinguishing a
+        thing from nothing is noise, and the common install must keep the icon
+        it has always had."""
+        self.assertEqual(self.sni.partition_letters(["global"]), {})
+        self.assertEqual(self.sni.partition_letters([]), {})
+
+    def test_A_IS_ALWAYS_THE_BASELINE(self):
+        """`global` is the reserved baseline partition, so it sorts first
+        whatever it is sitting beside -- including names that would beat it
+        alphabetically."""
+        got = self.sni.partition_letters(["work", "global", "alpha"])
+        self.assertEqual(got["global"], "A")
+        self.assertEqual(got["alpha"], "B")
+        self.assertEqual(got["work"], "C")
+
+    def test_without_a_baseline_it_is_plain_alphabetical(self):
+        """A host whose context never resolves to `global` is not an error,
+        and its first partition alphabetically is simply A."""
+        got = self.sni.partition_letters(["work", "alpha"])
+        self.assertEqual(got, {"alpha": "A", "work": "B"})
+
+    def test_the_letters_are_STATELESS(self):
+        """Stable ordering across restarts was explicitly not required, and
+        alphabetical is chosen because it needs no state: two machines drawing
+        the same fleet agree without sharing anything, which the per-host
+        COLOUR file has to work around."""
+        a = self.sni.partition_letters(["work", "global"])
+        b = self.sni.partition_letters(["global", "work"])
+        self.assertEqual(a, b)
+
+    def test_past_Z_there_is_NO_letter_rather_than_a_second_alphabet(self):
+        """27 partitions is a different problem, and a tray drawing `AA` would
+        be making it look solved."""
+        names = [f"p{i:02d}" for i in range(30)]
+        got = self.sni.partition_letters(names)
+        self.assertEqual(len(got), 26)
+        self.assertEqual(got["p00"], "A")
+        self.assertEqual(got["p25"], "Z")
+        self.assertNotIn("p26", got)
+
+
+class ItemSet(unittest.TestCase):
+    """Which items should exist right now -- the decision the whole partition
+    feature turns on, lifted out of the async loop so it can be asserted."""
+
+    def setUp(self):
+        self.sni = _fresh()
+
+    def _feed(self, rows):
+        f = self.sni.Feed(["true"])
+        f.rows = rows
+        f.asked = rows is not None
+        return f
+
+    def _run(self, feeds, known=None):
+        known = {} if known is None else known
+        got = self.sni.item_set({h: ["x"] for h in feeds},
+                                {h: (f, None) for h, f in feeds.items()},
+                                known)
+        return got, known
+
+    def test_one_partition_is_one_item_with_the_OLD_key(self):
+        got, _k = self._run({"manifold": self._feed(
+            {"global": ("idle", None)})})
+        self.assertEqual(list(got), ["manifold"])
+        self.assertEqual(got["manifold"][1], None)   # no partition on the key
+        self.assertEqual(got["manifold"][2], None)   # and no letter
+
+    def test_two_partitions_are_two_items_WITH_letters(self):
+        got, _k = self._run({"manifold": self._feed(
+            {"global": ("idle", None), "work": ("blocked", 1)})})
+        self.assertEqual(sorted(got), ["manifold:global", "manifold:work"])
+        self.assertEqual(got["manifold:global"][2], "A")
+        self.assertEqual(got["manifold:work"][2], "B")
+        self.assertEqual(got["manifold:work"][1], "work")
+
+    def test_AN_UNREACHABLE_HOST_KEEPS_ITS_ITEMS(self):
+        """The load-bearing one. The partition set lives on the other machine,
+        so a failed query means "could not ask", never "it has none" --
+        withdrawing the items would empty the tray at the exact moment it has
+        something to say, which is the entire promise of this design.
+        """
+        known = {}
+        up = self._feed({"global": ("idle", None), "work": ("idle", None)})
+        got, known = self._run({"manifold": up}, known)
+        self.assertEqual(len(got), 2)
+        up.rows = None                       # the network goes
+        got, known = self._run({"manifold": up}, known)
+        self.assertEqual(sorted(got), ["manifold:global", "manifold:work"])
+
+    def test_a_host_that_has_NEVER_answered_publishes_nothing(self):
+        """One tick only. Nothing is known about it yet, not even how many
+        items it wants, and inventing one would mean withdrawing or re-keying
+        it a second later."""
+        got, _k = self._run({"manifold": self._feed(None)})
+        self.assertEqual(got, {})
+
+    def test_a_host_that_LOSES_a_partition_loses_its_item(self):
+        """The other direction, and it has to be separate: a rule that only
+        ever adds satisfies the unreachable case perfectly while the tray
+        accumulates items for partitions that are long gone."""
+        known = {}
+        f = self._feed({"global": ("idle", None), "work": ("idle", None)})
+        _got, known = self._run({"manifold": f}, known)
+        f.rows = {"global": ("idle", None)}
+        got, known = self._run({"manifold": f}, known)
+        self.assertEqual(list(got), ["manifold"])
+        # ... AND THE MEMORY FORGOT IT TOO. `known` only matters on an
+        # unreachable tick, so a version that accumulated rather than
+        # replacing would pass everything above and resurrect the dead
+        # partition the moment the network dropped.
+        f.rows = None
+        got, known = self._run({"manifold": f}, known)
+        self.assertEqual(list(got), ["manifold"],
+                         "a partition that went away came back from `known` "
+                         "when the host became unreachable")
+
+
+class ParseAll(unittest.TestCase):
+    """`mux agent-summary --all`: one round trip, every partition."""
+
+    def setUp(self):
+        self.sni = _fresh()
+
+    def test_every_row_becomes_a_partition(self):
+        got = self.sni.parse_all("global working 2\nwork blocked 1\n")
+        self.assertEqual(got, {"global": ("working", 2),
+                               "work": ("blocked", 1)})
+
+    def test_idle_and_none_carry_no_count(self):
+        got = self.sni.parse_all("global idle 0\nwork none 0\n")
+        self.assertEqual(got, {"global": ("idle", None),
+                               "work": ("none", None)})
+
+    def test_a_STATE_mux_would_never_emit_is_unknown_not_dropped(self):
+        """The partition is real and the feed is answering junk about it,
+        which is exactly what `unknown` is for. Dropping the row would
+        withdraw the item, which reads as "that partition is gone"."""
+        got = self.sni.parse_all("global 1) bootique\n")
+        self.assertEqual(got, {"global": ("unknown", None)})
+
+    def test_a_partition_that_is_not_a_LABEL_is_DROPPED(self):
+        """These names arrive from another machine and go back out inside a
+        shell command, so a row that cannot be a partition name is not one."""
+        got = self.sni.parse_all("../etc idle 0\nUP idle 0\ngood idle 0\n")
+        self.assertEqual(sorted(got), ["good"])
+
+    def test_junk_and_blank_lines_are_survivable(self):
+        """The output may be anything: a login banner, a usage block from a
+        remote too old for --all, an empty answer. None of it may raise."""
+        for text in ("", "\n\n", "usage: mux agent-summary [NS]\n",
+                     "onlyoneword\n"):
+            self.assertEqual(self.sni.parse_all(text), {})
+
+
+class FeedRows(unittest.TestCase):
+    """What an item reads out of its host's shared answer."""
+
+    def setUp(self):
+        self.sni = _fresh()
+
+    def test_UNREACHABLE_is_unknown_for_every_partition(self):
+        f = self.sni.Feed(["true"])
+        self.assertIsNone(f.rows)
+        self.assertEqual(f.row("work"), ("unknown", None))
+        self.assertEqual(f.row(None), ("unknown", None))
+
+    def test_a_partition_MISSING_from_a_good_answer_is_unknown(self):
+        """Not calm. The item exists because that partition was there a moment
+        ago, so its absence from a SUCCESSFUL answer is a fact nobody has
+        explained -- and drawing it idle would be the tray inventing one."""
+        f = self.sni.Feed(["true"])
+        f.rows = {"global": ("working", 2)}
+        self.assertEqual(f.row("work"), ("unknown", None))
+
+    def test_the_solo_item_reads_whichever_partition_there_is(self):
+        """Its key deliberately does not name one, so that a host gaining a
+        second partition RE-KEYS its item rather than mutating it."""
+        f = self.sni.Feed(["true"])
+        f.rows = {"work": ("blocked", 3)}
+        self.assertEqual(f.row(None), ("blocked", 3))
+
+    def test_a_solo_item_whose_host_grew_a_partition_is_unknown(self):
+        """For the tick between the answer arriving and the supervisor
+        re-keying. Picking the first of two would be arbitrary, and arbitrary
+        here means the tile shows another partition's state under this one's
+        name."""
+        f = self.sni.Feed(["true"])
+        f.rows = {"global": ("idle", None), "work": ("blocked", 3)}
+        self.assertEqual(f.row(None), ("unknown", None))
+
+    def test_ASKED_is_not_the_same_question_as_ANSWERED(self):
+        """`rows is None` is true of a host that has not been asked AND of one
+        that could not be reached, and the difference decides whether an item
+        paints unknown or waits. Without it every item flashed unknown for one
+        tick at startup."""
+        f = self.sni.Feed(["true"])
+        self.assertFalse(f.asked)
+
+
 class Identity(unittest.TestCase):
     """What a tray host and a human see when there are SEVERAL items.
 
@@ -646,11 +904,16 @@ class TraySort(unittest.TestCase):
 
 
 class Watch(unittest.TestCase):
-    """The per-item poll loop: what it repaints, and how often.
+    """The per-item repaint loop: what it repaints, and how often.
 
     Tested as the real loop rather than through an extraction, because the loop
     IS the rule -- there is nothing left once you lift the decision out of it.
     Driven with a tiny POLL and cancelled, so it runs in milliseconds.
+
+    THE ITEM NO LONGER POLLS. Its host's Feed does, once per tick for every
+    partition at once, and the item waits on it and reads its own row -- so
+    these drive a real Feed over a stub source, which is also what proves the
+    two halves fit together.
     """
 
     def _source(self, body):
@@ -670,21 +933,24 @@ class Watch(unittest.TestCase):
         def set(self, state, count):
             self.calls.append((state, count))
 
-    def _spin(self, sni, item, argv, seconds=0.25):
-        """Runs the loop briefly and cancels it. stdout is swallowed: the loop
-        logs every change by design, and a suite that prints is a suite whose
-        real output you stop reading."""
+    def _spin(self, sni, item, argv, seconds=0.25, part=None):
+        """Runs a Feed and one watcher briefly, then cancels both. stdout is
+        swallowed: the loop logs every change by design, and a suite that
+        prints is a suite whose real output you stop reading."""
         import contextlib
         import io
 
         async def go():
-            task = asyncio.ensure_future(sni._watch(item, argv, "test"))
+            feed = sni.Feed(argv)
+            pt = asyncio.ensure_future(feed.poll())
+            task = asyncio.ensure_future(sni._watch(item, feed, part, "test"))
             await asyncio.sleep(seconds)
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
+            for t in (task, pt):
+                t.cancel()
+                try:
+                    await t
+                except asyncio.CancelledError:
+                    pass
         with contextlib.redirect_stdout(io.StringIO()):
             asyncio.run(go())
 
@@ -694,7 +960,7 @@ class Watch(unittest.TestCase):
         tray and defeats the blink that is supposed to mean "look at me"."""
         sni = _fresh(MUX_INDICATOR_POLL="0.01", MUX_INDICATOR_CTL=None)
         item = self._Item()
-        self._spin(sni, item, [self._source("printf 'working 2\\n'")])
+        self._spin(sni, item, [self._source("printf 'global working 2\\n'")])
         self.assertEqual(item.calls, [("working", 2)],
                          f"repainted {len(item.calls)} times for one value")
 
@@ -708,8 +974,8 @@ class Watch(unittest.TestCase):
         src = self._source(
             f'n=$(cat {counter} 2>/dev/null || echo 0)\n'
             f'echo $((n + 1)) >{counter}\n'
-            f'if [ "$n" -lt 2 ]; then printf "working 1\\n"\n'
-            f'else printf "blocked 3\\n"; fi')
+            f'if [ "$n" -lt 2 ]; then printf "global working 1\\n"\n'
+            f'else printf "global blocked 3\\n"; fi')
         item = self._Item()
         self._spin(sni, item, [src])
         self.assertIn(("working", 1), item.calls)
@@ -734,7 +1000,7 @@ class Watch(unittest.TestCase):
         self.addCleanup(os.unlink, path)
         sni = _fresh(MUX_INDICATOR_POLL="0.01", MUX_INDICATOR_CTL=path)
         item = self._Item()
-        self._spin(sni, item, [self._source("printf 'idle 0\\n'")])
+        self._spin(sni, item, [self._source("printf 'global idle 0\\n'")])
         self.assertEqual(item.calls, [("blocked", 9)])
 
 

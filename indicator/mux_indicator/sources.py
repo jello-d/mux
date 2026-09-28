@@ -60,11 +60,38 @@ DEFAULT_TRANSPORT = (
     "ssh -o BatchMode=yes -o ConnectTimeout=6 "
     "-o StrictHostKeyChecking=accept-new %h %q"
 )
-REMOTE_CMD = "sh -lc 'mux agent-summary'"
-# The click's remote half. `mux next-blocked` resolves its own client when it
-# has no pane to read one from (mux 0.53), which is the whole reason a tray
-# click can reach a latched host at all.
-ACTIVATE_CMD = "sh -lc 'mux next-blocked'"
+# `--all` rather than a bare summary, and the partition is not an argument
+# here: one round trip answers for EVERY partition on that host, which is what
+# lets a host publish several items without multiplying its ssh traffic. A
+# per-partition poll would be N queries per host per tick for an answer the
+# far side can compose in one.
+REMOTE_CMD = "sh -lc 'mux agent-summary --all'"
+LOCAL_CMD = ("agent-summary", "--all")
+
+# A partition name is a DNS label (see mux_ctx_valid): lowercase alphanumerics
+# and hyphens. VALIDATED HERE because the names arrive from the far side and
+# go back out inside a shell command, so this is untrusted input crossing into
+# `sh -lc` -- not a second copy of mux's rule, which decides what a partition
+# may be CALLED rather than what this daemon may quote.
+_PART_OK = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
+
+
+def valid_partition(name):
+    return bool(name) and bool(_PART_OK.match(name))
+
+
+def activate_cmd(part=None):
+    """The click's remote half. `mux next-blocked` resolves its own client
+    when it has no pane to read one from (mux 0.53), which is the whole reason
+    a tray click can reach a latched host at all.
+
+    THE PARTITION TRAVELS WITH IT, or every item on a host does the same
+    thing: the far side's login shell resolves its own default and jumps
+    there, landing on a real session that is not the one clicked.
+    """
+    if part and valid_partition(part):
+        return f"sh -lc 'mux next-blocked --partition {part}'"
+    return "sh -lc 'mux next-blocked'"
 
 
 def local_label():
@@ -212,7 +239,7 @@ def load(run_dir=None, mux_bin="mux"):
     left-hand item does not move around as latches come and go.
     """
     local = local_label()
-    out = [(local, [mux_bin, "agent-summary"])]
+    out = [(local, [mux_bin, *LOCAL_CMD])]
     tmpl = transport()
     for host, _target in latched(run_dir):
         if host == local:

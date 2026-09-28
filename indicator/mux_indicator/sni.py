@@ -37,8 +37,8 @@ from dbus_next.service import ServiceInterface, dbus_property, method, signal
 
 from .render import MARK_PALETTE, host_mark, icon_pixmap, parse_pair
 from .slots import Slots
-from .sources import (ACTIVATE_CMD, activate_hook, load as load_sources,
-                      local_label, remote_argv)
+from .sources import (activate_cmd, activate_hook, load as load_sources,
+                      local_label, remote_argv, valid_partition)
 
 WATCHER = "org.kde.StatusNotifierWatcher"
 WATCHER_PATH = "/StatusNotifierWatcher"
@@ -72,7 +72,7 @@ BLINK_MS = int(os.environ.get("MUX_INDICATOR_BLINK_MS", "250"))
 
 class Indicator(ServiceInterface):
     def __init__(self, state="none", count=None, label=None, host=None,
-                 local=False):
+                 local=False, part=None):
         super().__init__("org.kde.StatusNotifierItem")
         # The label names the host this item speaks for. None keeps the old
         # unlabelled identity, which is what the existing tests construct.
@@ -95,9 +95,13 @@ class Indicator(ServiceInterface):
         # beside the mark because the two turn on together and neither means
         # anything without the other.
         self._ink = None
+        # The A-Z letter naming this item's PARTITION, or None when the host
+        # has only one. Set later for the same reason the mark is: a second
+        # partition can appear while the daemon runs.
+        self._part = part
         self._state = state
         self._count = count
-        self._pixmap = icon_pixmap(state, count, host=host)
+        self._pixmap = icon_pixmap(state, count, host=host, part=part)
         self._blink = None
 
     def _status(self):
@@ -106,19 +110,26 @@ class Indicator(ServiceInterface):
     def _paint(self, cursor=True):
         self._pixmap = icon_pixmap(self._state, self._count, cursor=cursor,
                                    host=self._host, mark=self._mark,
-                                   ink=self._ink)
+                                   ink=self._ink, part=self._part)
         self.NewIcon()
 
-    def set_mark(self, mark, ink=None):
-        """Show or hide the host mark. Repaints only on a real change, so the
-        discovery loop can call this every tick without churning the tray.
+    def set_mark(self, mark, ink=None, part=None):
+        """Show or hide the overlay: the host mark, its palette slot, and the
+        partition letter. Repaints only on a real change, so the discovery
+        loop can call this every tick without churning the tray.
 
-        BOTH fields decide that. Comparing only the mark would pin a host to
-        the first colour it was ever drawn with, and a reshuffle would then be
-        invisible until something else forced a repaint."""
-        if mark == self._mark and ink == self._ink:
+        ALL THREE fields decide that. Comparing only the mark would pin a host
+        to the first colour it was ever drawn with, and a reshuffle would then
+        be invisible until something else forced a repaint.
+
+        THE LETTER TRAVELS WITH THE MARK because one pass computes both and
+        both answer "which tile is this": the mark says which machine, the
+        letter which partition of it. Two setters would mean two repaints on
+        the tick where a host gains a second partition, which is exactly the
+        tick where both change."""
+        if mark == self._mark and ink == self._ink and part == self._part:
             return
-        self._mark, self._ink = mark, ink
+        self._mark, self._ink, self._part = mark, ink, part
         self._paint()
 
     def set(self, state, count):
@@ -250,6 +261,89 @@ def _parse(text):
         return (state, None)
 
 
+
+# `global` is the reserved baseline partition, and mux's own `mux resume`
+# grammar already treats it that way. Kept here rather than imported because
+# it is a NAME mux publishes, not a rule this presenter gets to decide.
+BASELINE = "global"
+
+
+def parse_all(text):
+    """`<partition> <state> <count>` per line -> {partition: (state, count)}.
+
+    The shape `mux agent-summary --all` emits, which answers for every
+    partition in ONE round trip. That is the whole reason the verb exists: a
+    reader on another box cannot know the partition names to ask for, and over
+    a transport N partitions must not mean N connections.
+
+    A ROW THAT DOES NOT PARSE IS DROPPED, not guessed at, and a name that is
+    not a DNS label is dropped with it. These names arrive from another
+    machine and go straight back out inside a shell command, so this is
+    untrusted input crossing into `sh -lc`.
+
+    A row whose STATE is a word mux would never emit becomes `unknown` rather
+    than being dropped: the partition is real, and the feed answering junk
+    about it is exactly what `unknown` is for. Dropping it would make the item
+    disappear, which reads as "that partition is gone".
+    """
+    out = {}
+    for line in text.splitlines():
+        fields = line.split()
+        if len(fields) < 2 or not valid_partition(fields[0]):
+            continue
+        got = _parse(" ".join(fields[1:]))
+        out[fields[0]] = got if got and got[0] in KNOWN else UNKNOWN
+    return out
+
+
+def partition_letters(parts):
+    """-> {partition: letter}, or {} when there is only one.
+
+    A IS THE BASELINE. `global` always sorts first and always gets A;
+    everything else follows alphabetically. Stable ordering across restarts
+    was explicitly not required (the user's call), and alphabetical is chosen
+    BECAUSE it needs no state: nothing is remembered, so nothing can drift
+    between two machines drawing the same fleet, which is the failure the
+    per-host colour file already has to work around.
+
+    ONE PARTITION GETS NO LETTER, the same rule as the host mark one level up:
+    a letter distinguishing a thing from nothing is noise, and a host with one
+    partition must keep the icon it has always had, byte for byte.
+
+    PAST Z THERE IS NO LETTER rather than a second alphabet. Partitions are
+    meant to be rare and few; 27 of them is a different problem, and a tray
+    that starts drawing `AA` would be making it look solved.
+    """
+    if len(parts) < 2:
+        return {}
+    ordered = sorted(parts, key=lambda p: (p != BASELINE, p))
+    return {p: chr(ord("A") + i) for i, p in enumerate(ordered[:26])}
+
+
+def item_key(host, part, solo):
+    """The identity of one tray item: `host`, or `host:partition`.
+
+    THE SOLO FORM IS THE OLD ONE, unchanged, which is what keeps a
+    single-partition host publishing exactly the item it always did -- same
+    Id, same tooltip, same everything. The colon grammar matches `mux latch`'s
+    own target, so the two read the same way.
+    """
+    return host if solo else f"{host}:{part}"
+
+
+def host_of(key):
+    """The host half of an item key. Everything before the FIRST colon, the
+    same rule latch's target grammar uses."""
+    return key.split(":", 1)[0] if key else key
+
+
+def part_of(key):
+    """The partition half of an item key, or None for the solo form."""
+    if not key or ":" not in key:
+        return None
+    return key.split(":", 1)[1]
+
+
 def _read_override():
     """The opt-in override file (MUX_INDICATOR_CTL) if set + parseable, else
     None -- so with the env unset the live feed is the only source."""
@@ -344,6 +438,108 @@ async def _query(argv):
     return got
 
 
+async def _query_all(argv):
+    """Run one source -> {partition: (state, count)}, or None.
+
+    NONE MEANS COULD NOT ASK, and it is a different answer from an empty dict.
+    A host that answered with no partitions is quiet; a host that could not be
+    reached is UNKNOWN, and every item it owns must say so. Collapsing the two
+    is the original sin this feature keeps having to avoid -- it is what left
+    an unreachable box showing whatever it last said, forever.
+
+    Shares `_query`'s subprocess rules by calling it? No: it needs the whole
+    stdout rather than one parsed line, and _query's value is the exit-code
+    discipline, which is repeated here rather than abstracted because the two
+    differ in exactly one line and a wrapper would hide which.
+    """
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *argv,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+            # The PAIR -- see _query. Neither line may be simplified without
+            # the other, and the failure mode is a daemon that vanishes
+            # whenever the network does.
+            start_new_session=True)
+    except OSError:
+        return None
+    try:
+        out, _ = await asyncio.wait_for(proc.communicate(), TIMEOUT)
+    except asyncio.TimeoutError:
+        await _reap(proc)
+        return None
+    if proc.returncode != 0:      # the transport failed, not the host
+        return None
+    return parse_all(out.decode("utf-8", "replace"))
+
+
+class Feed:
+    """One host's answer, shared by every item that host publishes.
+
+    ONE QUERY PER HOST PER TICK, not one per partition, which is the whole
+    argument for `mux agent-summary --all`: over a transport, N partitions
+    must not mean N ssh connections. The items do not poll; they wait on this
+    and read their own row out of the result.
+
+    IT ALSO DISCOVERS. The set of partitions is not knowable from here -- it
+    lives on the other machine -- so the same answer that repaints the items
+    is what tells the supervisor which items should exist at all. Two
+    mechanisms for one fact is how a tray starts disagreeing with itself.
+    """
+
+    def __init__(self, argv):
+        self.argv = argv
+        # None until the first answer, and again whenever one fails. It is
+        # NOT an empty dict: "quiet" and "cannot reach" must stay apart.
+        self.rows = None
+        # Whether a query has COMPLETED, either way. Not the same question as
+        # `rows is None`, which is also true of a host that answered and could
+        # not be reached -- and the difference decides whether an item paints
+        # `unknown` or waits. Without it every item flashed unknown for one
+        # tick at startup, before its host had been asked even once.
+        self.asked = False
+        self._ev = asyncio.Event()
+
+    def partitions(self):
+        """The partitions this host reported, or None if it has not
+        answered. The supervisor keeps the LAST known set when this is None,
+        because an unreachable host must keep its items and draw them
+        `unknown` -- withdrawing them would empty the tray at the exact moment
+        it has something to say."""
+        return None if self.rows is None else sorted(self.rows)
+
+    def row(self, part):
+        """One partition's (state, count).
+
+        UNKNOWN when the host could not be reached AND when it answered
+        without mentioning this partition. The second case is not calm: the
+        item exists because that partition was there a moment ago, so its
+        absence from a successful answer is a fact nobody has explained."""
+        if self.rows is None:
+            return UNKNOWN
+        if part is None:
+            # The solo form: one partition, whichever it is called. Named
+            # rather than positional would be better and is not available --
+            # the key deliberately does not carry it, so that a host gaining
+            # a second partition re-keys its item rather than mutating it.
+            if len(self.rows) != 1:
+                return UNKNOWN
+            return next(iter(self.rows.values()))
+        return self.rows.get(part, UNKNOWN)
+
+    async def poll(self):
+        """Query forever, waking this host's items after each answer."""
+        while True:
+            self.rows = await _query_all(self.argv)
+            self.asked = True
+            self._ev.set()
+            self._ev.clear()
+            await asyncio.sleep(POLL)
+
+    async def changed(self):
+        await self._ev.wait()
+
+
 async def _host_colors(label):
     """`mux host-color LABEL` -> an (fg, bg) pair, or None.
 
@@ -427,19 +623,29 @@ async def activate(label):
     default, so a click still does the half mux owns when nobody wired one.
     """
     me = local_label()
-    if label and label != me:
-        argv = remote_argv(label, cmd=ACTIVATE_CMD)
+    host, part = host_of(label), part_of(label)
+    if host and host != me:
+        argv = remote_argv(host, cmd=activate_cmd(part))
     else:
         argv = [MUX, "next-blocked"]
+        if part:
+            argv += ["--partition", part]
     await _fire(argv, f"switch {label or me}")
 
     hook = activate_hook()
     if hook:
-        # The LABEL as its one argument, and shell-split here rather than run
-        # through a shell: the hook is a command line in config, not a script,
-        # and handing it to `sh -c` would make a host name with a space an
-        # injection rather than an argument.
-        await _fire(shlex.split(hook) + [label or me], f"focus {label or me}")
+        # THE HOST, NOT THE KEY, as the hook's first argument. The shipped
+        # examples match a terminal title against `[host]`, which is what mux
+        # itself puts there -- a `host:partition` key would match nothing and
+        # the click would silently stop raising the window. The partition
+        # follows as a second argument, which an existing hook ignores and a
+        # new one can use.
+        #
+        # Shell-SPLIT rather than run through a shell: the hook is a command
+        # line in config, not a script, and handing it to `sh -c` would make a
+        # host name with a space an injection rather than an argument.
+        args = [host or me] + ([part] if part else [])
+        await _fire(shlex.split(hook) + args, f"focus {label or me}")
 
 
 async def _fire(argv, what):
@@ -469,6 +675,44 @@ async def _fire(argv, what):
         _msg = (err or b"").decode("utf-8", "replace").strip().splitlines()
         print(f"mux-indicator: {what} exited {proc.returncode}"
               f"{': ' + _msg[-1] if _msg else ''}", flush=True)
+
+
+def item_set(hosts, feeds, known):
+    """-> {key: (feed, part, letter)}: every item that should exist right now.
+
+    Lifted out of the supervisor for the same reason `reconcile` and
+    `mark_plan` were: the loop is async and needs a bus, so a rule left inside
+    it cannot be asserted, and this is where the whole partition feature is
+    decided.
+
+    AN UNREACHABLE HOST KEEPS ITS ITEMS. The partition set lives on the other
+    machine, so a failed query means "could not ask", never "it has none" --
+    and withdrawing the items would empty the tray at the exact moment it has
+    something to say. They stay, and the feed draws them `unknown`, which is
+    the whole promise of the cross-machine design. `known` carries the last
+    answer forward for that; it is mutated here rather than returned because
+    it is the caller's memory across ticks.
+
+    A HOST THAT HAS NEVER ANSWERED PUBLISHES NOTHING, one tick only. Nothing
+    is known about it yet, not even how many items it wants, and inventing one
+    would mean withdrawing or re-keying it a second later.
+    """
+    want = {}
+    for host in hosts:
+        feed = feeds[host][0]
+        parts = feed.partitions()
+        if parts is None:
+            parts = known.get(host)
+            if parts is None:
+                continue
+        else:
+            known[host] = parts
+        solo = len(parts) < 2
+        letters = partition_letters(parts)
+        for part in parts:
+            want[item_key(host, part, solo)] = (
+                feed, None if solo else part, letters.get(part))
+    return want
 
 
 def reconcile(want, live):
@@ -548,48 +792,74 @@ def mark_plan(labels, local, slots):
     tray -- the common case, and every new user's first impression -- keeps
     exactly the look it always had, tint and all.
 
+    COUNTED IN HOSTS, NOT ITEMS, which is the 0.56 correction. One host with
+    two partitions publishes two items, and marking them would put the same
+    three letters and the same colour on both: it says nothing, because they
+    ARE the same machine. The partition letter is what tells those two apart,
+    and the mark stays for the question it actually answers.
+
     THE LOCAL HOST TAKES NO SLOT, which is what reserves white for it. Matched
     by NAME rather than by position: `labels` comes from a dict, so a host that
     drops and returns re-enters somewhere else and would otherwise inherit
     whichever identity happened to sit at that index.
     """
-    if len(labels) < 2:
+    if len({host_of(lab) for lab in labels}) < 2:
         return {lab: (None, None) for lab in labels}
-    return {lab: (host_mark(lab),
-                  None if lab == local else slots.slot(lab))
+    return {lab: (host_mark(host_of(lab)),
+                  None if host_of(lab) == local else slots.slot(host_of(lab)))
             for lab in labels}
 
 
-async def _watch(item, argv, label=""):
-    """Feed one icon: the override file if present, else this item's source.
-    Only repaints when the (state, count) actually changes."""
+async def _watch(item, feed, part=None, label=""):
+    """Feed one icon: the override file if present, else this item's row out
+    of its host's answer. Only repaints when the (state, count) actually
+    changes.
+
+    IT WAITS ON THE FEED rather than sleeping POLL of its own. Two items on
+    one host would otherwise drift out of phase with the answer they share and
+    with each other, so a change would reach one tile up to a whole tick
+    before the other -- on the same machine, from the same query.
+    """
     last = None
     while True:
-        cur = _read_override() or await _query(argv)
+        if not feed.asked:
+            # NOT YET ASKED is not `unknown`. Painting before the first answer
+            # lands would flash every item at startup, and unknown means "this
+            # host was asked and could not be reached".
+            await feed.changed()
+            continue
+        cur = _read_override() or feed.row(part)
         if cur != last:
             last = cur
             item.set(*cur)
             print(f"mux-indicator: {label or 'local'} = "
                   f"{cur[0]} {cur[1]}", flush=True)
-        await asyncio.sleep(POLL)
+        await feed.changed()
 
 
-async def _publish(index, label, argv):
-    """One connection, one bus name, one item, one poll task.
+async def _publish(index, label, feed, part=None):
+    """One connection, one bus name, one item, one watch task.
 
     A CONNECTION EACH is not a style choice: see the module docstring. The bus
     name index is 1-based to match the convention every other SNI producer uses.
+
+    The item's poll is not its own any more: it reads `feed`, which its whole
+    HOST shares, so two partitions on one box cost one query rather than two.
     """
     bus = await MessageBus(bus_type=BusType.SESSION).connect()
     # Before the export, so the FIRST pixmap a tray host reads already carries
     # the host colour. Painting neutral and then correcting it would make every
     # item visibly change colour a moment after the bar appeared.
-    host = await _host_colors(label)
+    #
+    # THE HOST HALF OF THE KEY, because the colour identifies a MACHINE: two
+    # partitions on one box must be the same colour, or the tray says they are
+    # two machines and the letter says they are not.
+    host = await _host_colors(host_of(label))
     if host is None and label:
         print(f"mux-indicator: {label} has no usable colour pair "
               f"(drawing host-neutral)", flush=True)
     item = Indicator(label=label, host=host,
-                     local=(label == local_label()))
+                     local=(host_of(label) == local_label()))
     bus.export(ITEM_PATH, item)
     name = item_bus_name(os.getpid(), index)
     await bus.request_name(name)
@@ -627,7 +897,7 @@ async def _publish(index, label, argv):
     else:
         print(f"mux-indicator: {label} waiting for the tray watcher",
               flush=True)
-    task = asyncio.create_task(_watch(item, argv, label))
+    task = asyncio.create_task(_watch(item, feed, part, label))
     return bus, task, item
 
 
@@ -647,7 +917,9 @@ async def _supervise():
     would hand a tray host a name it may still be holding state for, and the
     spec's name is meant to be unique per item; a counter costs nothing.
     """
-    live = {}          # label -> (bus, task)
+    live = {}          # key -> (bus, task, item)
+    feeds = {}         # host -> (Feed, task)
+    known = {}         # host -> its last KNOWN partition list
     index = 0
     announced = False
     # ONE Slots FOR THE PROCESS, so the in-memory table is the same object
@@ -657,13 +929,29 @@ async def _supervise():
     _slots = Slots(len(MARK_PALETTE))
     while True:
         try:
-            want = {label: argv for label, argv in load_sources(mux_bin=MUX)}
+            hosts = dict(load_sources(mux_bin=MUX))
         except Exception as e:
             # Discovery failing must never take the daemon down: the items
             # already published are still telling the truth.
             print(f"mux-indicator: discovery failed: {e}", flush=True)
             await asyncio.sleep(DISCOVER)
             continue
+
+        # ONE FEED PER HOST, started before anything it owns is published and
+        # stopped when the last of them goes. The feed is what discovers the
+        # partitions, so a host's first tick necessarily publishes nothing:
+        # the item set arrives one pass later, which is imperceptible and is
+        # the price of not asking a second question to find out what to ask.
+        for _h, _argv in hosts.items():
+            if _h not in feeds:
+                _f = Feed(_argv)
+                feeds[_h] = (_f, asyncio.create_task(_f.poll()))
+        for _h in [h for h in feeds if h not in hosts]:
+            _f, _t = feeds.pop(_h)
+            _t.cancel()
+            known.pop(_h, None)
+
+        want = item_set(hosts, feeds, known)
 
         drop, add = reconcile(want, live)
 
@@ -682,12 +970,15 @@ async def _supervise():
                 bus.disconnect()
             except Exception:
                 pass
-            print(f"mux-indicator: - {label} (latch ended)", flush=True)
+            # The reason is no longer always a latch: an item also goes
+            # when its partition stops being reported, and when a host
+            # gains a second one and every key on it is rewritten.
+            print(f"mux-indicator: - {label} (withdrawn)", flush=True)
 
-        for label, argv in add:
+        for label, (_feed, _part, _letter) in add:
             index += 1
             try:
-                live[label] = await _publish(index, label, argv)
+                live[label] = await _publish(index, label, _feed, _part)
             except Exception as e:
                 # One host that cannot be published must not cost the others --
                 # and the others are exactly where its absence would show.
@@ -700,7 +991,9 @@ async def _supervise():
         # looking at precisely because it just appeared.
         plan = mark_plan(live, local_label(), _slots)
         for _label, (_b, _t, _item) in live.items():
-            _item.set_mark(*plan[_label])
+            _mk, _ink = plan[_label]
+            _item.set_mark(_mk, _ink, want[_label][2] if _label in want
+                           else None)
         await asyncio.sleep(DISCOVER)
 
 
