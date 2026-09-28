@@ -63,4 +63,37 @@ rm -f "$MUX_DIR/config"
 agent_rec "$XDG_RUNTIME_DIR/agent-state/global/p3" blocked %3 150 charlie x
 eq worst-wins "$(sum global)" "blocked 2"
 
+# --- --all: EVERY partition, in one call ----------------------------------
+# The tray polls a remote over ssh; asking per partition would multiply that
+# cost by the partition count on every tick, for a signal that changes on
+# human timescales. One question, one answer.
+#
+# Two namespaces exist in this fixture (global and work), so this also pins
+# that --all reports the OTHER partition, not just the caller's -- a version
+# that quietly answered for one would pass any single-line assertion.
+_o=$(sum --all)
+printf '%s\n' "$_o" | grep -q '^global blocked 2$' \
+	|| fail "--all did not report the caller partition correctly: [$_o]"
+printf '%s\n' "$_o" | grep -q '^work idle 1$' \
+	|| fail "--all did not report the OTHER partition: [$_o]"
+[ "$(printf '%s\n' "$_o" | grep -c .)" = 2 ] \
+	|| fail "--all reported $(printf '%s\n' "$_o" | grep -c .) lines, want 2"
+
+# The caller's own partition appears even when NOTHING has any state, so a
+# consumer always gets at least one line -- the same reason the tray always
+# carries the local host rather than emptying when nothing is latched.
+#
+# Asserted by emptying the lot rather than by setting MUX_CTX_PARTITION:
+# mux_ctx_resolve OVERWRITES that variable from the context command, so an
+# env-var fixture would silently test the resolved partition instead of the
+# one it named. That override has now cost three separate debugging sessions.
+rm -rf "$XDG_RUNTIME_DIR/agent-state"
+_o=$(sum --all)
+[ "$(printf '%s\n' "$_o" | grep -c .)" = 1 ] \
+	|| fail "with no state at all, --all should still answer once: [$_o]"
+case $_o in
+*" none 0") ;;
+*) fail "with no state at all, --all said [$_o]" ;;
+esac
+
 pass

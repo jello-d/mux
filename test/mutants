@@ -1165,3 +1165,18 @@ t mux-even
 - 	else tmux -L "$_ns" "$@"; fi
 + 	else tmux "$@"; fi
 m headless did not reach the partition's server
+
+= summary-all-reports-one-partition
+f libexec/agent-state-summary
+t mux-agent-summary
+- for _d in "$_root"/*; do
++ 	for _d in "$(mux_agent_dir "$_ns")"; do
+m did not report the OTHER partition
+
+= summary-all-drops-the-empty-caller
+f libexec/agent-state-summary
+t mux-agent-summary
+- *) printf '%s %s\n' "${_ns:-global}" "none 0" ;;
++ 	*) ;;
+m --all should still answer once
+
