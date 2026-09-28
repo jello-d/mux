@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.59" "User Commands"
+.TH MUX 1 "" "mux 0.60" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -589,7 +589,7 @@ Read\-only and headless: derived from the state files, never from
 so it answers with no server, no client and no
 .BR $TMUX .
 .TP
-.B mux agent-summary " [" \-\-all "] [" \fINS\fR ]
+.B mux agent-summary " [" \-\-all "] [" \-\-attached "] [" \fINS\fR ]
 One line,
 .BR "<state> <count>" :
 the worst live state across the namespace and how many sessions sit in it, or
@@ -607,6 +607,20 @@ ask for, and over a transport N partitions must not mean N connections. THE
 CALLER'S OWN PARTITION ALWAYS APPEARS, even with nothing tracked in it \(em
 "quiet" and "not there" are different answers, and a presenter that saw
 nothing for the partition it is sitting in would have to guess which.
+.IP
+.B \-\-attached
+narrows that to the partitions SOMEBODY IS LOOKING AT: those whose tmux server
+has a client attached. A tray item means a human is watching, and remotely that
+is precisely what a latch encodes \(em the local counterpart is an attached
+client. Without it a partition with a running server and no terminal window
+showing it publishes an item nobody can act on.
+.IP
+It is a flag rather than the default because the bare verb's contract is that
+it answers HEADLESS, with no tmux client anywhere; filtering on clients by
+default would delete that promise for every other caller. It also drops the
+caller's\-partition guarantee above, deliberately: an unwatched partition is
+not reported and the caller's own is not exempt from the question it just
+asked, which is what lets a tray empty when you detach from everything.
 .TP
 .B mux check
 Audit the install: tmux, mux's own presence on PATH, the desktop notification
@@ -965,7 +979,7 @@ It always exits 0: it is a pure report, and a non\-zero exit would be
 indistinguishable from the transport.
 .PP
 .EX
-mux 0.59
+mux 0.60
 capabilities 1
 agent\-list 1
 agent\-summary 1

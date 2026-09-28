@@ -65,8 +65,20 @@ DEFAULT_TRANSPORT = (
 # lets a host publish several items without multiplying its ssh traffic. A
 # per-partition poll would be N queries per host per tick for an answer the
 # far side can compose in one.
-REMOTE_CMD = "sh -lc 'mux agent-summary --all'"
-LOCAL_CMD = ("agent-summary", "--all")
+#
+# `--attached` because A TRAY ITEM MEANS A HUMAN IS LOOKING AT THIS. For a
+# remote host that is already what the latch registry encodes -- an item
+# exists only because a latch does, and the latch IS the human's live view of
+# that box. The local counterpart is a client attached to that partition's
+# server, and without asking for it a partition with a live server and no
+# terminal window showing it published an item nobody could act on.
+#
+# THE CONSEQUENCE IS DELIBERATE: detach from everything and the tray empties,
+# because there is nothing anyone is looking at. That supersedes the older
+# "the local host is always present" rule, which was written when a host had
+# exactly one partition and presence WAS the question.
+REMOTE_CMD = "sh -lc 'mux agent-summary --all --attached'"
+LOCAL_CMD = ("agent-summary", "--all", "--attached")
 
 # A partition name is a DNS label (see mux_ctx_valid): lowercase alphanumerics
 # and hyphens. VALIDATED HERE because the names arrive from the far side and

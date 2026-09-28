@@ -1447,3 +1447,25 @@ t mux-indicator-setup
 + 		echo "mux-indicator: service $UNIT installed + enabled"
 m the restart happened and was not reported
 
+
+= summary-attached-ignored
+f libexec/agent-state-summary
+t mux-agent-summary
+- 	[ "$_att" -eq 0 ] || _watched "$_p" || continue
++ 	:
+m attached-only
+
+= summary-attached-keeps-the-empty-caller
+f libexec/agent-state-summary
+t mux-agent-summary
+- [ "$_att" -eq 0 ] || exit 0
++ :
+m attached-other
+
+
+= summary-watched-asks-the-wrong-server
+f libexec/agent-state-summary
+t mux-agent-summary
+- 	tmux -L "$1" list-clients -F '#{client_name}' 2>/dev/null | grep -q .
++ 	tmux list-clients -F '#{client_name}' 2>/dev/null | grep -q .
+m attached-only

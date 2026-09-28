@@ -110,7 +110,7 @@ class Load(unittest.TestCase):
         got = load(self.d)
         self.assertEqual(got,
                          [(local_label(),
-                           ["mux", "agent-summary", "--all"])])
+                           ["mux", "agent-summary", "--all", "--attached"])])
 
     def test_local_comes_first(self):
         """So the left-hand item does not move as latches come and go."""
@@ -427,6 +427,14 @@ class ActivateCommand(unittest.TestCase):
         connections."""
         argv = sources.remote_argv("box", template="ssh %h %q")
         self.assertIn("mux agent-summary --all", " ".join(argv))
+
+    def test_the_poll_asks_only_for_what_someone_is_WATCHING(self):
+        """A tray item means a human is looking at this. Remotely that is what
+        the latch registry already encodes; locally it is an attached client.
+        Without `--attached` a partition with a live server and no terminal
+        window showing it published an item nobody could act on."""
+        argv = sources.remote_argv("box", template="ssh %h %q")
+        self.assertIn("--attached", " ".join(argv))
 
     def test_the_poll_still_asks_for_agent_summary(self):
         """The other direction, asserted separately: a default that leaked the

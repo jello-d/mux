@@ -26,22 +26,44 @@ set -eu
 _lib=$(dirname "$0")
 . "$_lib/mux-agent-state.sh"
 
-# ARGUMENTS: [--all] [NS]
+# ARGUMENTS: [--all] [--attached] [NS]
 #
-#   (none)   the caller's own partition, as "<state> <count>"
-#   NS       that partition, same shape
-#   --all    EVERY partition that has agent state, as
-#            "<partition> <state> <count>" -- one line each.
+#   (none)      the caller's own partition, as "<state> <count>"
+#   NS          that partition, same shape
+#   --all       EVERY partition that has agent state, as
+#               "<partition> <state> <count>" -- one line each.
+#   --attached  with --all: only partitions SOMEONE IS LOOKING AT, meaning a
+#               client is attached to that partition's tmux server.
 #
 # --all EXISTS FOR ONE ROUND TRIP. The tray indicator polls a remote host over
 # ssh, and asking per partition would multiply that cost by the number of
 # partitions on every tick -- for a signal that changes on human timescales
 # and whose poll was deliberately slowed to 5s for exactly this reason. One
 # question, one answer, however many partitions.
+#
+# --attached IS THE TRAY'S QUESTION, and it is a different one from "what
+# state is everything in". A tray item means A HUMAN IS LOOKING AT THIS: for a
+# remote host that is exactly what a latch already means (the notes say it
+# outright -- an item exists only because a latch does, and the latch IS the
+# human's live view of that box), and the local equivalent is an attached
+# client. Without it a partition with a live server and no terminal window
+# showing it published an item nobody could act on: reported live, where a
+# second local partition sat in the tray with nothing on screen behind it.
+#
+# IT IS A FLAG AND NOT THE DEFAULT, because the bare verb's contract is that
+# it answers HEADLESS -- from a tray daemon, over ssh, at boot, with no tmux
+# client anywhere. Filtering on clients by default would quietly delete that
+# promise for every other consumer. The tray asks the narrower question
+# explicitly; everyone else keeps the state report.
 _all=0
-case "${1:-}" in
---all|-a) _all=1; shift ;;
-esac
+_att=0
+while :; do
+	case "${1:-}" in
+	--all|-a)    _all=1; shift ;;
+	--attached)  _att=1; shift ;;
+	*) break ;;
+	esac
+done
 _ns=${1:-}
 if [ -z "$_ns" ] && [ -r "$_lib/mux-context.sh" ]; then
 	. "$_lib/mux-context.sh"
@@ -106,22 +128,43 @@ if [ "$_all" -eq 0 ]; then
 	exit 0
 fi
 
-# --all: every namespace that EXISTS, plus the caller's own partition even if
-# it has none yet. State DIRECTORIES are the truth here rather than the
-# configured partition list: a partition file with no agents has nothing to
-# report, and a namespace can exist without a file (the directory is created
-# by the first emit). Reporting what is actually there is the honest answer.
+# _watched PARTITION: is anyone actually LOOKING at that partition?
 #
-# The caller's own is guaranteed present so a consumer always gets at least
-# one line -- the same reason the tray always carries the local host.
+# A client attached to its server, which is the local counterpart of a latch.
+# Server-wide rather than per session: the question is whether a human has
+# that partition on screen at all, not which session they are on.
+#
+# STATE FILES OUTLIVE THEIR SERVER, which is why this cannot be inferred from
+# the directory. A partition whose server is gone keeps its records until
+# something prunes them, and a partition whose server is up with nobody
+# attached is a set of sessions running behind a closed window. Neither is
+# something a tray can usefully point at.
+_watched() {   # <partition>
+	tmux -L "$1" list-clients -F '#{client_name}' 2>/dev/null | grep -q .
+}
+
+# --all: every namespace that EXISTS. State DIRECTORIES are the truth here
+# rather than the configured partition list: a partition file with no agents
+# has nothing to report, and a namespace can exist without a file (the
+# directory is created by the first emit). Reporting what is actually there is
+# the honest answer.
+#
+# WITHOUT --attached the caller's own partition is guaranteed present, so a
+# consumer always gets at least one line. WITH it that guarantee is dropped on
+# purpose: the whole point of the flag is that an unwatched partition is not
+# reported, and the caller's own is not exempt from the question it just
+# asked. A box where nothing is attached answers nothing, which is the honest
+# report and what makes the tray empty when you detach from everything.
 _root=$(dirname "$(mux_agent_dir "$_ns")")
 _seen=
 for _d in "$_root"/*; do
 	[ -d "$_d" ] || continue
 	_p=${_d##*/}
+	[ "$_att" -eq 0 ] || _watched "$_p" || continue
 	_seen="$_seen $_p"
 	printf '%s %s\n' "$_p" "$(_summarise "$_d")"
 done
+[ "$_att" -eq 0 ] || exit 0
 case " $_seen " in
 *" ${_ns:-global} "*) ;;
 *) printf '%s %s\n' "${_ns:-global}" "none 0" ;;

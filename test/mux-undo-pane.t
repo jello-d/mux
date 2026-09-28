@@ -28,7 +28,31 @@ PATH=$HERE/bin:$PATH; export PATH
 
 tm() { tmux -L "$SOCK" "$@"; }
 cleanup() { tmux -L "$SOCK" kill-server 2>/dev/null || true; }
-trap 'cleanup' EXIT INT TERM
+
+# WHERE IT DIED, because this file has now gone NO VERDICT three times under a
+# loaded full-suite run and never once in isolation -- twice during a mutation
+# sweep, once during a plain `test/run`. It drives a REAL tmux, so it is the
+# one file exposed to contention, and under `set -e` a tmux command that fails
+# takes the whole file down with nothing printed at all: no ok, no FAIL, just
+# a gap the runner has to report second-hand.
+#
+# `stage` costs one variable assignment and turns the next occurrence from
+# "something happened somewhere in 250 lines" into a named step. Cheaper than
+# another afternoon of not reproducing it, and it does not attempt a FIX for
+# a cause nobody has seen yet.
+STAGE=startup
+stage() { STAGE=$*; }
+_bail() {
+	_rc=$?
+	cleanup
+	[ "$_rc" = 0 ] && return 0
+	[ -n "${MUX_T_SAID:-}" ] && return 0
+	printf 'FAIL %s: died at stage [%s] with status %s and said nothing.\n' \
+		"$_name" "$STAGE" "$_rc"
+	printf '  This is the contention flake; capture the state above.\n'
+}
+trap '_bail' EXIT
+trap 'cleanup' INT TERM
 
 # A SERVER ON A NAME NOBODY HAS KILLED. build() used to `cleanup` and then
 # immediately create on the SAME socket, which races tmux's teardown -- see
@@ -89,6 +113,7 @@ state() { tm list-panes -t t -F '#{pane_height}:#{pane_current_path}' \
 # the restore quietly re-evened the window, every assertion on a declared
 # layout would still pass while the user's arrangement was lost.
 build() {
+	stage "building the window (a fresh socket each time)"
 	rotate
 	tm new-session -d -s t -x 120 -y 60 -c /tmp
 	tm source-file "$HERE/share/mux.tmux"
@@ -105,6 +130,7 @@ build() {
 }
 
 # --- the layout comes back exactly, wherever the hole was -----------------
+stage "the layout comes back exactly, wherever the hole was"
 # All three positions, because the placement logic differs at the ends and
 # getting it wrong does NOT look like a missing pane: the window comes back
 # with the right COUNT and the panes wearing each other's sizes. A two-pane
@@ -129,6 +155,7 @@ place does not merely sit wrong -- it takes another pane's size.
 done
 
 # --- the SURVIVING panes are never touched -------------------------------
+stage "the SURVIVING panes are never touched"
 # The whole reason this beats rebuilding by hand. Their scrollback is the thing
 # that cannot be recreated, so a restore that clears or respawns them would be
 # solving the cheap half of the problem.
@@ -146,6 +173,7 @@ tm capture-pane -p -t t.0 | grep -q SURVIVOR_SCROLLBACK \
 respawned but the one pane that died."
 
 # --- what it was RUNNING comes back --------------------------------------
+stage "what it was RUNNING comes back"
 # tmux hands `pane_start_command` back QUOTED for display (wrapped, with inner
 # quotes and $ escaped). Replaying that verbatim does not fail loudly: the pane
 # is created and runs the wrong thing, which is exactly how it survived a first
@@ -163,6 +191,7 @@ comes back as a bare shell has lost the conversation, which is the case this
 feature exists for."
 
 # --- the directory is remembered ------------------------------------------
+stage "the directory is remembered"
 _until 10 _cwds_ready || true
 case "$(state)" in
 *":/etc "*) ;;
@@ -170,12 +199,14 @@ case "$(state)" in
 esac
 
 # --- twice is once --------------------------------------------------------
+stage "twice is once"
 # The record is consumed, so a second undo cannot bolt on a pane nobody lost.
 _o=$(tm run-shell "mux undo-pane" 2>&1 || true)
 [ "$(tm list-panes -t t | wc -l)" = 3 ] \
 	|| fail "a second undo added a pane nobody closed"
 
 # --- ... and so is filling the hole YOURSELF ------------------------------
+stage "... and so is filling the hole YOURSELF"
 # The case the consumed record does NOT cover, and the one that needs its own
 # guard: close a pane, split a new one by hand, THEN undo. The record is still
 # there and looks perfectly valid, but nothing was lost any more. Without the
@@ -197,6 +228,7 @@ record alone does not mean something is missing -- the hole may have been
 filled by hand since."
 
 # --- THE PANE'S OWN OPTIONS COME BACK WITH IT -----------------------------
+stage "THE PANE'S OWN OPTIONS COME BACK WITH IT"
 # Losing @mux-bottom is not cosmetic and not recoverable by looking: `mux pin`
 # skips an unmarked pane AND the width balance refuses (with no marker it
 # cannot tell the bottom pane from the row above), so one dropped option
@@ -234,6 +266,7 @@ geometry is frozen and nothing says so"
 running command and record an exited agent as a plain shell"
 
 # --- with nothing closed, it says so --------------------------------------
+stage "with nothing closed, it says so"
 build
 _rc=0
 _o=$(env XDG_RUNTIME_DIR="$T/run" TMUX= "$HERE/libexec/mux-undo-pane" 2>&1) \
@@ -241,6 +274,7 @@ _o=$(env XDG_RUNTIME_DIR="$T/run" TMUX= "$HERE/libexec/mux-undo-pane" 2>&1) \
 [ "$_rc" != 0 ] || fail "with no record and no tmux, undo-pane must fail"
 
 # --- an unknown option is an error ----------------------------------------
+stage "an unknown option is an error"
 _rc=0
 _o=$(env XDG_RUNTIME_DIR="$T/run" "$HERE/libexec/mux-undo-pane" --nope 2>&1) \
 	|| _rc=$?

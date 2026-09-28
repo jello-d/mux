@@ -84,7 +84,7 @@ pulled in automatically. Sub-commands:
 
 Requires: `python3`, a systemd **user** manager (for the service), a running
 StatusNotifierItem host (waybar's tray, or any desktop's), and `mux` on `PATH`
-(the daemon polls `mux agent-summary --all` for state). Prefer `pipx`? `pipx
+(the daemon polls `mux agent-summary --all --attached`). Prefer `pipx`? `pipx
 install .` then `./setup.sh service` works too -- both land the command at the
 same
 `~/.local/bin/mux-indicator` the unit runs.
@@ -97,8 +97,9 @@ last week's icon. `setup.sh service` says which of `RESTARTED`, "starts at the
 next login" (no user manager here) and `RESTART FAILED` actually happened --
 it used to print the same sentence for all three.
 
-The feed is `mux agent-summary --all` (one `<partition> <state> <count>` line
-per partition), polled every `MUX_INDICATOR_POLL` seconds (default 5).
+The feed is `mux agent-summary --all --attached` (one
+`<partition> <state> <count>` line per partition), polled every
+`MUX_INDICATOR_POLL` seconds (default 5).
 Overrides via env: `MUX_BIN` (path to `mux`), `MUX_INDICATOR_BLINK` /
 `_BLINK_MS` (the cursor blink on change), `MUX_INDICATOR_TIMEOUT` (per-source
 deadline, default 10s). Writing
@@ -165,8 +166,15 @@ set of sessions, its own agent state), and each gets **its own tray item**:
 `northwood`, or `northwood:global` and `northwood:work`. The colon grammar is
 `mux latch`'s own.
 
-One query answers for all of them. `mux agent-summary --all` prints one
-`<partition> <state> <count>` line per partition, so a host with three
+**An item means somebody is looking at it.** Remotely that is what a latch
+already encodes; locally it is a client attached to that partition's server, so
+the poll asks `--attached` and a partition running behind a closed window gets
+no item. Detach from everything and the tray empties, which supersedes the
+older "the local host is always present" rule -- that was written when a host
+had one partition and presence *was* the question.
+
+One query answers for all of them. `mux agent-summary --all --attached` prints
+one `<partition> <state> <count>` line per partition, so a host with three
 partitions still costs **one** ssh connection per poll -- that is the whole
 reason the verb exists, since a reader on another machine cannot know the
 partition names to ask for in the first place.
