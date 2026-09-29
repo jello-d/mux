@@ -18,7 +18,7 @@
 # Pure file and string logic against a scratch $MUX_DIR; nothing is launched.
 set -eu
 _name=mux-context
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 MUX_DIR=$T/conf
 MUX_SHARE=$T/share

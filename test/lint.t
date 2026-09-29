@@ -38,7 +38,7 @@
 # instance of the same pattern still fails here.
 set -eu
 _name=lint
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 command -v shellcheck >/dev/null 2>&1 || {
 	printf 'skip %s (no shellcheck)\n' "$_name"; exit 0; }

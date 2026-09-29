@@ -9,7 +9,7 @@
 # tmux is stubbed, so no server starts. Scratch repos, scratch MUX_DIR/CACHE.
 set -eu
 _name=mux-discover
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 command -v git >/dev/null 2>&1 || { printf 'skip %s (no git)\n' "$_name"
 	exit 0; }

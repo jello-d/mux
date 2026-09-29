@@ -5,7 +5,7 @@
 # data roots; nothing on the box is touched.
 set -eu
 _name=mux-data
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 . "$HERE/libexec/mux-data_lib"
 
 MUX_SHARE=$T/share

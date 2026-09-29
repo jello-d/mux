@@ -21,7 +21,7 @@
 #                    answers with no client, no server and no $TMUX.
 set -eu
 _name=mux-agent-list
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 XDG_RUNTIME_DIR=$T/run
 MUX_DIR=$T/conf

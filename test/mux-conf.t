@@ -4,7 +4,7 @@
 # and agent profiles. Pure string logic; nothing on the box is touched.
 set -eu
 _name=mux-conf
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 . "$HERE/libexec/mux-conf_lib"
 
 # ck LABEL RAW EXPECT : clean RAW (with \n \r \t escapes) and compare to EXPECT.

@@ -11,7 +11,7 @@
 # tmux is stubbed, so no server is started.
 set -eu
 _name=mux-theme-hash
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 mkdir -p "$T/bin" "$T/conf/partitions" "$T/conf/profiles.d" "$T/proj"
 cat >"$T/bin/tmux" <<'EOF'

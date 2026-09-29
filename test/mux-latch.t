@@ -15,7 +15,7 @@
 # the status seam records the state sequence, which is what gets asserted.
 set -eu
 _name=mux-latch
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 mkdir -p "$T/bin" "$T/conf"
 STATES=$T/states        # the status seam's log: one state per line

@@ -5,7 +5,7 @@
 # scratch $MUX_DIR; nothing on the box is touched.
 set -eu
 _name=mux-profiles
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 . "$HERE/libexec/mux-profiles_lib"
 
 MUX_DIR=$T/conf

@@ -14,7 +14,7 @@
 # (mux-agent-state_lib owns that and the strip shares it).
 set -eu
 _name=mux-agent-summary
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 XDG_RUNTIME_DIR=$T/run
 MUX_DIR=$T/conf
@@ -23,7 +23,8 @@ export XDG_RUNTIME_DIR MUX_DIR MUX_CACHE
 mkdir -p "$XDG_RUNTIME_DIR/agent-state/global" \
 	"$XDG_RUNTIME_DIR/agent-state/work" "$MUX_DIR/partitions"
 
-# agent_rec writes the record; test/lib.sh owns the field order, so a format
+# agent_rec writes the record; test/harness_lib owns the field order, so a
+# format
 # change lands in one place instead of being re-typed in every fixture.
 agent_rec "$XDG_RUNTIME_DIR/agent-state/global/p1" blocked %1 100 alpha x
 agent_rec "$XDG_RUNTIME_DIR/agent-state/global/p2" working %2 200 bravo x

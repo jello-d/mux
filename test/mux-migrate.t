@@ -5,7 +5,7 @@
 # would derive anyway is dropped, but only when it genuinely would.
 set -eu
 _name=mux-migrate
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 command -v git >/dev/null 2>&1 || { printf 'skip %s (no git)\n' "$_name"
 	exit 0; }

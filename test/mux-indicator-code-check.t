@@ -12,7 +12,7 @@
 # Driven against a STUB venv, so no real Python install is needed: the stub is
 # the seam, and it answers the one question setup.sh asks the interpreter.
 _name=mux-indicator-code-check
-. "$(dirname "$0")/lib.sh"     # HERE=repo root, T=scratch, fail/pass
+. "$(dirname "$0")/harness_lib"     # HERE=repo root, T=scratch, fail/pass
 
 SETUP=$HERE/indicator/setup.sh
 [ -f "$SETUP" ] || fail "indicator/setup.sh is missing"

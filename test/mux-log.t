@@ -21,7 +21,7 @@
 #   3. IT IS CAPPED. An unbounded always-on file is its own bug.
 set -eu
 _name=mux-log
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 LIB=$HERE/libexec/mux-log_lib
 [ -r "$LIB" ] || fail "libexec/mux-log_lib is missing"
@@ -54,7 +54,8 @@ _o=$(env MUX_LOG=none MUX_STATE="$T/state" "$HERE/bin/mux" log 2>&1 || true)
 has "$_o" "OFF" "MUX_LOG=none must be reported as OFF, not as an empty log"
 # ... and OFF must CREATE nothing. A disabled log that still makes a directory
 # has not really been disabled. Checked against a path NOTHING has touched:
-# lib.sh pins MUX_STATE and mkdir -p's it, so $T/state exists already and would
+# harness_lib pins MUX_STATE and mkdir -p's it, so $T/state exists already and
+# would
 # have made this assertion pass for the wrong reason.
 ( . "$LIB"; MUX_LOG=none MUX_STATE="$T/untouched" mux_log latch 'x' )
 [ ! -e "$T/untouched" ] || fail "MUX_LOG=none created $T/untouched"

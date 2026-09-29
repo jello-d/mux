@@ -2,7 +2,7 @@
 # setup.t - setup.sh install -> assert links -> check -> uninstall -> assert
 # gone, all against a scratch PREFIX. Nothing outside the sandbox is touched.
 _name=setup
-. "$(dirname "$0")/lib.sh"     # HERE=repo root, T=scratch, fail/pass
+. "$(dirname "$0")/harness_lib"     # HERE=repo root, T=scratch, fail/pass
 
 run() {
   env PREFIX="$T" XDG_BIN_HOME="$T/bin" XDG_DATA_HOME="$T/share" NO_COLOR=1 \

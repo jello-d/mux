@@ -13,7 +13,7 @@
 # would be a second thing to remember.
 set -eu
 _name=mux-ignore
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 mkdir -p "$T/bin" "$T/conf/partitions" "$T/conf/contexts" "$T/cache"
 cat >"$T/bin/tmux" <<'EOF'

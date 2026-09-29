@@ -22,7 +22,7 @@
 # emulator's contract, not this program's, and no test here can stand in for it.
 set -eu
 _name=mux-sane
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 HOOK=$HERE/libexec/mux-sane
 [ -x "$HOOK" ] || fail "libexec/mux-sane is missing or not executable"

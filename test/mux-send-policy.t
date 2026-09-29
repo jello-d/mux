@@ -12,7 +12,7 @@
 # exactly like a policy that is working.
 set -eu
 _name=mux-send-policy
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 . "$HERE/libexec/mux-send-policy_lib"
 

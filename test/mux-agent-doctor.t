@@ -24,7 +24,7 @@
 #    rather than a promise in a comment.
 set -eu
 _name=mux-agent-doctor
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 mkdir -p "$T/bin" "$T/run/agent-state/global" "$T/proc" "$T/share/agents"
 : >"$T/share/agents/claude.agent"

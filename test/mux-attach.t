@@ -18,7 +18,7 @@
 # attempted, with no pty needed.
 set -eu
 _name=mux-attach
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 mkdir -p "$T/bin" "$T/conf/partitions" "$T/proj"
 cat >"$T/bin/tmux" <<'EOF'

@@ -16,7 +16,7 @@
 # server, no clients and no real geometry are involved.
 set -eu
 _name=mux-views
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 mkdir -p "$T/bin"
 CLIENTS=$T/clients            # what list-clients reports

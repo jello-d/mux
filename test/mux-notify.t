@@ -14,7 +14,7 @@
 # or a notification on anyone's screen.
 set -eu
 _name=mux-notify
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 . "$HERE/libexec/mux-notify_lib"
 
 mkdir -p "$T/bin"

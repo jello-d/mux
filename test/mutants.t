@@ -13,7 +13,7 @@
 # and names the record to update.
 set -eu
 _name=mutants
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 CORPUS=$HERE/test/mutants
 [ -f "$CORPUS" ] || fail "no mutation corpus at test/mutants"

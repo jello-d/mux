@@ -8,7 +8,7 @@
 # feature exists for, and the one a snapshot-based design would break.
 set -eu
 _name=mux-resume
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 command -v git >/dev/null 2>&1 || { printf 'skip %s (no git)\n' "$_name"
 	exit 0; }

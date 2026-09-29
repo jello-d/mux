@@ -18,7 +18,7 @@
 # rebuilding would grow the status line on every reload, forever.
 set -eu
 _name=mux-click
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 mkdir -p "$T/bin"
 LOG=$T/log; OPTS=$T/opts

@@ -16,7 +16,7 @@
 # It SKIPS where tmux is absent, the same as test/lint.t without shellcheck.
 set -eu
 _name=mux-undo-pane
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 command -v tmux >/dev/null 2>&1 || {
 	printf 'skip %s (no tmux)\n' "$_name"; exit 0; }
@@ -56,7 +56,8 @@ trap 'cleanup' INT TERM
 
 # A SERVER ON A NAME NOBODY HAS KILLED. build() used to `cleanup` and then
 # immediately create on the SAME socket, which races tmux's teardown -- see
-# tmux_fresh_socket in lib.sh. That is what made this file flake under the full
+# tmux_fresh_socket in harness_lib. That is what made this file flake under the
+# full
 # suite and never in isolation. The old server is killed and NOT waited for,
 # because there is nothing reliable to wait on.
 rotate() {

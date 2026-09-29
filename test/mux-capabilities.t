@@ -21,7 +21,7 @@
 # nobody classified fails here rather than quietly never being advertised.
 set -eu
 _name=mux-capabilities
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 mkdir -p "$T/bin" "$T/conf"
 # No notify-send on PATH, so the `notify` capability has a contextual answer to
