@@ -2049,3 +2049,17 @@ t mux-portability
 - elif command -v shasum >/dev/null 2>&1; then _MUX_SHA='shasum -a 256'
 + elif false; then _MUX_SHA='shasum -a 256'
 m stamp is EMPTY
+
+= check-stale-server-told-to-reload
+f libexec/mux-check
+t mux-check
+-       bad "  this server predates them: run \`mux reload\`"
++       bad "  the fragment is not sourced"
+m STALE, and the only
+
+= check-unsourced-told-to-reload
+f libexec/mux-check
+t mux-check
+-         | grep -q 'mux agent-render'; then
++         | cat >/dev/null; then
+m a server with neither mux's bindings nor
