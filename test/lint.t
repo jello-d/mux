@@ -59,7 +59,7 @@ find "$HERE/bin" "$HERE/libexec" "$HERE/test" "$HERE/share" "$HERE/indicator" \
   # never what made them visible. Now the selector cannot go stale when a
   # name changes, which is the property the count assertion below wants.
   *.py|*.tmux|*.md|*.toml|*.json|*.yaml|*/.git/*) ;;
-  *)	# A shebang naming sh/dash/bash, and nothing else.
+  *)  # A shebang naming sh/dash/bash, and nothing else.
     case "$(head -c 64 -- "$_f" 2>/dev/null | head -1)" in
     '#!'*/sh|'#!'*/dash|'#!'*/bash|'#!'*env\ sh|'#!'*env\ dash)
       printf '%s\n' "$_f" ;;
