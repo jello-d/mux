@@ -651,7 +651,14 @@ that means no opinion, so latch proceeds.
 ```
 latch-transport  et %h --command %c
 latch-classify   et-classify
+latch-probe      et-probe
 ```
+
+The probe is worth wiring here even though it is off by default for ssh. With
+etserver stopped, one attempt costs 0.04s instead of 0.68s, latch stops
+announcing an attach that cannot happen, and the reason it gives is right ("the
+target is not reachable" rather than "the transport dropped"). Tell it the port
+with `MUX_ET_PORT` or `latch-et-port` if etserver is not on 2022.
 
 Verified between two VMs against et 7.0.0: the attach works, mux's status bar
 renders on the far side, and a detach ends the latch at 0 while leaving the

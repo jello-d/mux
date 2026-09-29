@@ -1,0 +1,120 @@
+#!/bin/sh
+# share/latch/et-probe - is HOST's Eternal Terminal server reachable right now?
+#
+# A `mux latch` PROBE hook. Called as `et-probe HOST`:
+#
+#   0   yes, attempt it
+#   1   no, not reachable: wait and retry
+#   78  cannot tell
+#
+# WHAT IT BUYS, MEASURED IN THE LAB RATHER THAN ARGUED, because et-classify
+# already turns et's exit 1 into a retry and the honest question is what this
+# adds on top of that. Against a real etserver, stopped, one attempt:
+#
+#   without this hook   attaching ...            0.68s   "the transport dropped"
+#   with it             (no attach announced)    0.04s   "the target is not
+#                                                         reachable"
+#
+# Three things, none of them "it makes the failure visible":
+#
+#   - THE REASON IS RIGHT. Nothing dropped: et never connected. latch says so.
+#   - NO FALSE `attaching`. Without the probe latch announces an attach that
+#     cannot happen, once per cycle, in the log and on the terminal.
+#   - 17x CHEAPER PER CYCLE, because it never starts et at all -- et brings up
+#     sentry and a crash handler and writes log files on every invocation. On a
+#     host that is fully down rather than merely serviceless, the gap widens to
+#     whatever et's connect timeout is.
+#
+# Wire it in $MUX_DIR/config:
+#
+#     latch-probe   et-probe
+#
+# WHY ET NEEDS THIS MORE THAN ssh DOES. Over ssh a failure explains itself: ssh
+# writes to stderr, latch captures stderr, and the classifier reads the reason.
+# ET does neither -- measured against et 7.0.0, it writes "Could not reach the
+# ET server: host:port" to STDOUT, where a CLASSIFY hook handed a STDERR file
+# cannot see it, and it propagates no remote exit status. So over ET the
+# classifier has only the exit code to work with, and this hook is the only
+# thing that can say WHICH failure it was.
+#
+# WHAT IT ASKS: can this box open a TCP connection to the etserver port. That is
+# precisely what et must do after its ssh handshake, so a negative answer is a
+# real "not now" -- a booting box, a stopped service, a firewall -- and all of
+# them heal without a human or are fixed and then heal. It says nothing about
+# sshd, because ET's bootstrap failing there is ssh's story and `ssh-auth` and
+# the classifier already tell it.
+#
+# THE PORT IS NOT DISCOVERABLE FROM THE ARGUMENT, so it comes from the
+# environment (or `latch-et-port` in the config, read below). The hook is handed
+# a HOST and nothing else: mux's target grammar spends the colon on a PARTITION,
+# so `%h` never carries a port. IF YOU RUN etserver ON A NON-DEFAULT PORT YOU
+# MUST TELL THIS HOOK TOO, or it will test 2022, find nothing, and park latch in
+# a backoff about a service that is running. That is the one way to hold a
+# working transport with this wired, so it is said here loudly rather than left
+# to be discovered.
+set -eu
+
+_host=${1:-}
+[ -n "$_host" ] || exit 78
+
+# The port: env first, then the config key, then ET's own default.
+_port=${MUX_ET_PORT:-}
+if [ -z "$_port" ]; then
+  _conf=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}/config
+  if [ -r "$_conf" ]; then
+    _re='^[[:space:]]*latch-et-port[[:space:]]\{1,\}\([0-9]\{1,\}\).*'
+    _port=$(sed -n "s/$_re/\1/p" "$_conf" 2>/dev/null | head -1)
+  fi
+fi
+case ${_port:-} in
+''|*[!0-9]*) _port=2022 ;;
+esac
+
+# NO TOOL MEANS NO OPINION, AND THAT IS NOT THE SAME CALL ssh-probe MAKES.
+# There, a missing `ssh` is answered 78 ("cannot tell"), which latch treats as
+# WAIT -- correct, because with no ssh the ssh transport cannot work either, so
+# nothing is being held up that would otherwise run. Here a missing `nc` says
+# NOTHING about whether et works: answering 78 would park a perfectly good
+# transport in a backoff forever, which is the shape of the bug latch's own
+# comments already record (a probe site that read "cannot tell" as "wait" and
+# made no-probe-configured wait for nothing). So this exits 0, which the
+# contract words as "attempt it" rather than as a claim about the host, and
+# which is exactly what latch does with no probe at all: the attempt is the
+# probe.
+command -v nc >/dev/null 2>&1 || exit 0
+
+# BOUNDED BY CONTRACT, not by whichever flag happens to enforce it. `nc -w`
+# bounds the connect, and timeout(1) bounds nc, because a probe that has not
+# answered in ten seconds has already answered. `timeout` is GNU-only and macOS
+# does not ship it, so it is asked for rather than assumed -- the same rule the
+# rest of the package follows and test/mux-portability.t enforces.
+_PROBE_MAX=${MUX_ET_PROBE_TIMEOUT:-10}
+_CONNECT=${MUX_ET_PROBE_CONNECT:-3}
+_bound() {
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$_PROBE_MAX" "$@"
+  else
+    "$@"        # unbounded rather than pretend-bounded
+  fi
+}
+
+# `-z` is zero-I/O: connect, report, send nothing. Present both on the BSD
+# netcat macOS ships and on the OpenBSD one Linux distributions package, which
+# is why it is the portable choice. Its success line goes to stderr, hence the
+# silence.
+_rc=0
+_bound nc -z -w "$_CONNECT" -- "$_host" "$_port" >/dev/null 2>&1 || _rc=$?
+
+case $_rc in
+0)   exit 0 ;;
+# timeout(1)'s own code. The port did not answer inside the bound, which is a
+# definite "not usable right now" rather than a "cannot tell": if it will not
+# complete a TCP handshake in ten seconds, an attach will not fare better.
+124) exit 1 ;;
+1)   exit 1 ;;
+# Any other code is nc failing for its own reasons (a usage error, a resolver
+# it could not use), which says nothing about the host. `unknown` is what latch
+# reports for this, and waiting is right: something here is misconfigured and
+# quietly attempting would hide it.
+*)   exit 78 ;;
+esac

@@ -1454,8 +1454,34 @@ A second transport ships as data, not code. Two lines in
 .nf
 latch\-transport  et %h \-\-command %c
 latch\-classify   et\-classify
+latch\-probe      et\-probe
 .fi
 .RE
+.PP
+.B et\-probe
+IS WORTH WIRING HERE THOUGH IT IS OFF BY DEFAULT FOR ssh, and the reason is
+measured rather than argued. With etserver stopped, one attempt:
+.PP
+.RS
+.nf
+without it   announces an attach   0.68s   "the transport dropped"
+with it      announces nothing     0.04s   "the target is not reachable"
+.fi
+.RE
+.PP
+The reason is right (nothing dropped: et never connected), latch stops
+announcing an attach that cannot happen once per cycle, and it never starts et
+at all, which matters because et brings up a crash handler and writes log files
+on every invocation. It asks one question, over TCP, from here: is the etserver
+port open. IF etserver RUNS ON A NON\-DEFAULT PORT, tell the probe too, with
+.B MUX_ET_PORT
+or a
+.B latch\-et\-port
+line in the same config \(em otherwise it tests 2022, finds nothing, and parks
+latch in a backoff about a service that is running. With no
+.BR nc (1)
+it answers "attempt it" rather than "cannot tell", because the latter is what
+latch WAITS on and a missing netcat says nothing about whether et works.
 .PP
 VERIFIED BETWEEN TWO VMS against et 7.0.0, which is what its own PPA ships: the
 attach works, mux's status bar renders on the far side, a detach ends the latch
