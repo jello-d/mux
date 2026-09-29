@@ -21,6 +21,44 @@ run install >/dev/null 2>&1 || fail "install errored"
 run check >"$T/out" 2>&1 || true
 grep -q 'bin/mux linked' "$T/out" || fail "check missing the bin/mux OK line"
 
+# --- NOTHING SOURCING THE FRAGMENT IS SAID, NOT FIXED -----------------------
+# Linking mux into PATH does nothing VISIBLE: the bar, the strip and the
+# bindings all come from `source-file .../mux.tmux` in the user's own
+# tmux.conf, so until that line exists mux looks installed and inert. That is
+# the "fully installed and fully broken" state one step earlier than the one
+# `mux check` was built for.
+#
+# SAID, NEVER EDITED: a tmux.conf is the user's own file, not a package input,
+# and an installer that rewrote it as a side effect of `install` is the one
+# irreversible mistake available here. Asserted, so nobody "improves" it into
+# an edit.
+run install >"$T/out" 2>&1 || fail "reinstall errored"
+grep -q 'source-file' "$T/out" || fail "the install said nothing about sourcing
+the fragment, so a new user gets a working install with no visible mux and
+nothing telling them why"
+grep -q 'setup claude' "$T/out" || fail "the notice did not point at the next
+step; the two manual steps are the whole first-run problem"
+[ -e "$T/.tmux.conf" ] && fail "the installer CREATED a tmux.conf: that file is
+the user's, and writing it is the one thing this notice exists to avoid"
+
+# ... and SILENT once the line is there, or a re-install is noise and people
+# learn to skip the output that matters.
+mkdir -p "$T/conf-tmux"
+printf 'source-file %s/share/mux/mux.tmux\n' "$T" >"$T/conf-tmux/tmux.conf"
+_o=$(env PREFIX="$T" XDG_BIN_HOME="$T/bin" XDG_DATA_HOME="$T/share" NO_COLOR=1 \
+  HOME="$T" XDG_CONFIG_HOME="$T/conf-tmux-parent" \
+  sh "$HERE/setup.sh" install 2>&1) || fail "install errored"
+mkdir -p "$T/conf-tmux-parent/tmux"
+printf 'source-file %s/share/mux/mux.tmux\n' "$T" \
+  >"$T/conf-tmux-parent/tmux/tmux.conf"
+_o=$(env PREFIX="$T" XDG_BIN_HOME="$T/bin" XDG_DATA_HOME="$T/share" NO_COLOR=1 \
+  HOME="$T" XDG_CONFIG_HOME="$T/conf-tmux-parent" \
+  sh "$HERE/setup.sh" install 2>&1) || fail "install errored"
+case $_o in
+*source-file*) fail "the notice fired with the fragment already sourced:
+$_o" ;;
+esac
+
 # --- AN INSTALLED INDICATOR THAT HAS FALLEN BEHIND IS SAID, NOT FIXED -------
 # The indicator is a separate package that core neither installs nor owns, but
 # it POLLS a mux contract (`mux agent status`, JSON), and a skew there fails

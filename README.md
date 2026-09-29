@@ -152,6 +152,18 @@ navigation defaults you can skip if you have your own.
 
 ## Quickstart
 
+Nothing wired yet and want to see what the fuss is about? `mux demo` builds a
+throwaway mux on its own tmux server, with four pretend agents cycling through
+states, and tears itself down with `mux demo --stop`. It needs no agent, no
+hooks and no configuration, and it cannot touch your real sessions: its own
+server means its own agent-state namespace.
+
+```sh
+mux demo          # look at the strip, press prefix b, then: mux demo --stop
+```
+
+Then, for real:
+
 ```sh
 # 1. wire your agent up, so the strip has something to report. Shows the change
 #    first; --remove takes it back out; running it twice changes nothing.
@@ -737,6 +749,8 @@ mux go --resume [NAME]       same, but the agent resumes (choose a chat)
 mux --no-agent ...           build the panes, plain shell in the agent pane
 mux resume [PART [SESS]]     rebuild a partition's sessions (--list)
 mux setup claude             wire an agent's hooks to mux (--dry-run first)
+mux demo                     a throwaway mux to look at (--stop when done)
+mux keys                     what the key bindings do (also prefix ?)
 mux skill                    the agent instructions this mux ships
 mux skill --agents-md        the same, in the AGENTS.md convention
 mux agent status             per-partition worst state + count, as JSON
@@ -767,6 +781,8 @@ mux capabilities             what this mux supports, for other programs
 ```
 
 ## Key bindings
+
+`prefix ?` shows this list inside tmux (`mux keys` from a shell).
 
 Provided by `mux.tmux` (prefix table unless noted; your prefix is untouched):
 

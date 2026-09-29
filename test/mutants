@@ -2000,3 +2000,38 @@ t mux-setup
 -             sys.stderr.write("%s does not parse as JSON (%s); "
 +             sys.stderr.write("%s is no good (%s); "
 m does not parse
+
+= keys-undescribed-binding
+f libexec/mux-keys
+t mux-keys
+-   printf '    %-3s %s\n' "$_k" "$_d"
++   :
+m does not mention
+
+= setup-tmux-conf-notice
+f setup.sh
+t setup
+-   _tmux_conf_notice
++   :
+m said nothing about sourcing
+
+= setup-tmux-conf-notice-is-quiet
+f setup.sh
+t setup
+-     if grep -q -- "$PKG/mux.tmux" "$_c" 2>/dev/null; then return 0; fi
++     :
+m fired with the fragment already sourced
+
+= demo-state-not-removed-on-stop
+f libexec/mux-demo
+t mux-demo
+-   */agent-state/"$SOCK") rm -rf "$_statedir" 2>/dev/null || true ;;
++   */agent-state/"$SOCK") : ;;
+m left the demo
+
+= demo-second-run-rebuilds
+f libexec/mux-demo
+t mux-demo
+- if _tx has-session -t api 2>/dev/null; then
++ if false; then
+m second build failed

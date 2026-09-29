@@ -1,0 +1,93 @@
+#!/bin/sh
+# share/demo/fake-agent - pretend to be a coding agent, for `mux demo`.
+#
+#   fake-agent <label> <mode>
+#
+# IT GOES THROUGH MUX'S REAL HOOK PATH, which is the whole point. Every state
+# change is a `mux agent-hook <EventName>` call, exactly what a wired agent's
+# lifecycle sends, so the strip the demo shows is produced by the same machinery
+# a real agent drives: hook -> mux's event table -> agent-state-emit -> a record
+# -> agent-render. A demo that wrote state files directly would be a puppet
+# show, and would drift from the format the moment the record changed.
+#
+# MODES, because a strip with one state on it teaches nothing:
+#
+#   blocked   goes to `blocked` and STAYS there, so `prefix b` always has a
+#             target and the "who needs me" answer is deterministic.
+#   cycle     working -> beats -> blocked -> idle, forever, at its own pace.
+#   idle      finishes once and sits there, which is what `done` looks like.
+#
+# It prints a line per transition, so the pane looks like something is happening
+# rather than like a dead shell. That matters for a demo more than it sounds.
+set -eu
+
+# NO DESKTOP NOTIFICATIONS FROM A DEMO. mux raises one on a working -> blocked
+# transition for a pane you are not looking at, which is correct for real work
+# and wrong here: four pretend agents cycling forever would fill the
+# notification daemon with news about sessions that do not exist. The seam mux
+# already has for this is an env pair, so the demo simply points it at `true`.
+# Suppressed HERE rather than in mux-demo, so it stays the demo's own decision
+# and is visible to anyone reading the pretend agent.
+MUX_NOTIFY_SEND=true; MUX_NOTIFY_CLOSE=true
+export MUX_NOTIFY_SEND MUX_NOTIFY_CLOSE
+
+_label=${1:-demo}
+_mode=${2:-cycle}
+# Staggered per session, so the first screen already shows a mix rather than
+# four sessions in lockstep.
+_beat=${3:-4}
+
+say() { printf '  %s\n' "$*"; }
+hook() { mux agent-hook "$1" >/dev/null 2>&1 || true; }
+
+printf '\n  [demo] %s -- a pretend agent, driving mux through real hooks\n' \
+  "$_label"
+printf '  [demo] nothing here touches your real sessions: its own\n'
+printf '  [demo] tmux server and its own agent-state namespace.\n\n'
+
+case $_mode in
+blocked)
+  say "worked for a moment, then hit something that needs a human"
+  hook UserPromptSubmit
+  sleep 1
+  hook Notification
+  say "BLOCKED: waiting for you to approve something."
+  say "press prefix b from any session and you land here."
+  ;;
+idle)
+  say "ran, finished, and has nothing to say"
+  hook UserPromptSubmit
+  sleep 1
+  hook Stop
+  say "IDLE: done."
+  ;;
+esac
+
+# The cycling ones keep going; the others just park. A parked pane still has to
+# hold the pane open, or tmux closes it and the session disappears mid-demo.
+while :; do
+  case $_mode in
+  cycle)
+    hook UserPromptSubmit
+    say "working ..."
+    _n=0
+    while [ "$_n" -lt 3 ]; do
+      sleep "$_beat"
+      # A BEAT, not a transition: this is what an agent sends while a turn is
+      # in progress, and mux refuses to let one resurrect a finished turn.
+      hook PostToolUse
+      say "  ... still working"
+      _n=$((_n + 1))
+    done
+    hook Notification
+    say "BLOCKED: needs you."
+    sleep $((_beat * 2))
+    hook Stop
+    say "IDLE: done. starting again shortly."
+    sleep "$_beat"
+    ;;
+  *)
+    sleep 3600
+    ;;
+  esac
+done

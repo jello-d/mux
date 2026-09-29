@@ -1,0 +1,139 @@
+#!/bin/sh
+# mux-demo: a throwaway mux you can look at, for people who have just installed
+# it and see nothing.
+#
+#   mux demo            build it and attach
+#   mux demo --stop     tear it down (the server and its state)
+#
+# THE FIRST-RUN PROBLEM IS THAT THE REWARD IS BEHIND THE SETUP. A new user
+# installs mux, runs `mux go`, and gets a session with a status bar that says
+# nothing interesting, because the interesting part needs several agents in
+# several states and an agent wired up to report. Reading about it is not the
+# same as seeing it: the whole pitch is one glance at a bar.
+#
+# IT IS ITS OWN tmux SERVER, on a fixed socket, and that is what makes it safe
+# to ship. The agent-state namespace is derived from the socket, so a demo
+# cannot write a record any real session reads, cannot appear in a real strip,
+# and cannot be killed by mistake along with anything you care about. `--stop`
+# removes the server and the namespace and leaves nothing behind.
+#
+# IT IS NOT A PARTITION. A partition would have to be declared, would show up
+# in `mux resume --list`, in latch's targets and in the tray's discovery, and
+# would then need explaining. A socket nobody else uses needs no explaining.
+#
+# THE AGENTS ARE FAKE AND THE MACHINERY IS REAL, which is the only honest way to
+# demo this: each pane runs `share/demo/fake-agent`, which drives mux through
+# `mux agent-hook` exactly as a wired agent's lifecycle does. So the strip, the
+# glyph colours, the escalation, `prefix b` and the count all come from the
+# shipped code rather than from a fixture, and the demo cannot quietly drift
+# away from the product.
+set -eu
+
+_lib=$(dirname "$0")
+[ -d "${MUX_SHARE:-}" ] || MUX_SHARE=$_lib/../share
+
+# A FIXED SOCKET, and one that cannot collide with a partition: a partition name
+# is a DNS label, so it can never contain a dot. `mux.demo` is therefore
+# unreachable by the partition machinery by construction.
+SOCK=${MUX_DEMO_SOCKET:-mux.demo}
+
+_die() { echo "mux: demo: $*" >&2; exit 1; }
+_tx() { tmux -L "$SOCK" "$@"; }
+
+_usage() {
+  echo "usage: mux demo [--stop] [--no-attach]"
+  echo "  build a throwaway mux on its own server and attach to it"
+  echo "  --stop        tear it down: the server and its agent state"
+  echo "  --no-attach   build it and say so, without attaching"
+}
+
+_stop=0 _attach=1
+while [ $# -gt 0 ]; do
+  case $1 in
+  -h|--help) _usage; exit 0 ;;
+  --stop) _stop=1; shift ;;
+  # Same name `mux go` uses for the same idea. It is also what makes this verb
+  # testable: the attach needs a terminal, so a suite that could only run the
+  # whole thing could assert nothing about the part that matters.
+  --no-attach) _attach=0; shift ;;
+  *) echo "mux: demo: unknown option: $1" >&2; _usage >&2; exit 2 ;;
+  esac
+done
+
+# The namespace agent-state-emit will use inside that server. Derived the same
+# way the rest of mux derives it, so --stop cannot remove the wrong directory.
+_statedir=${XDG_RUNTIME_DIR:-/tmp/user-$(id -u)}/agent-state/$SOCK
+
+if [ "$_stop" -eq 1 ]; then
+  if _tx kill-server 2>/dev/null; then
+    echo "mux: demo: server stopped"
+  else
+    echo "mux: demo: no demo server was running"
+  fi
+  # THE STATE GOES WITH IT. A record whose pane is gone is exactly the phantom
+  # mux prunes elsewhere, and leaving a directory of them behind would make
+  # `mux agent-doctor` on the demo socket report findings about a demo nobody
+  # is running.
+  case $_statedir in
+  */agent-state/"$SOCK") rm -rf "$_statedir" 2>/dev/null || true ;;
+  esac
+  exit 0
+fi
+
+command -v tmux >/dev/null 2>&1 || _die "tmux is not installed"
+
+# ALREADY RUNNING IS NOT AN ERROR: it is the second time you ran the command,
+# and the useful response is to put you back in it rather than to complain.
+if _tx has-session -t api 2>/dev/null; then
+  echo "mux: demo: already running; attaching"
+else
+  _frag=$MUX_SHARE/mux.tmux
+  [ -r "$_frag" ] || _die "$_frag is missing (broken install)"
+
+  # `-x`/`-y` because a detached server has no client to size from, and the
+  # first client then resizes everything anyway. 200x50 keeps the strip wide
+  # enough to show every session at full width on the first draw.
+  _tx new-session -d -s api -x 200 -y 50 \
+    "$MUX_SHARE/demo/fake-agent api blocked" 2>/dev/null \
+    || _die "could not start a tmux server on socket '$SOCK'"
+  _tx new-session -d -s web -x 200 -y 50 \
+    "$MUX_SHARE/demo/fake-agent web cycle 3"
+  _tx new-session -d -s docs -x 200 -y 50 \
+    "$MUX_SHARE/demo/fake-agent docs idle"
+  _tx new-session -d -s infra -x 200 -y 50 \
+    "$MUX_SHARE/demo/fake-agent infra cycle 6"
+
+  # THE REAL FRAGMENT, not a copy of its settings. This is what gives the demo
+  # mux's actual bindings, the actual strip and the actual palette; a demo that
+  # configured its own would be demonstrating itself.
+  _tx source-file "$_frag" \
+    || _die "could not source $_frag into the demo server"
+fi
+
+cat <<EOF
+
+  A throwaway mux, on its own server. Four sessions, four pretend agents.
+
+    the strip, bottom right   one token per session, with its agent's state
+    prefix b                  jump to whoever has been blocked longest
+    prefix ( )                cycle sessions
+    prefix d                  detach (the demo keeps running)
+
+  'api' stays blocked on purpose, so prefix b always has somewhere to go.
+  'web' and 'infra' cycle at different speeds; 'docs' is finished.
+
+  When you are done:   mux demo --stop
+
+EOF
+if [ "$_attach" -eq 0 ]; then
+  echo "  (built; attach with: mux demo)"
+  exit 0
+fi
+printf '  press Enter to attach ... '
+read -r _ || true
+
+# TMUX IS UNSET FOR THE ATTACH, so this works from inside another tmux as well
+# as from a plain shell. Nesting is not ideal, and refusing would be worse: a
+# newcomer reading the README is very likely already inside tmux, and "run this
+# somewhere else" is exactly the friction the demo exists to remove.
+exec env -u TMUX tmux -L "$SOCK" attach-session -t api
