@@ -2,34 +2,61 @@
 
 **A tmux session manager for agent-heavy, many-session work.**
 
-You run several coding agents at once — one per project, each in its own tmux
+You run several coding agents at once, one per project, each in its own tmux
 session. They spend much of their time *working*, then *block*, waiting for you
-to answer a prompt or approve a step. The hard part isn't running them; it's
-knowing **which one needs you, and jumping straight to it** — without hunting
+to answer a prompt or approve a step. The hard part is not running them; it is
+knowing **which one needs you, and jumping straight to it**, without hunting
 through a wall of look-alike sessions.
 
-mux turns tmux into that dashboard:
+## What mux is for
 
-- **Declarative profiles.** A session's identity and appearance (working
-  directory, theme, agent) live in one small file that names a *layout* for the
-  pane arrangement. `mux go api` builds or attaches `api` the same way every
-  time, and with no profile at all you still get a working session.
-- **A live agent-state strip.** Every session wears a glyph for its agent —
-  idle, working, or blocked (needs you). One glance answers "who's waiting on
-  me."
-- **Jump to whoever's waited longest.** One key takes you to the most-blocked
-  session; repeat to walk down the urgency order.
-- **Per-host colour chips, per-client hide/show, skip-hidden cycling,
-  data-driven themes**, and **contexts and partitions** to isolate (say) work
-  from personal, driven by one word from an integrator.
+**Every session comes up the same way.** A session's identity and appearance
+(working directory, theme, agent, pane arrangement) live in one small
+declarative profile that names a *layout*. `mux go api` builds or attaches `api`
+identically every time, on either machine, and with no profile at all you still
+get a working session. Projects are discovered rather than registered, themes
+are data, and partitions keep one boundary's sessions from seeing another's.
+The point is that nothing drifts: the session you come back to is the session
+you left.
 
-It's POSIX shell over tmux. No daemon, no runtime dependencies beyond tmux
-itself (`fzf` optional, for a nicer session picker).
+**You can see which agent needs you, and go there in one key.** Every session
+wears a glyph for its agent: idle, working, or blocked. `prefix b` jumps to
+whichever has been blocked longest, and repeating walks down the urgency order.
+The states come from the agent's own lifecycle hooks, which `mux setup claude`
+wires for you; a session mux started an agent in and has never heard from wears
+`🔌`, so an unwired install says so instead of looking calm.
+
+**Higher layers get a contract, not a screen to scrape.** `mux agent` is a
+machine surface: one JSON object on stdout, always, including on failure.
+`peers` says who is here and what each is doing, `read` captures a pane, `wait`
+blocks until a session reaches a state, and `send` hands work to another agent
+under a root-owned policy the agent itself cannot edit. mux ships the
+instructions for using it (`mux skill`, and the same text as `AGENTS.md`), so an
+orchestrator above mux does not have to reverse-engineer a status bar. mux stays
+serverless and leaves orchestration to that layer.
+
+**Remote sessions survive the network.** `mux latch HOST[:PARTITION] [SESSION]`
+holds an attachment to another machine's mux open across drops, and **brings
+your own transport**: mux owns the state machine and the attach semantics while
+ssh, mosh or anything else supplies the pipe. It tells a wait apart from a dead
+end, repairs the terminal when a session dies under it, and never carries a
+keystroke.
+
+**One tray for every box you are attached to.** An optional StatusNotifier icon
+shows one item per (host, partition) with its worst agent state and a count,
+following your latches: attach to a box and its item appears. The machine you
+are sitting at PULLS, so nothing is pushed to it and every platform-specific
+decision stays local. Clicking an item jumps that box to whoever needs you.
+
+It is POSIX shell over tmux. No daemon, no runtime dependencies beyond tmux
+itself (`fzf` optional, for a nicer session picker; the tray is a separate
+optional Python package).
 
 ---
 
 ## Contents
 
+- [What mux is for](#what-mux-is-for)
 - [The status bar](#the-status-bar)
 - [Requirements](#requirements)
 - [Install](#install)
@@ -42,6 +69,8 @@ itself (`fzf` optional, for a nicer session picker).
   - [Contexts and partitions](#contexts-and-partitions)
   - [Views and tension](#views-and-tension)
   - [Remote sessions: latch](#remote-sessions-latch)
+  - [The agent contract: mux agent](#the-agent-contract-mux-agent)
+  - [The tray](#the-tray)
 - [Commands](#commands)
 - [Key bindings](#key-bindings)
 - [Configuration](#configuration)
@@ -89,8 +118,11 @@ The text is the signal; colour is decoration.
 - Optional: **fzf** for the fuzzy session picker (`mux` with no arguments falls
   back to a numbered menu without it).
 - Optional: a coding agent CLI (e.g. Claude Code) to actually run in the agent
-  panes, and its lifecycle hooks wired to `mux agent-emit` for the state strip
-  (see [Agent state](#how-it-works)).
+  panes, with its lifecycle hooks wired to mux for the state strip. **`mux setup
+  claude` does that for you**, idempotently and reversibly, and installs the
+  agent instructions at the same time. The hooks call `mux agent-hook
+  <EventName>` and say only what HAPPENED: mux decides what each event means, so
+  a rule change is a mux release rather than a coordinated one.
 
 ## Install
 
@@ -121,7 +153,12 @@ navigation defaults you can skip if you have your own.
 ## Quickstart
 
 ```sh
-# open (or attach) a session for the current project, agent continuing
+# 1. wire your agent up, so the strip has something to report. Shows the change
+#    first; --remove takes it back out; running it twice changes nothing.
+mux setup claude --dry-run
+mux setup claude
+
+# 2. open (or attach) a session for the current project, agent continuing
 mux go
 
 # write a profile for a project, then bring it up
@@ -133,7 +170,16 @@ mux go api
 #   prefix B     jump back
 #   prefix ( )   cycle to the prev / next session (skips hidden)
 #   prefix Space explorer (choose-tree)
+
+# is it all wired? `mux check` asks functional questions, not presence ones,
+# and names any session whose agent has never reported.
+mux check
 ```
+
+Without step 1 the strip draws `🔌` for every session mux started an agent in:
+the panes are right and nothing is reporting. That is the one first-run failure
+worth knowing about, which is why the glyph exists rather than leaving those
+sessions looking like plain shells.
 
 ## Concepts
 
@@ -313,8 +359,9 @@ resume  claude --resume
 A layout picks one with `agent <name>`; Claude is the default. Add any CLI by
 dropping in a profile — `$MUX_DIR/agents/<name>.agent` for one of your own, or
 to override a shipped profile of the same name. The state strip works for any
-agent whose lifecycle calls `mux agent-emit working|blocked|idle` (Claude Code
-does this via a hook plugin).
+agent whose lifecycle events reach `mux agent-hook <EventName>`; mux owns the
+mapping from event to state, so wiring an agent up says only what happened.
+`mux setup claude` does it for Claude Code.
 
 ### Themes
 
@@ -584,6 +631,101 @@ empty session. It negotiates that once, lazily, via `mux capabilities` — the
 first real consumer of the handshake — and degrades gracefully against an older
 remote. See **LATCH** in `man mux`.
 
+### The agent contract: mux agent
+
+Everything above is for a human reading a bar. `mux agent` is the surface a
+PROGRAM is invited to depend on, and it is deliberately a different contract
+rather than a second spelling of the same one.
+
+```sh
+mux agent status              # worst state + count, per partition
+mux agent peers               # per session: state, age, control, root
+mux agent read api -n 200     # what that agent is doing
+mux agent wait api idle -t 60 # block until it is done
+mux agent send api 'run the integration suite'
+```
+
+**One JSON object on stdout, always, including on failure.** A reader never has
+to decide whether today's answer is a document or a sentence:
+
+```json
+{"status":"ok",
+ "partitions":[{"partition":"global","state":"working","count":1}]}
+{"status":"refused","reason":"blocked","override":"none",
+ "class":"human","message":"..."}
+```
+
+A symbolic `status` sits beside the numeric exit code because mux uses exactly
+four exit codes and the ABSENCE of the rest is load-bearing: latch can attribute
+126, 127 and 255 to the shell and to ssh precisely because mux never emits them.
+So richer outcomes go in the payload, where they cost nothing. The shape is
+stable or the capability number moves (`mux capabilities` declares `agent
+contract N`).
+
+**`send` is the hook a higher layer needs, and the one with teeth.** mux refuses
+to type into a pane that is `blocked` (sitting at a prompt addressed to a
+person) or that it knows nothing about. An override exists, and it cannot live
+anywhere
+the governed party can reach: a command-line flag is forgeable and `$MUX_DIR` is
+user-owned by design, so the policy is a root-owned file
+(`/etc/mux/send-policy`), allowlist-only, scoped as finely as one window. mux
+refuses to obey it if this user can write the file or its directory. Both halves
+are required and neither is sufficient: the policy says whether it may ever
+happen here, and an explicit `--answer-prompt` says you meant it now. Every
+refusal reports whether an override is `available`, so a caller discovers the
+answer in one round trip instead of guessing.
+
+WHO CONTROLS THE PANE decides whether an override is possible at all, because
+what makes answering a prompt wrong is not that an agent typed it, it is that
+the prompt was addressed to a HUMAN. `human` is refused before the policy is
+consulted; `agent` (a worker spawned and supervised by an agent) is grantable as
+a whole class, which is what makes a village of generated names workable;
+`hybrid` is its own class, grantable but usually scoped, because collapsing it
+into either of the others is wrong in one direction or the other.
+
+The guard is organisational, not a sandbox, and says so: mux runs as the agent's
+own user, so any mark it reads is one the agent could rewrite. What it buys is
+that the dangerous thing stops being the easy thing, the default sits outside
+the agent's reach, and a bypass leaves mux's audit log.
+
+**mux ships the instructions.** `mux skill` prints the agent-facing document
+that
+matches THIS mux, and `mux skill --agents-md` prints the same text in the
+vendor-neutral `AGENTS.md` convention. Release-matched on purpose: a copy taken
+from a website teaches whatever the verbs were that day. `mux setup claude`
+places it. See **THE AGENT CONTRACT** in `man mux`.
+
+### The tray
+
+An optional StatusNotifierItem icon, its own Python package so mux core stays
+shell and daemonless. It draws **one item per (host, partition)**, each carrying
+that partition's worst agent state and how many sessions sit in it, with three
+letters and a colour for the host and a letter for the partition.
+
+**The box you are sitting at PULLS; nothing is pushed to it.** Every
+platform-specific decision then happens on the only machine where it belongs,
+which is what makes a macOS tray a presenter swap rather than a new transport.
+Sources are COMMANDS rather than hosts, the same seam shape as the context hook,
+so it works over ssh, a jump host, `kubectl exec` or anything else, and mux
+never
+learns what ssh is.
+
+**The item set follows your latches.** Attach to a box and its item appears;
+detach and it goes, because a tray item exists only if somebody is looking at
+that machine. Locally the equivalent is a client attached to that partition's
+server. An unreachable host KEEPS its items and draws them as unknown: "could
+not ask" is a different answer from "it has none", and withdrawing them would
+empty the tray at the moment it has something to say.
+
+Clicking an item runs `mux next-blocked` on that box, which is meaningful for a
+remote precisely because the item only exists while a latch does, and the latch
+IS your live view of it.
+
+```sh
+./indicator/setup.sh          # install + a --user service unit
+./indicator/setup.sh check    # same [OK]/[FAIL] marker contract as mux check
+```
+
 ## Commands
 
 Full reference in **`man mux`**. The essentials:
@@ -594,16 +736,20 @@ mux go [NAME|DIR] [PROFILE]   create/attach/switch; agent continues
 mux go --resume [NAME]       same, but the agent resumes (choose a chat)
 mux --no-agent ...           build the panes, plain shell in the agent pane
 mux resume [PART [SESS]]     rebuild a partition's sessions (--list)
+mux setup claude             wire an agent's hooks to mux (--dry-run first)
 mux skill                    the agent instructions this mux ships
 mux skill --agents-md        the same, in the AGENTS.md convention
-mux setup claude             wire an agent's hooks to mux (--dry-run first)
+mux agent status             per-partition worst state + count, as JSON
+mux agent peers              who is here, what each is doing, who drives it
+mux agent read NAME [-n N]   capture that session's agent pane
+mux agent wait NAME STATE    block until it gets there (-t SECONDS)
+mux agent send NAME TEXT     hand it work (refuses a blocked or unknown pane)
 mux scan                     rebuild the project discovery map
 mux why [NAME]               show each resolved value and where it came from
 mux views [auto|floor|ceil]  who is attached, at what size, what it costs
 mux agent-doctor             does recorded agent state match reality?
 mux ls                       list sessions (with agent-state glyphs)
 mux new NAME                 create NAME here, binding the name if needed
-mux scan                     rebuild the project discovery map
 mux save [NAME]              snapshot this session (records only deltas)
 mux edit [NAME]              open a profile in $EDITOR
 mux rename [OLD] NEW         rename a session and its profile
@@ -659,8 +805,9 @@ reads your override first, then the shipped default.
   tmux fragment and agent hooks carry no paths.
 - **Agent state** lives in per-pane files under `$XDG_RUNTIME_DIR`, namespaced
   by tmux socket (a marked context never shows another's agents).
-  `mux agent-emit <state>` (called from the agent's lifecycle hooks) records a
-  transition; `mux agent-render` draws the status-right strip from it, degrading
+  `mux agent-hook <EventName>` (called from the agent's lifecycle hooks, which
+  `mux setup claude` wires) records a transition through `mux agent-emit`;
+  `mux agent-render` draws the status-right strip from it, degrading
   gracefully as the session count grows so a blocked session is never silently
   dropped.
 - **The palette** is compiled from `*.theme` files to tmux options by
