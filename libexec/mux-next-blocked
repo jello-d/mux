@@ -1,7 +1,8 @@
 #!/bin/sh
 # mux-next-blocked: switch this client to the session whose agent has been
 # BLOCKED (needs-you) the LONGEST -- the loudest, most-escalated chip on the
-# strip (see agent-state-render). "Jump to whoever needs me most." Skips this
+# strip (see mux-agent-state-render). "Jump to whoever needs me most." Skips
+# this
 # client's hidden sessions (mux hide) and the session you are already on, so a
 # repeat press walks to the next-most-urgent. Silent by contract: it runs from a
 # key binding, whose stdout tmux would pop in a view-mode buffer over the pane.

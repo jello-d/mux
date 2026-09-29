@@ -41,7 +41,7 @@ done
 lst() {
 	env -u TMUX -u MUX_SHARE PATH="$T/bin" \
 		XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" MUX_DIR="$MUX_DIR" \
-		MUX_CACHE="$MUX_CACHE" "$HERE/libexec/agent-state-list" "$@" 2>&1
+		MUX_CACHE="$MUX_CACHE" "$HERE/libexec/mux-agent-state-list" "$@" 2>&1
 }
 # `_rc=0; _o=$(lst) || _rc=$?`: under set -eu a bare assignment aborts the
 # moment the command exits non-zero, which is a case under test.

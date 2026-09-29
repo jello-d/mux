@@ -72,7 +72,8 @@
 #   agent  NAME          the agent a `pane agent` runs (an agents/NAME.agent:
 #                        claude, gemini, ...), default claude. go and resume use
 #                        that agent's own continue/resume command.
-#   notify always|away   whether the agent notification (see agent-state-emit)
+#   notify always|away   whether the agent notification (see
+# mux-agent-state-emit)
 #                        fires while you are LOOKING at the pane: `away` (the
 #                        default) suppresses it then, `always` fires anyway.
 #   layout NAME          the pane ARRANGEMENT to build (a layouts/NAME.layout),
@@ -320,10 +321,10 @@ refresh)       shift; exec "$LIBEXEC/mux-refresh" "$@" ;;
 pin)           shift; exec "$LIBEXEC/mux-pin" "$@" ;;
 style)         shift; exec "$LIBEXEC/mux-style" "$@" ;;
 status-banner) shift; exec "$LIBEXEC/mux-status-banner" "$@" ;;
-agent-render)  shift; exec "$LIBEXEC/agent-state-render" "$@" ;;
-agent-emit)    shift; exec "$LIBEXEC/agent-state-emit" "$@" ;;
-agent-summary) shift; exec "$LIBEXEC/agent-state-summary" "$@" ;;
-agent-list) shift; exec "$LIBEXEC/agent-state-list" "$@" ;;
+agent-render)  shift; exec "$LIBEXEC/mux-agent-state-render" "$@" ;;
+agent-emit)    shift; exec "$LIBEXEC/mux-agent-state-emit" "$@" ;;
+agent-summary) shift; exec "$LIBEXEC/mux-agent-state-summary" "$@" ;;
+agent-list) shift; exec "$LIBEXEC/mux-agent-state-list" "$@" ;;
 themes)        shift; exec "$LIBEXEC/mux-themes" "$@" ;;
 check)         shift; exec "$LIBEXEC/mux-check" "$@" ;;
 next-blocked)  shift; exec "$LIBEXEC/mux-next-blocked" "$@" ;;
@@ -1161,7 +1162,7 @@ sock=$(mux_ctx_socket)
 # stopped existing when the personal one became `global`, while every library
 # fell back to `global`. Unreachable today (resolve either sets a partition or
 # exits), but this is the third sighting of that default and the first two were
-# live bugs: the tray indicator (15cc461) and agent-state-emit (6099078).
+# live bugs: the tray indicator (15cc461) and mux-agent-state-emit (6099078).
 #
 # The `default` left in the SOCKET comparisons below is a different string with
 # the same spelling, and is correct: with no -L, tmux's own socket really is
@@ -3054,7 +3055,7 @@ trap - EXIT
 
 # `notify always` fires the agent notification even while you are looking at the
 # pane; `away` (also the default when unset) suppresses it then. Read by
-# agent-state-emit as @mux-notify-always.
+# mux-agent-state-emit as @mux-notify-always.
 if [ "$want_notify" = always ]; then
 	tm set-option -t "$name" @mux-notify-always 1
 elif [ "$want_notify" = away ]; then

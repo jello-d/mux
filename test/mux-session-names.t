@@ -148,7 +148,7 @@ EOF
 chmod +x "$T/emitbin/tmux"
 rm -f "$T/run/agent-state/global"/*
 env XDG_RUNTIME_DIR="$T/run" TMUX=/tmp/fake/global,1,0 TMUX_PANE=%7 \
-	PATH="$T/emitbin:$PATH" "$HERE/libexec/agent-state-emit" working \
+	PATH="$T/emitbin:$PATH" "$HERE/libexec/mux-agent-state-emit" working \
 	>/dev/null 2>&1 || fail "emit failed"
 _rec=$(cat "$T/run/agent-state/global/7")
 _found=$(env XDG_RUNTIME_DIR="$T/run" sh -c '
@@ -210,7 +210,7 @@ rm -f "$T/run/agent-state/global"/*
 agent_rec "$T/run/agent-state/global/8" working %8 100 'my project'
 env XDG_RUNTIME_DIR="$T/run" TMUX=/tmp/fake/global,1,0 TMUX_PANE=%8 \
 	MUX_NOTIFY_SEND="$T/notifbin/send" PATH="$T/notifbin:$PATH" \
-	"$HERE/libexec/agent-state-emit" idle >/dev/null 2>&1 \
+	"$HERE/libexec/mux-agent-state-emit" idle >/dev/null 2>&1 \
 	|| fail "emit with a notification failed"
 
 _rec=$(cat "$T/run/agent-state/global/8")
@@ -236,11 +236,12 @@ st %2 blocked 'my project'
 st %3 blocked zulu
 
 # --- the strip shows the whole name, and hides exactly ---------------------
-# agent-state-render always read line by line, so it never had the ring bug --
+# mux-agent-state-render always read line by line, so it never had the ring bug
+# --
 # but it shared the hidden-set test.
 render() {
 	env -u TMUX -u TMUX_PANE XDG_RUNTIME_DIR="$T/run" MUX_STRIP_WIDTH=400 \
-		PATH="$T/bin:$PATH" "$HERE/libexec/agent-state-render" \
+		PATH="$T/bin:$PATH" "$HERE/libexec/mux-agent-state-render" \
 		alpha client0 2>/dev/null | sed 's/#\[[^]]*\]//g'
 }
 case "$(render)" in
@@ -286,7 +287,7 @@ EOF
 chmod +x "$T/lateb/tmux"
 emit() {
 	env XDG_RUNTIME_DIR="$T/run" TMUX=/tmp/fake/global,1,0 TMUX_PANE=%30 \
-	PATH="$T/lateb:$PATH" "$HERE/libexec/agent-state-emit" "$@" \
+	PATH="$T/lateb:$PATH" "$HERE/libexec/mux-agent-state-emit" "$@" \
 	>/dev/null 2>&1
 }
 recstate() { cut -d' ' -f1 <"$T/run/agent-state/global/30"; }

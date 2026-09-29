@@ -1,5 +1,6 @@
 #!/bin/sh
-# agent-state-list: machine-readable PER-SESSION agent state across a namespace,
+# mux-agent-state-list: machine-readable PER-SESSION agent state across a
+# namespace,
 # for an external presenter. Where agent-summary collapses the namespace to one
 # worst-state-and-count line, this keeps every session, which is what a tooltip,
 # a right-click menu, or a MULTI-HOST tray needs.

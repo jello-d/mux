@@ -28,7 +28,8 @@ bind b run-shell "mux next-blocked '#{client_name}'"
 bind B switch-client -l
 
 # Click a session chip (status-right strip) to jump STRAIGHT to it, unlike ( / )
-# which step neighbours. agent-state-render tags each chip #[range=user|s:NAME],
+# which step neighbours. mux-agent-state-render tags each chip
+# #[range=user|s:NAME],
 # so a click hands mux-click that tag; a hidden session has no chip, no range,
 # no press. Anything else on the bar (the window list on the left) keeps the
 # default -- switch to the target under the mouse. Needs `mouse on`.
@@ -149,7 +150,8 @@ run-shell "mux status-banner"
 # next right), divider-separated and fixed-width so cycling never shifts them.
 # #S (this bar's current session) is passed in so ONLY it is highlighted -- on
 # its own themed window-status-current-style, matching the left active-window
-# chip. Each token's emoji shows agent state (see agent-state-render): a caution
+# chip. Each token's emoji shows agent state (see mux-agent-state-render): a
+# caution
 # triangle for needs-you, a brain for working, a check for finished, a black
 # circle for no agent.
 set -g status-interval 2

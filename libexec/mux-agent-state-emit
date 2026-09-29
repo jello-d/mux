@@ -1,5 +1,5 @@
 #!/bin/sh
-# agent-state-emit: record this agent's lifecycle state for the status bar.
+# mux-agent-state-emit: record this agent's lifecycle state for the status bar.
 # Invoked from Claude Code hooks with one argument, the new state. Writes a
 # single line to a per-pane file under the runtime state dir and nudges tmux
 # to redraw. Stays silent on stdout so the UserPromptSubmit hook never injects
@@ -25,19 +25,19 @@ while [ $# -gt 0 ]; do
 	# two candidates were indistinguishable from the record alone.
 	--source) shift
 		[ $# -gt 0 ] || {
-			echo "agent-state-emit: --source wants a name" >&2
+			echo "mux-agent-state-emit: --source wants a name" >&2
 			exit 2; }
 		_src=$1 ;;
-	-*) echo "agent-state-emit: unknown option: $1" >&2; exit 2 ;;
+	-*) echo "mux-agent-state-emit: unknown option: $1" >&2; exit 2 ;;
 	*)
 		[ -z "$state" ] || {
-			echo "agent-state-emit: one STATE only" >&2; exit 2; }
+			echo "mux-agent-state-emit: one STATE only" >&2; exit 2; }
 		state=$1 ;;
 	esac
 	shift
 done
 [ -n "$state" ] || {
-	echo "usage: agent-state-emit STATE [--beat] [--source NAME]" >&2
+	echo "usage: mux-agent-state-emit STATE [--beat] [--source NAME]" >&2
 	exit 2; }
 
 # No tmux pane means nothing to track. Exit clean so the hook never fails.

@@ -1,12 +1,13 @@
 #!/bin/sh
 # mux-agent-state_lib - shared reader for per-pane agent state (see
-# agent-state-emit). Sourced by agent-state-render (the status strip) AND by the
+# mux-agent-state-emit). Sourced by mux-agent-state-render (the status strip)
+# AND by the
 # mux front end (the session picker and `mux ls`), so the state ranking and the
 # state GLYPHS live in ONE place, so the bar and the picker cannot drift apart.
 # Functions and glyph constants only; source it, do not run it.
 #
 # State lives in per-pane files under $XDG_RUNTIME_DIR/agent-state/<ns>, a line
-# each: "state window pane epoch notif SESSION" (see agent-state-emit). The
+# each: "state window pane epoch notif SESSION" (see mux-agent-state-emit). The
 # session comes LAST so a name containing a space reads back whole in one
 # `read`; this comment said the old order long after the code changed, which is
 # the same asserted-vs-actual drift that let a notification overwrite the
@@ -15,7 +16,7 @@
 
 # Width-2 glyphs, so a caller that aligns columns (the strip) holds line. This
 # is the single source of the state->glyph mapping; the strip's colour STYLES
-# stay in agent-state-render, which owns the bar's look.
+# stay in mux-agent-state-render, which owns the bar's look.
 MUX_GLYPH_BLOCKED='⚠️' ; MUX_GLYPH_WORKING='🧠' ; MUX_GLYPH_IDLE='✅'
 MUX_GLYPH_NONE='⚫'    ; MUX_GLYPH_UNKNOWN='❓'
 # UNWIRED: mux STARTED an agent in this session and has never heard from it.
@@ -113,9 +114,11 @@ mux_agent_pane() {      # <dir> <session>
 # `my project` dedup against its own words and then be counted twice, as `my`
 # and `project`.
 #
-# Centralised because it was already written twice -- in agent-state-summary and
+# Centralised because it was already written twice -- in
+# mux-agent-state-summary and
 # in mux-agent-doctor -- and a third copy was about to be written for
-# agent-state-list. Every copy has to independently remember that the session is
+# mux-agent-state-list. Every copy has to independently remember that the
+# session is
 # the LAST field.
 mux_agent_sessions() {  # DIR
 	_asd=$1

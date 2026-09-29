@@ -5,7 +5,8 @@
 #   mux agent-doctor [--repair] [NS]
 #
 # The status strip reports state from per-pane files written by an agent's
-# lifecycle hooks (see agent-state-emit). When a hook does not fire -- a turn
+# lifecycle hooks (see mux-agent-state-emit). When a hook does not fire -- a
+# turn
 # that ends without a Stop, a long generation with no tool call to trigger
 # PostToolUse, a hook that failed silently -- the file keeps saying whatever it
 # last said while the agent moves on. The strip then reports a finished session
