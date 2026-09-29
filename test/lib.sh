@@ -1,4 +1,11 @@
+#!/bin/sh
 # test/lib.sh - a tiny harness for mux's shell tests, sourced by each *.t.
+#
+# THE SHEBANG IS FOR THE LINTER, not for execution: this file is sourced and
+# never run. It was the ONLY sourced shell file in the tree without one, and
+# that made it the only one a shebang-based selector could not see -- which is
+# how it silently dropped out of `test/lint.t` the moment that selector
+# stopped keying on `.sh`. Every lib under libexec/ already carries one.
 #
 # Sets HERE (the repo root, so a test sources libexec/<lib>.sh), a private
 # scratch dir T (removed on exit), a HOME pinned inside it, and fail/pass. A

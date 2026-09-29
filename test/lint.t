@@ -51,8 +51,14 @@ _list=$T/files
 find "$HERE/bin" "$HERE/libexec" "$HERE/test" "$HERE/share" "$HERE/indicator" \
 	-type f 2>/dev/null | LC_ALL=C sort | while IFS= read -r _f; do
 	case $_f in
-	*.sh|*.t) printf '%s\n' "$_f" ;;
-	*.py|*.tmux|*.md|*.toml|*/.git/*) ;;
+	# NOT SELECTED BY `.sh`, deliberately. A suffix-keyed selector SILENTLY
+	# SHRINKS the moment something is renamed -- the corpus gets smaller, the
+	# test still passes, and nothing says so. Measured before removing it:
+	# every sourced lib in this tree carries `#!/bin/sh`, and so does every
+	# `.t`, so the shebang arm below already covers them and the suffix was
+	# never what made them visible. Now the selector cannot go stale when a
+	# name changes, which is the property the count assertion below wants.
+	*.py|*.tmux|*.md|*.toml|*.json|*.yaml|*/.git/*) ;;
 	*)	# A shebang naming sh/dash/bash, and nothing else.
 		case "$(head -c 64 -- "$_f" 2>/dev/null | head -1)" in
 		'#!'*/sh|'#!'*/dash|'#!'*/bash|'#!'*env\ sh|'#!'*env\ dash)
@@ -66,10 +72,19 @@ LC_ALL=C sort -u "$_list" -o "$_list"
 # A floor on the count. Without it, a find that matched NOTHING (a layout
 # change, a bad case arm above) would lint zero files and report a triumphant
 # pass -- the failure mode this whole file exists to prevent, reproduced one
-# level up. 40 is well under the current count and well over any plausible
-# accident.
+# level up.
+#
+# THE FLOOR IS TIGHT, not generous, and that is the point. At 40 against a real
+# 115 it would have sat there while a rename dropped fifteen files out of the
+# corpus -- visible to nobody, because a shrinking corpus reports the same
+# cheerful pass as a whole one. Close to the real number, a shrink FAILS and
+# says so; the cost is bumping this line when files are legitimately removed,
+# which is a deliberate trade and cheap next to a linter that quietly stops
+# looking.
 _n=$(wc -l <"$_list")
-[ "$_n" -ge 40 ] || fail "only $_n shell files found; the discovery is broken"
+[ "$_n" -ge 100 ] || fail "only $_n shell files found (expected 100+): either
+the discovery is broken, or files left the corpus -- if that was deliberate,
+lower this floor in the same commit so the next shrink is still visible"
 
 _out=$T/out
 # Run from the repo root so shellcheck finds .shellcheckrc, and pass the list
