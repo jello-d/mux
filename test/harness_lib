@@ -22,6 +22,21 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT INT TERM
 
+# t_trap 'COMMAND' -- a test's OWN cleanup, composed with the scratch removal
+# above instead of replacing it.
+#
+# SIX TESTS HAD REPLACED IT, and POSIX sh has no trap stack, so each of them
+# leaked its whole scratch directory into /tmp on every run, forever. Invisible
+# until TMUX_TMPDIR below put a recognisable `tmux/` inside each one; a count of
+# /tmp/tmp.*/tmux then said exactly which. Same shape as the socket leak this
+# suite already fixed once: the litter was uniform, so nobody could see it.
+#
+# test/lint.t refuses a bare `trap ... EXIT` in a test now, so the next one
+# cannot reintroduce it -- the rule rather than the vigilance.
+t_trap() {
+  trap "$1"'; rm -rf "$T"' EXIT INT TERM
+}
+
 # HOME IS PINNED INSIDE T, and that one line is what makes the claim above
 # ("nothing outside T is touched") actually true rather than aspirational.
 #
@@ -45,6 +60,38 @@ export HOME_REAL
 HOME=$T/home
 export HOME
 mkdir -p "$HOME"
+
+# AND THE tmux SOCKET DIRECTORY, for the same reason and by the same rule: it is
+# the one location mux reaches that is NOT $HOME-relative. tmux derives it from
+# TMUX_TMPDIR (default /tmp), so a test that writes a scratch tmux.conf and then
+# causes anything to run `tmux source-file` reaches THE DEVELOPER'S OWN LIVE
+# SERVER on the default socket -- sourcing a config from a directory that is
+# about to be deleted. That became reachable the moment `setup.sh install`
+# learned to reload live servers, and setup.t writes exactly such a conf.
+#
+# It also stops the three tests that drive a real tmux leaving anything behind
+# in the shared /tmp/tmux-$(id -u), where 123 dead sockets once accumulated from
+# a single day of runs.
+TMUX_TMPDIR=$T/tmux
+export TMUX_TMPDIR
+mkdir -p "$TMUX_TMPDIR"
+chmod 700 "$TMUX_TMPDIR"
+
+# AND `TMUX` HAS TO GO, which is the half that pinning a directory does not
+# cover and the half that actually bit. A tmux CLIENT takes its socket from
+# `$TMUX` when that is set and ignores TMUX_TMPDIR entirely -- and the suite is
+# normally run BY A HUMAN INSIDE tmux, so every `tmux` a test invokes was
+# talking to the developer's own live server. Proven the hard way while adding
+# the reload case below: a test's `tmux new-session -d -s reloadme` created a
+# real session on the live server, `set-option -g status-right` overwrote the
+# real status bar, and the assertions then passed by reading that server back.
+# The mutation SURVIVED, because the leftover session made the second run skip
+# the whole block -- a test that pollutes real state also stops testing.
+#
+# Same rule as the HOME pin one paragraph up, with the lesson that a derived
+# path is not the only way out of the sandbox: an inherited HANDLE is another.
+# A test that wants $TMUX sets it to a fake value itself, and they all do.
+unset TMUX TMUX_PANE
 
 # The session set, pinned explicitly as well. HOME above already keeps it inside
 # T, but a fixture is easier to read as $T/state/sessions.global than as

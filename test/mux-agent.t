@@ -418,7 +418,7 @@ seal_pol() { chmod 0444 "$T/etc/send-policy"; chmod 0555 "$T/etc"; }
 pol() { unseal_pol; printf '%s\n' "$1" >"$T/etc/send-policy"; seal_pol; }
 unseal_pol() { chmod 0755 "$T/etc" 2>/dev/null || true
   chmod 0644 "$T/etc/send-policy" 2>/dev/null || true; }
-trap 'chmod 0755 "$T/etc" 2>/dev/null || true' EXIT INT TERM
+t_trap 'chmod 0755 "$T/etc" 2>/dev/null || true'
 
 # `bravo` is WORKING, which needs no override: a turn that is running buffers
 # the text and picks it up when it ends. That is the natural "queue the next

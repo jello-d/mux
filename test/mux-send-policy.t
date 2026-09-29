@@ -26,7 +26,7 @@ MUX_SEND_POLICY_FILE=$POL; export MUX_SEND_POLICY_FILE
 # than a stand-in for it.
 seal() { chmod 0444 "$POL"; chmod 0555 "$T/etc"; }
 unseal() { chmod 0755 "$T/etc"; chmod 0644 "$POL"; }
-trap 'chmod 0755 "$T/etc" 2>/dev/null || true' EXIT INT TERM
+t_trap 'chmod 0755 "$T/etc" 2>/dev/null || true'
 
 # CLASS DEFAULTS TO `agent` in these helpers, because a human-controlled pane
 # never reaches this file at all -- `send` refuses it before the policy is

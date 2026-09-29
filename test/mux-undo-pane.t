@@ -51,7 +51,7 @@ _bail() {
     "$_name" "$STAGE" "$_rc"
   printf '  This is the contention flake; capture the state above.\n'
 }
-trap '_bail' EXIT
+t_trap '_bail'
 trap 'cleanup' INT TERM
 
 # A SERVER ON A NAME NOBODY HAS KILLED. build() used to `cleanup` and then

@@ -144,6 +144,37 @@ if [ -s "$_bad" ]; then
   exit 1
 fi
 
+# --- a test may not REPLACE the harness's EXIT trap ------------------------
+# POSIX sh has no trap stack, so `trap '...' EXIT` in a test file silently
+# discards harness_lib's `rm -rf "$T"` and that run's whole scratch directory
+# stays in /tmp forever. SIX FILES had done it, every one of them for a good
+# reason (kill a tmux server, restore a mode so the dir can be removed), and
+# none of them meant to keep the dir.
+#
+# INVISIBLE BECAUSE THE LITTER WAS UNIFORM, the same way 123 dead tmux sockets
+# went unnoticed: one more `/tmp/tmp.XXXX` among hundreds looks like everyone
+# else's. It became countable only once the harness put a recognisable `tmux/`
+# inside each scratch dir.
+#
+# `t_trap 'CMD'` composes instead of replacing. This rule is what stops the
+# next test reintroducing it, since the failure is invisible by construction.
+# SCOPED TO THE `.t` FILES, which is the actual rule: only a file that SOURCES
+# the harness can discard its trap. `test/mutate` and `test/run` are drivers
+# with scratch dirs and traps of their own, and the first version of this check
+# reported the driver -- a rule wider than its reason.
+_bt=$T/traps
+: >"$_bt"
+for _f in "$HERE"/test/*.t; do
+  grep -nE "^[[:space:]]*trap[[:space:]].*EXIT" "$_f" 2>/dev/null \
+    | sed "s|^|${_f#"$HERE"/}:|" >>"$_bt" || true
+done
+if [ -s "$_bt" ]; then
+  printf 'FAIL %s: a test replaced the harness EXIT trap:\n' "$_name" >&2
+  sed 's/^/  /' "$_bt" >&2
+  printf 'Use `t_trap CMD`, which keeps the scratch-dir removal.\n' >&2
+  exit 1
+fi
+
 # --- a grep PATTERN that came from a name needs `--` ---------------------
 # `grep -qxF "$name"` parses a leading-dash name as OPTIONS: the match silently
 # fails and grep prints a usage block to stderr. Seven shipped instances when
