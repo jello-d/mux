@@ -48,14 +48,15 @@
 set -eu
 
 _lib=$(dirname "$0")
-# mux-conf.sh for mux_conf_clean: the `busy` marker is read through the same
+# mux-conf_lib for mux_conf_clean: the `busy` marker is read through the same
 # comment-and-whitespace cleaner every other mux config file uses, rather
 # than a private parser. Omitting it made _busy_pat silently return nothing,
 # which degraded to the old verdict instead of failing loudly -- a graceful
 # fallback hiding a missing dependency.
-# mux-log.sh for mux_log: --repair MUTATES a record, and a mutation nobody can
+# mux-log_lib for mux_log: --repair MUTATES a record, and a mutation nobody can
 # see afterwards is exactly what made the original bug expensive to find.
-for _l in mux-agent-state.sh mux-data.sh mux-context.sh mux-conf.sh mux-log.sh
+for _l in mux-agent-state_lib mux-data_lib mux-context_lib mux-conf_lib \
+		mux-log_lib
 do
 	[ -r "$_lib/$_l" ] || {
 		echo "mux: $_l missing (incomplete install)" >&2; exit 1; }

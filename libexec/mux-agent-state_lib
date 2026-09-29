@@ -1,5 +1,5 @@
 #!/bin/sh
-# mux-agent-state.sh - shared reader for per-pane agent state (see
+# mux-agent-state_lib - shared reader for per-pane agent state (see
 # agent-state-emit). Sourced by agent-state-render (the status strip) AND by the
 # mux front end (the session picker and `mux ls`), so the state ranking and the
 # state GLYPHS live in ONE place, so the bar and the picker cannot drift apart.

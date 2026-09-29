@@ -1,5 +1,5 @@
 #!/bin/sh
-# mux-exclude.sh - shared paths for per-client session hiding (mux hide/show).
+# mux-exclude_lib - shared paths for per-client session hiding (mux hide/show).
 # A tmux client -- one attachment, keyed by its client_name (its tty) -- hides
 # sessions from its own status strip and ( / ) cycling. client_name is unique
 # per attachment, so it alone keys the set; no socket namespace is needed. The

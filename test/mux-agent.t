@@ -199,7 +199,7 @@ eq peers-state \
 	"$(jq '[p["state"] for p in d["peers"] if p["session"]=="alpha"][0]')" \
 	blocked
 # THE ROOT COMES FROM THE SESSION SET, which is a different source from the
-# state files -- and sourcing mux-sessions.sh without mux-paths.sh gave every
+# state files -- and sourcing mux-sessions_lib without mux-paths_lib gave every
 # peer an empty root plus six `mux_state_path: not found` lines on stderr. A
 # plausible answer, silently wrong: exactly the lib-needs-a-lib trap.
 eq peers-root \

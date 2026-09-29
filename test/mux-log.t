@@ -23,8 +23,8 @@ set -eu
 _name=mux-log
 . "$(dirname "$0")/lib.sh"
 
-LIB=$HERE/libexec/mux-log.sh
-[ -r "$LIB" ] || fail "libexec/mux-log.sh is missing"
+LIB=$HERE/libexec/mux-log_lib
+[ -r "$LIB" ] || fail "libexec/mux-log_lib is missing"
 
 L=$T/state/mux.log
 lg() {   # <subsys> <msg...> -- through the real lib, never by hand

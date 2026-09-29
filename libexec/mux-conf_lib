@@ -1,5 +1,5 @@
 #!/bin/sh
-# mux-conf.sh - the ONE comment/normalize rule for mux's line-directive config
+# mux-conf_lib - the ONE comment/normalize rule for mux's line-directive config
 # (layouts, themes, agents). Sourced (functions only); every config PARSE site
 # runs its input through mux_conf_clean, so the rule lives in exactly one place
 # and cannot drift between layouts, themes, and agent profiles.

@@ -1,7 +1,7 @@
 #!/bin/sh
 # mux-scan: rebuild the project discovery map for THIS context, then report what
 # it found. The on-demand trigger; mux also rebuilds silently when the map is
-# absent or a lookup misses (see mux-scan.sh).
+# absent or a lookup misses (see mux-scan_lib).
 #
 #   mux scan          rescan and report
 #   mux scan --list   print the current map without rescanning
@@ -10,7 +10,7 @@ set -eu
 MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
 
 _lib=$(dirname "$0")
-for _l in mux-paths.sh mux-profiles.sh mux-context.sh mux-scan.sh; do
+for _l in mux-paths_lib mux-profiles_lib mux-context_lib mux-scan_lib; do
 	[ -r "$_lib/$_l" ] || {
 		echo "mux: $_l missing (incomplete install)" >&2; exit 1; }
 	. "$_lib/$_l"

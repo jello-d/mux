@@ -48,9 +48,9 @@
 set -eu
 
 _lib=$(dirname "$0")
-[ -r "$_lib/mux-log.sh" ] || {
-	echo "mux: mux-log.sh missing (incomplete install)" >&2; exit 1; }
-. "$_lib/mux-log.sh"
+[ -r "$_lib/mux-log_lib" ] || {
+	echo "mux: mux-log_lib missing (incomplete install)" >&2; exit 1; }
+. "$_lib/mux-log_lib"
 
 _run=${XDG_RUNTIME_DIR:-/tmp}/mux-undo
 _tab=$(printf '\t')

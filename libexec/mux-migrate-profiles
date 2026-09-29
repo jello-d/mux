@@ -35,7 +35,7 @@ MUX_SHARE=${MUX_SHARE:-$(dirname "$0")/../share}
 # The shared overlay resolver (so a composed file's `include` target is looked
 # up exactly as mux would have looked it up) and the shared comment/whitespace
 # rule (so a spliced layout arrives normalized, as the parser would see it).
-for _l in mux-data.sh mux-conf.sh mux-profiles.sh; do
+for _l in mux-data_lib mux-conf_lib mux-profiles_lib; do
 	[ -r "$(dirname "$0")/$_l" ] || {
 		echo "mux: $_l missing (incomplete install)" >&2; exit 1; }
 	. "$(dirname "$0")/$_l"

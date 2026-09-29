@@ -1,5 +1,5 @@
 #!/bin/sh
-# mux-log.sh - ONE log for the whole package. Sourced (functions only); source
+# mux-log_lib - ONE log for the whole package. Sourced (functions only); source
 # it, do not run it.
 #
 # WHY IT EXISTS. `mux latch` held a session across an hour-long outage, a MITM
@@ -23,7 +23,7 @@
 # deleting files: all IN. When adding a call, ask which of the two it is; if it
 # is neither, it does not belong here.
 #
-# WHERE. $MUX_STATE, because a log cannot be REBUILT -- the test mux-paths.sh
+# WHERE. $MUX_STATE, because a log cannot be REBUILT -- the test mux-paths_lib
 # makes the whole design. The XDG spec independently agrees, naming logs as
 # $XDG_STATE_HOME content. Derived with the plain one-line default rather than
 # through mux_state_path: that function's value is its ADOPTION rule (migrating

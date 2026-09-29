@@ -1,5 +1,5 @@
 #!/bin/sh
-# mux-data.sh - the ONE $MUX_DIR-over-$MUX_SHARE resolver for mux's package
+# mux-data_lib - the ONE $MUX_DIR-over-$MUX_SHARE resolver for mux's package
 # data: layouts, shapes, colour themes, agent profiles. Sourced (functions
 # only); source it, do not run it.
 #

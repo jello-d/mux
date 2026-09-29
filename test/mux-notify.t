@@ -15,7 +15,7 @@
 set -eu
 _name=mux-notify
 . "$(dirname "$0")/lib.sh"
-. "$HERE/libexec/mux-notify.sh"
+. "$HERE/libexec/mux-notify_lib"
 
 mkdir -p "$T/bin"
 LOG=$T/log

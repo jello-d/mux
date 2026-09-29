@@ -1,12 +1,12 @@
 #!/bin/sh
-# mux-paths.sh - WHERE MUX KEEPS THINGS. One place, because the answer was
+# mux-paths_lib - WHERE MUX KEEPS THINGS. One place, because the answer was
 # open-coded in five. Sourced (functions only); source it, do not run it.
 #
 # Three homes, and the line between them is a question with a yes/no answer:
 # DOES IT REBUILD?
 #
 #   $MUX_DIR    your config. Authored, and mux writes here too (`mux save`,
-#               `mux edit`, `mux theme`). Resolved in mux-data.sh, not here.
+#               `mux edit`, `mux theme`). Resolved in mux-data_lib, not here.
 #
 #   $MUX_CACHE  YES, it rebuilds. Palette stamps and the project discovery map:
 #               both regenerate on demand from what they summarise, so losing

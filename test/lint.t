@@ -117,7 +117,7 @@ fi
 # check rather than a reviewer's eye.
 #
 # IT APPLIES TO OUTPUT TOO, which this rule missed until 2026-09-23. A brand new
-# `printf ... >>"$f" 2>/dev/null` in mux-log.sh printed `cannot create ...:
+# `printf ... >>"$f" 2>/dev/null` in mux-log_lib printed `cannot create ...:
 # Permission denied` from a path built to be silent, and the input-only pattern
 # below sailed past it. The direction was never the point -- a failing OPEN is a
 # failing open -- so both are checked now. The output pattern wants a target

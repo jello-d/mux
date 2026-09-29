@@ -303,7 +303,7 @@ def parse_pair(text):
 
     WHY MUX ANSWERS THIS AT ALL: a per-host tray item has to be the same colour
     as that host's status-bar chip, or the two disagree about which machine is
-    which and neither looks broken. So the rule has ONE owner (mux-hosts.sh,
+    which and neither looks broken. So the rule has ONE owner (mux-hosts_lib,
     which `mux style` also uses) and this only converts.
 
     None on anything unexpected, INCLUDING the refusal. `mux host-color` exits 1

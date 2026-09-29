@@ -6,7 +6,7 @@
 set -eu
 _name=mux-profiles
 . "$(dirname "$0")/lib.sh"
-. "$HERE/libexec/mux-profiles.sh"
+. "$HERE/libexec/mux-profiles_lib"
 
 MUX_DIR=$T/conf
 mkdir -p "$MUX_DIR"

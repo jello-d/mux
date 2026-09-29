@@ -3,7 +3,7 @@
 #
 #   mux log [-n LINES] [-f] [SUBSYSTEM]
 #
-# The log itself is written by mux-log.sh (which explains what goes in it and
+# The log itself is written by mux-log_lib (which explains what goes in it and
 # why it is always on). This is the reader, and it exists so the feature is
 # DISCOVERABLE: a log whose path you have to know is a log nobody reads.
 #
@@ -17,9 +17,9 @@
 set -eu
 
 _lib=$(dirname "$0")
-[ -r "$_lib/mux-log.sh" ] || {
-	echo "mux: mux-log.sh missing (incomplete install)" >&2; exit 1; }
-. "$_lib/mux-log.sh"
+[ -r "$_lib/mux-log_lib" ] || {
+	echo "mux: mux-log_lib missing (incomplete install)" >&2; exit 1; }
+. "$_lib/mux-log_lib"
 
 _n=200 _follow=0 _sub=
 while [ "$#" -gt 0 ]; do

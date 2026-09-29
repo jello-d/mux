@@ -1,12 +1,12 @@
 #!/bin/sh
 # test/mux-data.t - the shared package-data resolver, mux_data_* in
-# libexec/mux-data.sh: the ONE $MUX_DIR-over-$MUX_SHARE rule for layouts,
+# libexec/mux-data_lib: the ONE $MUX_DIR-over-$MUX_SHARE rule for layouts,
 # shapes, themes and agent profiles. Pure path logic against a scratch pair of
 # data roots; nothing on the box is touched.
 set -eu
 _name=mux-data
 . "$(dirname "$0")/lib.sh"
-. "$HERE/libexec/mux-data.sh"
+. "$HERE/libexec/mux-data_lib"
 
 MUX_SHARE=$T/share
 MUX_DIR=$T/dir

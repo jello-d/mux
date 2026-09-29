@@ -1,5 +1,5 @@
 #!/bin/sh
-# mux-views.sh - VIEW TENSION: what happens when two clients of different sizes
+# mux-views_lib - VIEW TENSION: what happens when two clients of different sizes
 # are attached to one tmux server. Sourced by mux-views (the verb and the status
 # chip); functions only.
 #

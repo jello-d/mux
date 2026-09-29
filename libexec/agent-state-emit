@@ -45,12 +45,12 @@ done
 
 # Sibling libs in this script's own (colocated) libexec dir.
 _lib=$(dirname "$0")
-. "$_lib/mux-agent-state.sh"
-. "$_lib/mux-notify.sh"
+. "$_lib/mux-agent-state_lib"
+. "$_lib/mux-notify_lib"
 # mux_log, for TRANSITIONS only -- see the write below. A beat that merely
 # refreshes an unchanged state is not a change and is not logged, or a busy
 # session would fill the log with "still working" at tool-call rate.
-. "$_lib/mux-log.sh"
+. "$_lib/mux-log_lib"
 
 # The state dir, namespaced by tmux socket so a work session and a personal one
 # -- separate tmux servers sharing this runtime dir -- never collide on pane
@@ -245,7 +245,7 @@ if [ "$_pstate" = working ] && [ "$state" != working ]; then
                 # outlived the prompt it announced and had to be dismissed by
                 # hand, every time. Urgency is not how mux says which state
                 # this is -- the summary line says it, and the strip and the
-                # tray hold it persistently. See mux-notify.sh.
+                # tray hold it persistently. See mux-notify_lib.
                 #
                 # $_sess is the one computed at the top, deliberately NOT
                 # recomputed here. This block used to re-derive it as

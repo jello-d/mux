@@ -37,19 +37,19 @@ _lib=$(dirname "$0")
 # a shared lib, so the strip and the mux picker map state the same way and
 # cannot drift. The bar's COLOUR knobs (styles, accents) stay below -- they are
 # the strip's own look, which the picker does not share.
-. "$_lib/mux-agent-state.sh"
+. "$_lib/mux-agent-state_lib"
 
 # Closing a notification whose pane has died (the prune below) is the same
 # operation agent-state-emit performs when a state changes, so both take it
 # from one place rather than each knowing a daemon's CLI.
-. "$_lib/mux-notify.sh"
+. "$_lib/mux-notify_lib"
 
 # The view indicator lives at the RIGHT END of this strip, so its width has to
 # come out of the same budget the reduction tiers spend. It is drawn from here
 # rather than as its own status-left segment precisely so that arithmetic
 # happens in ONE place -- a second #() appended by tmux would be invisible to
 # the tiers and would silently push the strip past status-right-length.
-. "$_lib/mux-views.sh"
+. "$_lib/mux-views_lib"
 
 # ---------------------------------------------------------------------------
 # LOOK & FEEL -- every colour knob for the strip in one place. Colours are tmux
@@ -144,7 +144,7 @@ $1
 
 # Prune phantoms once: drop any state file whose pane is gone, closing any
 # notification it still holds -- so a pane killed while blocked leaves no stale
-# "needs you" behind (best effort on any platform; see mux-notify.sh).
+# "needs you" behind (best effort on any platform; see mux-notify_lib).
 #
 # ONLY when the pane list is non-empty. An empty one does not mean every pane
 # died -- it means the QUERY failed, and the commonest way is a socket
@@ -188,8 +188,8 @@ current=${1:-}
 # hidden (mux hide) drop off ITS strip -- per client, so each monitor differs.
 client=${2:-}
 excluded=
-if [ -r "$_lib/mux-exclude.sh" ]; then
-        . "$_lib/mux-exclude.sh"
+if [ -r "$_lib/mux-exclude_lib" ]; then
+        . "$_lib/mux-exclude_lib"
         excluded=$(mux_excluded "$client")
 fi
 

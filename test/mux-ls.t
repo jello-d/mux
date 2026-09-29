@@ -3,7 +3,7 @@
 # mux_agent_state_glyph, which only `ls` and the picker call.
 #
 # `ls` is how you read the whole context at a glance, so the GLYPH mapping is
-# the contract: it comes from mux-agent-state.sh, the single source the status
+# the contract: it comes from mux-agent-state_lib, the single source the status
 # strip also uses, and the two must not drift. A wrong glyph here is a session
 # reported calm when it needs you.
 #
