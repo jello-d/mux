@@ -1586,14 +1586,14 @@ f libexec/mux-agent
 t mux-agent
 -   exit "$2"
 +   exit 0
-m badverb-rc
+m part-needs-a-name
 
 = agent-status-unfiltered-by-default
 f libexec/mux-agent
 t mux-agent
 - [ "$_att" -eq 0 ] || set -- "$@" --attached
 + true
-m status-parts
+m empty-arr
 
 = agent-count-emitted-as-a-string
 f libexec/mux-agent
@@ -1628,7 +1628,7 @@ f libexec/mux-agent
 t mux-agent
 -     --partition)
 +     --ignored)
-m peers-other
+m peers-part-status
 
 = agent-peers-all-is-one-partition
 f libexec/mux-agent
