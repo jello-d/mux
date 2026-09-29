@@ -60,25 +60,30 @@ DEFAULT_TRANSPORT = (
     "ssh -o BatchMode=yes -o ConnectTimeout=6 "
     "-o StrictHostKeyChecking=accept-new %h %q"
 )
-# `--all` rather than a bare summary, and the partition is not an argument
-# here: one round trip answers for EVERY partition on that host, which is what
-# lets a host publish several items without multiplying its ssh traffic. A
-# per-partition poll would be N queries per host per tick for an answer the
-# far side can compose in one.
+# `mux agent status`, THE MACHINE CONTRACT, rather than the human-facing
+# summary this used to poll. That is the whole point of the namespace: the
+# tray is a program, so it reads the surface that promises a stable shape, and
+# `mux agent-summary` stays free to change for whoever reads it in a terminal.
 #
-# `--attached` because A TRAY ITEM MEANS A HUMAN IS LOOKING AT THIS. For a
-# remote host that is already what the latch registry encodes -- an item
-# exists only because a latch does, and the latch IS the human's live view of
-# that box. The local counterpart is a client attached to that partition's
-# server, and without asking for it a partition with a live server and no
+# ONE ROUND TRIP FOR EVERY PARTITION, which is what lets a host publish
+# several items without multiplying its ssh traffic. A per-partition poll
+# would be N queries per host per tick for an answer the far side composes in
+# one, and a reader on another box cannot know the partition names to ask for
+# in the first place.
+#
+# ATTACHED IS THE DEFAULT THERE, because A TRAY ITEM MEANS A HUMAN IS LOOKING
+# AT THIS. For a remote host that is already what the latch registry encodes
+# -- an item exists only because a latch does, and the latch IS the human's
+# live view of that box. The local counterpart is a client attached to that
+# partition's server, and without it a partition with a live server and no
 # terminal window showing it published an item nobody could act on.
 #
 # THE CONSEQUENCE IS DELIBERATE: detach from everything and the tray empties,
 # because there is nothing anyone is looking at. That supersedes the older
 # "the local host is always present" rule, which was written when a host had
 # exactly one partition and presence WAS the question.
-REMOTE_CMD = "sh -lc 'mux agent-summary --all --attached'"
-LOCAL_CMD = ("agent-summary", "--all", "--attached")
+REMOTE_CMD = "sh -lc 'mux agent status'"
+LOCAL_CMD = ("agent", "status")
 
 # A partition name is a DNS label (see mux_ctx_valid): lowercase alphanumerics
 # and hyphens. VALIDATED HERE because the names arrive from the far side and

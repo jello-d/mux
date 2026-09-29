@@ -631,18 +631,35 @@ class ItemSet(unittest.TestCase):
 
 
 class ParseAll(unittest.TestCase):
-    """`mux agent-summary --all`: one round trip, every partition."""
+    """`mux agent status`: the machine contract, one round trip."""
 
     def setUp(self):
         self.sni = _fresh()
 
+    @staticmethod
+    def _doc(*rows, status="ok"):
+        import json
+        return json.dumps({"status": status, "partitions": list(rows)})
+
     def test_every_row_becomes_a_partition(self):
-        got = self.sni.parse_all("global working 2\nwork blocked 1\n")
+        got = self.sni.parse_all(self._doc(
+            {"partition": "global", "state": "working", "count": 2},
+            {"partition": "work", "state": "blocked", "count": 1}))
         self.assertEqual(got, {"global": ("working", 2),
                                "work": ("blocked", 1)})
 
+    def test_the_count_arrives_as_a_NUMBER(self):
+        """Most of the point of JSON over the tab-separated form: a consumer
+        gets a type instead of an agreement, so nothing here re-parses it and
+        nothing has to decide what a non-numeric field meant."""
+        got = self.sni.parse_all(self._doc(
+            {"partition": "global", "state": "working", "count": 2}))
+        self.assertIsInstance(got["global"][1], int)
+
     def test_idle_and_none_carry_no_count(self):
-        got = self.sni.parse_all("global idle 0\nwork none 0\n")
+        got = self.sni.parse_all(self._doc(
+            {"partition": "global", "state": "idle", "count": 0},
+            {"partition": "work", "state": "none", "count": 0}))
         self.assertEqual(got, {"global": ("idle", None),
                                "work": ("none", None)})
 
@@ -650,21 +667,49 @@ class ParseAll(unittest.TestCase):
         """The partition is real and the feed is answering junk about it,
         which is exactly what `unknown` is for. Dropping the row would
         withdraw the item, which reads as "that partition is gone"."""
-        got = self.sni.parse_all("global 1) bootique\n")
+        got = self.sni.parse_all(self._doc(
+            {"partition": "global", "state": "1) bootique", "count": 0}))
         self.assertEqual(got, {"global": ("unknown", None)})
 
     def test_a_partition_that_is_not_a_LABEL_is_DROPPED(self):
         """These names arrive from another machine and go back out inside a
-        shell command, so a row that cannot be a partition name is not one."""
-        got = self.sni.parse_all("../etc idle 0\nUP idle 0\ngood idle 0\n")
+        shell command, so a row that cannot be a partition name is not one --
+        which stays true whatever the transport encoding is."""
+        got = self.sni.parse_all(self._doc(
+            {"partition": "../etc", "state": "idle", "count": 0},
+            {"partition": "UP", "state": "idle", "count": 0},
+            {"partition": "good", "state": "idle", "count": 0}))
         self.assertEqual(sorted(got), ["good"])
 
-    def test_junk_and_blank_lines_are_survivable(self):
-        """The output may be anything: a login banner, a usage block from a
-        remote too old for --all, an empty answer. None of it may raise."""
-        for text in ("", "\n\n", "usage: mux agent-summary [NS]\n",
-                     "onlyoneword\n"):
-            self.assertEqual(self.sni.parse_all(text), {})
+    def test_a_row_of_the_WRONG_SHAPE_is_dropped_not_guessed(self):
+        got = self.sni.parse_all(self._doc(
+            "not-an-object",
+            {"state": "idle"},
+            {"partition": "good", "state": "idle", "count": 0}))
+        self.assertEqual(sorted(got), ["good"])
+
+    def test_JUNK_IS_NONE_NOT_EMPTY(self):
+        """The distinction the tab-separated form could not make. A document
+        that does not parse is a host that said something other than an
+        answer, and reading that as "no partitions" would withdraw its items
+        -- emptying the tray at the exact moment it has something to say."""
+        for text in ("", "\n\n", "usage: mux agent <status>\n",
+                     "onlyoneword\n", "[1,2,3]", '{"status":"ok"}'):
+            self.assertIsNone(self.sni.parse_all(text), repr(text))
+
+    def test_a_REFUSAL_is_none_too(self):
+        """`status` is not `ok`, so the payload is not an answer -- even
+        though the document parses perfectly. That is exactly what the
+        symbolic status is for."""
+        self.assertIsNone(self.sni.parse_all(self._doc(
+            {"partition": "global", "state": "idle", "count": 0},
+            status="refused")))
+
+    def test_an_EMPTY_partition_list_is_empty_not_none(self):
+        """The other half, and it has to be separate: a host where nobody is
+        attached answers `[]` and that IS an answer. Collapsing it into None
+        would draw `unknown` for a box that is simply quiet."""
+        self.assertEqual(self.sni.parse_all(self._doc()), {})
 
 
 class FeedRows(unittest.TestCase):
@@ -960,7 +1005,9 @@ class Watch(unittest.TestCase):
         tray and defeats the blink that is supposed to mean "look at me"."""
         sni = _fresh(MUX_INDICATOR_POLL="0.01", MUX_INDICATOR_CTL=None)
         item = self._Item()
-        self._spin(sni, item, [self._source("printf 'global working 2\\n'")])
+        self._spin(sni, item, [self._source(
+            'printf \'{"status":"ok","partitions":'
+            '[{"partition":"global","state":"working","count":2}]}\\n\'')])
         self.assertEqual(item.calls, [("working", 2)],
                          f"repainted {len(item.calls)} times for one value")
 
@@ -974,8 +1021,11 @@ class Watch(unittest.TestCase):
         src = self._source(
             f'n=$(cat {counter} 2>/dev/null || echo 0)\n'
             f'echo $((n + 1)) >{counter}\n'
-            f'if [ "$n" -lt 2 ]; then printf "global working 1\\n"\n'
-            f'else printf "global blocked 3\\n"; fi')
+            f'p() {{ printf \'{{"status":"ok","partitions":'
+            f'[{{"partition":"global","state":"%s","count":%s}}]}}\\n\' '
+            f'"$1" "$2"; }}\n'
+            f'if [ "$n" -lt 2 ]; then p working 1\n'
+            f'else p blocked 3; fi')
         item = self._Item()
         self._spin(sni, item, [src])
         self.assertIn(("working", 1), item.calls)
@@ -1000,7 +1050,9 @@ class Watch(unittest.TestCase):
         self.addCleanup(os.unlink, path)
         sni = _fresh(MUX_INDICATOR_POLL="0.01", MUX_INDICATOR_CTL=path)
         item = self._Item()
-        self._spin(sni, item, [self._source("printf 'global idle 0\\n'")])
+        self._spin(sni, item, [self._source(
+            'printf \'{"status":"ok","partitions":'
+            '[{"partition":"global","state":"idle","count":0}]}\\n\'')])
         self.assertEqual(item.calls, [("blocked", 9)])
 
 

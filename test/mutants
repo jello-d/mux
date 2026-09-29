@@ -1387,16 +1387,30 @@ m test_a_solo_item_whose_host_grew_a_partition_is_unknown
 = indicator-all-rows-trusted
 f indicator/mux_indicator/sni.py
 t mux-indicator
--         if len(fields) < 2 or not valid_partition(fields[0]):
-+         if len(fields) < 2:
+-         if not isinstance(name, str) or not valid_partition(name):
++         if not isinstance(name, str):
 m test_a_partition_that_is_not_a_LABEL_is_DROPPED
 
 = indicator-all-junk-state-dropped
 f indicator/mux_indicator/sni.py
 t mux-indicator
--         out[fields[0]] = got if got and got[0] in KNOWN else UNKNOWN
-+         out[fields[0]] = got if got and got[0] in KNOWN else None
+-         out[name] = (state, count) if state in KNOWN else UNKNOWN
++         out[name] = (state, count)
 m test_a_STATE_mux_would_never_emit_is_unknown_not_dropped
+
+= indicator-refusal-read-as-an-answer
+f indicator/mux_indicator/sni.py
+t mux-indicator
+-     if not isinstance(doc, dict) or doc.get("status") != "ok":
++     if not isinstance(doc, dict):
+m test_a_REFUSAL_is_none_too
+
+= indicator-unparseable-read-as-empty
+f indicator/mux_indicator/sni.py
+t mux-indicator
+-     except (ValueError, TypeError):
++     except (ValueError, TypeError) if False else ():
+m test_JUNK_IS_NONE_NOT_EMPTY
 
 = indicator-item-paints-before-the-first-answer
 f indicator/mux_indicator/sni.py

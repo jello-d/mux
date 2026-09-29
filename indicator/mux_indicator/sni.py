@@ -21,6 +21,7 @@ host that is slow to answer delays only its own icon. A shared round would make
 every host as slow as the worst one, which over ssh is the normal case.
 """
 import asyncio
+import json
 import os
 import shlex
 # SIGKILL by NAME, not the `signal` module: dbus_next.service exports a `signal`
@@ -269,30 +270,58 @@ BASELINE = "global"
 
 
 def parse_all(text):
-    """`<partition> <state> <count>` per line -> {partition: (state, count)}.
+    """`mux agent status` -> {partition: (state, count)}, or None.
 
-    The shape `mux agent-summary --all` emits, which answers for every
-    partition in ONE round trip. That is the whole reason the verb exists: a
-    reader on another box cannot know the partition names to ask for, and over
-    a transport N partitions must not mean N connections.
+    THE MACHINE CONTRACT, not the human one. It answers for every partition in
+    ONE round trip -- a reader on another box cannot know the partition names
+    to ask for, and over a transport N partitions must not mean N connections
+    -- and it answers as JSON, so this reader gets types and structure instead
+    of a field order it has to agree about out of band. The count arrives as a
+    number rather than as a string that has to be re-parsed, and the escaping
+    of a session name or a partition is mux's problem rather than a delimiter
+    convention both sides have to keep in step.
 
-    A ROW THAT DOES NOT PARSE IS DROPPED, not guessed at, and a name that is
-    not a DNS label is dropped with it. These names arrive from another
-    machine and go straight back out inside a shell command, so this is
-    untrusted input crossing into `sh -lc`.
+    NONE MEANS DO NOT TRUST THIS ANSWER, which is a distinction the
+    tab-separated form could not make: a document that does not parse, or one
+    whose `status` is not `ok`, is a host that said something other than an
+    answer. That is `unknown` territory, not an empty one -- the caller must
+    not read it as "this host has no partitions".
+
+    A ROW IS STILL DROPPED if its partition is not a DNS label: these names
+    arrive from another machine and go straight back out inside a shell
+    command, so this remains untrusted input crossing into `sh -lc`, whatever
+    the transport encoding.
 
     A row whose STATE is a word mux would never emit becomes `unknown` rather
     than being dropped: the partition is real, and the feed answering junk
     about it is exactly what `unknown` is for. Dropping it would make the item
     disappear, which reads as "that partition is gone".
     """
+    try:
+        doc = json.loads(text)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(doc, dict) or doc.get("status") != "ok":
+        return None
+    rows = doc.get("partitions")
+    if not isinstance(rows, list):
+        return None
     out = {}
-    for line in text.splitlines():
-        fields = line.split()
-        if len(fields) < 2 or not valid_partition(fields[0]):
+    for row in rows:
+        if not isinstance(row, dict):
             continue
-        got = _parse(" ".join(fields[1:]))
-        out[fields[0]] = got if got and got[0] in KNOWN else UNKNOWN
+        name = row.get("partition")
+        state = row.get("state")
+        count = row.get("count")
+        if not isinstance(name, str) or not valid_partition(name):
+            continue
+        if not isinstance(state, str):
+            continue
+        if not isinstance(count, int) or isinstance(count, bool):
+            count = None
+        out[name] = (state, count) if state in KNOWN else UNKNOWN
+        if state in ("idle", "none"):
+            out[name] = (state, None)
     return out
 
 
