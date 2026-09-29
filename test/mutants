@@ -1577,8 +1577,8 @@ m the answer did not parse
 = agent-status-word-ignored
 f libexec/mux-agent
 t mux-agent
-- 	_out usage 2 "usage: mux agent <status> [options]"
-+ 	_out ok 2 "usage: mux agent <status> [options]"
+- 	_out usage 2 "usage: mux agent <status|peers> [options]"
++ 	_out ok 2 "usage: mux agent <status|peers> [options]"
 m noverb-status
 
 = agent-exit-disagrees-with-status
@@ -1601,3 +1601,38 @@ t mux-agent
 - 			"$(mux_json_num "${_n:-}")"
 + 			"$(mux_json_str "${_n:-}")"
 m status-count
+
+= agent-peers-root-not-looked-up
+f libexec/mux-agent
+t mux-agent
+- 						"$(mux_sess_root "$_s" "$_p")")"
++ 						"$(printf "")")"
+m peers-root
+
+= agent-peers-emits-an-epoch
+f libexec/mux-agent
+t mux-agent
+- 				*)  _ag=$((_now - _ep))
++ 				*)  _ag=$_ep
+m peers-clamped
+
+= agent-peers-negative-age
+f libexec/mux-agent
+t mux-agent
+- 				    [ "$_ag" -lt 0 ] && _ag=0 ;;
++ 				    true
+m peers-clamped
+
+= agent-peers-ignores-the-partition
+f libexec/mux-agent
+t mux-agent
+- 		--partition)
++ 		--ignored)
+m peers-other
+
+= agent-peers-all-is-one-partition
+f libexec/mux-agent
+t mux-agent
+- 	[ "$_pa" -eq 0 ] || _which=$(
++ 	true && _which=$(
+m peers-n

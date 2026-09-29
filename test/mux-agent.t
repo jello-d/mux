@@ -97,6 +97,91 @@ eq empty-rc "$RC" 0
 eq empty-ok "$(jq 'd["status"]')" ok
 eq empty-arr "$(jq 'len(d["partitions"])')" 0
 
+# --- peers: every session, and what it is doing ---------------------------
+# The verb an agent reaches for first. HEADLESS by construction -- sessions
+# come from the state FILES and roots from the session set -- so it answers
+# over a transport, at boot, with no tmux client and no server attached.
+# $MUX_STATE, which lib.sh already pins and exports for exactly this. Two
+# wrong guesses first, and both failed the same silent way -- an empty root,
+# no error -- which is why the assertion below is on the root and not merely
+# on the peer being present: XDG_STATE_HOME (which `run` does not pass
+# through) and $HOME/.local/state/mux (which MUX_STATE overrides).
+printf 'alpha	/srv/alpha
+bravo	/srv/bravo
+' >"$MUX_STATE/sessions.global"
+printf 'wsess	/srv/wsess
+' >"$MUX_STATE/sessions.work"
+
+run peers
+eq peers-rc "$RC" 0
+eq peers-ok "$(jq 'd["status"]')" ok
+eq peers-n "$(jq 'len(d["peers"])')" 2
+eq peers-names "$(jq 'sorted(p["session"] for p in d["peers"])')" \
+	"['alpha', 'bravo']"
+eq peers-state \
+	"$(jq '[p["state"] for p in d["peers"] if p["session"]=="alpha"][0]')" \
+	blocked
+# THE ROOT COMES FROM THE SESSION SET, which is a different source from the
+# state files -- and sourcing mux-sessions.sh without mux-paths.sh gave every
+# peer an empty root plus six `mux_state_path: not found` lines on stderr. A
+# plausible answer, silently wrong: exactly the lib-needs-a-lib trap.
+eq peers-root \
+	"$(jq '[p["root"] for p in d["peers"] if p["session"]=="alpha"][0]')" \
+	/srv/alpha
+
+# AGE, NOT AN EPOCH, resolved against the clock that wrote it. The obvious
+# design emits the epoch and works until the reader is on another machine,
+# where a box a few seconds off shows "idle 4s" as "idle 2m" and one badly off
+# shows a negative.
+#
+# ASSERTED WITH A FRESH RECORD, because the fixtures above use epoch 100 and
+# would make a leaked epoch and a genuine 55-year age indistinguishable. This
+# one was written just now, so an age is single digits and an epoch is 1.7
+# billion -- no threshold to tune, and the two cannot be confused.
+agent_rec "$XDG_RUNTIME_DIR/agent-state/global/p9" idle %9 "$(date +%s)" fresh x
+printf 'fresh	/srv/fresh
+' >>"$MUX_STATE/sessions.global"
+run peers
+eq peers-age-number "$(jq 'type(d["peers"][0]["age"]).__name__')" int
+eq peers-age-sane "$(jq 'all(p["age"] >= 0 for p in d["peers"])')" True
+# A record stamped in the FUTURE, which is what the clamp exists for: this
+# host's clock moved, and "0" is the honest floor for "it began no earlier
+# than now". Without a case for it the clamp is a guard nothing can kill.
+agent_rec "$XDG_RUNTIME_DIR/agent-state/global/p8" idle %8 \
+	"$(( $(date +%s) + 3600 ))" ahead x
+printf 'ahead\t/srv/ahead\n' >>"$MUX_STATE/sessions.global"
+run peers
+eq peers-clamped \
+	"$(jq '[p["age"] for p in d["peers"] if p["session"]=="ahead"][0]')" 0
+eq peers-age-is-age \
+	"$(jq '[p["age"] for p in d["peers"] if p["session"]=="fresh"][0] < 60')" \
+	True
+
+# --- peers is scoped to ONE partition, and --all widens it ----------------
+run peers
+eq peers-n-after "$(jq 'len(d["peers"])')" 4
+eq peers-scoped "$(jq 'set(p["partition"] for p in d["peers"])')" "{'global'}"
+run peers --partition work
+eq peers-other "$(jq 'set(p["partition"] for p in d["peers"])')" "{'work'}"
+eq peers-other-n "$(jq 'len(d["peers"])')" 1
+run peers --all
+eq peers-all "$(jq 'sorted(set(p["partition"] for p in d["peers"]))')" \
+	"['global', 'work']"
+
+# An unknown partition is not an error here: it has no sessions, so it has no
+# peers, and `[]` is an answer. Inventing a refusal would make a caller
+# distinguish "empty" from "wrong" for a question with one honest answer.
+run peers --partition nosuchpartition
+eq peers-unknown-rc "$RC" 0
+eq peers-unknown-n "$(jq 'len(d["peers"])')" 0
+
+run peers --nosuchoption
+eq peers-badopt-rc "$RC" 2
+eq peers-badopt "$(jq 'd["status"]')" usage
+run peers --partition
+eq peers-bare-part-rc "$RC" 2
+eq peers-bare-part "$(jq '"needs a name" in d["message"]')" True
+
 # --- FAILURE IS STILL JSON, AND STILL ON STDOUT ---------------------------
 # The promise that makes this a contract rather than a convention. Every other
 # mux verb puts its reason on stderr, which is right for a human and wrong for

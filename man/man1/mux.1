@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.64" "User Commands"
+.TH MUX 1 "" "mux 0.65" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -979,7 +979,7 @@ It always exits 0: it is a pure report, and a non\-zero exit would be
 indistinguishable from the transport.
 .PP
 .EX
-mux 0.64
+mux 0.65
 capabilities 1
 agent\-list 1
 agent\-summary 1
@@ -1460,13 +1460,41 @@ here: cannot tell is not no.
 .B mux agent " " \fIVERB\fR " [" \fIoptions\fR ]
 THE MACHINE CONTRACT: a surface a program is invited to depend on, and
 deliberately a different contract from the rest of mux rather than a second
-spelling of it. Currently one verb,
-.BR "mux agent status" ,
-which answers what is going on as JSON \(em the same question
+spelling of it. Two verbs so far.
+.B mux agent status
+answers what is going on as JSON \(em the same question
 .B mux agent-summary \-\-all \-\-attached
-answers, in the contract's shape.
+answers, in the contract's shape;
 .B \-\-any
 widens it to every partition rather than only the ones somebody is watching.
+.B mux agent peers
+lists every session with a tracked agent and what it is doing, one object per
+session carrying its
+.BR partition ,
+.BR session ,
+.BR state ,
+.B age
+and
+.BR root .
+.B \-\-partition
+asks about another one and
+.B \-\-all
+about every one.
+.IP
+.B peers
+is HEADLESS by construction, and that is protected rather than incidental: it
+derives sessions from the state FILES and roots from the session set, so it
+answers over a transport, at boot, with no tmux client and no server attached.
+It carries no pane id on purpose \(em a verb that acts on a pane resolves one
+at the moment it acts, which is more correct than a caller caching an id that
+can change under it.
+.IP
+AGE, NOT AN EPOCH, resolved against the clock that wrote it. Emitting the
+epoch works perfectly until the reader is on another machine, where durations
+would be computed by subtracting a remote clock's timestamp from a local
+clock's now: a box a few seconds off shows "idle 4s" as "idle 2m", and one
+badly off shows a negative. A record stamped in the future clamps to 0, which
+is the honest floor for "it began no earlier than now".
 .IP
 THREE PROMISES, which is what makes it a contract rather than a convention.
 .IP
