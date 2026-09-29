@@ -123,13 +123,47 @@ eq status-state "$(jq 'd["partitions"][0]["state"]')" blocked
 # tab-separated form: a consumer gets a type instead of an agreement.
 eq status-count "$(jq 'd["partitions"][0]["count"] + 1')" 2
 
+# --- SCOPED TO THE CALLER'S PARTITION BY DEFAULT --------------------------
+# `_all` was PARSED AND NEVER READ until 0.73, so every caller got every
+# partition and the flag was decoration. The shipped skill says the opposite,
+# one sentence after calling a partition an isolation boundary -- so an agent
+# in `work` reading `status` was told it was seeing its own partition while
+# being handed `global`'s state and counts.
+#
+# The old assertion here encoded the bug: it asserted `--any` returned BOTH
+# partitions, which was true only because nothing was scoping. A flag that
+# parses and does nothing is worse than a missing one, because the caller
+# believes it asked for something.
+WATCHED=global run status --any
+eq scoped-default "$(jq 'len(d["partitions"])')" 1
+eq scoped-is-mine "$(jq 'd["partitions"][0]["partition"]')" global
+
+# --all WIDENS, which is the direction the tray depends on: a reader on
+# another box cannot know the partition names to ask for.
+WATCHED=global run status --all --any
+eq all-widens "$(jq 'len(d["partitions"])')" 2
+
+# --partition SELECTS one that is not mine, and is the flag the skill
+# documents and the verb did not parse at all.
+WATCHED=global run status --partition work --any
+eq part-selects "$(jq 'len(d["partitions"])')" 1
+eq part-is-named "$(jq 'd["partitions"][0]["partition"]')" work
+# `run` captures the status into $RC, so `$?` here reads the WRAPPER and is 0
+# whatever the verb did -- the same shape as the vacuous assertions this suite
+# has been bitten by before.
+run status --partition
+eq part-needs-a-name "$RC" 2
+eq part-needs-a-name-says "$(jq 'd["status"]')" usage
+
 # --- ATTACHED BY DEFAULT, --any for everything ----------------------------
 # A tray item means somebody is looking at it, and an agent asking what is
-# going on wants the answer a human would see. `work` has state and no client.
+# going on wants the answer a human would see. Asserted IN SCOPE, so it cannot
+# be confused with the scoping above: the caller's own partition, with and
+# without a client attached to it.
 WATCHED=global run status
 eq default-hides-unwatched "$(jq 'len(d["partitions"])')" 1
-WATCHED=global run status --any
-eq any-shows-all "$(jq 'len(d["partitions"])')" 2
+WATCHED= run status --any
+eq any-shows-unattached "$(jq 'len(d["partitions"])')" 1
 
 # --- NOTHING WATCHED IS AN EMPTY ARRAY, NOT AN ERROR ----------------------
 # The JSON form of "empty is exit 0": a box where nobody is attached answers

@@ -21,6 +21,39 @@ run install >/dev/null 2>&1 || fail "install errored"
 run check >"$T/out" 2>&1 || true
 grep -q 'bin/mux linked' "$T/out" || fail "check missing the bin/mux OK line"
 
+# --- AN INSTALLED INDICATOR THAT HAS FALLEN BEHIND IS SAID, NOT FIXED -------
+# The indicator is a separate package that core neither installs nor owns, but
+# it POLLS a mux contract (`mux agent status`, JSON), and a skew there fails
+# silently: a daemon built against an older contract keeps polling and just
+# publishes fewer items, which reads as "that partition is gone" rather than as
+# a version problem. So a core install says so.
+#
+# NOT A RESTART, which is the part worth asserting: restarting would not help,
+# because what is stale is the daemon's own code rather than anything it caches
+# from core -- it re-execs `mux` every poll. And not an install, which is a pip
+# operation wanting a network that core deliberately has no part of.
+#
+# SILENT WITH NO INDICATOR INSTALLED, first, because an optional sub-package
+# must not make the core install noisy for everyone who does not use it.
+run install >"$T/out" 2>&1 || fail "reinstall errored"
+grep -q 'tray indicator' "$T/out" && fail "the indicator notice fired with no
+indicator installed; an optional sub-package must stay silent:
+$(cat "$T/out")"
+
+# ... and said when one IS installed and does not match. The drift verdict is
+# the INDICATOR's own check (package vs installed vs the running daemon), so
+# this is content-based rather than keyed on a version somebody must remember
+# to bump. Here the sandbox venv does not exist at all, which is one of the
+# three answers that check distinguishes.
+: >"$T/bin/mux-indicator"
+run install >"$T/out" 2>&1 || fail "install errored with an indicator present"
+grep -q 'tray indicator' "$T/out" || fail "an installed indicator that does not
+match the package was not reported, so a silent tray skew is the default:
+$(cat "$T/out")"
+grep -q 'setup.sh indicator' "$T/out" || fail "the notice did not name the
+command that fixes it; a gap named without a remedy invites two different fixes"
+rm -f "$T/bin/mux-indicator"
+
 # uninstall: every link removed
 run uninstall >/dev/null 2>&1 || fail "uninstall errored"
 [ -e "$T/bin/mux" ] && fail "bin/mux link not removed"
