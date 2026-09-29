@@ -1,0 +1,144 @@
+#!/bin/sh
+# share/latch/et-classify - turn an Eternal Terminal attempt into a latch state.
+#
+# A `mux latch` CLASSIFY hook, same contract as ssh-classify: called as
+# `et-classify EXIT STDERR_FILE`, prints exactly one state word on stdout.
+# See ssh-classify for what each word commits latch to; this file only differs
+# where ET differs.
+#
+# WIRE IT, WITH THE TRANSPORT, in $MUX_DIR/config:
+#
+#     latch-transport  et -t %h --command %c
+#     latch-classify   et-classify
+#
+# WHY ET IS A SECOND TRANSPORT AND NOT A SECOND MUX. ET reconnects by itself
+# across a drop or an IP change, which is the one thing latch also does -- so on
+# an ET link latch's retry loop is mostly idle and what latch still adds is the
+# rest: which session to land in (`mux resume` semantics), attach-only on a
+# reattach so a rebooted box never hands you a fresh empty stranger, the
+# terminal repair when the far side dies mid-attach, the lock the tray reads to
+# know this box is watching that one, and a state word for everything that is
+# NOT a recoverable drop. Two mechanisms for the drop, one owner for each of the
+# rest.
+#
+# THREE FACTS ABOUT ET DECIDE THIS FILE, all read out of its source rather than
+# guessed, because a classifier built on guessed wording is how latch spins
+# forever on something a human must fix:
+#
+# 1. `--command CMD` IS TYPED AS KEYSTROKES, not sent as a request:
+#    TerminalClient.cpp does `tb.set_buffer(command + "; exit\n")`. It lands in
+#    a remote LOGIN shell (PseudoUserTerminalUnix.hpp execs the shell with
+#    argv[0] prefixed by `-`), which is why the ET transport needs no `sh -lc`
+#    wrapper where ssh does, and why the template token is `%c` and NOT `%q`: a
+#    shell-QUOTED string typed at a prompt reads as one command name.
+# 2. THE REMOTE EXIT STATUS IS PROPAGATED. The client returns
+#    `remoteExitStatus` when it has one, and the typed `; exit` makes the login
+#    shell exit with the command's own status. So mux's 0/1/2/3 arrive here
+#    intact and mean what they mean everywhere else, which is what lets this
+#    file be short.
+# 3. ET EXITS 0 ON SEVERAL OF ITS OWN USAGE ERRORS, and that is the trap. mux
+#    has shipped this exact bug once already: `mux latch -V` ran `ssh -V`, which
+#    SUCCEEDS, so the transport exited cleanly, latch read that as the human
+#    detaching, and it reported success and exit 0 for a session that never
+#    existed. Not an error -- something PLAUSIBLE, which is the failure mode
+#    this codebase keeps meeting. So an exit 0 is interrogated here before it is
+#    believed.
+#
+# WHAT IS NOT VERIFIED AGAINST A RUNNING ET, said plainly because the next
+# person will otherwise read it as measured: every pattern below comes from
+# EternalTerminal's source, not from a live failure. The one that matters most
+# is what et exits with when it finally gives up reconnecting, which no message
+# in its source names -- that falls to `unknown` here, which retries, which is
+# the safe direction.
+#
+# FIRST REAL USE IS THE VERIFICATION STEP, and it needs no new tooling: every
+# latch attempt already records its state, the far side's message and the timing
+# in `mux log`. So the check is to wire this, latch once to a box with etserver
+# stopped and once with it running, and read `mux log` -- which is how the CR
+# garbling and the backoff ratchet were both found on the ssh side.
+set -eu
+
+_rc=${1:-}
+_err=${2:-/dev/null}
+[ -n "$_rc" ] || { printf 'unknown'; exit 0; }
+
+# Whole file, case-insensitive, fixed string. Same reasoning as ssh-classify:
+# the operative line is not the first one.
+_saw() { grep -qi -- "$1" "$_err" 2>/dev/null; }
+
+case $_rc in
+0)
+  # A CLEAN EXIT IS NOT SELF-EVIDENT HERE. et answers 0 to `--version`, to
+  # `--help`, to `--list`, and -- the dangerous ones, because they look like
+  # ours going wrong -- to a malformed invocation: "Missing host to connect
+  # to", "Value for X must be specified only once", and a keep-alive outside
+  # its range. Every one of those means the `latch-transport` line is wrong,
+  # so reporting `ended` would tell you the session you asked for had been
+  # closed by hand.
+  #
+  # ONE PATTERN PER CAUSE and no overlap between them, so each is
+  # individually killable by mutation; folding them into a single alternation
+  # would make none of them so.
+  if _saw 'missing host to connect to'; then
+    printf 'refused'
+  elif _saw 'must be specified only once'; then
+    printf 'refused'
+  elif _saw 'keep-alive duration must'; then
+    printf 'refused'
+  else
+    # The typed `; exit` carried the remote command's own status, and it was
+    # zero: mux on the far side exited cleanly, so the human detached or
+    # quit. Terminal by design, exactly as for ssh.
+    printf 'ended'
+  fi ;;
+1)
+  # ET's OWN failures share this code with the remote mux's refusals, so
+  # stderr is the discriminator -- the role ssh's 255 arm plays.
+  #
+  # "Could not reach the ET server" is the failure with no ssh equivalent and
+  # the one an ET user will actually hit: sshd is fine, the handshake works,
+  # and etserver is not answering on its port (booting, not enabled, a
+  # firewall, or the wrong --port). RETRIED, not terminal: it self-heals the
+  # moment the service comes up, and a latch that gave up would have to be
+  # restarted by hand after a fix that latch could simply have waited for.
+  # That is the same call `blocked` makes about a credential.
+  if _saw 'could not reach the et server'; then
+    printf 'probing'
+  # ET BOOTSTRAPS OVER SSH, so ssh's own refusals surface through it and
+  # keep their meanings. Host key before credentials, as in ssh-classify:
+  # the mismatch happens during key exchange, before any credential is
+  # offered, so it is bounded-retryable while a rejected credential is not.
+  elif _saw 'host key verification'; then
+    printf 'untrusted'
+  elif _saw 'permission denied'; then
+    printf 'denied'
+  else
+    # Either the remote mux refused for a reason it put on stderr, or et
+    # rejected its own arguments (it exits 1 for most of those). Both are
+    # terminal and both want a human to read the message, which latch
+    # prints, so they need no separating here.
+    printf 'refused'
+  fi ;;
+2)
+  # The remote mux's usage code: a verb or flag it does not know. A version
+  # answer, not a transport failure.
+  printf 'refused' ;;
+3)
+  # The remote mux: that name is not known there. The code is the contract,
+  # deliberately, so that no message's wording is load-bearing across a
+  # machine boundary.
+  printf 'gone' ;;
+126|127)
+  # The remote SHELL. Less likely than over ssh, since ET types into a LOGIN
+  # shell and so gets the PATH a login shell has -- which is exactly the trap
+  # that made `sh -lc` necessary for ssh. Still terminal if it happens: only
+  # a human installs mux on that box.
+  printf 'refused' ;;
+*)
+  # Includes whatever et exits with when it stops reconnecting, which its
+  # source does not name. `unknown` retries with more patience, which is the
+  # right way to be wrong about a transport whose entire purpose is that a
+  # drop is temporary.
+  printf 'unknown' ;;
+esac
+exit 0
