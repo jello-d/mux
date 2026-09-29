@@ -48,6 +48,7 @@ run() {   # <args...> -> stdout in $OUT, exit in $RC
 	OUT=$(env -u TMUX -u MUX_SHARE MUX_DIR="$MUX_DIR" \
 		MUX_CACHE="$MUX_CACHE" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
 		PATH="$T/bin:$PATH" WATCHED="${WATCHED:-}" \
+		CAPLOG="${CAPLOG:-/dev/null}" \
 		"$HERE/bin/mux" agent "$@" 2>"$T/err") || RC=$?
 }
 
@@ -68,6 +69,14 @@ sys.stdout.write(str(eval(os.environ["MUX_T_EXPR"])))
 PY
 }
 eq() { [ "$2" = "$3" ] || fail "$1: got [$2] want [$3]"; }
+
+# `read` is a mux VERB here, not the shell builtin -- but shellcheck sees the
+# word after a wrapper function and assumes the builtin, at every call site.
+# One helper carries the suppression so a real `read` anywhere else in this
+# file still fails, which is this project's rule for an intentional-but-rare
+# exception.
+# shellcheck disable=SC2162
+_read() { run read "$@"; }
 
 # --- the happy answer -----------------------------------------------------
 WATCHED=global run status
@@ -181,6 +190,124 @@ eq peers-badopt "$(jq 'd["status"]')" usage
 run peers --partition
 eq peers-bare-part-rc "$RC" 2
 eq peers-bare-part "$(jq '"needs a name" in d["message"]')" True
+
+# --- read: what is on that agent's screen ---------------------------------
+# THE PANE IS RESOLVED NOW, from the state record, rather than taken from a
+# caller. An id cached from an earlier `peers` can have died and been replaced,
+# and capturing the wrong pane is the plausible-wrong-answer shape.
+cat >"$T/bin/tmux" <<'EOF'
+#!/bin/sh
+# ONE ARM PER QUESTION. The client check used to run for EVERY call, and with
+# $WATCHED empty its pattern `*" "*` matched `"  "` -- so a capture-pane call
+# got `/dev/pts/1` prepended to the pane text. A stub looser than the tool
+# fails in the direction that wastes most time: the text was right and one
+# line off, which reads as a bug in the verb.
+_sock=
+[ "${1:-}" = -L ] && _sock=$2
+case "$*" in
+*list-clients*)
+	case " ${WATCHED:-} " in
+	*" $_sock "*) printf '/dev/pts/1\n' ;;
+	esac ;;
+*capture-pane*)
+	printf 'CAPTURED %s\n' "$*" >>"$CAPLOG"
+	printf 'line one\nhe said "hi" \\ there\n' ;;
+esac
+exit 0
+EOF
+chmod +x "$T/bin/tmux"
+CAPLOG=$T/caplog; export CAPLOG
+: >"$CAPLOG"
+
+_read alpha
+eq read-rc "$RC" 0
+eq read-ok "$(jq 'd["status"]')" ok
+eq read-session "$(jq 'd["session"]')" alpha
+# The pane comes from the RECORD, so it is the pane the agent is actually in.
+eq read-pane "$(jq 'd["pane"]')" %1
+# A SECOND SESSION, WITH A DIFFERENT PANE, because the first one's pane is %1
+# and a hardcoded %1 passes every assertion about it. Mutation said so: the
+# resolver was replaced by a constant and nothing noticed.
+_read bravo
+eq read-pane-other "$(jq 'd["pane"]')" %2
+# AND THE TEXT SURVIVES A ROUND TRIP, quotes and backslash included. This is
+# the first verb whose payload is arbitrary terminal output, which is exactly
+# the input the JSON escaper exists for.
+eq read-text "$(jq 'd["text"].splitlines()[1]')" 'he said "hi" \ there'
+
+# THE VISIBLE PANE BY DEFAULT, scrollback only when asked: an agent pane's
+# scrollback can be enormous, and a verb whose default answer is unbounded is
+# one a caller learns to be afraid of.
+grep -q 'CAPTURED capture-pane -p -J -t %1$' "$CAPLOG" \
+	|| fail "the default capture asked for scrollback: $(cat "$CAPLOG")"
+: >"$CAPLOG"
+_read alpha -n 50
+grep -q -- '-S -50' "$CAPLOG" \
+	|| fail "-n did not reach capture-pane: $(cat "$CAPLOG")"
+
+# AN OPTION IS AN OPTION WHEREVER IT SITS. The front end stops parsing at the
+# first positional, which is tolerable for a human who can see the result and
+# not for a caller composing argv, where order becomes a rule nobody wrote
+# down. `mux agent read mux -n 5` failed exactly that way once.
+: >"$CAPLOG"
+_read -n 50 alpha
+eq read-opt-before "$RC" 0
+grep -q -- '-S -50' "$CAPLOG" || fail "an option before the session was lost"
+
+_read nosuchsession
+eq read-unknown-rc "$RC" 3
+eq read-unknown "$(jq 'd["status"]')" no-such-name
+_read
+eq read-noargs-rc "$RC" 2
+_read alpha bravo
+eq read-two-rc "$RC" 2
+eq read-two "$(jq '"one SESSION" in d["message"]')" True
+_read alpha -n x
+eq read-badn-rc "$RC" 2
+
+# --- wait: block until it gets there --------------------------------------
+# ALREADY THERE RETURNS AT ONCE, rather than after the first poll interval.
+run wait alpha blocked -t 5
+eq wait-rc "$RC" 0
+eq wait-ok "$(jq 'd["status"]')" ok
+eq wait-waited "$(jq 'd["waited"] < 3')" True
+
+# TIMED-OUT IS ITS OWN STATUS AND NOT ITS OWN EXIT CODE, which is the whole
+# argument for carrying both: "it did not happen in time" is a refusal as far
+# as a shell is concerned, and a reader that wants to tell it from every other
+# refusal reads the word. Widening mux's four codes would cost latch the
+# attribution it gets from 126, 127 and 255 never being mux's.
+# BOUNDED BY THE TEST, not just by the verb, because the guard under test IS
+# the verb's bound: mutate it away and an unbounded loop hangs the suite
+# instead of failing it. `timeout` turns "the guard is gone" into a verdict,
+# which is the same shape mux-latch-stall.t uses for its own stalled peers.
+RC=0
+OUT=$(env -u TMUX -u MUX_SHARE MUX_DIR="$MUX_DIR" MUX_CACHE="$MUX_CACHE" \
+	XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" PATH="$T/bin:$PATH" \
+	CAPLOG="${CAPLOG:-/dev/null}" \
+	timeout 20 "$HERE/bin/mux" agent wait alpha idle -t 1 2>"$T/err") \
+	|| RC=$?
+[ "$RC" != 124 ] || fail "wait never returned: its timeout is not bounding
+anything, so a caller asking about a session that never changes hangs forever"
+eq wait-to-rc "$RC" 1
+eq wait-to-status "$(jq 'd["status"]')" timed-out
+# AND IT REPORTS THE STATE IT IS ACTUALLY IN: "not idle yet" is a different
+# problem from "blocked and waiting for a human", and a caller that has just
+# burned its timeout should not need a second round trip to find out which.
+eq wait-to-state "$(jq 'd["state"]')" blocked
+eq wait-to-wanted "$(jq 'd["wanted"]')" idle
+
+run wait nosuchsession idle -t 1
+eq wait-unknown-rc "$RC" 3
+eq wait-unknown "$(jq 'd["status"]')" no-such-name
+# A STATE MUX NEVER EMITS is a usage error, not a wait that can never end.
+run wait alpha nosuchstate -t 1
+eq wait-badstate-rc "$RC" 2
+eq wait-badstate "$(jq '"not a state" in d["message"]')" True
+run wait alpha
+eq wait-noargs-rc "$RC" 2
+run wait alpha idle -t x
+eq wait-badt-rc "$RC" 2
 
 # --- FAILURE IS STILL JSON, AND STILL ON STDOUT ---------------------------
 # The promise that makes this a contract rather than a convention. Every other

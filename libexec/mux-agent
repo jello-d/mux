@@ -5,6 +5,8 @@
 #
 #   mux agent status [--any]              every partition's worst state
 #   mux agent peers  [--partition N|--all] every session and what it is doing
+#   mux agent read   SESSION [-n LINES]    what is on that agent's screen
+#   mux agent wait   SESSION STATE [-t N]  block until it gets there
 #
 # THREE PROMISES, which is what makes it a contract rather than a convention:
 #
@@ -55,7 +57,7 @@ _out() {   # <status> <exit> <message>
 }
 
 _usage() {
-	_out usage 2 "usage: mux agent <status|peers> [options]"
+	_out usage 2 "usage: mux agent <status|peers|read|wait> ..."
 }
 
 _verb=${1:-}
@@ -63,9 +65,172 @@ _verb=${1:-}
 shift
 
 case $_verb in
-status|peers) ;;
+status|peers|read|wait) ;;
 *) _out usage 2 "unknown agent verb: $_verb" ;;
 esac
+
+# _resolve TARGET -- sets $_rp (partition), $_rd (state dir) and checks the
+# session is one mux knows. Shared by read and wait, because "that session is
+# not here" must be the same answer and the same exit from both.
+_resolve() {   # <session> <partition-or-empty>
+	_rp=$2
+	if [ -z "$_rp" ] && [ -r "$_lib/mux-context.sh" ]; then
+		. "$_lib/mux-context.sh"
+		mux_ctx_resolve 2>/dev/null && _rp=$MUX_CTX_PARTITION
+	fi
+	_rd=$(mux_agent_dir "$_rp")
+	# EXIT 3, mux's cross-cutting "the name is not known here", rather than
+	# an empty answer. A caller that mistyped a session and a caller
+	# looking at one with nothing to say must not get the same document.
+	mux_agent_sessions "$_rd" | grep -qxF -- "$1" || _out no-such-name 3 \
+		"no session $1 with a tracked agent in partition ${_rp:-global}"
+}
+
+if [ "$_verb" = read ] || [ "$_verb" = wait ]; then
+	. "$_lib/mux-paths.sh"
+	. "$_lib/mux-agent-state.sh"
+fi
+
+if [ "$_verb" = read ]; then
+	# --- read ----------------------------------------------------------
+	# What is on that agent's screen. THE PANE IS RESOLVED NOW, from the
+	# state record, rather than taken from a caller: an id cached from an
+	# earlier `peers` can have died and been replaced, and capturing the
+	# wrong pane is the plausible-wrong-answer shape this codebase keeps
+	# meeting. Resolving it here also means `peers` need not carry one.
+	# AN OPTION IS AN OPTION WHEREVER IT SITS. The front end stops parsing
+	# options at the first positional -- so `mux resume work --list` reads
+	# `--list` as a session name -- and that edge is tolerable for a human
+	# who can see the result. It is not for a caller composing argv
+	# programmatically, where argument ORDER becomes a rule nobody wrote
+	# down. `mux agent read mux -n 5` failed exactly that way once.
+	_rn=
+	_rpart=
+	_rsess=
+	while [ $# -gt 0 ]; do
+		case $1 in
+		-n) shift
+		    _rn=${1:-}
+		    case ${_rn:-} in
+		    ''|*[!0-9]*) _out usage 2 "-n needs a line count" ;;
+		    esac
+		    shift ;;
+		--partition) shift
+		    _rpart=${1:-}
+		    [ -n "$_rpart" ] || _out usage 2 "--partition needs a name"
+		    shift ;;
+		--) shift; break ;;
+		-*) _out usage 2 "unknown option: $1" ;;
+		*)  [ -z "$_rsess" ] || _out usage 2 "read takes one SESSION"
+		    _rsess=$1; shift ;;
+		esac
+	done
+	[ -n "$_rsess" ] || _out usage 2 "usage: mux agent read SESSION [-n N]"
+
+	_resolve "$_rsess" "$_rpart"
+	_pane=$(mux_agent_pane "$_rd" "$_rsess")
+	[ -n "$_pane" ] || _out refused 1 \
+		"no agent pane recorded for $_rsess"
+
+	# THE VISIBLE PANE BY DEFAULT, scrollback only when asked. An agent
+	# pane's scrollback can be enormous, and a verb whose default answer is
+	# unbounded is one a caller learns to be afraid of. -J joins wrapped
+	# lines, so a reader gets the logical line rather than the terminal's.
+	set -- capture-pane -p -J -t "$_pane"
+	[ -z "$_rn" ] || set -- "$@" -S "-$_rn"
+	_text=$(tmux "$@" 2>/dev/null) || _out refused 1 \
+		"could not capture pane $_pane (is that server running?)"
+
+	printf '{"status":"ok","partition":%s,"session":%s,' \
+		"$(mux_json_str "${_rp:-global}")" "$(mux_json_str "$_rsess")"
+	printf '"pane":%s,"text":%s}\n' \
+		"$(mux_json_str "$_pane")" "$(mux_json_str "$_text")"
+	exit 0
+fi
+
+if [ "$_verb" = wait ]; then
+	# --- wait ----------------------------------------------------------
+	# Block until a session reaches a state. The verb that makes the other
+	# two composable: without it a caller polls `peers` in a loop and
+	# invents its own timeout, badly.
+	#
+	# ALWAYS BOUNDED. An unbounded wait from an agent is a hang with no
+	# operator, so -t has a default rather than meaning forever.
+	_wt=300
+	_wpart=
+	_wsess=
+	_want=
+	while [ $# -gt 0 ]; do
+		case $1 in
+		-t) shift
+		    _wt=${1:-}
+		    case ${_wt:-} in
+		    ''|*[!0-9]*) _out usage 2 "-t needs seconds" ;;
+		    esac
+		    shift ;;
+		--partition) shift
+		    _wpart=${1:-}
+		    [ -n "$_wpart" ] || _out usage 2 "--partition needs a name"
+		    shift ;;
+		--) shift; break ;;
+		-*) _out usage 2 "unknown option: $1" ;;
+		*)  if [ -z "$_wsess" ]; then _wsess=$1
+		    elif [ -z "$_want" ]; then _want=$1
+		    else _out usage 2 "wait takes a SESSION and a STATE"
+		    fi
+		    shift ;;
+		esac
+	done
+	[ -n "$_wsess" ] && [ -n "$_want" ] \
+		|| _out usage 2 "usage: mux agent wait SESSION STATE [-t N]"
+	case $_want in
+	blocked|working|idle) ;;
+	*) _out usage 2 "not a state mux emits: $_want" ;;
+	esac
+
+	_resolve "$_wsess" "$_wpart"
+
+	# CHECKED BEFORE SLEEPING, so a session already in the wanted state
+	# returns at once rather than after the first poll interval.
+	_t0=$(date +%s 2>/dev/null || echo 0)
+	while :; do
+		_se=$(mux_agent_state "$_rd" "$_wsess")
+		_now=$(date +%s 2>/dev/null || echo 0)
+		_el=$((_now - _t0))
+		[ "$_el" -ge 0 ] || _el=0
+		if [ "${_se%% *}" = "$_want" ]; then
+			printf '{"status":"ok","partition":%s,"session":%s,' \
+				"$(mux_json_str "${_rp:-global}")" \
+				"$(mux_json_str "$_wsess")"
+			printf '"state":%s,"waited":%s}\n' \
+				"$(mux_json_str "$_want")" \
+				"$(mux_json_num "$_el")"
+			exit 0
+		fi
+		[ "$_el" -lt "$_wt" ] || break
+		sleep 1
+	done
+
+	# TIMED-OUT IS ITS OWN STATUS AND NOT ITS OWN EXIT CODE, which is the
+	# whole argument for carrying both. "It did not happen in time" is a
+	# refusal as far as a shell is concerned (exit 1); a reader that wants
+	# to tell it from every other refusal reads the word. Widening mux's
+	# four exit codes to say this would cost latch the attribution it gets
+	# from 126, 127 and 255 never being mux's.
+	#
+	# AND IT REPORTS THE STATE IT IS ACTUALLY IN, because "not idle yet" is
+	# a different problem from "blocked and waiting for a human", and a
+	# caller that has just burned its timeout should not need a second
+	# round trip to find out which.
+	printf '{"status":"timed-out","partition":%s,"session":%s,' \
+		"$(mux_json_str "${_rp:-global}")" "$(mux_json_str "$_wsess")"
+	printf '"wanted":%s,"state":%s,"waited":%s,"message":%s}\n' \
+		"$(mux_json_str "$_want")" \
+		"$(mux_json_str "${_se%% *}")" \
+		"$(mux_json_num "$_el")" \
+		"$(mux_json_str "$_wsess is ${_se%% *}, not $_want, after ${_el}s")"
+	exit 1
+fi
 
 if [ "$_verb" = peers ]; then
 	# --- peers ---------------------------------------------------------

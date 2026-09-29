@@ -1577,8 +1577,8 @@ m the answer did not parse
 = agent-status-word-ignored
 f libexec/mux-agent
 t mux-agent
-- 	_out usage 2 "usage: mux agent <status|peers> [options]"
-+ 	_out ok 2 "usage: mux agent <status|peers> [options]"
+- 	_out usage 2 "usage: mux agent <status|peers|read|wait> ..."
++ 	_out ok 2 "usage: mux agent <status|peers|read|wait> ..."
 m noverb-status
 
 = agent-exit-disagrees-with-status
@@ -1636,3 +1636,45 @@ t mux-agent
 - 	[ "$_pa" -eq 0 ] || _which=$(
 + 	true && _which=$(
 m peers-n
+
+= agent-read-pane-not-resolved
+f libexec/mux-agent
+t mux-agent
+- 	_pane=$(mux_agent_pane "$_rd" "$_rsess")
++ 	_pane=$(printf %%1)
+m read-pane
+
+= agent-read-defaults-to-scrollback
+f libexec/mux-agent
+t mux-agent
+- 	[ -z "$_rn" ] || set -- "$@" -S "-$_rn"
++ 	set -- "$@" -S "-${_rn:-1000}"
+m the default capture asked for scrollback
+
+= agent-read-unknown-session-is-empty
+f libexec/mux-agent
+t mux-agent
+- 	mux_agent_sessions "$_rd" | grep -qxF -- "$1" || _out no-such-name 3 \
++ 	mux_agent_sessions "$_rd" | grep -q "" || _out no-such-name 3 \
+m read-unknown-rc
+
+= agent-wait-never-times-out
+f libexec/mux-agent
+t mux-agent
+- 		[ "$_el" -lt "$_wt" ] || break
++ 		true
+m wait never returned
+
+= agent-wait-timeout-exits-zero
+f libexec/mux-agent
+t mux-agent
+- 	exit 1
++ 	exit 0
+m wait-to-rc
+
+= agent-wait-hides-the-real-state
+f libexec/mux-agent
+t mux-agent
+- 		"$(mux_json_str "${_se%% *}")" \
++ 		"$(mux_json_str "$_want")" \
+m wait-to-state
