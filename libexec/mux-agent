@@ -7,6 +7,7 @@
 #   mux agent peers  [--partition N|--all] every session and what it is doing
 #   mux agent read   SESSION [-n LINES]    what is on that agent's screen
 #   mux agent wait   SESSION STATE [-t N]  block until it gets there
+#   mux agent send   SESSION TEXT|-         type into that agent's pane
 #
 # THREE PROMISES, which is what makes it a contract rather than a convention:
 #
@@ -35,6 +36,7 @@ set -eu
 
 _lib=$(dirname "$0")
 . "$_lib/mux-json.sh"
+. "$_lib/mux-send-policy.sh"
 
 # THE STATUS ENUMERATION, and its one rule: each value maps to exactly one of
 # mux's four exit codes, never the reverse. Several statuses may share a code
@@ -57,7 +59,7 @@ _out() {   # <status> <exit> <message>
 }
 
 _usage() {
-	_out usage 2 "usage: mux agent <status|peers|read|wait> ..."
+	_out usage 2 "usage: mux agent <status|peers|read|wait|send> ..."
 }
 
 _verb=${1:-}
@@ -65,7 +67,7 @@ _verb=${1:-}
 shift
 
 case $_verb in
-status|peers|read|wait) ;;
+status|peers|read|wait|send) ;;
 *) _out usage 2 "unknown agent verb: $_verb" ;;
 esac
 
@@ -86,10 +88,24 @@ _resolve() {   # <session> <partition-or-empty>
 		"no session $1 with a tracked agent in partition ${_rp:-global}"
 }
 
-if [ "$_verb" = read ] || [ "$_verb" = wait ]; then
+# EVERY tmux CALL GOES THROUGH THIS. A bare `tmux` asks the DEFAULT socket,
+# which is not where a partition's server lives -- so `read` captured nothing
+# and `send` read an empty class (defaulting to `human`) for a pane that was
+# plainly marked `agent`. Both looked like correct refusals, which is why a
+# stub could not have caught it and a real server did on the first try.
+#
+# The socket name IS the partition name, so once _resolve has one there is no
+# case where a bare call is right. Same wrapper mux-even and next-blocked
+# already carry, for the same reason, which makes this the third time.
+_tx() {
+	tmux -L "${_rp:-global}" "$@"
+}
+
+case $_verb in
+read|wait|send)
 	. "$_lib/mux-paths.sh"
-	. "$_lib/mux-agent-state.sh"
-fi
+	. "$_lib/mux-agent-state.sh" ;;
+esac
 
 if [ "$_verb" = read ]; then
 	# --- read ----------------------------------------------------------
@@ -138,7 +154,7 @@ if [ "$_verb" = read ]; then
 	# lines, so a reader gets the logical line rather than the terminal's.
 	set -- capture-pane -p -J -t "$_pane"
 	[ -z "$_rn" ] || set -- "$@" -S "-$_rn"
-	_text=$(tmux "$@" 2>/dev/null) || _out refused 1 \
+	_text=$(_tx "$@" 2>/dev/null) || _out refused 1 \
 		"could not capture pane $_pane (is that server running?)"
 
 	printf '{"status":"ok","partition":%s,"session":%s,' \
@@ -230,6 +246,158 @@ if [ "$_verb" = wait ]; then
 		"$(mux_json_num "$_el")" \
 		"$(mux_json_str "$_wsess is ${_se%% *}, not $_want, after ${_el}s")"
 	exit 1
+fi
+
+if [ "$_verb" = send ]; then
+	# --- send ----------------------------------------------------------
+	# Type into an agent's pane. THE HOOK A HIGHER LAYER NEEDS, and the
+	# reason it belongs here rather than in that layer: mux already knows
+	# which pane is the agent's, which partition it is in, and -- the part
+	# only mux knows -- whether it is BLOCKED. Without this verb an
+	# orchestrator reaches around mux to `tmux send-keys`, re-derives pane
+	# resolution, and inherits none of the guards below.
+	#
+	# WHAT IT IS NOT: orchestration. `spawn` is `mux go` plus this, which
+	# the layer above composes in two lines, so mux does not grow a verb
+	# that decides when a worker starts.
+	_spart= _sack_prompt=0 _sack_blind=0 _senter=1
+	_ssess= _stext= _shave_text=0
+	while [ $# -gt 0 ]; do
+		case $1 in
+		--partition) shift
+		    _spart=${1:-}
+		    [ -n "$_spart" ] || _out usage 2 "--partition needs a name"
+		    shift ;;
+		# TWO ACKNOWLEDGEMENTS, NOT ONE, pairing with the two grants:
+		# being allowed to answer prompts must never imply being
+		# allowed to type into a pane mux cannot classify.
+		--answer-prompt) _sack_prompt=1; shift ;;
+		--blind)         _sack_blind=1; shift ;;
+		--no-enter)      _senter=0; shift ;;
+		--) shift; break ;;
+		-)  # stdin, so a long charge is not an argv-length problem
+		    [ "$_shave_text" -eq 0 ] || _out usage 2 "send takes one TEXT"
+		    _stext=$(cat); _shave_text=1; shift ;;
+		-*) _out usage 2 "unknown option: $1" ;;
+		*)  if [ -z "$_ssess" ]; then _ssess=$1
+		    elif [ "$_shave_text" -eq 0 ]; then _stext=$1; _shave_text=1
+		    else _out usage 2 "send takes one SESSION and one TEXT"
+		    fi
+		    shift ;;
+		esac
+	done
+	[ -n "$_ssess" ] && [ "$_shave_text" -eq 1 ] \
+		|| _out usage 2 "usage: mux agent send SESSION TEXT|-"
+
+	_resolve "$_ssess" "$_spart"
+	_spane=$(mux_agent_pane "$_rd" "$_ssess")
+	[ -n "$_spane" ] || _out refused 1 "no agent pane recorded for $_ssess"
+	_sstate=$(mux_agent_state "$_rd" "$_ssess")
+	_sstate=${_sstate%% *}
+
+	# WHO CONTROLS THE PANE, and the default is the strict one. An
+	# unclassified pane is a human's: the safe answer is the one you get by
+	# saying nothing, and marking a village is a deliberate act by the
+	# layer that spawned it.
+	_swin=$(_tx display-message -p -t "$_spane" '#{window_name}' \
+		2>/dev/null || true)
+	_sclass=$(_tx display-message -p -t "$_spane" '#{@mux-control}' \
+		2>/dev/null || true)
+	case ${_sclass:-} in
+	agent|hybrid) ;;
+	*) _sclass=human ;;
+	esac
+
+	# _refuse WHAT ACK -- the target needs an override. Reports whether one
+	# is AVAILABLE, which is the whole point of answering rather than just
+	# refusing: a caller that does not know discovers the capability in one
+	# round trip and decides; one that does know passes the flag up front
+	# and pays nothing.
+	_refuse() {   # <what> <ack-flag-name>
+		_rf_av=none
+		_rf_why=
+		if [ "$_sclass" = human ]; then
+			# NEVER, and the policy is not consulted. Structural
+			# rather than a token an operator has to remember: a
+			# grant naming only a window would otherwise reach a
+			# human's pane by omission.
+			_rf_why="it is human-controlled; mux does not"
+			_rf_why="$_rf_why answer a prompt on a human's behalf"
+		elif mux_send_allowed "$1" "${_rp:-global}" "$_ssess" \
+				"${_swin:-}" "$_sclass"; then
+			_rf_av=available
+			_rf_why="the policy permits an override here; pass $2"
+		else
+			_rf_why=$(mux_send_policy_why)
+			[ -n "$_rf_why" ] || _rf_why="no policy grants an override for this scope"
+		fi
+		printf '{"status":"refused","reason":%s,"override":%s,' \
+			"$(mux_json_str "$1")" "$(mux_json_str "$_rf_av")"
+		printf '"partition":%s,"session":%s,"window":%s,"class":%s,' \
+			"$(mux_json_str "${_rp:-global}")" \
+			"$(mux_json_str "$_ssess")" \
+			"$(mux_json_str "${_swin:-}")" \
+			"$(mux_json_str "$_sclass")"
+		printf '"state":%s,"message":%s}\n' \
+			"$(mux_json_str "$_sstate")" \
+			"$(mux_json_str "$_ssess: $_rf_why")"
+		exit 1
+	}
+
+	# THE STATE DECIDES WHETHER AN OVERRIDE IS NEEDED AT ALL. idle and
+	# working are ordinary: a turn that is running buffers the text and
+	# picks it up when it ends, which is the natural "queue the next
+	# instruction" case and is why working is not refused.
+	case $_sstate in
+	idle|working) ;;
+	blocked)
+		[ "$_sack_prompt" -eq 1 ] || _refuse blocked --answer-prompt
+		mux_send_allowed blocked "${_rp:-global}" "$_ssess" \
+			"${_swin:-}" "$_sclass" || _refuse blocked --answer-prompt
+		[ "$_sclass" != human ] || _refuse blocked --answer-prompt ;;
+	*)
+		[ "$_sack_blind" -eq 1 ] || _refuse unknown --blind
+		mux_send_allowed unknown "${_rp:-global}" "$_ssess" \
+			"${_swin:-}" "$_sclass" || _refuse unknown --blind
+		[ "$_sclass" != human ] || _refuse unknown --blind ;;
+	esac
+
+	# BRACKETED PASTE, so the agent's TUI sees PASTED TEXT rather than a
+	# stream of keystrokes. It matters for anything multi-line: a TUI that
+	# reads Enter as submit would send the first line on its own and leave
+	# the rest arriving as a new prompt.
+	#
+	# A buffer named for this process, deleted on paste, so a human's own
+	# tmux buffers are not clobbered by an agent talking to a peer.
+	_sbuf=mux-send-$$
+	printf '%s' "$_stext" | _tx load-buffer -b "$_sbuf" - 2>/dev/null \
+		|| _out refused 1 "could not stage the text for $_spane"
+	_tx paste-buffer -p -d -b "$_sbuf" -t "$_spane" 2>/dev/null || {
+		_tx delete-buffer -b "$_sbuf" 2>/dev/null || true
+		_out refused 1 "could not paste into $_spane"; }
+	[ "$_senter" -eq 0 ] || _tx send-keys -t "$_spane" Enter 2>/dev/null \
+		|| true
+
+	# LOGGED, because a send is a MUTATION and this is the one mux makes on
+	# another agent's behalf. It is also the audit trail the layer above
+	# would otherwise have to build: who was typed at, in what state, and
+	# whether an override was taken.
+	if [ -r "$_lib/mux-log.sh" ]; then
+		. "$_lib/mux-log.sh"
+		_sov=
+		[ "$_sack_prompt" -eq 0 ] || _sov=" --answer-prompt"
+		[ "$_sack_blind" -eq 0 ]  || _sov="$_sov --blind"
+		mux_log send "$_ssess (${_rp:-global}/${_swin:-?}) $_sclass \
+$_sstate$_sov ${#_stext} bytes"
+	fi
+
+	printf '{"status":"ok","partition":%s,"session":%s,"window":%s,' \
+		"$(mux_json_str "${_rp:-global}")" "$(mux_json_str "$_ssess")" \
+		"$(mux_json_str "${_swin:-}")"
+	printf '"pane":%s,"class":%s,"state":%s,"bytes":%s}\n' \
+		"$(mux_json_str "$_spane")" "$(mux_json_str "$_sclass")" \
+		"$(mux_json_str "$_sstate")" "$(mux_json_num "${#_stext}")"
+	exit 0
 fi
 
 if [ "$_verb" = peers ]; then
