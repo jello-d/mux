@@ -125,6 +125,25 @@ case $(tm list-panes -t far -F '#{pane_width}' | tr '\n' ' ') in
 "100 "*) ;;
 *) fail "setup: the far session did not drift" ;;
 esac
+# A DECOY SESSION, CREATED AFTER `far`, AND IT IS THE WHOLE ASSERTION. Until it
+# existed this case said what it meant and proved none of it: `far` was the
+# newest session, so it WAS the current window, and a `mux even` reduced to the
+# current window alone still evened it and still passed. The mutation survived
+# the full corpus run on 2026-09-29 -- the comment above described an intent the
+# fixture did not implement, the same shape as the mark's font claiming to be
+# condensed for three releases.
+#
+# MEASURED, after two plausible fixes were wrong. With no client attached,
+# tmux's default target is the MOST RECENTLY CREATED session, and `run-shell`
+# exports NO TMUX_PANE to its child at all -- so `run-shell -t t` cannot steer
+# what a later `tmux display-message` inside that child resolves, and a fix
+# built on it was inert while looking correct. The only thing that moves the
+# default target off `far` is a session newer than it.
+#
+# (The first probe of this was itself contaminated: run from a real tmux, the
+# agent's own TMUX_PANE=%1 leaked in and happened to name a pane on the scratch
+# server. Same hole harness_lib closed this morning, met again in a diagnostic.)
+tm new-session -d -s decoy -x 161 -y 63 -c /tmp
 tm run-shell "mux even --all" >/dev/null 2>&1 || true
 case $(tm list-panes -t far -F '#{pane_width}' | tr '\n' ' ') in
 "80 80 ") ;;
