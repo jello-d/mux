@@ -139,6 +139,15 @@ if [ -d "$MUX_SHARE" ]; then
 	if [ -n "$(mux_data_find layouts default .layout)" ]; then
 		ok "default layout resolves"
 	else bad "no layouts/default.layout (a bare 'mux go' cannot build)"; fi
+	# THE AGENT INSTRUCTIONS MUST ASSEMBLE, which is not the same question
+	# as share/skills being present. The document is a body (AGENTS.md)
+	# plus a frontmatter file, and a skill emitted without the frontmatter
+	# installs cleanly, errors nothing and then never triggers -- so the
+	# check has to be whether it composes, not whether the directory is
+	# there. Read-only, and the sibling helper so a dev tree audits itself.
+	if "$(dirname "$0")/mux-skill" >/dev/null 2>&1; then
+		ok "agent instructions assemble (mux skill)"
+	else bad "mux skill cannot assemble share/skills/mux-agent"; fi
 else
 	bad "package data missing ($MUX_SHARE) -- reinstall mux"
 fi

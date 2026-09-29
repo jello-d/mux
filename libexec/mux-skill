@@ -1,15 +1,33 @@
 #!/bin/sh
-# mux-skill: print the agent skill that matches THIS mux.
+# mux-skill: print the agent instructions that match THIS mux.
 #
-#   mux skill [NAME]
+#   mux skill [NAME]               the skill form: YAML frontmatter + the body
+#   mux skill --agents-md [NAME]   the AGENTS.md form: the body alone
 #
 # An API agents do not know about does not get used, which is the whole reason
 # this ships. The verbs, the JSON contract and -- the part that matters -- the
 # rule about never answering another agent's permission prompt are no use
 # living only in a man page an agent will not read.
 #
+# TWO CONVENTIONS, ONE DOCUMENT. `AGENTS.md` is the vendor-neutral file a
+# repository carries for whatever agent turns up; a `SKILL.md` with YAML
+# frontmatter is one harness's on-demand form. They want the same words, so
+# there is ONE body -- `skills/<name>/AGENTS.md` -- and the frontmatter is data
+# beside it, assembled here. A second copy of the text would drift, and it
+# would drift in the direction where the two answers disagree about what mux
+# refuses.
+#
+# THE BODY IS THE SOURCE, and that is the right way round: the frontmatter is
+# one ecosystem's metadata, while the document is mux's. So the neutral file is
+# the one on disk, and the harness-specific one is the one composed.
+#
+# AN ALWAYS-LOADED DOCUMENT HAS TO SAY WHEN IT DOES NOT APPLY. A skill is
+# matched against its description and invoked on demand, so its premise holds
+# whenever it is read; an AGENTS.md is in context for every turn in that repo,
+# including turns with no tmux anywhere. That is why the body opens by naming
+# the condition and how to test it, rather than asserting it.
+#
 # RELEASE-MATCHED, WHICH IS THE POINT OF PRINTING IT RATHER THAN LINKING IT. A
-# skill is installed once and then sits in a config directory forever, so a
 # copy taken from a website teaches whatever the verbs were that day. This one
 # comes out of the same tree as the binary answering the calls, so it cannot
 # describe a flag this mux does not have.
@@ -20,24 +38,35 @@
 # contract. This is for a human or a provisioner to run, once, so it lives
 # outside that surface.
 #
-# IT PRINTS AND DOES NOT INSTALL. Where a skill belongs is the agent harness's
-# business (`~/.claude/skills/<name>/SKILL.md` for one of them), and mux does
-# not learn the layout of somebody else's config directory -- the same seam it
-# already holds by taking indicator SOURCES as commands and never learning what
-# ssh is. The integrator places it:
+# IT PRINTS AND DOES NOT INSTALL. Where either file belongs is somebody else's
+# business -- `~/.claude/skills/<name>/SKILL.md` for one harness, the root of
+# the repo you are working in for the other -- and mux does not learn the
+# layout of another program's config directory, the same seam it already holds
+# by taking indicator SOURCES as commands and never learning what ssh is:
 #
 #   mkdir -p ~/.claude/skills/mux-agent
 #   mux skill >~/.claude/skills/mux-agent/SKILL.md
+#
+#   mux skill --agents-md >>~/src/myproject/AGENTS.md
+#
+# APPEND, for that second one: a repository's AGENTS.md is its own, and mux is
+# one section of it rather than the whole file.
 set -eu
 
 _lib=$(dirname "$0")
 [ -d "${MUX_SHARE:-}" ] || MUX_SHARE=$_lib/../share
 
+_form=skill
+case ${1:-} in
+--agents-md) _form=agents; shift ;;
+esac
+
 _name=${1:-mux-agent}
 case ${_name:-} in
 -h|--help)
-	echo "usage: mux skill [NAME]"
-	echo "  print the agent skill that matches this mux, on stdout"
+	echo "usage: mux skill [--agents-md] [NAME]"
+	echo "  print the agent instructions that match this mux, on stdout"
+	echo "  --agents-md   the body alone, with no YAML frontmatter"
 	exit 0 ;;
 -*) echo "mux: skill: unknown option: $_name" >&2; exit 2 ;;
 esac
@@ -50,19 +79,40 @@ case $_name in
 	exit 2 ;;
 esac
 
-_f=$MUX_SHARE/skills/$_name/SKILL.md
-if [ ! -r "$_f" ]; then
+_dir=$MUX_SHARE/skills/$_name
+_body=$_dir/AGENTS.md
+if [ ! -r "$_body" ]; then
 	echo "mux: skill: no skill called $_name" >&2
 	# NAME WHAT THERE IS, rather than leaving someone to guess. There is
 	# one today and the list is cheap; a refusal that cannot say what the
 	# alternatives are makes a typo look like a missing feature.
 	if [ -d "$MUX_SHARE/skills" ]; then
 		for _d in "$MUX_SHARE"/skills/*; do
-			[ -r "$_d/SKILL.md" ] || continue
+			[ -r "$_d/AGENTS.md" ] || continue
 			echo "mux: skill: have: ${_d##*/}" >&2
 		done
 	fi
 	exit 1
 fi
 
-cat "$_f"
+if [ "$_form" = agents ]; then
+	cat "$_body"
+	exit 0
+fi
+
+# A MISSING FRONTMATTER IS FATAL, not an omission. A SKILL.md without it
+# installs fine, errors nothing, and never triggers -- the worst failure
+# available to a file whose only job is to be matched -- so a partial install
+# has to say so here rather than emit a document that can never fire.
+_front=$_dir/frontmatter.yaml
+if [ ! -r "$_front" ]; then
+	echo "mux: skill: $_name has no frontmatter.yaml, so the skill form" >&2
+	echo "mux: skill: cannot be assembled; --agents-md still works" >&2
+	exit 1
+fi
+
+echo '---'
+cat "$_front"
+echo '---'
+echo ''
+cat "$_body"

@@ -1,17 +1,11 @@
----
-name: mux-agent
-description: >-
-  Coordinate with the other coding agents on this machine through mux - list
-  them, see what state each is in, read what one is doing, wait for one to
-  finish, and hand work to one. Use when you need to know what another agent
-  is up to, block until one is done, or give one something to do.
----
-
 # Working with peer agents through mux
 
-You are running in a tmux session managed by `mux`. Other agents may be
-working in other sessions on this machine. `mux agent` is how you see them and
-coordinate with them.
+This applies when you are working inside a tmux session managed by `mux`. If
+`mux` is not on PATH, or `$TMUX` is unset, none of it does. `mux agent peers`
+is the quickest check: if it answers JSON, you are in one.
+
+Other agents may be working in other sessions on this machine. `mux agent` is
+how you see them and coordinate with them.
 
 Use it instead of driving tmux yourself. `tmux send-keys` and `capture-pane`
 reach the same panes, and every safety rule below is one mux applies and tmux

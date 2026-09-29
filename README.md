@@ -593,7 +593,8 @@ mux go [NAME|DIR] [PROFILE]   create/attach/switch; agent continues
 mux go --resume [NAME]       same, but the agent resumes (choose a chat)
 mux --no-agent ...           build the panes, plain shell in the agent pane
 mux resume [PART [SESS]]     rebuild a partition's sessions (--list)
-mux skill                    print the agent skill this mux ships
+mux skill                    the agent instructions this mux ships
+mux skill --agents-md        the same, in the AGENTS.md convention
 mux scan                     rebuild the project discovery map
 mux why [NAME]               show each resolved value and where it came from
 mux views [auto|floor|ceil]  who is attached, at what size, what it costs
