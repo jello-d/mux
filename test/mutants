@@ -1832,3 +1832,17 @@ t mux-skill
 - 	echo "mux: skill: no skill called $_name" >&2
 + 	echo "mux: skill: no skill called $_name" >&2; exit 0
 m should exit 1
+
+= skill-frontmatter-missing-is-fatal
+f libexec/mux-skill
+t mux-skill
+- if [ ! -r "$_front" ]; then
++ if false; then
+m bytes on stdout
+
+= skill-agents-md-is-the-body-alone
+f libexec/mux-skill
+t mux-skill
+- if [ "$_form" = agents ]; then
++ if false; then
+m carries YAML frontmatter

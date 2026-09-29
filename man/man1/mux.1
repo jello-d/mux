@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.69" "User Commands"
+.TH MUX 1 "" "mux 0.70" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -979,7 +979,7 @@ It always exits 0: it is a pure report, and a non\-zero exit would be
 indistinguishable from the transport.
 .PP
 .EX
-mux 0.69
+mux 0.70
 capabilities 1
 agent\-list 1
 agent\-summary 1
@@ -1457,30 +1457,53 @@ question stays open and is asked again \(em the same rule as everywhere else
 here: cannot tell is not no.
 .SS The agent contract
 .TP
-.B mux skill " [" \fINAME\fR ]
-Print the agent skill that matches THIS mux, on stdout. An API agents do not
-know about does not get used, which is the whole reason it ships: the verbs,
-the JSON contract and \(em the part that matters \(em the rule about never
-answering another agent's permission prompt are no use living only in a man
-page an agent will not read.
+.B mux skill " [" \-\-agents\-md "] [" \fINAME\fR ]
+Print the agent instructions that match THIS mux, on stdout. An API agents do
+not know about does not get used, which is the whole reason it ships: the
+verbs, the JSON contract and \(em the part that matters \(em the rule about
+never answering another agent's permission prompt are no use living only in a
+man page an agent will not read.
 .IP
-RELEASE\-MATCHED, which is the point of printing it rather than linking it. A
-skill is installed once into a config directory and then nobody looks at it
-again, so a copy taken from a website teaches whatever the verbs were that
-day. This one comes out of the same tree as the binary answering the calls, so
-it cannot describe a flag this mux does not have \(em and the suite checks the
-skill's verbs, flags, states and statuses against the source, in both
-directions.
+TWO CONVENTIONS, ONE DOCUMENT.
+.B AGENTS.md
+is the vendor\-neutral file a repository carries for whatever agent turns up;
+a
+.B SKILL.md
+with YAML frontmatter is one harness's on\-demand form. They want the same
+words, so there is ONE body,
+.IR share/skills/ \fINAME\fR /AGENTS.md ,
+with the frontmatter as data beside it and the skill composed on the way out.
+.B \-\-agents\-md
+prints that body alone. A second copy of the text would drift, and it would
+drift in the direction where mux's two answers disagree about what it refuses.
 .IP
-IT PRINTS AND DOES NOT INSTALL. Where a skill belongs is the agent harness's
-business, and mux does not learn the layout of somebody else's config
+AN ALWAYS\-LOADED DOCUMENT HAS TO SAY WHEN IT DOES NOT APPLY. A skill is
+matched on its description and invoked on demand, so its premise holds whenever
+it is read; an AGENTS.md is in context for every turn in that repository,
+including turns with no tmux anywhere. So the body opens by naming its
+condition and how to test it, rather than asserting it.
+.IP
+RELEASE\-MATCHED, which is the point of printing it rather than linking it. It
+is installed once into a config directory and then nobody looks at it again, so
+a copy taken from a website teaches whatever the verbs were that day. This one
+comes out of the same tree as the binary answering the calls, so it cannot
+describe a flag this mux does not have \(em and the suite checks its verbs,
+flags, states and statuses against the source, in both directions.
+.IP
+IT PRINTS AND DOES NOT INSTALL. Where either file belongs is somebody else's
+business, and mux does not learn the layout of another program's config
 directory \(em the same seam it holds by taking indicator sources as commands
 and never learning what ssh is. The integrator places it:
 .IP
 .EX
 mkdir -p ~/.claude/skills/mux-agent
 mux skill >~/.claude/skills/mux-agent/SKILL.md
+
+mux skill --agents-md >>~/src/myproject/AGENTS.md
 .EE
+.IP
+APPEND, for that second one: a repository's AGENTS.md is its own, and mux is
+one section of it rather than the whole file.
 .IP
 It is deliberately NOT
 .BR "mux agent skill" :

@@ -1,0 +1,6 @@
+name: mux-agent
+description: >-
+  Coordinate with the other coding agents on this machine through mux - list
+  them, see what state each is in, read what one is doing, wait for one to
+  finish, and hand work to one. Use when you need to know what another agent
+  is up to, block until one is done, or give one something to do.

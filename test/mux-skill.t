@@ -1,16 +1,23 @@
 #!/bin/sh
-# test/mux-skill.t - `mux skill`, and the skill it ships.
+# test/mux-skill.t - `mux skill`, and the agent instructions it ships.
 #
 # TWO THINGS ARE UNDER TEST AND THE SECOND IS THE UNUSUAL ONE. The verb has to
 # resolve, refuse and not read outside its own directory. But the CONTENT has
-# to stay true: a skill is the only documentation an agent actually reads, and
-# one that names a verb or a flag this mux does not have teaches a call that
-# fails. It is installed once into somebody else's config directory and then
-# nobody looks at it again, so drift there is permanent and invisible.
+# to stay true: this is the only documentation an agent actually reads, and one
+# that names a verb or a flag this mux does not have teaches a call that fails.
+# It is installed once into somebody else's config directory and then nobody
+# looks at it again, so drift there is permanent and invisible.
 #
 # So the verbs and flags it mentions are checked AGAINST THE SOURCE, the same
 # way mux-check derives its key list from the tmux fragment rather than
 # restating it.
+#
+# AND THERE ARE TWO CONVENTIONS OVER ONE DOCUMENT: the vendor-neutral
+# `AGENTS.md` a repository carries, and one harness's `SKILL.md` with YAML
+# frontmatter. A second copy of the text would drift, so the body is the file
+# and the frontmatter is data beside it -- which is asserted here, because a
+# single source is only worth anything if something notices when it stops
+# being single.
 set -eu
 _name=mux-skill
 . "$(dirname "$0")/lib.sh"
@@ -41,6 +48,75 @@ if python3 -c 'import yaml' 2>/dev/null; then
 	MUX_T_SKILL=$T/skill.md python3 "$HERE/test/frontmatter.py" \
 		|| fail "the frontmatter did not parse as a harness would read it"
 fi
+
+# --- THE TWO FORMS ARE ONE DOCUMENT ---------------------------------------
+_plain=$(mux skill --agents-md) || fail "mux skill --agents-md failed"
+case $_plain in
+'---'*) fail "the AGENTS.md form carries YAML frontmatter, which a generic
+harness reads as content. The frontmatter belongs only in the composed form" ;;
+esac
+
+# THE COMPOSED FORM ENDS WITH THE BODY, VERBATIM. This is what makes the
+# single source observable rather than merely true today: any second copy of
+# the text, or any transformation on the way out, shows up here.
+_o=$(mux skill)
+printf '%s\n' "$_plain" >"$T/plain"
+printf '%s\n' "$_o" | tail -n "$(wc -l <"$T/plain")" >"$T/body"
+cmp -s "$T/body" "$T/plain" || fail "the composed skill's body is not the
+AGENTS.md form. They must be one document with one dress changed, or the two
+conventions will come to disagree about what mux refuses."
+
+# ... and BEGINS with the frontmatter file, between markers. Asserted from the
+# shipped file rather than a copy typed here, for the same reason.
+{ echo '---'; cat "$HERE/share/skills/mux-agent/frontmatter.yaml"
+	echo '---'; } >"$T/want-front"
+printf '%s\n' "$_o" | head -n "$(wc -l <"$T/want-front")" >"$T/got-front"
+cmp -s "$T/got-front" "$T/want-front" || fail "the composed skill does not
+open with the shipped frontmatter"
+
+# NOTHING SITS BETWEEN THEM but the one blank line markdown wants.
+_nf=$(wc -l <"$T/want-front"); _nb=$(wc -l <"$T/plain")
+_nt=$(printf '%s\n' "$_o" | wc -l)
+[ "$_nt" -eq "$((_nf + _nb + 1))" ] || fail "the composed skill is $_nt lines,
+not the $_nf of frontmatter plus a blank plus the $_nb of body: something is
+being injected between them"
+
+# AN ALWAYS-LOADED DOCUMENT MUST SAY WHEN IT DOES NOT APPLY. A skill is matched
+# on its description and invoked on demand, so its premise holds whenever it is
+# read; an AGENTS.md is in context for every turn in that repository, including
+# turns with no tmux anywhere. An unconditional premise is a false one.
+printf '%s\n' "$_plain" | grep -q 'TMUX' \
+	|| fail "the AGENTS.md form never says how to tell whether it applies,
+so an agent in a repo with no tmux reads it as instructions anyway"
+
+# --- A MISSING FRONTMATTER IS FATAL, NOT AN OMISSION ----------------------
+# A SKILL.md with no frontmatter installs fine, errors nothing, and never
+# triggers -- the worst failure available to a file whose only job is to be
+# matched. Splitting the document is what made that partial install possible,
+# so it has to be refused here rather than emitted.
+mkdir -p "$T/share/skills/bare"
+echo '# just a body' >"$T/share/skills/bare/AGENTS.md"
+bare() { MUX_SHARE=$T/share "$HERE/bin/mux" "$@"; }
+_rc=0; bare skill bare >"$T/out" 2>"$T/err" || _rc=$?
+[ "$_rc" = 1 ] || fail "a skill with no frontmatter.yaml must fail, got $_rc"
+
+# STDOUT AND STDERR ARE ASSERTED SEPARATELY, because the obvious single
+# assertion is VACUOUS and was: with the guard deleted, `cat` fails on the
+# missing file, prints a message CONTAINING the path -- so any test grepping
+# the combined output for "frontmatter" passes, and exit 1 comes free from
+# `set -e`. Mutation said so. What actually differs is that the guard emits
+# NOTHING on stdout, where its absence emits a truncated document.
+[ ! -s "$T/out" ] || fail "a refusal put $(wc -c <"$T/out") bytes on stdout:
+a half-written skill is the one outcome that installs cleanly and never fires
+$(cat "$T/out")"
+grep -q 'cannot be assembled' "$T/err" || fail "the refusal did not say the
+skill form could not be assembled, so it is indistinguishable from whatever
+error a missing file happens to produce: [$(cat "$T/err")]"
+
+# ... and the AGENTS.md form is UNAFFECTED, because it needs no frontmatter.
+# Two forms sharing a body must not share each other's preconditions.
+_o=$(bare skill --agents-md bare) || fail "--agents-md should still work"
+[ "$_o" = '# just a body' ] || fail "--agents-md printed [$_o]"
 
 # --- refusals --------------------------------------------------------------
 _rc=0; _o=$(mux skill nosuchskill 2>&1) || _rc=$?
