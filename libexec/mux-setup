@@ -120,8 +120,13 @@ command -v python3 >/dev/null 2>&1 || {
 	exit 1
 }
 
-_py=$_lib/mux-setup-claude.py
-[ -r "$_py" ] || _die "$_py is missing (broken install)"
+# RUN DIRECTLY, not as `python3 "$_impl"`. Dropping the suffix is only half the
+# job: the point is that the implementation language stops leaking out of the
+# file, and a hardcoded interpreter at the call site leaks it just as loudly --
+# rewriting this in any other language would still break the caller. The file
+# carries its own `#!/usr/bin/env python3`.
+_impl=$_lib/mux-setup-claude
+[ -x "$_impl" ] || _die "$_impl is missing or not executable (broken install)"
 
 _mode=apply
 [ "$_remove" -eq 0 ] || _mode=remove
@@ -130,7 +135,7 @@ _mode=apply
 # THE DIFF IS SHOWN FIRST, ALWAYS, and it is the same code path that applies:
 # a preview computed by different logic than the write is a preview that can
 # lie. `plan` prints what would change and exits 0 having touched nothing.
-_plan=$(MUX_SETUP_EVENTS="$_events" python3 "$_py" plan "$_settings" \
+_plan=$(MUX_SETUP_EVENTS="$_events" "$_impl" plan "$_settings" \
 		"$_mode" 2>&1) || _die "$_plan"
 printf '%s\n' "$_plan"
 case $_plan in
@@ -152,7 +157,7 @@ if [ "$_yes" -eq 0 ]; then
 	esac
 fi
 
-_out=$(MUX_SETUP_EVENTS="$_events" python3 "$_py" write "$_settings" \
+_out=$(MUX_SETUP_EVENTS="$_events" "$_impl" write "$_settings" \
 		"$_mode" 2>&1) || _die "$_out"
 printf '%s\n' "$_out"
 

@@ -244,5 +244,36 @@ for _h in "$HERE"/share/latch/* "$HERE"/share/indicator/*; do
 a hook that cannot run is a hook latch resolves and then cannot use"
 done
 
+# THE MODE IS AUTHORITATIVE IN libexec/, and asserted in BOTH directions. mux
+# had it both ways before this: four of fifteen sourced libs were 775 and the
+# rest 664, so the mode bit was a second, self-contradicting signal for
+# "library". Two coherent answers existed (mode means nothing and the NAME
+# carries it, which is tackup's position; or mode is authoritative and a test
+# says so) and having a third of the cases disagree was not one of them.
+#
+# THIS FLEET HAS PAID FOR A LOST MODE BIT MORE THAN ONCE: `test/mutate` shipped
+# a bug where `awk >tmp` then `mv` left every mutated PROGRAM at 0644 -- so the
+# bit is worth asserting rather than ignoring. And the naming convention is what
+# makes it assertable at all: `*_lib` is machine-parseable in a way `*-lib`
+# would not be.
+#
+# A COMMAND THAT IS NOT EXECUTABLE is the failure that actually happens: it
+# resolves by name through the dispatcher, then cannot run.
+for _f in "$HERE"/libexec/*; do
+	[ -f "$_f" ] || continue
+	case $_f in
+	*_lib)
+		[ ! -x "$_f" ] || fail "$(basename "$_f") is a sourced library and
+is EXECUTABLE. The bit is a lie: running it does nothing useful, and mux asserts
+the opposite everywhere else in this directory."
+		;;
+	*)
+		[ -x "$_f" ] || fail "$(basename "$_f") is a command and is NOT
+executable. It resolves by name through the dispatcher and then fails to run,
+which reads as a missing feature rather than a broken install."
+		;;
+	esac
+done
+
 printf 'ok   %s (%s files clean)\n' "$_name" "$_n"
 exit 0

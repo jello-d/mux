@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Read a SKILL.md's frontmatter the way an agent harness would.
 
 A helper rather than a heredoc inside the test: the test is POSIX sh and a

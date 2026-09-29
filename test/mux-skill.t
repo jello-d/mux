@@ -45,7 +45,7 @@ installed and never triggers"
 # is absent rather than assumed present.
 if python3 -c 'import yaml' 2>/dev/null; then
 	printf '%s\n' "$_o" >"$T/skill.md"
-	MUX_T_SKILL=$T/skill.md python3 "$HERE/test/frontmatter.py" \
+	MUX_T_SKILL=$T/skill.md "$HERE/test/frontmatter" \
 		|| fail "the frontmatter did not parse as a harness would read it"
 fi
 

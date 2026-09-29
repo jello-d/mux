@@ -84,7 +84,7 @@ def plan(doc, events, remove):
 
 def main():
     if len(sys.argv) != 4:
-        sys.stderr.write("usage: mux-setup-claude.py plan|write FILE MODE\n")
+        sys.stderr.write("usage: mux-setup-claude plan|write FILE MODE\n")
         return 2
     action, path, mode = sys.argv[1:4]
     events = os.environ.get("MUX_SETUP_EVENTS", "").split()
