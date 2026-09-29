@@ -1577,8 +1577,8 @@ m the answer did not parse
 = agent-status-word-ignored
 f libexec/mux-agent
 t mux-agent
-- 	_out usage 2 "usage: mux agent <status|peers|read|wait> ..."
-+ 	_out ok 2 "usage: mux agent <status|peers|read|wait> ..."
+- 	_out usage 2 "usage: mux agent <status|peers|read|wait|send> ..."
++ 	_out ok 2 "usage: mux agent <status|peers|read|wait|send> ..."
 m noverb-status
 
 = agent-exit-disagrees-with-status
@@ -1741,3 +1741,59 @@ t mux-send-policy
 - 			"window:$_spwin") ;;
 + 			"window:$_spwin"|control:*) ;;
 m class-hybrid
+
+= agent-send-default-socket
+f libexec/mux-agent
+t mux-agent
+- 	tmux -L "${_rp:-global}" "$@"
++ 	tmux "$@"
+m DEFAULT tmux socket
+
+= agent-send-human-gate-removed
+f libexec/mux-agent
+t mux-agent
+- 		if [ "$_sclass" = human ]; then
++ 		if false; then
+m blk-msg
+
+= agent-send-ack-not-required
+f libexec/mux-agent
+t mux-agent
+- 		[ "$_sack_prompt" -eq 1 ] || _refuse blocked --answer-prompt
++ 		:
+m grant-rc
+
+= agent-send-blind-ack-not-required
+f libexec/mux-agent
+t mux-agent
+- 		[ "$_sack_blind" -eq 1 ] || _refuse unknown --blind
++ 		:
+m unk-noack-rc
+
+= agent-send-unclassified-is-agent
+f libexec/mux-agent
+t mux-agent
+- 	*) _sclass=human ;;
++ 	*) _sclass=agent ;;
+m blk-class
+
+= agent-send-not-bracketed
+f libexec/mux-agent
+t mux-agent
+- 	_tx paste-buffer -p -d -b "$_sbuf" -t "$_spane" 2>/dev/null || {
++ 	_tx paste-buffer -d -b "$_sbuf" -t "$_spane" 2>/dev/null || {
+m BRACKETED
+
+= agent-send-leaves-the-buffer
+f libexec/mux-agent
+t mux-agent
+- 	_tx paste-buffer -p -d -b "$_sbuf" -t "$_spane" 2>/dev/null || {
++ 	_tx paste-buffer -p -b "$_sbuf" -t "$_spane" 2>/dev/null || {
+m staging buffer was not deleted
+
+= agent-send-unlogged
+f libexec/mux-agent
+t mux-agent
+- 		mux_log send "$_ssess (${_rp:-global}/${_swin:-?}) $_sclass \
++ 		: "$_ssess \
+m was not logged

@@ -48,7 +48,9 @@ run() {   # <args...> -> stdout in $OUT, exit in $RC
 	OUT=$(env -u TMUX -u MUX_SHARE MUX_DIR="$MUX_DIR" \
 		MUX_CACHE="$MUX_CACHE" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
 		PATH="$T/bin:$PATH" WATCHED="${WATCHED:-}" \
-		CAPLOG="${CAPLOG:-/dev/null}" \
+		CAPLOG="${CAPLOG:-/dev/null}" CLASS="${CLASS:-}" \
+		WINNAME="${WINNAME:-main}" MUX_LOG="$T/log" \
+		MUX_SEND_POLICY_FILE="$T/etc/send-policy" \
 		"$HERE/bin/mux" agent "$@" 2>"$T/err") || RC=$?
 }
 
@@ -212,6 +214,10 @@ case "$*" in
 *capture-pane*)
 	printf 'CAPTURED %s\n' "$*" >>"$CAPLOG"
 	printf 'line one\nhe said "hi" \\ there\n' ;;
+*window_name*)   printf '%s\n' "${WINNAME:-main}" ;;
+*@mux-control*)  printf '%s\n' "${CLASS:-}" ;;
+*load-buffer*|*paste-buffer*|*send-keys*|*delete-buffer*)
+	printf 'TMUX %s\n' "$*" >>"$CAPLOG" ;;
 esac
 exit 0
 EOF
@@ -230,6 +236,9 @@ eq read-pane "$(jq 'd["pane"]')" %1
 # resolver was replaced by a constant and nothing noticed.
 _read bravo
 eq read-pane-other "$(jq 'd["pane"]')" %2
+grep -q 'CAPTURED -L ' "$CAPLOG" \
+	|| fail "read captured from the DEFAULT tmux socket, not the
+partition's: $(cat "$CAPLOG")"
 # AND THE TEXT SURVIVES A ROUND TRIP, quotes and backslash included. This is
 # the first verb whose payload is arbitrary terminal output, which is exactly
 # the input the JSON escaper exists for.
@@ -238,7 +247,7 @@ eq read-text "$(jq 'd["text"].splitlines()[1]')" 'he said "hi" \ there'
 # THE VISIBLE PANE BY DEFAULT, scrollback only when asked: an agent pane's
 # scrollback can be enormous, and a verb whose default answer is unbounded is
 # one a caller learns to be afraid of.
-grep -q 'CAPTURED capture-pane -p -J -t %1$' "$CAPLOG" \
+grep -q 'capture-pane -p -J -t %1$' "$CAPLOG" \
 	|| fail "the default capture asked for scrollback: $(cat "$CAPLOG")"
 : >"$CAPLOG"
 _read alpha -n 50
@@ -308,6 +317,159 @@ run wait alpha
 eq wait-noargs-rc "$RC" 2
 run wait alpha idle -t x
 eq wait-badt-rc "$RC" 2
+
+# --- send: the hook a higher layer needs ----------------------------------
+# mux already knows which pane is the agent's, which partition it is in, and
+# -- the part only mux knows -- whether it is BLOCKED. Without this verb an
+# orchestrator reaches around mux to `tmux send-keys`, re-derives pane
+# resolution, and inherits none of the guards below.
+mkdir -p "$T/etc"
+seal_pol() { chmod 0444 "$T/etc/send-policy"; chmod 0555 "$T/etc"; }
+# pol LINE -- replace the policy and seal it, which four cases below do.
+pol() { unseal_pol; printf '%s\n' "$1" >"$T/etc/send-policy"; seal_pol; }
+unseal_pol() { chmod 0755 "$T/etc" 2>/dev/null || true
+	chmod 0644 "$T/etc/send-policy" 2>/dev/null || true; }
+trap 'chmod 0755 "$T/etc" 2>/dev/null || true' EXIT INT TERM
+
+# `bravo` is WORKING, which needs no override: a turn that is running buffers
+# the text and picks it up when it ends. That is the natural "queue the next
+# instruction" case, and refusing it would make every caller poll for idle.
+: >"$CAPLOG"
+run send bravo 'hello there'
+eq send-rc "$RC" 0
+eq send-ok "$(jq 'd["status"]')" ok
+eq send-pane "$(jq 'd["pane"]')" %2
+eq send-bytes "$(jq 'd["bytes"]')" 11
+
+# BRACKETED PASTE, so the TUI sees pasted text rather than a stream of
+# keystrokes. Anything multi-line would otherwise submit its first line alone
+# and leave the rest arriving as a fresh prompt.
+grep -q 'paste-buffer -p ' "$CAPLOG" \
+	|| fail "the text was not pasted in BRACKETED mode: $(cat "$CAPLOG")"
+# ... into a buffer named for this process and deleted on paste, so a human's
+# own tmux buffers are not clobbered by an agent talking to a peer.
+grep -q 'paste-buffer .*-d ' "$CAPLOG" \
+	|| fail "the staging buffer was not deleted: $(cat "$CAPLOG")"
+grep -q 'send-keys .*Enter' "$CAPLOG" || fail "Enter was never sent"
+
+# EVERY tmux CALL NAMES THE PARTITION'S SOCKET. A bare `tmux` asks the DEFAULT
+# one, which is not where a partition's server lives -- so `send` read an
+# empty class for a pane plainly marked `agent` and refused it as a human's,
+# and `read` captured nothing. Both looked like correct refusals, which is why
+# only a REAL server caught it. Third time this repo has paid for it, after
+# mux-even and next-blocked, so it is asserted rather than remembered.
+grep -q 'TMUX -L ' "$CAPLOG" \
+	|| fail "send talked to the DEFAULT tmux socket instead of the
+partition's: $(cat "$CAPLOG")"
+
+: >"$CAPLOG"
+run send bravo 'no newline' --no-enter
+grep -q 'send-keys .*Enter' "$CAPLOG" \
+	&& fail "--no-enter still pressed Enter: $(cat "$CAPLOG")"
+
+# STDIN, so a long charge is not an argv-length problem.
+_o=$(printf 'from stdin' | env -u TMUX -u MUX_SHARE MUX_DIR="$MUX_DIR" \
+	MUX_CACHE="$MUX_CACHE" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
+	PATH="$T/bin:$PATH" CAPLOG="$CAPLOG" \
+	"$HERE/bin/mux" agent send bravo - 2>&1)
+case $_o in
+*'"bytes":10'*) ;;
+*) fail "the stdin form did not read the text: [$_o]" ;;
+esac
+
+# --- BLOCKED: mux will not answer a prompt on a human's behalf ------------
+# `alpha` is blocked. With no class set the pane is a HUMAN's -- the safe
+# answer is the one you get by saying nothing.
+run send alpha 'y'
+eq blk-rc "$RC" 1
+eq blk-status "$(jq 'd["status"]')" refused
+eq blk-reason "$(jq 'd["reason"]')" blocked
+eq blk-class "$(jq 'd["class"]')" human
+# NO OVERRIDE EXISTS FOR A HUMAN PANE, and the policy is never consulted.
+eq blk-override "$(jq 'd["override"]')" none
+eq blk-msg "$(jq '"human-controlled" in d["message"]')" True
+
+# ... and the acknowledgement alone changes nothing, which is the property
+# that makes a forgeable flag safe to have: it grants nothing on its own.
+run send alpha 'y' --answer-prompt
+eq blk-ack-rc "$RC" 1
+eq blk-ack-override "$(jq 'd["override"]')" none
+
+# --- an AGENT-CONTROLLED pane, with no policy -----------------------------
+# The class alone is not permission either. Both halves are required.
+CLASS=agent run send alpha 'y' --answer-prompt
+eq agent-nopol-rc "$RC" 1
+eq agent-nopol-override "$(jq 'd["override"]')" none
+
+# --- the policy grants the CLASS: now the capability is reported ----------
+# A caller that does not know discovers it in one round trip and decides; one
+# that does know passes the flag up front and pays nothing. That signal is why
+# there is no standing always-open grant.
+pol 'send-blocked control:agent'
+CLASS=agent run send alpha 'y'
+eq grant-rc "$RC" 1
+eq grant-override "$(jq 'd["override"]')" available
+eq grant-msg "$(jq '"--answer-prompt" in d["message"]')" True
+
+# ... and WITH the acknowledgement it goes through.
+: >"$CAPLOG"
+CLASS=agent run send alpha 'y' --answer-prompt
+eq grant-ack-rc "$RC" 0
+eq grant-ack-status "$(jq 'd["status"]')" ok
+grep -q 'paste-buffer' "$CAPLOG" || fail "the override did not send"
+
+# A HUMAN PANE IS STILL NEVER GRANTED, even by a policy that is in force. The
+# class gate runs BEFORE the allowlist, so a grant naming only a window cannot
+# reach a human's pane by omission.
+pol 'send-blocked *'
+run send alpha 'y' --answer-prompt
+eq human-star-rc "$RC" 1
+eq human-star-override "$(jq 'd["override"]')" none
+
+# HYBRID IS ITS OWN CLASS and is NOT covered by an agent grant -- folding it
+# into either neighbour was the wrong answer in both directions.
+pol 'send-blocked control:agent'
+CLASS=hybrid run send alpha 'y' --answer-prompt
+eq hybrid-rc "$RC" 1
+eq hybrid-override "$(jq 'd["override"]')" none
+pol 'send-blocked control:hybrid'
+CLASS=hybrid run send alpha 'y' --answer-prompt
+eq hybrid-granted-rc "$RC" 0
+
+# --- the two acknowledgements are SEPARATE --------------------------------
+# Being allowed to answer prompts must never imply being allowed to type into
+# a pane mux cannot classify.
+agent_rec "$XDG_RUNTIME_DIR/agent-state/global/p7" weirdstate %7 100 odd x
+printf 'odd\t/srv/odd\n' >>"$MUX_STATE/sessions.global"
+pol 'send-blocked control:agent'
+CLASS=agent run send odd 'x' --answer-prompt
+eq unk-rc "$RC" 1
+eq unk-reason "$(jq 'd["reason"]')" unknown
+eq unk-override "$(jq 'd["override"]')" none
+# ... and with the `unknown` grant in force, the ACKNOWLEDGEMENT is still
+# required. Asserted separately from the grant, or the policy check covers for
+# the ack check and neither is individually killable -- which is exactly what
+# mutation reported here.
+pol 'send-unknown control:agent'
+CLASS=agent run send odd 'x'
+eq unk-noack-rc "$RC" 1
+eq unk-noack-override "$(jq 'd["override"]')" available
+eq unk-noack-msg "$(jq '"--blind" in d["message"]')" True
+CLASS=agent run send odd 'x' --blind
+eq unk-granted-rc "$RC" 0
+
+# --- every send that lands is LOGGED --------------------------------------
+# A send is a mutation, and the one mux makes on another agent's behalf. It is
+# also the audit trail the layer above would otherwise have to build.
+grep -q 'send\[' "$T/log" 2>/dev/null \
+	|| fail "a send was not logged: [$(cat "$T/log" 2>/dev/null)]"
+grep -q 'odd' "$T/log" || fail "the log did not name the session"
+unseal_pol
+
+run send bravo
+eq send-noargs-rc "$RC" 2
+run send bravo a b
+eq send-three-rc "$RC" 2
 
 # --- FAILURE IS STILL JSON, AND STILL ON STDOUT ---------------------------
 # The promise that makes this a contract rather than a convention. Every other

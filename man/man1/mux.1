@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.66" "User Commands"
+.TH MUX 1 "" "mux 0.67" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -979,7 +979,7 @@ It always exits 0: it is a pure report, and a non\-zero exit would be
 indistinguishable from the transport.
 .PP
 .EX
-mux 0.66
+mux 0.67
 capabilities 1
 agent\-list 1
 agent\-summary 1
@@ -1483,7 +1483,73 @@ about every one.
 .B mux agent read " " \fISESSION\fR
 returns what is on that agent's screen, and
 .B mux agent wait " " \fISESSION\fR " " \fISTATE\fR
-blocks until it gets there.
+blocks until it gets there, and
+.B mux agent send " " \fISESSION\fR " " \fITEXT\fR
+types into that agent's pane.
+.IP
+.B send
+IS A HOOK FOR A HIGHER LAYER, not orchestration. mux already knows which pane
+is the agent's, which partition it is in and \(em the part only mux knows \(em
+whether it is BLOCKED; without the verb an orchestrator reaches around mux to
+.BR "tmux send-keys" ,
+re-derives pane resolution and inherits none of the guards. What is NOT here is
+.BR spawn ,
+which is
+.B mux go
+plus this and which the layer above composes in two lines.
+.IP
+IT REFUSES TO TYPE INTO A PANE MUX CANNOT VOUCH FOR: one that is
+.B blocked
+(sitting at a permission prompt) or whose state mux cannot classify. A peer
+that can answer another agent's approval prompt is a way for agents to approve
+each other and route around the person.
+.B idle
+and
+.B working
+are ordinary \(em a running turn buffers the text and picks it up when it ends,
+which is the natural "queue the next instruction" case.
+.IP
+AN OVERRIDE NEEDS TWO THINGS THAT CANNOT SUBSTITUTE FOR EACH OTHER: a grant in
+.IR /etc/mux/send-policy ,
+which is root\-owned and so outside the agent's reach, and an explicit
+acknowledgement on the call (
+.B \-\-answer\-prompt
+or
+.BR \-\-blind ).
+The policy answers "may this ever happen here"; the flag answers "am I
+deliberately doing it now". That is what makes a forgeable flag safe: it grants
+nothing on its own. Every refusal reports whether an override is
+.B available
+or
+.BR none ,
+so a caller that does not know discovers the capability in one round trip and
+decides, and one that does know passes the flag up front and pays nothing.
+.IP
+WHO CONTROLS THE PANE decides whether an override is possible at all, read from
+the
+.B @mux-control
+pane option and set by whatever spawned the pane \(em mux reads it and never
+writes it.
+.B human
+(the default, so an unclassified pane is a human's) is refused before the policy
+is even consulted;
+.B agent
+is grantable as a whole class, which is what makes a village of generated names
+workable;
+.B hybrid
+is its own class because it DEPENDS, and folding it into either neighbour is
+wrong \(em into
+.B human
+it would force the strictest grant to express the middling case.
+.IP
+The classification is ORGANISATIONAL, NOT A SECURITY BOUNDARY. mux runs as the
+agent's own uid, so any mark mux reads is one the agent can rewrite, and an
+agent set on answering its neighbour's prompt can call
+.B tmux send-keys
+today. What the refusal buys is that the dangerous thing stops being the easy
+one, the default sits outside the agent's reach, and a bypass leaves mux's
+audit log \(em which is itself a signal. Every send that lands is written to
+.BR "mux log" .
 .IP
 .B peers
 is HEADLESS by construction, and that is protected rather than incidental: it
