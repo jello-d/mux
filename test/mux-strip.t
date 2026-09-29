@@ -70,6 +70,44 @@ has() { case "$1" in *"$2"*) ;; *) fail "$3: want [$2] in [$(vis "$1")]" ;;
 no_has() { case "$1" in *"$2"*) fail "$3: unwanted [$2] in [$(vis "$1")]" ;;
 	esac; }
 
+# --- UNWIRED: mux started an agent and has never heard from it ------------
+# THE FIRST-RUN FAILURE, and the reason it needs a glyph of its own: install
+# mux, start a session, and every chip reads `⚫` -- which is also exactly what
+# a plain shell looks like, so nothing says the hooks were never wired and the
+# reasonable conclusion is that mux is broken.
+#
+# The signal is `@mux-agent` set on a pane with NO record for that session: a
+# wired agent emits on SessionStart, so the absence of any record is the tell.
+# Deliberately not a process check -- tmux reports a live Claude pane's
+# `#{pane_current_command}` as the SHELL, and `#{pane_start_command}` keeps
+# naming the agent long after it exits, so neither can tell a running agent
+# from a finished one (measured).
+#
+# Fields: pane id, @mux-agent, session -- the session LAST because a name may
+# contain a space.
+printf '%%1\t\talpha\n%%2\t\tdelta\n%%3\t1\tcharlie\n' >"$PANES"
+_o=$(vis "$(render delta 400)")
+has "$_o" "$MUX_GLYPH_UNWIRED charlie" "charlie has an agent pane and no
+record, so it must draw the unwired glyph rather than reading like a plain
+shell -- which is the whole first-run problem"
+
+# AND IT DOES NOT FIRE FOR EVERYONE, which is the half that makes the glyph
+# mean something: bravo has no record AND no agent pane, so it is genuinely
+# agentless and stays `none`. Asserted separately because one "the strip
+# changed" check passes with the condition inverted.
+has "$_o" "$MUX_GLYPH_NONE bravo" "bravo has no agent pane, so it is agentless
+rather than unwired -- marking every recordless session would make the glyph
+noise"
+
+# AND IT SURVIVES REDUCTION. The fold tier collapses runs of agentless
+# sessions to a count, and an unwired session must not disappear into one: it
+# is the one chip the user needs to see. It breaks the run rather than joining
+# it, which follows from the fold testing for `none` exactly.
+_o=$(vis "$(render delta 46)")
+has "$_o" "$MUX_GLYPH_UNWIRED" "the unwired glyph was folded away under
+reduction, which hides the only thing telling the user why the strip is empty"
+printf '%%1\n%%2\n%%3\n' >"$PANES"
+
 # --- the widest tier: every session, with its age -------------------------
 _o=$(vis "$(render delta 400)")
 for _s in alpha bravo charlie delta; do

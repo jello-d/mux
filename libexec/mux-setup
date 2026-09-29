@@ -1,0 +1,189 @@
+#!/bin/sh
+# mux-setup: wire an agent up to mux, idempotently and reversibly.
+#
+#   mux setup <AGENT> [--yes] [--remove] [--dry-run]
+#
+# THE HARDEST PART OF MUX IS THE FIRST TEN MINUTES, and it is this. A new user
+# installs mux, starts a session, and sees a status strip full of "no agent"
+# glyphs -- because nothing has told their agent to report anything. The reward
+# the README promises is on the far side of the one step nobody wants to do by
+# hand, so they reasonably conclude mux does not work.
+#
+# WHICH AGENTS ARE POSSIBLE IS DATA, not code: `share/agents/*.agent` already
+# declares what mux knows about each one, so an unknown name is refused with the
+# list rather than assumed. mux knowing how to wire one is a property of that
+# agent's config format, which is why this is per-agent and not generic.
+#
+# IT WRITES SOMEBODY ELSE'S CONFIG FILE, which every other part of mux refuses
+# to do (`mux skill` prints rather than installs, for exactly this reason). The
+# difference is that this verb's whole PURPOSE is that step: a seam nobody can
+# cross for you is not a seam, it is a gap. So it is confined here, it says
+# precisely what it will change before changing it, it backs the file up, and
+# `--remove` puts it back.
+#
+# IDEMPOTENT BY CONSTRUCTION: the entries are keyed by event name and replaced
+# wholesale, so running it twice is running it once, and an upgrade that changes
+# the command rewrites rather than appends. That matters more than it sounds --
+# a hook appended twice fires twice, and the second `working` after a turn ends
+# is exactly the straggler this project spent two releases learning to discard.
+#
+# THE MAPPING IS NOT HERE. The wiring says only WHAT HAPPENED
+# (`mux agent-hook <EventName>`) and mux decides what it means, which is the
+# 0.52 contract: mux defines what wiring must promise, never the reverse. So
+# this file names EVENTS and no states, and a rule change stays a mux release.
+#
+# PYTHON FOR THE JSON, and only here. mux ships a JSON emitter and no parser
+# (three functions to write it, a parser to read it), and editing a user's
+# settings file safely means reading what is already in it. This verb is a
+# one-shot, interactive, human-speed command -- not a hot path -- so the
+# dependency is acceptable where it would not be in the status bar. With no
+# python3 it degrades to printing the block and saying where it goes, which is
+# worse but not silent.
+set -eu
+
+_lib=$(dirname "$0")
+[ -d "${MUX_SHARE:-}" ] || MUX_SHARE=$_lib/../share
+
+_die() { echo "mux: setup: $*" >&2; exit 1; }
+
+_usage() {
+	echo "usage: mux setup <AGENT> [--yes] [--remove] [--dry-run]"
+	echo "  wire an agent's lifecycle hooks to mux, and install its skill"
+	echo "  --yes       apply without asking (for a provisioner)"
+	echo "  --remove    take mux's wiring back out"
+	echo "  --dry-run   show what would change and stop"
+}
+
+# The agents mux ships a descriptor for. DERIVED, so a new .agent file is
+# offered here the day it lands rather than when somebody remembers.
+_known() {
+	for _k in "$MUX_SHARE"/agents/*.agent; do
+		[ -r "$_k" ] || continue
+		_kb=${_k##*/}; printf '%s\n' "${_kb%.agent}"
+	done
+}
+
+_agent= _yes=0 _remove=0 _dry=0
+while [ $# -gt 0 ]; do
+	case $1 in
+	-h|--help) _usage; exit 0 ;;
+	--yes|-y)  _yes=1; shift ;;
+	--remove)  _remove=1; shift ;;
+	--dry-run) _dry=1; shift ;;
+	-*) echo "mux: setup: unknown option: $1" >&2; _usage >&2; exit 2 ;;
+	*)
+		[ -z "$_agent" ] || {
+			echo "mux: setup: one agent at a time" >&2; exit 2; }
+		_agent=$1; shift ;;
+	esac
+done
+
+[ -n "$_agent" ] || { _usage >&2; exit 2; }
+# VALIDATED BEFORE IT IS A PATH, the same rule `mux skill` follows: the name
+# picks a file, so a traversal must be refused as a usage error and not read.
+case $_agent in
+''|*[!a-z0-9-]*|-*|*-)
+	echo "mux: setup: not an agent name: $_agent" >&2; exit 2 ;;
+esac
+if ! _known | grep -qxF -- "$_agent"; then
+	echo "mux: setup: mux ships no descriptor for $_agent" >&2
+	_known | while IFS= read -r _h; do
+		echo "mux: setup: have: $_h" >&2; done
+	exit 1
+fi
+
+# THE EVENTS COME FROM MUX, not from a list typed here. `mux agent-hook`'s
+# table IS the contract, so scraping it means this can never wire an event mux
+# does not understand (which exits 2 and logs) or miss one it does.
+_events=$(sed -n 's/^\([A-Za-z]*\))  *set -- .*/\1/p' "$_lib/mux-agent-hook")
+[ -n "$_events" ] || _die "cannot read the event table from mux-agent-hook"
+
+case $_agent in
+claude) ;;
+*) _die "mux knows $_agent's states but not how to wire it up yet" ;;
+esac
+
+# --- claude ---------------------------------------------------------------
+# `$CLAUDE_CONFIG_DIR` is honoured because the tool documents it, and because a
+# test must be able to point this somewhere harmless.
+_cdir=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
+_settings=$_cdir/settings.json
+
+command -v python3 >/dev/null 2>&1 || {
+	echo "mux: setup: python3 is needed to edit $_settings safely." >&2
+	echo "mux: setup: add these to its \"hooks\" object by hand:" >&2
+	for _e in $_events; do
+		printf '  "%s": [{"hooks":[{"type":"command",' "$_e" >&2
+		printf '"command":"mux agent-hook %s ' "$_e" >&2
+		printf '>/dev/null 2>&1 || true"}]}]\n' >&2
+	done
+	exit 1
+}
+
+_py=$_lib/mux-setup-claude.py
+[ -r "$_py" ] || _die "$_py is missing (broken install)"
+
+_mode=apply
+[ "$_remove" -eq 0 ] || _mode=remove
+[ "$_dry" -eq 0 ] || _mode=diff
+
+# THE DIFF IS SHOWN FIRST, ALWAYS, and it is the same code path that applies:
+# a preview computed by different logic than the write is a preview that can
+# lie. `plan` prints what would change and exits 0 having touched nothing.
+_plan=$(MUX_SETUP_EVENTS="$_events" python3 "$_py" plan "$_settings" \
+		"$_mode" 2>&1) || _die "$_plan"
+printf '%s\n' "$_plan"
+case $_plan in
+*'nothing to change'*) exit 0 ;;
+esac
+[ "$_dry" -eq 0 ] || exit 0
+
+# NOT WITHOUT AN ANSWER. A provisioner passes --yes; a human is asked. With
+# neither a tty nor --yes this REFUSES rather than assuming consent, because
+# the one thing a config-editing verb must not do is surprise somebody.
+if [ "$_yes" -eq 0 ]; then
+	[ -t 0 ] || _die "not a terminal and no --yes: refusing to edit" \
+		"$_settings unasked"
+	printf 'apply this to %s? [y/N] ' "$_settings" >&2
+	read -r _ans || _ans=
+	case ${_ans:-} in
+	y|Y|yes|YES) ;;
+	*) echo "mux: setup: nothing changed" >&2; exit 1 ;;
+	esac
+fi
+
+_out=$(MUX_SETUP_EVENTS="$_events" python3 "$_py" write "$_settings" \
+		"$_mode" 2>&1) || _die "$_out"
+printf '%s\n' "$_out"
+
+# --- the skill ------------------------------------------------------------
+# THE SECOND HALF OF THE SAME GAP. mux ships the agent instructions and, until
+# now, nothing put them anywhere: `mux skill` prints, on the principle that mux
+# does not learn another program's layout. That principle is right for the
+# general case and this verb is the exception it needs, so the placement lives
+# here beside the wiring rather than leaking into `mux skill`.
+_skdir=$_cdir/skills/mux-agent
+if [ "$_remove" -eq 1 ]; then
+	if [ -f "$_skdir/SKILL.md" ]; then
+		rm -f "$_skdir/SKILL.md"
+		rmdir "$_skdir" 2>/dev/null || true
+		echo "mux: setup: removed $_skdir/SKILL.md"
+	fi
+	exit 0
+fi
+mkdir -p "$_skdir" 2>/dev/null || _die "cannot create $_skdir"
+# RELEASE-MATCHED, which is why it is generated rather than linked: a symlink
+# into the install tree breaks when the tree moves, and a copy taken once
+# teaches whatever the verbs were that day. Re-running this refreshes it.
+# STDERR IS NOT SILENCED. The first draft wrote
+# `mux-skill >file 2>/dev/null`, which silences nothing anyway (the
+# redirections apply left to right, so a failing open prints before the
+# command runs) and would hide the one thing worth seeing here: mux-skill
+# says precisely why it could not assemble the document.
+if "$_lib/mux-skill" >"$_skdir/SKILL.md.new"; then
+	mv -f "$_skdir/SKILL.md.new" "$_skdir/SKILL.md"
+	echo "mux: setup: installed $_skdir/SKILL.md"
+else
+	rm -f "$_skdir/SKILL.md.new"
+	echo "mux: setup: could not render the skill (mux skill failed)" >&2
+fi

@@ -69,8 +69,9 @@ The whole point is the bar. A sketch of what you see (colour omitted):
   are told apart, then the current session name.
 - **status-right** — one token per session, in cycle order, each with an
   agent-state glyph: `⚠` needs you, `🧠` working, `✓` just finished, `⚫` no
-  agent. The session that has needed you **longest** is the loudest; `prefix b`
-  jumps there.
+  agent, and `🔌` an agent mux started that has never reported: its hooks are
+  not wired, which `mux setup <agent>` fixes. The session that has needed you
+  **longest** is the loudest; `prefix b` jumps there.
 - **the right edge** — one glyph for [view tension](#views-and-tension), always
   present: `✱` auto, `┻` floor, `┳` ceil. Shape is the mode you chose; colour is
   what is happening to *this* view.
@@ -595,6 +596,7 @@ mux --no-agent ...           build the panes, plain shell in the agent pane
 mux resume [PART [SESS]]     rebuild a partition's sessions (--list)
 mux skill                    the agent instructions this mux ships
 mux skill --agents-md        the same, in the AGENTS.md convention
+mux setup claude             wire an agent's hooks to mux (--dry-run first)
 mux scan                     rebuild the project discovery map
 mux why [NAME]               show each resolved value and where it came from
 mux views [auto|floor|ceil]  who is attached, at what size, what it costs
