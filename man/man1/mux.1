@@ -1446,6 +1446,65 @@ ordered fallback list is a later refactor rather than a rewrite:
 .B blocked
 is a per\-transport verdict, and across several transports the aggregate is
 blocked only when every one of them is.
+.SS Eternal Terminal
+A second transport ships as data, not code. Two lines in
+.IR MUX_DIR /config:
+.PP
+.RS
+.nf
+latch\-transport  et \-t %h \-\-command %c
+latch\-classify   et\-classify
+.fi
+.RE
+.PP
+ET RECONNECTS BY ITSELF across a drop or an IP change, which is the one job
+latch also does, so on an ET link latch's retry loop is mostly idle. What latch
+still owns is everything else: which session you land in, attach\-only on a
+reattach so a rebooted box never hands you a fresh empty stranger, the terminal
+repair when the far side dies mid\-attach, the lock the tray reads to know this
+box is watching that one, and a state word for every outcome that is NOT a
+recoverable drop. Two mechanisms for the drop; one owner for each of the rest.
+.PP
+THREE DIFFERENCES FROM SSH, each read out of ET's source rather than assumed,
+because a transport that fails plausibly is worse than one that fails loudly:
+.TP
+.B no \fBsh \-lc\fR wrapper
+ET delivers
+.B \-\-command
+by TYPING it into the remote shell, and that shell is a LOGIN shell. So the
+PATH problem that makes
+.B "sh \-lc"
+load\-bearing for ssh does not exist here.
+.TP
+.B %c, never %q
+For the same reason: the command is typed at a prompt, so it must arrive as one
+UNQUOTED element.
+.B %q
+shell\-quotes it, which is exactly right for ssh (the far side re\-parses) and
+would make ET's shell look for a command whose name contains spaces.
+.TP
+.B an exit 0 is not proof
+et answers 0 to several of its own usage errors, including a missing host. A
+classifier that believes a clean exit would report the session you asked for as
+closed by hand, which is a success for something that never happened \(em the
+bug
+.B "mux latch \-V"
+shipped once, when
+.B "ssh \-V"
+succeeded.
+.B et\-classify
+interrogates an exit 0 before believing it.
+.PP
+The credential seam is UNCHANGED: ET handshakes over ssh, so
+.B ssh\-auth
+answers for it too and
+.B blocked
+keeps working. What has NOT been verified against a running etserver is what et
+exits with when it stops reconnecting; its source names no message for that, so
+it falls to
+.B unknown
+and is retried, which is the safe direction for a transport whose whole premise
+is that a drop is temporary.
 .SS Attach\-only on retry
 The first attempt may CREATE, since you asked to latch onto something. Every
 attempt after it asks for
