@@ -1,0 +1,107 @@
+#!/bin/sh
+# mux-agent: THE MACHINE CONTRACT. `mux agent <verb>` is the surface an agent
+# (or any program) is invited to depend on, and it is deliberately a different
+# contract from the rest of mux rather than a second spelling of it.
+#
+#   mux agent status [--all]    what is going on, as JSON
+#
+# THREE PROMISES, which is what makes it a contract rather than a convention:
+#
+#   1. JSON ON STDOUT, ALWAYS, INCLUDING ON FAILURE. Every other mux verb puts
+#      its reason on stderr, which is right for a human reading a terminal and
+#      wrong for a caller that parses. A reader here never has to decide
+#      whether today's answer is a document or a sentence.
+#
+#   2. A SYMBOLIC `status`, alongside the numeric exit. mux uses exactly four
+#      exit codes and the ABSENCE of every other one is load-bearing -- latch
+#      attributes 126, 127 and 255 to the shell and to ssh precisely because
+#      mux never emits them. So richer outcomes go in the PAYLOAD, where they
+#      cost nothing: the exit code stays for the shell, the enumeration is for
+#      the reader, and neither has to be widened to serve the other.
+#
+#   3. THE SHAPE IS STABLE OR THE CAPABILITY NUMBER MOVES. `mux capabilities`
+#      declares `agent contract 1`; a breaking change to any of these
+#      documents is a new number there, which is how a consumer finds out
+#      without sniffing a version string.
+#
+# WHY A NAMESPACE AT ALL. Without one, nothing declares which output is meant
+# to be parsed: the tray polls `mux agent-summary`, and improving `mux ls` for
+# a human could silently break a consumer that had started reading it. A
+# declared machine surface is what frees the human surface to keep changing.
+set -eu
+
+_lib=$(dirname "$0")
+. "$_lib/mux-json.sh"
+
+# THE STATUS ENUMERATION, and its one rule: each value maps to exactly one of
+# mux's four exit codes, never the reverse. Several statuses may share a code
+# -- that is the point of having both -- but a status must not be able to mean
+# two different exits.
+#
+#   ok            0   the answer follows
+#   refused       1   a guard fired; `message` says which
+#   usage         2   this verb does not know what it was asked
+#   no-such-name  3   mux's cross-cutting "the name is not known here"
+#
+# ALWAYS A MESSAGE. The no-message branch this used to carry was unreachable
+# -- every failure has a reason -- and an unreachable branch is a mutation
+# nothing can kill, which this corpus treats as a signal to delete rather than
+# to test harder. Belt-and-braces reads as safety and measures as untestable.
+_out() {   # <status> <exit> <message>
+	printf '{"status":%s,"message":%s}\n' \
+		"$(mux_json_str "$1")" "$(mux_json_str "$3")"
+	exit "$2"
+}
+
+_usage() {
+	_out usage 2 "usage: mux agent <status> [options]"
+}
+
+_verb=${1:-}
+[ -n "$_verb" ] || _usage
+shift
+
+case $_verb in
+status) ;;
+*) _out usage 2 "unknown agent verb: $_verb" ;;
+esac
+
+# --- status ---------------------------------------------------------------
+# The same question `mux agent-summary --all --attached` answers, in the
+# contract's shape. It SHELLS OUT to that verb rather than re-deriving: the
+# ranking lives in mux-agent-state.sh and has been written twice before, which
+# is once more than it should have been. Whether a verb here is a thin wrapper
+# is an implementation detail; the contracts are what differ.
+_all=0
+_att=1
+while [ $# -gt 0 ]; do
+	case $1 in
+	--all)      _all=1; shift ;;
+	# EVERY partition, not just the watched ones. The default is `attached`
+	# because a tray item means somebody is looking at it, and an agent
+	# asking what is going on wants the same answer a human would see.
+	--any)      _att=0; shift ;;
+	--) shift; break ;;
+	*)  _out usage 2 "unknown option: $1" ;;
+	esac
+done
+
+set -- --all
+[ "$_att" -eq 0 ] || set -- "$@" --attached
+_rows=$("$_lib/agent-state-summary" "$@" 2>/dev/null) || _rows=
+
+# `<partition> <state> <count>` per line into one object per line, then one
+# array. Read with a field split rather than `read -r a b c` so a malformed
+# line cannot silently shift the count into the state.
+_items=$(
+	printf '%s\n' "$_rows" | while IFS=' ' read -r _p _st _n; do
+		[ -n "${_p:-}" ] || continue
+		[ -n "${_st:-}" ] || continue
+		printf '{"partition":%s,"state":%s,"count":%s}\n' \
+			"$(mux_json_str "$_p")" "$(mux_json_str "$_st")" \
+			"$(mux_json_num "${_n:-}")"
+	done | mux_json_array
+)
+
+printf '{"status":"ok","partitions":%s}\n' "$_items"
+exit 0

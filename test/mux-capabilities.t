@@ -147,6 +147,26 @@ _cnt=$(printf '%s\n' "$_dispatched" | grep -c .)
 [ "$_cnt" -ge 25 ] || fail "only $_cnt verbs discovered, expected 30 or more.
 The scrape has stopped matching and would pass no matter what is missing"
 
+# AND THE SUB-VERBS OF A MODE SWITCH, which the scrape above cannot see. A
+# nested dispatch appears as ONE verb (`agent`), so every verb inside it would
+# be unaudited by the guard that exists to stop exactly that -- a verb added
+# and never declared. Read out of the sub-dispatcher's own case, the same way
+# the two above are read out of bin/mux rather than listed here.
+_sub=$(awk '/^case \$_verb in$/,/^esac$/' "$HERE/libexec/mux-agent" \
+	| grep -oE '^[a-z][a-z-]*\)' | tr -d ')')
+[ -n "$_sub" ] || fail "no sub-verbs discovered in libexec/mux-agent; the
+scrape has stopped matching and this guard is proving nothing"
+for _v in $_sub; do
+	"$HERE/bin/mux" agent "$_v" >/dev/null 2>&1
+	_rc=$?
+	# 0, 1 or 3 are answers. 2 is "this verb does not know what it was
+	# asked", which for a bare invocation means it is not really there.
+	[ "$_rc" != 2 ] || fail "capabilities declares the agent contract, but
+\`mux agent $_v\` answers usage -- the sub-verb is scraped from the dispatch
+and does not work, which is the gap a nested dispatch hides from the guard
+below."
+done
+
 _missing=$(printf '%s\n' "$_dispatched" | while IFS= read -r _v; do
 	[ -n "$_v" ] || continue
 	printf '%s\n' "$_declared" | grep -qxF "$_v" || printf '%s\n' "$_v"

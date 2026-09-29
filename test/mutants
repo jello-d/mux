@@ -1544,3 +1544,46 @@ t mux-json
 - 	printf '[%s]' "$_ja"
 + 	printf '%s' "$_ja"
 m arr-two
+
+
+= agent-failure-not-json
+f libexec/mux-agent
+t mux-agent
+- 		"$(mux_json_str "$1")" "$(mux_json_str "$3")"
++ 		"$1" "$3"
+m the answer did not parse
+
+= agent-refusal-goes-to-stderr
+f libexec/mux-agent
+t mux-agent
+- 		"$(mux_json_str "$1")" "$(mux_json_str "$3")"
++ 		"$(mux_json_str "$1")" "$(mux_json_str "$3")" >&2
+m the answer did not parse
+
+= agent-status-word-ignored
+f libexec/mux-agent
+t mux-agent
+- 	_out usage 2 "usage: mux agent <status> [options]"
++ 	_out ok 2 "usage: mux agent <status> [options]"
+m noverb-status
+
+= agent-exit-disagrees-with-status
+f libexec/mux-agent
+t mux-agent
+- 	exit "$2"
++ 	exit 0
+m badverb-rc
+
+= agent-status-unfiltered-by-default
+f libexec/mux-agent
+t mux-agent
+- [ "$_att" -eq 0 ] || set -- "$@" --attached
++ true
+m status-parts
+
+= agent-count-emitted-as-a-string
+f libexec/mux-agent
+t mux-agent
+- 			"$(mux_json_num "${_n:-}")"
++ 			"$(mux_json_str "${_n:-}")"
+m status-count
