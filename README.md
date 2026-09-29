@@ -649,18 +649,22 @@ that means no opinion, so latch proceeds.
 **Eternal Terminal is supported as data, not code.** Two lines:
 
 ```
-latch-transport  et -t %h --command %c
+latch-transport  et %h --command %c
 latch-classify   et-classify
 ```
 
-ET already reconnects by itself, so on an ET link latch's retry loop is mostly
-idle and what it still adds is the rest: which session you land in, attach-only
-on a reattach so a rebooted box never hands you an empty stranger, the terminal
-repair, the lock the tray reads, and a state word for every outcome that is not
-a recoverable drop. `ssh-auth` still answers for it, because ET handshakes over
-ssh. `man mux` has the three ways ET differs from ssh and why each one is in the
-template; the short version is that ET types the command into a remote *login*
-shell, so it needs no `sh -lc` and must use `%c` rather than `%q`.
+Verified between two VMs against et 7.0.0: the attach works, mux's status bar
+renders on the far side, and a detach ends the latch at 0 while leaving the
+remote session alive. `ssh-auth` still answers for it, because ET handshakes
+over ssh.
+
+Two limitations, both ET's rather than mux's. **A remote refusal reads as
+`ended`**, because et 7.0.0 does not propagate the remote command's exit status,
+so a far side with no mux looks like a deliberate close (its own message is on
+your terminal, where et wrote it). And **latch cannot quote the reason a
+connection failed**, because et writes its diagnostics to stdout rather than
+stderr, which is why the classifier keys on the exit code alone. `man mux` has
+the details, including why the template carries no `-t`.
 
 **It puts your terminal back.** When ssh dies mid-session tmux never sends its
 teardown, so the cursor stays hidden, mouse reporting stays on (moving the mouse

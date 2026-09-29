@@ -2119,3 +2119,24 @@ t mux-homebrew
 -     libexec.install "bin", "libexec", "share"
 +     libexec.install "bin", "libexec"
 m under libexec alongside
+
+= et-connect-failure-retries
+f share/latch/et-classify
+t mux-latch-et
+-   printf 'probing' ;;
++   printf 'refused' ;;
+m must be retryable
+
+= et-detach-is-ended
+f share/latch/et-classify
+t mux-latch-et
+-   printf 'ended' ;;
++   printf 'unknown' ;;
+m clean exit must be
+
+= et-documented-line-has-no-dash-t
+f share/latch/et-classify
+t mux-latch-et
+- #     latch-transport  et %h --command %c
++ #     latch-transport  et -t %h --command %c
+m documented line passes

@@ -1452,59 +1452,72 @@ A second transport ships as data, not code. Two lines in
 .PP
 .RS
 .nf
-latch\-transport  et \-t %h \-\-command %c
+latch\-transport  et %h \-\-command %c
 latch\-classify   et\-classify
 .fi
 .RE
 .PP
-ET RECONNECTS BY ITSELF across a drop or an IP change, which is the one job
-latch also does, so on an ET link latch's retry loop is mostly idle. What latch
-still owns is everything else: which session you land in, attach\-only on a
-reattach so a rebooted box never hands you a fresh empty stranger, the terminal
-repair when the far side dies mid\-attach, the lock the tray reads to know this
-box is watching that one, and a state word for every outcome that is NOT a
-recoverable drop. Two mechanisms for the drop; one owner for each of the rest.
-.PP
-THREE DIFFERENCES FROM SSH, each read out of ET's source rather than assumed,
-because a transport that fails plausibly is worse than one that fails loudly:
+VERIFIED BETWEEN TWO VMS against et 7.0.0, which is what its own PPA ships: the
+attach works, mux's status bar renders on the far side, a detach ends the latch
+at 0 and LEAVES the remote session alive. What follows is what that run
+measured, including three things a first version of this page got wrong by
+reading EternalTerminal's master branch instead.
 .TP
-.B no \fBsh \-lc\fR wrapper
+.B no \fBsh \-lc\fR wrapper, and \fB%c\fR rather than \fB%q\fR
 ET delivers
 .B \-\-command
-by TYPING it into the remote shell, and that shell is a LOGIN shell. So the
-PATH problem that makes
+by TYPING it into the remote shell, and that shell is a LOGIN shell, so the PATH
+problem that makes
 .B "sh \-lc"
-load\-bearing for ssh does not exist here.
-.TP
-.B %c, never %q
-For the same reason: the command is typed at a prompt, so it must arrive as one
-UNQUOTED element.
+load\-bearing for ssh does not exist. For the same reason the command must
+arrive as one UNQUOTED element:
 .B %q
-shell\-quotes it, which is exactly right for ssh (the far side re\-parses) and
-would make ET's shell look for a command whose name contains spaces.
+shell\-quotes it, which is right for ssh and would make ET's shell look for a
+command whose name contains spaces.
 .TP
-.B an exit 0 is not proof
-et answers 0 to several of its own usage errors, including a missing host. A
-classifier that believes a clean exit would report the session you asked for as
-closed by hand, which is a success for something that never happened \(em the
-bug
-.B "mux latch \-V"
-shipped once, when
-.B "ssh \-V"
-succeeded.
-.B et\-classify
-interrogates an exit 0 before believing it.
-.PP
-The credential seam is UNCHANGED: ET handshakes over ssh, so
+.B no \fB\-t\fR
+In et 7.0.0
+.B \-t
+is
+.BR \-\-tunnel ,
+not "request a pty", and it TAKES A VALUE: given
+.BR "et \-t %h \-\-command %c" ,
+it swallows the host and et answers "Missing host to connect to" \(em on exit 0.
+A pty is the DEFAULT for
+.BR \-\-command ,
+so no flag is needed.
+.TP
+.B the credential seam is unchanged
+ET handshakes over ssh, so
 .B ssh\-auth
-answers for it too and
+answers for it and
 .B blocked
-keeps working. What has NOT been verified against a running etserver is what et
-exits with when it stops reconnecting; its source names no message for that, so
-it falls to
-.B unknown
-and is retried, which is the safe direction for a transport whose whole premise
-is that a drop is temporary.
+keeps working. Confirmed in the lab: the default AUTH hook permitted the
+attempt and the bootstrap used the key.
+.PP
+TWO LIMITATIONS, both properties of ET rather than of mux, and both worth
+knowing before relying on a latch over it:
+.TP
+.B a remote refusal reads as \fBended\fR
+et 7.0.0 does NOT propagate the remote command's exit status: a
+.B "mux resume"
+that exits 3 over ssh comes back as 0 over et. So mux's own codes never reach
+the classifier, and a far side with no mux, or a session that is gone, is
+reported as a deliberate close. The far side's own message is on YOUR TERMINAL,
+where et wrote it, so the reason is visible even though latch cannot quote it or
+act on it.
+.TP
+.B latch cannot quote the transport's reason
+et writes its diagnostics to STDOUT, not stderr, so the CLASSIFY hook \(em which
+is handed a stderr file \(em never sees them. That is why
+.B et\-classify
+keys on the exit code alone:
+.B 0
+is a detach,
+.B 1
+is et failing to reach the server (retryable, because a booting box is the
+common cause and it heals by itself), and anything else retries with more
+patience.
 .SS Attach\-only on retry
 The first attempt may CREATE, since you asked to latch onto something. Every
 attempt after it asks for
