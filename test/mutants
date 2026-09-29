@@ -1874,3 +1874,24 @@ t mux-latch
 - 			_say untrusted "  $_uline"
 + 			:
 m not quoted
+
+= latch-backoff-reset-on-progress
+f libexec/mux-latch
+t mux-latch
+- 		[ "$_el" -ge "$PROGRESS" ] && _delay=$BACKOFF
++ 		[ "$_el" -ge "$PROGRESS" ] && :
+m did not reset the
+
+= latch-untrusted-reason-whole
+f libexec/mux-latch
+t mux-latch
+- 			_uw="$_uw its key really changed"
++ 			_uw="$_uw"
+m cut off mid-sentence
+
+= check-skill-assembles
+f libexec/mux-check
+t mux-check
+- 	if "$(dirname "$0")/mux-skill" >/dev/null 2>&1; then
++ 	if true; then
+m cannot be assembled exited 0

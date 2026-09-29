@@ -227,6 +227,10 @@ MAX_TRIES=${MUX_LATCH_MAX_TRIES:-0}         # 0 = forever
 # which covers a path that is being interfered with while still telling a
 # human promptly that a host key really did change.
 UNTRUSTED_TRIES=${MUX_LATCH_UNTRUSTED_TRIES:-4}
+# HOW LONG AN ATTEMPT MUST RUN to count as progress and reset the backoff.
+# Above any sane connect timeout (the shipped transport uses 10s), because an
+# attempt that merely timed out reached nothing and must not reset anything.
+PROGRESS=${MUX_LATCH_PROGRESS:-30}
 SLEEP=${MUX_LATCH_SLEEP:-sleep}
 
 _usage() {
@@ -832,6 +836,22 @@ while :; do
 		# every one-second failure with "(1s)" is noise that trains the eye
 		# to skip the field.
 		[ "$_el" -ge 20 ] && _took=" after $((_el / 60))m$((_el % 60))s"
+		# AND PROGRESS RESETS THE BACKOFF. Without this `_delay` is a
+		# RATCHET: it is set once and only ever doubled, so the first
+		# disruption in a latch's life pins it at BACKOFF_MAX for the
+		# rest of the process. Observed on a 35-hour-old latch, whose
+		# log opened a fresh outage with "retrying in 60s" where a reset
+		# would have said 2s. The harm is worst for a SHORT blip: five
+		# seconds of lost wifi then costs a minute of downtime, which on
+		# a roaming laptop is the common case rather than the rare one.
+		#
+		# AN ATTEMPT THAT RAN LONG IS THE PROXY FOR "there was a
+		# session", which is the signal latch otherwise lacks. A connect
+		# that never completes is bounded by the transport's own timeout
+		# (10s in the shipped one), so an attempt lasting PROGRESS
+		# seconds or more reached the far side, and whatever the backoff
+		# had grown to before that is stale information.
+		[ "$_el" -ge "$PROGRESS" ] && _delay=$BACKOFF
 	fi
 
 	# PUT THE TERMINAL BACK FIRST, before classifying, reporting or waiting.
@@ -918,9 +938,14 @@ while :; do
 			# <seconds> <state> <why> and uses $3, so a reason split
 			# across several arguments is silently TRUNCATED at the
 			# first one. It printed "the far side's identity does".
-			_wait "$_delay" "$_state" "the far side's identity does\
- not match what is on file; something may be intercepting, or its key\
- really changed"
+			# Accumulated into a variable rather than continued
+			# across lines, so each half is a line a mutation can
+			# target -- a line-continuation backslash cannot be a
+			# corpus anchor.
+			_uw="the far side's identity does not match what is"
+			_uw="$_uw on file; something may be intercepting, or"
+			_uw="$_uw its key really changed"
+			_wait "$_delay" "$_state" "$_uw"
 			_backoff
 			continue
 		fi

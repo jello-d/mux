@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.71" "User Commands"
+.TH MUX 1 "" "mux 0.72" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -979,7 +979,7 @@ It always exits 0: it is a pure report, and a non\-zero exit would be
 indistinguishable from the transport.
 .PP
 .EX
-mux 0.71
+mux 0.72
 capabilities 1
 agent\-list 1
 agent\-summary 1
@@ -1942,7 +1942,12 @@ and
 bound the retry loop (0 tries means forever),
 .B MUX_LATCH_UNTRUSTED_TRIES
 bounds how many times an identity mismatch is retried before it is called
-permanent (default 4), and
+permanent (default 4),
+.B MUX_LATCH_PROGRESS
+is how many seconds an attempt must run to count as PROGRESS and reset the
+backoff (default 30; without a reset the delay is a ratchet, since it is only
+ever doubled, so one disruption pins it at the maximum for the life of the
+process), and
 .B MUX_LATCH_SLEEP
 replaces
 .BR sleep (1),
