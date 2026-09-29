@@ -1,0 +1,68 @@
+#!/bin/sh
+# mux-skill: print the agent skill that matches THIS mux.
+#
+#   mux skill [NAME]
+#
+# An API agents do not know about does not get used, which is the whole reason
+# this ships. The verbs, the JSON contract and -- the part that matters -- the
+# rule about never answering another agent's permission prompt are no use
+# living only in a man page an agent will not read.
+#
+# RELEASE-MATCHED, WHICH IS THE POINT OF PRINTING IT RATHER THAN LINKING IT. A
+# skill is installed once and then sits in a config directory forever, so a
+# copy taken from a website teaches whatever the verbs were that day. This one
+# comes out of the same tree as the binary answering the calls, so it cannot
+# describe a flag this mux does not have.
+#
+# NOT `mux agent skill`, deliberately. Everything under `mux agent` promises
+# ONE JSON OBJECT on stdout, including on failure, and a verb printing markdown
+# would make that promise a convention with an exception -- which is not a
+# contract. This is for a human or a provisioner to run, once, so it lives
+# outside that surface.
+#
+# IT PRINTS AND DOES NOT INSTALL. Where a skill belongs is the agent harness's
+# business (`~/.claude/skills/<name>/SKILL.md` for one of them), and mux does
+# not learn the layout of somebody else's config directory -- the same seam it
+# already holds by taking indicator SOURCES as commands and never learning what
+# ssh is. The integrator places it:
+#
+#   mkdir -p ~/.claude/skills/mux-agent
+#   mux skill >~/.claude/skills/mux-agent/SKILL.md
+set -eu
+
+_lib=$(dirname "$0")
+[ -d "${MUX_SHARE:-}" ] || MUX_SHARE=$_lib/../share
+
+_name=${1:-mux-agent}
+case ${_name:-} in
+-h|--help)
+	echo "usage: mux skill [NAME]"
+	echo "  print the agent skill that matches this mux, on stdout"
+	exit 0 ;;
+-*) echo "mux: skill: unknown option: $_name" >&2; exit 2 ;;
+esac
+
+# A NAME THAT IS NOT A NAME IS A USAGE ERROR, checked before it becomes a
+# path. The value ends up in a filename, so `../../etc/passwd` would otherwise
+# be a readable file this happily printed.
+case $_name in
+''|*[!a-z0-9-]*|-*|*-) echo "mux: skill: not a skill name: $_name" >&2
+	exit 2 ;;
+esac
+
+_f=$MUX_SHARE/skills/$_name/SKILL.md
+if [ ! -r "$_f" ]; then
+	echo "mux: skill: no skill called $_name" >&2
+	# NAME WHAT THERE IS, rather than leaving someone to guess. There is
+	# one today and the list is cheap; a refusal that cannot say what the
+	# alternatives are makes a typo look like a missing feature.
+	if [ -d "$MUX_SHARE/skills" ]; then
+		for _d in "$MUX_SHARE"/skills/*; do
+			[ -r "$_d/SKILL.md" ] || continue
+			echo "mux: skill: have: ${_d##*/}" >&2
+		done
+	fi
+	exit 1
+fi
+
+cat "$_f"

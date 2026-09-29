@@ -1,0 +1,28 @@
+"""Read a SKILL.md's frontmatter the way an agent harness would.
+
+A helper rather than a heredoc inside the test: the test is POSIX sh and a
+python heredoc carrying both shell and YAML quoting is the kind of nesting
+this suite has already been bitten by.
+"""
+import os
+import sys
+
+import yaml
+
+raw = open(os.environ["MUX_T_SKILL"]).read()
+if not raw.startswith("---\n"):
+    sys.stderr.write("no frontmatter\n")
+    sys.exit(1)
+doc = yaml.safe_load(raw.split("---\n", 2)[1])
+if not isinstance(doc, dict):
+    sys.stderr.write("frontmatter is not a mapping: %r\n" % (doc,))
+    sys.exit(1)
+if doc.get("name") != "mux-agent":
+    sys.stderr.write("name is %r\n" % (doc.get("name"),))
+    sys.exit(1)
+desc = doc.get("description") or ""
+# A FOLD THAT WENT WRONG looks like a description with newlines still in it,
+# or one truncated to its first line. Both install fine and never match.
+if len(desc) < 60 or "\n" in desc.strip():
+    sys.stderr.write("description folded wrong: %r\n" % (desc,))
+    sys.exit(1)
