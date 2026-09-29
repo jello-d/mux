@@ -193,7 +193,7 @@ case ${_tp:-} in
    [ "$_asked" = "$$" ] \
     || fail "with no tpgid it should fall back to the pane pid,
 asked [$_asked] want [$$]" ;;
-*)	 [ "$_asked" = "$_tp" ] \
+*)  [ "$_asked" = "$_tp" ] \
     || fail "asked [$_asked], want the foreground group [$_tp]" ;;
 esac
 
