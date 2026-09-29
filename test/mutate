@@ -58,7 +58,16 @@ _parses() {   # <file>
   *bash)    _pl=bash ;;
   *)        _pl=sh ;;
   esac
-  case "$1" in *.py) _pl=py ;; esac
+  case "$1" in
+  *.py) _pl=py ;;
+  # THE HOMEBREW FORMULA IS RUBY, and this repo is its own tap, so the
+  # formula ships here and its guards belong in the corpus like anything
+  # else. Without this arm a mutated `.rb` goes to `dash -n`, which rejects
+  # every Ruby file, and the driver reports a corpus error about a record
+  # that is perfectly good -- the same false accusation the suffix-keyed
+  # Python selector made before the shebang arm was added.
+  *.rb) _pl=rb ;;
+  esac
   case "$_pl" in
   py)
     # compile(), not py_compile: it checks the syntax and writes
@@ -71,6 +80,15 @@ src = open(sys.argv[1]).read()
 compile(src, sys.argv[1], "exec")' "$1" 2>/dev/null
     return $? ;;
   bash) bash -n "$1" 2>/dev/null ;;
+  rb)
+    # SKIPPED RATHER THAN FAILED with no ruby on the box, and the record
+    # still has to produce its named failure for the kill to count -- so
+    # the worst an absent ruby can do is let a non-parsing mutant through
+    # to a test that will reject it anyway. Failing here instead would make
+    # a machine without ruby report corpus errors about good records, which
+    # is the direction that wastes the most time.
+    command -v ruby >/dev/null 2>&1 || return 0
+    ruby -c "$1" >/dev/null 2>&1 ;;
   *)    dash -n "$1" 2>/dev/null ;;
   esac
 }

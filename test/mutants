@@ -2105,3 +2105,17 @@ t setup
 -   _rt="~${_shr#"$HOME"}/$PKG/mux.tmux"
 +   _rt=/nowhere/at/all/mux.tmux
 m written with a TILDE was not recognised
+
+= brew-caveats-say-reload
+f HomebrewFormula/mux.rb
+t mux-homebrew
+-            mux reload
++            echo nothing
+m never mention
+
+= brew-installs-all-three-dirs
+f HomebrewFormula/mux.rb
+t mux-homebrew
+-     libexec.install "bin", "libexec", "share"
++     libexec.install "bin", "libexec"
+m under libexec alongside
