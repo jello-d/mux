@@ -161,14 +161,17 @@ _sub=$(awk '/^case \$_verb in$/,/^esac$/' "$HERE/libexec/mux-agent" \
 [ -n "$_sub" ] || fail "no sub-verbs discovered in libexec/mux-agent; the
 scrape has stopped matching and this guard is proving nothing"
 for _v in $_sub; do
-	"$HERE/bin/mux" agent "$_v" >/dev/null 2>&1
-	_rc=$?
-	# 0, 1 or 3 are answers. 2 is "this verb does not know what it was
-	# asked", which for a bare invocation means it is not really there.
-	[ "$_rc" != 2 ] || fail "capabilities declares the agent contract, but
-\`mux agent $_v\` answers usage -- the sub-verb is scraped from the dispatch
-and does not work, which is the gap a nested dispatch hides from the guard
-below."
+	# NOT "it exits 0": `read` and `wait` REQUIRE arguments, so a bare call
+	# answering usage is correct for them. The question is whether the verb
+	# EXISTS, and the dispatcher has exactly one answer for one that does
+	# not -- so that is what this looks for.
+	_o=$("$HERE/bin/mux" agent "$_v" 2>&1 || true)
+	case $_o in
+	*"unknown agent verb"*) fail "capabilities declares the agent contract
+and \`mux agent $_v\` is scraped from its dispatch, but invoking it says
+unknown -- which is the gap a nested dispatch hides from the guard below:
+[$_o]" ;;
+	esac
 done
 
 _missing=$(printf '%s\n' "$_dispatched" | while IFS= read -r _v; do

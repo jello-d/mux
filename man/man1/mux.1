@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.65" "User Commands"
+.TH MUX 1 "" "mux 0.66" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -979,7 +979,7 @@ It always exits 0: it is a pure report, and a non\-zero exit would be
 indistinguishable from the transport.
 .PP
 .EX
-mux 0.65
+mux 0.66
 capabilities 1
 agent\-list 1
 agent\-summary 1
@@ -1480,6 +1480,10 @@ and
 asks about another one and
 .B \-\-all
 about every one.
+.B mux agent read " " \fISESSION\fR
+returns what is on that agent's screen, and
+.B mux agent wait " " \fISESSION\fR " " \fISTATE\fR
+blocks until it gets there.
 .IP
 .B peers
 is HEADLESS by construction, and that is protected rather than incidental: it
@@ -1488,6 +1492,34 @@ answers over a transport, at boot, with no tmux client and no server attached.
 It carries no pane id on purpose \(em a verb that acts on a pane resolves one
 at the moment it acts, which is more correct than a caller caching an id that
 can change under it.
+.IP
+.B read
+RESOLVES THE PANE ITSELF, from the state record, rather than taking one from
+the caller: an id cached from an earlier
+.B peers
+can have died and been replaced, and capturing the wrong pane is a wrong answer
+that looks like a right one. It returns the VISIBLE pane by default and
+scrollback only when
+.B \-n
+asks for it, because an agent pane's scrollback can be enormous and a verb
+whose default answer is unbounded is one a caller learns to be afraid of.
+.IP
+.B wait
+IS ALWAYS BOUNDED \(em an unbounded wait from an agent is a hang with no
+operator, so
+.B \-t
+has a default (300s) rather than meaning forever. A timeout answers status
+.B timed\-out
+and exit 1, and REPORTS THE STATE IT IS ACTUALLY IN: "not idle yet" is a
+different problem from "blocked and waiting for a human", and a caller that has
+just burned its timeout should not need a second round trip to find out which.
+That status is the clearest case for carrying a word beside the number \(em it
+needs no new exit code, which is what keeps 126, 127 and 255 attributable.
+.IP
+AN OPTION IS AN OPTION WHEREVER IT SITS on this surface, unlike the front end,
+which stops parsing options at the first positional. That edge is tolerable for
+a human who can see the result and not for a caller composing argv, where
+argument ORDER becomes a rule nobody wrote down.
 .IP
 AGE, NOT AN EPOCH, resolved against the clock that wrote it. Emitting the
 epoch works perfectly until the reader is on another machine, where durations

@@ -70,6 +70,30 @@ mux_agent_state() {
 	done
 	printf '%s %s' "$_best" "$_bestep"
 }
+# mux_agent_pane DIR SESSION -> the pane id of the record that SPEAKS for that
+# session, or empty. The same walk and the same ranking as mux_agent_state: a
+# session with several agent panes reports its worst, and this is the pane that
+# worst state came from, which is the one a caller wanting to READ it means.
+#
+# A SEPARATE FUNCTION RATHER THAN A THIRD FIELD, and that is forced rather than
+# chosen: mux_agent_state's answer is parsed as "STATE EPOCH" by seven callers
+# using ${_se%% *} and ${_se#* }, so appending a field would silently turn the
+# epoch into "EPOCH PANE" in every one of them. The walk is duplicated; the
+# RANKING is not, which is the part that must never drift.
+mux_agent_pane() {      # <dir> <session>
+	_apdir=$1 _apsess=$2
+	_appane= _apr=-1
+	[ -d "$_apdir" ] || return 0
+	for _f in "$_apdir"/*; do
+		[ -e "$_f" ] || continue
+		read -r _st _w _p _e _nid _ss <"$_f" || continue
+		[ "$_ss" = "$_apsess" ] || continue
+		_r=$(mux_agent_rank "$_st")
+		[ "$_r" -gt "$_apr" ] && { _apr=$_r; _appane=$_p; }
+	done
+	printf '%s' "$_appane"
+}
+
 
 # mux_agent_sessions DIR -> the distinct sessions with a tracked agent, ONE PER
 # LINE. Newline separated because a session name may contain a space but never a
