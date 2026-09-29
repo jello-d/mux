@@ -8,8 +8,10 @@
 #   gone     the far side lost that session      terminal, never recreate it
 #   refused  the far side answered, and no       terminal
 #            amount of patience helps
-#   denied   a credential or host key was        terminal, needs a human
+#   denied   a credential was offered and       terminal, needs a human
 #            refused
+#   untrusted the far side's identity does not   retry a bounded number of
+#            match what is on file               times, then terminal
 #   probing  down, recoverable on its own        retry on a backoff
 #   unknown  cannot be determined                retry, with more patience
 #
@@ -58,14 +60,38 @@ case $_rc in
 255)
 	# ssh's own catch-all. Everything below is the stderr discriminator.
 	#
-	# HOST KEY VERIFICATION is grouped with the credential refusals, which a
-	# live run against a rebuilt host is what found: ssh exits 255 and says
-	# nothing resembling "denied", so it classified as retryable and latch
-	# would have spun forever on something only a human can fix. It is the
-	# same refusal pointing the other way -- we rejected THEM -- and the
-	# handling is identical, which is why it is this state and not a new one.
-	if _saw 'permission denied' || _saw 'authenticat' \
-	   || _saw 'host key verification'; then
+	# HOST KEY VERIFICATION WAS GROUPED WITH THE CREDENTIAL REFUSALS, and
+	# that was right about the important half and wrong about one axis. The
+	# finding it came from stands: a live run against a rebuilt host showed
+	# ssh exiting 255 saying nothing resembling "denied", so it classified as
+	# retryable and latch spun forever on something only a human can fix.
+	# What the old reasoning got wrong was "the handling is identical".
+	#
+	# MEASURED, 2026-09-29: the refusal happens during KEY EXCHANGE, before
+	# user authentication. An `ssh -v` trace of a mismatched key contains no
+	# "Offering public key" line at all. So the two differ on the axis that
+	# decides terminality:
+	#
+	#   a credential denial SPENDS an authentication attempt and raises a
+	#   prompt -- which is the storm argument, and why it is terminal;
+	#   a host key refusal spends NOTHING, exposes no credential to the
+	#   unverified peer, and fails fast.
+	#
+	# And latch CAN observe this one being fixed, which was the other stated
+	# reason for stopping: the next attempt simply answers, at no cost. So it
+	# is its own state, retried a bounded number of times and then terminal.
+	# Bounded because the two causes are indistinguishable from here (an
+	# interception in the path resolves itself; a rebuilt host does not) and
+	# the asymmetry says to try: the cost of retrying a permanent change is a
+	# short delay before the human is told, and the cost of NOT retrying a
+	# transient one is a roaming attachment that stays dead.
+	# ONE PATTERN, not two. `host key for ... has changed` sits in the same
+	# message as `host key verification failed`, so matching both would make
+	# either one individually unkillable by mutation -- the two-guards trap
+	# this suite has now met six times.
+	if _saw 'host key verification'; then
+		printf 'untrusted'
+	elif _saw 'permission denied' || _saw 'authenticat'; then
 		printf 'denied'
 	else
 		printf 'probing'

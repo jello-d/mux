@@ -40,7 +40,10 @@ tail -n +2 "$SCRIPT" 2>/dev/null >"$SCRIPT.t" || :
 mv -f "$SCRIPT.t" "$SCRIPT"
 _rc=${_l%% *}; _msg=${_l#* }
 [ "$_msg" = "$_l" ] && _msg=
-[ -n "$_msg" ] && printf '%s\n' "$_msg" >&2
+# %b, not %s: a scripted message may carry \n for a MULTI-LINE
+# stderr. Without that, the last line is the only line and an
+# assertion about quoting the whole report cannot fail.
+[ -n "$_msg" ] && printf '%b\n' "$_msg" >&2
 exit "$_rc"
 EOF
 # The auth stub answers from a file, so a run can watch a credential appear.
@@ -75,12 +78,17 @@ latch() {
 		MUX_LATCH_SLEEP="$T/bin/nosleep" \
 		MUX_LATCH_BACKOFF=1 MUX_LATCH_BLOCKED_WAIT=1 \
 		MUX_LATCH_MAX_TRIES="${MAXT:-6}" \
+		MUX_LATCH_UNTRUSTED_TRIES="${UT:-4}" \
 		"$HERE/libexec/mux-latch" "$@" >/dev/null 2>&1 || _lr=$?
 	echo "$_lr"
 }
 seq_of()  { tr '\n' ' ' <"$STATES"; }
 n_tries() { grep -c . "$TRIES" 2>/dev/null || true; }
 n_auth()  { grep -c . "$AUTHLOG" 2>/dev/null || true; }
+# ATTEMPTS, not transport invocations. `n_tries` counts the latter and they
+# are not the same number: the terminal liveness query runs through the
+# transport as well, so a 3-attempt run can show 17 invocations.
+n_state() { grep -cx "$1" "$STATES" 2>/dev/null || true; }
 
 # --- the human quits: terminal, exit 0, and NO retry --------------------
 # Retrying here would resurrect a session they just closed. This is the case
@@ -124,21 +132,66 @@ case "$(seq_of)" in
 *) fail "a rejected credential was not reported as denied: [$(seq_of)]" ;;
 esac
 
-# --- A HOST KEY REFUSAL IS ALSO TERMINAL ------------------------------
-# Same family as a rejected credential, pointing the other way: we refused THEM.
-# ssh exits 255 and its message says nothing about "denied", so this classified
-# as retryable and latch would have spun forever on a problem only a human can
-# fix. Found in a live run against a rebuilt host, not by this suite.
-printf '255 Host key verification failed.\n' >"$SCRIPT"
-_rc=$(latch box proj)
-[ "$_rc" = 1 ] || fail "a host key refusal should exit non-zero, got $_rc"
-[ "$(n_tries)" = 1 ] \
-	|| fail "a host key refusal was retried $(n_tries) times; no amount of
-patience fixes a changed host key"
+# --- A HOST KEY REFUSAL IS BOUNDED, NOT IMMEDIATELY TERMINAL ----------
+# It was `denied` until 0.71, on the reasoning that it is the same refusal
+# pointing the other way. The original finding stands -- ssh exits 255 saying
+# nothing about "denied", so it classified as retryable and latch spun forever
+# on a problem only a human can fix -- but "the handling is identical" was
+# wrong on the axis that decides terminality. MEASURED: the refusal lands
+# during key exchange, before user authentication, so no credential is offered
+# and nothing is spent. And latch CAN observe it being fixed: the next attempt
+# answers, at no cost. So it retries a bounded number of times, which is what
+# lets a roaming attachment survive something interfering with the path, and
+# only then calls the change permanent.
+: >"$SCRIPT"
+_i=0; while [ "$_i" -lt 30 ]; do _i=$((_i + 1))
+	printf '255 Host key verification failed.\n' >>"$SCRIPT"
+done
+_rc=$(MAXT=9 UT=2 latch box proj)
+[ "$_rc" = 1 ] || fail "an unresolved identity mismatch should exit 1, got $_rc"
 case "$(seq_of)" in
-*denied*) ;;
-*) fail "a host key refusal should report denied: [$(seq_of)]" ;;
+*untrusted*) ;;
+*) fail "a host key refusal should report untrusted, not denied: it is not a
+rejected credential and it is not terminal on the first sighting:
+[$(seq_of)]" ;;
 esac
+
+# IT IS RETRIED, AND BOUNDED, IN ONE EXACT COUNT. Asserted as a number because
+# "reports untrusted" was true of the terminal version too -- and as an EQUALITY
+# rather than two inequalities in two blocks, which is what the first draft had:
+# with `= 3` here, a separate `<= 3` block cannot be killed on its own, so it
+# was belt-and-braces measuring as untestable. The global cap (MAXT) is above
+# the bound on purpose, so a bound that stops working ends the run and FAILS
+# here instead of hanging the suite.
+[ "$(n_state attaching)" = 3 ] || fail "an identity mismatch was attempted
+$(n_state attaching) time(s) with UT=2, expected exactly 3: it must retry up to
+the bound and no further. Too few makes a transient interception fatal, which is
+the bug this change exists to fix; too many is the forever-retry the original
+design correctly refused."
+
+# THE TRANSPORT'S OWN REPORT IS HANDED OVER, not paraphrased. ssh writes the
+# fingerprint, the offending file and line, and the exact remedy command, then
+# ends with its least informative line -- and `_errline` takes the last line,
+# which is right for a tool that warns before it fails and wrong for one that
+# writes a report. Without this the human is told "Host key verification
+# failed." and left to find the rest themselves.
+# FOUR, not two: the attach-only NEGOTIATION runs through the transport on the
+# first retry, so it pops a script line of its own. That invocation is why a
+# 3-attempt run shows 17 transport calls.
+_rep='255 REMEDY-LINE-HERE\nHost key verification failed.'
+printf '%s\n%s\n%s\n%s\n' "$_rep" "$_rep" "$_rep" "$_rep" >"$SCRIPT"
+_err=$T/said2
+env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
+	T_AUTH="$T_AUTH" T_PROBE="$T_PROBE" STATES="$STATES" \
+	TRIES="$TRIES" AUTHLOG="$AUTHLOG" SCRIPT="$SCRIPT" \
+	MUX_LATCH_TRANSPORT="$T/bin/transport %h %s" \
+	MUX_LATCH_AUTH="$T/bin/auth" MUX_LATCH_PROBE="$T/bin/probe" \
+	MUX_LATCH_SLEEP="$T/bin/nosleep" MUX_LATCH_BACKOFF=1 \
+	MUX_LATCH_UNTRUSTED_TRIES=1 MUX_LATCH_MAX_TRIES=4 \
+	"$HERE/libexec/mux-latch" box proj >/dev/null 2>"$_err" || true
+grep -q 'REMEDY-LINE-HERE' "$_err" || fail "the transport's own report was
+not quoted, so the fingerprint and the remedy it printed are lost. Got:
+$(cat "$_err")"
 
 # --- THE REPORT IS NOT TRUNCATED --------------------------------------
 # _say's detail is wrapped across source lines to stay inside 80 columns, and
@@ -146,7 +199,7 @@ esac
 # "this needs a human: latch cannot see when a" and stopped mid-sentence.
 # The state was right and the explanation was unreadable, which is the half a
 # human actually uses.
-printf '255 Host key verification failed.\n' >"$SCRIPT"
+printf '255 jello@box: Permission denied (publickey).\n' >"$SCRIPT"
 _err=$T/said
 env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" \
 	MUX_SHARE="$HERE/share" \
@@ -156,9 +209,30 @@ env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" \
 	MUX_LATCH_AUTH="$T/bin/auth" MUX_LATCH_PROBE="$T/bin/probe" \
 	MUX_LATCH_SLEEP="$T/bin/nosleep" MUX_LATCH_MAX_TRIES=3 \
 	"$HERE/libexec/mux-latch" box proj >/dev/null 2>"$_err" || true
-grep -q 'retrying a refusal forever' "$_err" \
+grep -q 'retrying a rejected credential forever' "$_err" \
 	|| fail "the denied explanation was cut off; a wrapped _say call must
 still print whole. Got:
+$(cat "$_err")"
+
+# THE SAME BUG SHIPPED IN THE UNTRUSTED ARM and is asserted separately, because
+# `_wait` takes exactly <seconds> <state> <why> and uses $3: a reason split
+# across arguments is silently truncated at the first one. It printed "the far
+# side's identity does" and stopped.
+: >"$SCRIPT"
+_i=0; while [ "$_i" -lt 4 ]; do _i=$((_i + 1))
+	printf '255 Host key verification failed.\n' >>"$SCRIPT"
+done
+env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
+	T_AUTH="$T_AUTH" T_PROBE="$T_PROBE" STATES="$STATES" \
+	TRIES="$TRIES" AUTHLOG="$AUTHLOG" SCRIPT="$SCRIPT" \
+	MUX_LATCH_TRANSPORT="$T/bin/transport %h %s" \
+	MUX_LATCH_AUTH="$T/bin/auth" MUX_LATCH_PROBE="$T/bin/probe" \
+	MUX_LATCH_SLEEP="$T/bin/nosleep" MUX_LATCH_MAX_TRIES=4 \
+	MUX_LATCH_UNTRUSTED_TRIES=1 \
+	"$HERE/libexec/mux-latch" box proj >/dev/null 2>"$_err" || true
+grep -q 'or its key really changed' "$_err" \
+	|| fail "the untrusted explanation was cut off mid-sentence; _wait uses
+\$3 only, so the reason must be ONE argument. Got:
 $(cat "$_err")"
 
 # --- pre-flight blocked WAITS, and leaves by itself when a key appears --

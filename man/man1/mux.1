@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.70" "User Commands"
+.TH MUX 1 "" "mux 0.71" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -979,7 +979,7 @@ It always exits 0: it is a pure report, and a non\-zero exit would be
 indistinguishable from the transport.
 .PP
 .EX
-mux 0.70
+mux 0.71
 capabilities 1
 agent\-list 1
 agent\-summary 1
@@ -1165,9 +1165,32 @@ A credential WAS offered and the far side rejected it. The opposite handling:
 TERMINAL. latch cannot observe a human fixing
 .IR authorized_keys ,
 so there is no condition on which to retry, and retrying a rejected credential
-forever is the same storm wearing a backoff. A HOST KEY refusal lands here too:
-it is the same refusal pointing the other way \(em a rebuilt host presents a new
-key and mux rejects it \(em and no amount of patience resolves it either.
+forever is the same storm wearing a backoff.
+.TP
+.B untrusted
+The far side's identity does not match what is on file. This was part of
+.B denied
+until 0.71, on the reasoning that it is the same refusal pointing the other way,
+and it is not \(em on the one axis that decides terminality. The refusal lands
+during KEY EXCHANGE, before user authentication, so no credential is offered to
+the unverified peer and nothing is spent; and latch CAN observe this one being
+fixed, because the next attempt simply answers, at no cost. So it retries a
+BOUNDED number of times
+.RB ( MUX_LATCH_UNTRUSTED_TRIES ,
+default 4) and only then calls the change permanent.
+.IP
+Bounded because the two causes are indistinguishable from here: something
+interfering with the path resolves itself, a rebuilt host does not. The
+asymmetry decides it \(em retrying a permanent change costs a short delay before
+the human is told, while not retrying a transient one leaves a roaming
+attachment dead until somebody notices.
+.IP
+On giving up it QUOTES THE TRANSPORT'S OWN REPORT rather than summarising it.
+ssh prints the fingerprint, the offending file and line, and the exact remedy
+command, and then ends with its least informative line; latch normally reports
+the LAST line, which is right for a tool that warns before it fails and wrong
+for one that writes a report. mux does not learn ssh's wording to pick the
+useful lines out \(em it hands the whole thing over, bounded.
 .TP
 .B unknown
 Cannot be determined. Never reported as usable and never as blocked; retried
@@ -1916,7 +1939,10 @@ where the environment wins. Described under
 .B MUX_LATCH_BLOCKED_WAIT
 and
 .B MUX_LATCH_MAX_TRIES
-bound the retry loop (0 tries means forever), and
+bound the retry loop (0 tries means forever),
+.B MUX_LATCH_UNTRUSTED_TRIES
+bounds how many times an identity mismatch is retried before it is called
+permanent (default 4), and
 .B MUX_LATCH_SLEEP
 replaces
 .BR sleep (1),

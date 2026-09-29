@@ -238,9 +238,9 @@ m a concurrent latch should refuse
 = latch-hostkey-treated-as-retryable
 f share/latch/ssh-classify
 t mux-latch
-- 	   || _saw 'host key verification'; then
-+ 	   || false; then
-m a host key refusal was retried
+- 	if _saw 'host key verification'; then
++ 	if false; then
+m should report untrusted
 
 = latch-say-detail-truncated
 f libexec/mux-latch
@@ -1846,3 +1846,31 @@ t mux-skill
 - if [ "$_form" = agents ]; then
 + if false; then
 m carries YAML frontmatter
+
+= latch-hostkey-is-untrusted-not-denied
+f share/latch/ssh-classify
+t mux-latch
+- 		printf 'untrusted'
++ 		printf 'denied'
+m not denied
+
+= latch-untrusted-retries
+f libexec/mux-latch
+t mux-latch
+- 		if [ "$_untrusted" -le "$UNTRUSTED_TRIES" ]; then
++ 		if false; then
+m expected exactly 3
+
+= latch-untrusted-is-bounded
+f libexec/mux-latch
+t mux-latch
+- 		if [ "$_untrusted" -le "$UNTRUSTED_TRIES" ]; then
++ 		if true; then
+m expected exactly 3
+
+= latch-untrusted-quotes-the-transport
+f libexec/mux-latch
+t mux-latch
+- 			_say untrusted "  $_uline"
++ 			:
+m not quoted

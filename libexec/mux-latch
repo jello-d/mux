@@ -19,16 +19,27 @@
 #             hardware key wanting a touch). DO NOT ATTEMPT: every attempt is a
 #             prompt and a loop here is the storm. Poll the CREDENTIAL instead,
 #             which costs nothing and self-heals the moment a key appears.
-#   denied    a credential WAS offered and the far side rejected it, OR a host
-#             key was rejected (the same refusal pointing the other way).
-#             Different problem, opposite handling: TERMINAL. latch cannot
-#             observe a human fixing authorized_keys or a known_hosts entry, so
-#             there is no condition on which to retry, and retrying a rejected
-#             credential forever is the storm wearing a backoff. Say what to fix
-#             and stop.
+#   denied    a credential WAS offered and the far side rejected it. Different
+#             problem, opposite handling: TERMINAL. latch cannot observe a human
+#             fixing authorized_keys, so there is no condition on which to
+#             retry, and retrying a rejected credential forever is the storm
+#             wearing a backoff. Say what to fix and stop.
 #             (These two were one state at first. The test for the storm is what
 #             separated them: with auth live and the far side refusing, a single
 #             `blocked` state oscillates.)
+#   untrusted the far side's identity does not match what is on file. This was
+#             part of `denied` until 0.71, on the reasoning that it is the same
+#             refusal pointing the other way. It is not, on the one axis that
+#             decides terminality: measured, the refusal lands during KEY
+#             EXCHANGE, before user authentication, so no credential is offered
+#             and nothing is spent -- and latch CAN observe it being fixed,
+#             because the next attempt simply answers. So: retry, BOUNDED, then
+#             terminal. Bounded because the two causes are indistinguishable
+#             from here -- something intercepting the path resolves itself, a
+#             rebuilt host does not -- and the asymmetry says to try: retrying a
+#             permanent change costs a short delay before the human is told,
+#             while not retrying a transient one leaves a roaming attachment
+#             dead until somebody notices.
 #   unknown   cannot determine. Never reported as usable and never as blocked;
 #             retried with more patience. On a real fleet this is COMMON, not
 #             exotic: an MTU blackhole passes every cheap liveness probe.
@@ -211,6 +222,11 @@ BACKOFF=${MUX_LATCH_BACKOFF:-2}
 BACKOFF_MAX=${MUX_LATCH_BACKOFF_MAX:-60}
 BLOCKED_WAIT=${MUX_LATCH_BLOCKED_WAIT:-5}
 MAX_TRIES=${MUX_LATCH_MAX_TRIES:-0}         # 0 = forever
+# HOW MANY TIMES AN IDENTITY MISMATCH IS RETRIED before it is called
+# permanent. Four attempts on the normal backoff is a couple of minutes,
+# which covers a path that is being interfered with while still telling a
+# human promptly that a host key really did change.
+UNTRUSTED_TRIES=${MUX_LATCH_UNTRUSTED_TRIES:-4}
 SLEEP=${MUX_LATCH_SLEEP:-sleep}
 
 _usage() {
@@ -442,7 +458,7 @@ _auth_state() { _ask "$AUTH" "$_host"; }
 _classify_state() {   # <exit> <stderr file>
 	_cs=$($CLASSIFY "$1" "$2" 2>/dev/null || true)
 	case ${_cs:-} in
-	probing|blocked|denied|unknown|ended|gone|refused)
+	probing|blocked|denied|untrusted|unknown|ended|gone|refused)
 		printf '%s' "$_cs"; return 0 ;;
 	esac
 	# A classifier that answered with something meaningless has not answered,
@@ -655,6 +671,7 @@ _remote_cmd() {   # -> sets $_cmd
 
 _state=probing
 _tries=0
+_untrusted=0      # identity mismatches seen, capped by UNTRUSTED_TRIES
 _attempts=0       # transport attaches made; 0 means the next is the first
 _delay=$BACKOFF
 
@@ -878,9 +895,55 @@ while :; do
 		exit 1 ;;
 	denied)
 		_say denied "$(_errline)"
+		# THE HOST KEY HALF OF THIS SENTENCE WAS FALSE and is now its own
+		# state. latch cannot observe authorized_keys being fixed, which
+		# is true and is the reason this one stops; it CAN observe a host
+		# key being fixed, so claiming otherwise was advice that could
+		# not come true -- the same defect this project already recorded
+		# in `mux agent-doctor`'s remedy text.
 		_say denied "this needs a human: latch cannot see when a" \
-			"credential or a host key is fixed, so it stops rather" \
-			"than retrying a refusal forever"
+			"credential is fixed, so it stops rather than retrying" \
+			"a rejected credential forever"
+		exit 1 ;;
+	untrusted)
+		# THE FAR SIDE IS NOT WHO WE HAVE ON FILE. Two causes, and from
+		# here they are the same bytes: something is interfering with the
+		# path, or the host legitimately changed its key. So retry a
+		# bounded number of times -- which costs nothing, since the
+		# refusal lands before any credential is offered -- and only then
+		# call it permanent.
+		_untrusted=$((_untrusted + 1))
+		if [ "$_untrusted" -le "$UNTRUSTED_TRIES" ]; then
+			# ONE argument for the reason: `_wait` takes exactly
+			# <seconds> <state> <why> and uses $3, so a reason split
+			# across several arguments is silently TRUNCATED at the
+			# first one. It printed "the far side's identity does".
+			_wait "$_delay" "$_state" "the far side's identity does\
+ not match what is on file; something may be intercepting, or its key\
+ really changed"
+			_backoff
+			continue
+		fi
+		# TERMINAL, AND THE TRANSPORT'S OWN REPORT IS HANDED OVER RATHER
+		# THAN PARAPHRASED. `_errline` takes the LAST line, which is
+		# right when a tool warns before it fails and wrong here: ssh
+		# writes a REPORT, and its last line ("Host key verification
+		# failed.") is the least informative part of it, while the
+		# fingerprint, the offending file and line, and the exact remedy
+		# command sit above. mux must not learn ssh's wording to pick
+		# those out -- so it quotes the lot, bounded, and lets the
+		# transport explain itself.
+		_say untrusted "unchanged after $_untrusted attempts, so this" \
+			"is not interference in the path: treat it as the far" \
+			"side's key having changed, and verify before trusting it"
+		_say untrusted "what the transport reported:"
+		_ul=0
+		while IFS= read -r _uline; do
+			[ -n "$_uline" ] || continue
+			_ul=$((_ul + 1))
+			[ "$_ul" -le 20 ] || break
+			_say untrusted "  $_uline"
+		done <"$_errf"
 		exit 1 ;;
 	blocked)
 		# Only reachable from a classifier that says "no credential yet"
