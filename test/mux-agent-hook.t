@@ -58,6 +58,49 @@ agent_rec "$REC" idle %9 100 sess
   || fail "UserPromptSubmit is being passed as a --beat: a turn START
 must be able to leave idle, or nothing ever can"
 
+# --- A COMPACTION MUST NOT FINISH A TURN ----------------------------------
+# THE BUG, MEASURED: a context compaction fires SessionStart mid-turn, so the
+# agent announces itself again while it is still working. Four of four compact
+# boundaries in this box's logs produced `working -> idle` in the same second,
+# one of them logged as `via SessionStart`. The strip then said done, the tray
+# said done, a "Claude finished" banner fired, and `mux agent wait` would have
+# told an orchestrator the turn was over. It was the HUMAN who noticed, twice
+# in one day, which is the failure.
+agent_rec "$REC" working %9 100 sess
+"$HERE/libexec/mux-agent-hook" SessionStart >/dev/null 2>&1 || true
+[ "$(state)" = working ] \
+  || fail "SessionStart demoted a WORKING record to [$(state)]. That is the
+compaction bug: a busy agent reads done until the human types, because the
+0.49 straggler guard will not let one beat promote it back."
+
+# ... AND IT STILL REPORTS ITSELF, or the refusal is invisible and the next
+# person investigating a stuck record has nothing to go on.
+agent_rec "$REC" working %9 100 sess
+: >"$T/log"
+MUX_LOG=$T/log "$HERE/libexec/mux-agent-hook" SessionStart \
+  >/dev/null 2>&1 || true
+grep -q 'kept working' "$T/log" 2>/dev/null \
+  || fail "the refused SessionStart wrote nothing to the log:
+[$(cat "$T/log" 2>/dev/null)]"
+
+# BOTH DIRECTIONS, because a SessionStart that could never write `idle` would
+# pass the assertion above and break the thing the row is FOR: a genuinely new
+# agent has to appear on the strip. The record here is idle rather than absent,
+# so this is an overwrite and not merely a create.
+agent_rec "$REC" idle %9 100 sess
+"$HERE/libexec/mux-agent-hook" SessionStart >/dev/null 2>&1 || true
+[ "$(state)" = idle ] || fail "SessionStart over a non-working record wrote
+[$(state)]: the qualifier has stopped it doing its job at all"
+
+# AND `Stop` IS NOT QUALIFIED. Stop is an OBSERVATION that the turn ended, so
+# it must be able to end one -- if the guard were put on the whole `idle` state
+# rather than on this one event, a finished turn would stay working forever,
+# which these notes call the worse direction.
+agent_rec "$REC" working %9 100 sess
+"$HERE/libexec/mux-agent-hook" Stop >/dev/null 2>&1 || true
+[ "$(state)" = idle ] \
+  || fail "Stop could not end a turn: it left the record [$(state)]"
+
 # --- the SOURCE travels, which is the point of the verb -------------------
 # Stop and SessionStart both resolve to `idle`, so the record alone can never
 # say which one wrote it -- and a record that went idle MID-TURN is exactly

@@ -2063,3 +2063,24 @@ t mux-check
 -         | grep -q 'mux agent-render'; then
 +         | cat >/dev/null; then
 m a server with neither mux's bindings nor
+
+= agent-hook-sessionstart-is-qualified
+f libexec/mux-agent-hook
+t mux-agent-hook
+- SessionStart)     set -- idle --unless-working ;;
++ SessionStart)     set -- idle ;;
+m demoted a WORKING record
+
+= emit-unless-working-reads-the-record
+f libexec/mux-agent-state-emit
+t mux-agent-hook
+- if [ -n "$_unless_working" ] && [ "$_pstate" = working ]; then
++ if [ -n "$_unless_working" ] || [ "$_pstate" = working ]; then
+m SessionStart mapped to
+
+= emit-unless-working-is-event-scoped
+f libexec/mux-agent-state-emit
+t mux-agent-hook
+- if [ -n "$_unless_working" ] && [ "$_pstate" = working ]; then
++ if [ -n "$state" ] && [ "$_pstate" = working ]; then
+m Stop could not end a turn

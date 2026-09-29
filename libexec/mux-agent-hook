@@ -19,7 +19,8 @@
 # that caused it. `Stop` and `SessionStart` both resolve to `idle`, and
 # telling them apart afterwards is exactly what the breadcrumb is for: a
 # record that went idle MID-TURN is one of them and the record alone cannot
-# say which.
+# say which. That breadcrumb is what identified the compaction bug below, one
+# release after being added.
 set -eu
 
 _lib=$(dirname "$0")
@@ -39,7 +40,13 @@ PostToolUse)      set -- working --beat ;;
 SubagentStop)     set -- working --beat ;;
 Notification)     set -- blocked ;;
 Stop)             set -- idle ;;
-SessionStart)     set -- idle ;;
+# A COMPACTION FIRES SessionStart MID-TURN, which is why this row carries a
+# qualifier that `Stop` does not. Stop is an OBSERVATION that the turn ended;
+# SessionStart is an agent announcing itself, which is an assertion about what
+# it knows rather than about what the pane is doing. Measured: four of four
+# compact boundaries turned a working session into a finished one. The
+# mechanism is in mux-agent-state-emit.
+SessionStart)     set -- idle --unless-working ;;
 *)
   # LOUD, not silent. An unset seam means nobody asked for anything and
   # says nothing; a NAMED event mux does not know is a wiring error, and
