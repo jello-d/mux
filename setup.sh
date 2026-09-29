@@ -111,9 +111,19 @@ EOF
 # this install and reloading them would push an unrelated config -- and in a
 # test sandbox it would reach the developer's real server. `mux reload` itself
 # never STARTS a server and says so when there was nothing up.
+# A TILDE IS THE FORM PEOPLE ACTUALLY WRITE, and checking only the expanded
+# path made this whole function inert on the one box it was written for: the
+# real config says `source-file ~/.local/share/mux/mux.tmux`, tmux expands the
+# `~` itself, and a textual guard looking for `/home/<user>/...` never matched.
+# Correct-looking, silent, and wrong -- the same shape as the bug above it.
 _reload_live() {
   command -v tmux >/dev/null 2>&1 || return 0
-  _conf_mentions "$_shr/$PKG/mux.tmux" || return 0
+  # Each form on its own LINE, so the corpus can mutate either: an anchor that
+  # ends in a continuation backslash is failure mode two in test/mutants' own
+  # header and never matches.
+  _rf=$_shr/$PKG/mux.tmux
+  _rt="~${_shr#"$HOME"}/$PKG/mux.tmux"
+  _conf_mentions "$_rf" || _conf_mentions "$_rt" || return 0
   _out=$("$_bin/$PKG" reload 2>&1) || {
     echo "$PKG: NOTE could not reload live tmux servers: $_out" >&2
     echo "$PKG:      a running server keeps the bindings and hooks it read" >&2

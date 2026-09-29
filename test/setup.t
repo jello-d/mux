@@ -149,6 +149,22 @@ inert on this machine, and mux check reports drift that apply cannot fix." ;;
     *reloaded*) ;;
     *) fail "the install reloaded a server and did not say so: $_o" ;;
     esac
+
+    # ... AND THE TILDE FORM, which is the one people actually write and the
+    # one that shipped: `source-file ~/.local/share/mux/mux.tmux`. tmux expands
+    # the `~` itself, so a guard checking only the expanded path matched
+    # nothing and the whole reload was inert on the box it was written for.
+    # Found by reading the real config rather than by any test, which is why
+    # this case exists.
+    tmux set-option -g status-right 'STALE' 2>/dev/null
+    printf 'source-file ~/share/mux/mux.tmux\n' \
+      >"$T/conf-tmux-parent/tmux/tmux.conf"
+    _o=$(_inst) || fail "install errored on the tilde form"
+    case $(_sr) in
+    *'mux agent-render'*) ;;
+    *) fail "a config written with a TILDE was not recognised, so the reload
+never fires on a real machine: status-right is [$(_sr)]" ;;
+    esac
     tmux_drop_socket default
   fi
 fi

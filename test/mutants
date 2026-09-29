@@ -2095,6 +2095,13 @@ m was not brought current
 = setup-reload-only-for-this-install
 f setup.sh
 t setup
--   _conf_mentions "$_shr/$PKG/mux.tmux" || return 0
-+   _conf_mentions "$_shr/$PKG/mux.tmux" || :
+-   _conf_mentions "$_rf" || _conf_mentions "$_rt" || return 0
++   _conf_mentions "$_rf" || _conf_mentions "$_rt" || :
 m pushed an unrelated config
+
+= setup-reload-knows-the-tilde-form
+f setup.sh
+t setup
+-   _rt="~${_shr#"$HOME"}/$PKG/mux.tmux"
++   _rt=/nowhere/at/all/mux.tmux
+m written with a TILDE was not recognised
