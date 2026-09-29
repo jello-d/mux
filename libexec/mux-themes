@@ -77,15 +77,31 @@ theme_inputs() {
   mux_data_files themes .theme
 }
 
-# Content hash over that resolved set (paths and bytes, since sha256sum prints
+# THE HASHER, RESOLVED ONCE, because the tool's NAME is not portable: macOS
+# ships `shasum` and no `sha256sum` at all, so the old code failed at every tmux
+# server start there -- themes load on every new server, and a hash that errors
+# makes the stamp meaningless. `cksum` is the POSIX floor: weaker, and perfectly
+# adequate for a value that is only ever compared against itself on one machine.
+#
+# A VARIABLE RATHER THAN A FUNCTION because `xargs` runs a COMMAND, and a shell
+# function is not one.
+if command -v sha256sum >/dev/null 2>&1; then _MUX_SHA='sha256sum'
+elif command -v shasum >/dev/null 2>&1; then _MUX_SHA='shasum -a 256'
+else _MUX_SHA='cksum'
+fi
+
+# Content hash over that resolved set (paths and bytes, since the hasher prints
 # the path), so an edit, a rename, or an overlay fragment appearing or being
 # removed all move it. An empty set hashes to a constant -- pushing nothing,
 # which is safe.
 themes_hash() {
   _tf=$(theme_inputs)
   [ -n "$_tf" ] || { echo none; return 0; }
-  printf '%s\n' "$_tf" | LC_ALL=C sort | xargs -r sha256sum \
-    | sha256sum | cut -d' ' -f1
+  # NO `xargs -r`: BSD xargs has no such flag, and the guard above already
+  # returns on the empty set, so it was unportable AND redundant.
+  # shellcheck disable=SC2086   # $_MUX_SHA is a command plus its flags
+  printf '%s\n' "$_tf" | LC_ALL=C sort | xargs $_MUX_SHA \
+    | $_MUX_SHA | cut -d' ' -f1
 }
 
 # Push every fragment's styles as @theme-<name>-bar/-window, plus the per-mode

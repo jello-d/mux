@@ -2035,3 +2035,17 @@ t mux-demo
 - if _tx has-session -t api 2>/dev/null; then
 + if false; then
 m second build failed
+
+= selflocate-no-readlink-f
+f bin/mux
+t mux-portability
+- if _r=$(readlink -f -- "$_self" 2>/dev/null) && [ -n "$_r" ]; then
++ if true; then
+m mux -V failed under a BSD
+
+= themes-hash-needs-sha256sum
+f libexec/mux-themes
+t mux-portability
+- elif command -v shasum >/dev/null 2>&1; then _MUX_SHA='shasum -a 256'
++ elif false; then _MUX_SHA='shasum -a 256'
+m stamp is EMPTY
