@@ -315,6 +315,39 @@ the wanted list is hardcoded, so it cannot notice a binding the fragment
 gained after it was written"
 _healthy_keys
 
+# --- A STALE SERVER AND AN UNSOURCED ONE GET DIFFERENT REMEDIES -----------
+# The common case by far is a LIVE server whose tmux.conf already sources the
+# fragment but which started before a binding existed: sourcing a file does not
+# reload a running server. Telling that user "the fragment is not sourced" is
+# advice that CANNOT COME TRUE -- the line is already there -- and a provisioner
+# reading it loops forever applying a fix that changes nothing. tackup reported
+# exactly that after `prefix ?` was added: "APPLY DID NOT FIX ... a fix owed by
+# another repo".
+#
+# The discriminator is on the server: status-right being mux's renderer proves
+# the fragment HAS been sourced here.
+_healthy_keys
+grep -v 'prefix ?' "$KEYS" >"$KEYS.t"; mv "$KEYS.t" "$KEYS"
+printf '#(mux agent-render #S #{client_name})\n' >"$SROPT"
+check >/dev/null
+has "mux reload" "a server that has mux's strip but is missing a NEW binding is
+STALE, and the only thing that fixes it is a reload. Saying 'the fragment is not
+sourced' sends a provisioner into a loop applying a line that is already there."
+no_has "the fragment is not sourced" "the stale case was given the unsourced
+case's remedy, which is the bug this pair exists to prevent"
+
+# ... and the genuinely unsourced case still gets the source-file line. Both
+# directions, because one message covering both is how this went wrong.
+: >"$SROPT"
+check >/dev/null
+has "the fragment is not sourced" "a server with neither mux's bindings nor
+mux's status-right has never sourced the fragment, and that is the one case
+where adding the line is the fix"
+no_has "mux reload" "an unsourced server was told to reload, which would do
+nothing: there is no fragment in its config to re-read"
+_healthy_keys
+printf '#(mux agent-render #S #{client_name})\n' >"$SROPT"
+
 # --- A HOOK THE SERVER NEVER GOT ------------------------------------------
 # The failure that was invisible for two releases: installing mux.tmux does
 # NOT reload a running server, so a tmux up since before a feature landed

@@ -292,7 +292,26 @@ else
     ok "key bindings live (prefix $_want_keys)"
   else
     bad "key binding(s) not bound to mux:$_nb"
-    bad "  the fragment is not sourced: source-file .../share/mux.tmux"
+    # TWO CAUSES, AND THEY NEED DIFFERENT REMEDIES. Saying only "the fragment
+    # is not sourced" was advice that could not come true for the common case:
+    # a LIVE server whose tmux.conf already sources the fragment, but which
+    # started before the binding existed. Sourcing a file does not reload a
+    # server, so the line was already there and adding it again changes
+    # nothing -- and a provisioner reading this loops forever, applying a fix
+    # that cannot work. (tackup reported exactly that: "APPLY DID NOT FIX ...
+    # a fix owed by another repo".)
+    #
+    # THE DISCRIMINATOR IS ALREADY ON THE SERVER: if status-right is mux's
+    # renderer, the fragment HAS been sourced here, so a missing NEW binding
+    # can only mean the server predates it. If it is not, nothing sourced the
+    # fragment at all.
+    if _vt show-options -gv status-right 2>/dev/null \
+        | grep -q 'mux agent-render'; then
+      bad "  this server predates them: run \`mux reload\`"
+      bad "  (installing a file does not reload a running tmux server)"
+    else
+      bad "  the fragment is not sourced: source-file .../share/mux.tmux"
+    fi
   fi
 
   # AND THE HOOKS, which nothing checked at all until 2026-09-27. The
