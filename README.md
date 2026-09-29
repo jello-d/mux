@@ -60,6 +60,7 @@ optional Python package).
 - [The status bar](#the-status-bar)
 - [Requirements](#requirements)
 - [Install](#install)
+  - [Homebrew (macOS and Linux)](#homebrew-macos-and-linux)
 - [Quickstart](#quickstart)
 - [Concepts](#concepts)
   - [Sessions: go and go --resume](#sessions-go-and-go---resume)
@@ -149,6 +150,34 @@ navigation defaults you can skip if you have your own.
 
 `setup.sh` installs the man page under `~/.local/share/man`, on the default
 `MANPATH`, so `man mux` works.
+
+### Homebrew (macOS and Linux)
+
+This repository is its own tap, so there is no separate formula repo to keep in
+step with it. Only the one-argument form of `brew tap` requires a repository
+named `homebrew-<name>`; the two-argument form takes the URL instead, which
+costs one extra argument exactly once:
+
+```sh
+brew tap jello-d/mux https://github.com/jello-d/mux
+brew install mux
+```
+
+After that, `brew upgrade mux` as usual, or `brew install --HEAD mux` to track
+the tip instead of the latest tag. Homebrew puts the tree under the formula's
+`libexec`, links `mux` onto `PATH`, and links the man page, so `man mux` works.
+
+Two things differ from the clone install above, both because brew installs by
+copying and so never runs `setup.sh`:
+
+- **The `source-file` path is your Homebrew prefix's**, which varies by
+  platform (`/opt/homebrew`, `/usr/local`, `/home/linuxbrew/.linuxbrew`), and
+  tmux.conf does not expand shell commands. The formula prints the exact line
+  for your machine on install; `brew info mux` shows it again.
+- **Run `mux reload` after an upgrade.** A tmux server that is already running
+  still has the bindings and hooks it read at start, and nothing in a brew
+  upgrade refreshes it. (`setup.sh install` does this for you; brew cannot,
+  because it never runs it.)
 
 ## Quickstart
 
@@ -616,6 +645,22 @@ key in `$MUX_DIR/config`: `MUX_LATCH_TRANSPORT`, `_AUTH`, `_PROBE`, `_CLASSIFY`
 and `_STATUS`. A hook answers 0 yes, 1 no, or 78 "cannot tell", and a hook that
 cannot tell is never read as fine. A hook that is *unset* is different again:
 that means no opinion, so latch proceeds.
+
+**Eternal Terminal is supported as data, not code.** Two lines:
+
+```
+latch-transport  et -t %h --command %c
+latch-classify   et-classify
+```
+
+ET already reconnects by itself, so on an ET link latch's retry loop is mostly
+idle and what it still adds is the rest: which session you land in, attach-only
+on a reattach so a rebooted box never hands you an empty stranger, the terminal
+repair, the lock the tray reads, and a state word for every outcome that is not
+a recoverable drop. `ssh-auth` still answers for it, because ET handshakes over
+ssh. `man mux` has the three ways ET differs from ssh and why each one is in the
+template; the short version is that ET types the command into a remote *login*
+shell, so it needs no `sh -lc` and must use `%c` rather than `%q`.
 
 **It puts your terminal back.** When ssh dies mid-session tmux never sends its
 teardown, so the cursor stays hidden, mouse reporting stays on (moving the mouse
