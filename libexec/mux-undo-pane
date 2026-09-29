@@ -235,8 +235,25 @@ _restore() {
 	# shellcheck disable=SC2086
 	# $_before is a FLAG OR NOTHING, so it must word-split: quoting it would
 	# pass an empty argument that tmux reads as an empty command.
+	# NO -c MEANS THE ANCHOR'S DIRECTORY, not "wherever it was", so an
+	# unknown cwd does not fail -- it puts the pane back in its NEIGHBOUR's
+	# directory and says nothing. Caught in a real run: every height
+	# restored exactly and slot 0 came back at /etc instead of /tmp,
+	# which is the pane beside it. Plausible, wrong, silent: the failure
+	# shape this codebase keeps meeting.
+	#
+	# The cwd can be unknown because the three trackers are three SEPARATE
+	# hook commands (@mux-ul, then @mux-up, then @mux-uc) and a pane that
+	# dies between them is recorded from a snapshot that does not list it.
+	# Rare in a human's hands and not impossible, so it is SAID rather than
+	# hidden -- the same treatment the lost scrollback already gets.
 	set -- split-window $_before -t "$_anchor" -P -F '#{pane_id}'
-	[ -n "$_cwd" ] && set -- "$@" -c "$_cwd"
+	if [ -n "$_cwd" ]; then
+		set -- "$@" -c "$_cwd"
+	else
+		echo "mux: undo-pane: the pane's directory was not recorded;" \
+			"it comes back where its neighbour is" >&2
+	fi
 	if [ -n "$_cmd" ]; then
 		_new=$(tmux "$@" "$_cmd" 2>/dev/null || true)
 	else

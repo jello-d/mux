@@ -125,8 +125,16 @@ build() {
 	# after they have settled rather than before.
 	_until 10 _cwds_ready || fail "the panes never reported their cwd"
 	tm resize-pane -t t.0 -y 30
-	_until 5 test -n "$(tm show-options -wqv -t t @mux-ul)" \
-		|| fail "the layout tracker never recorded anything"
+	# THE LAST TRACKER, NOT THE FIRST. The three snapshots are three
+	# SEPARATE hook commands appended to window-layout-changed -- @mux-ul,
+	# then @mux-up, then @mux-uc -- so waiting on @mux-ul proves only that
+	# the first has landed. Under load the gap widens, the pane dies inside
+	# it, and the record is written from a cwd snapshot that does not list
+	# the pane: the restore then puts it back in its NEIGHBOUR's directory.
+	# That is what a full-suite run actually caught, once in twelve, with
+	# every height correct and slot 0 at /etc instead of /tmp.
+	_until 5 test -n "$(tm show-options -wqv -t t @mux-uc)" \
+		|| fail "the cwd tracker never recorded anything"
 }
 
 # --- THE RECORD IS WRITTEN UNQUOTED -- asserted before anything is restored
@@ -310,6 +318,29 @@ _rc=0
 _o=$(env XDG_RUNTIME_DIR="$T/run" TMUX= "$HERE/libexec/mux-undo-pane" 2>&1) \
 	|| _rc=$?
 [ "$_rc" != 0 ] || fail "with no record and no tmux, undo-pane must fail"
+
+# --- AN UNKNOWN DIRECTORY IS SAID, NOT INHERITED -------------------------
+# Without `-c`, split-window uses the ANCHOR pane's directory -- so a cwd the
+# record does not have does not fail, it puts the pane back beside its
+# neighbour and says nothing. Asserted on the MESSAGE, because the placement
+# itself is indistinguishable from a correct restore of a pane that genuinely
+# lived there.
+build
+stage "an unknown directory is said, not inherited"
+tm send-keys -t t.1 'exit' Enter
+_until 10 _npanes 2 || fail "nocwd: the pane did not close"
+_until 10 _recorded || fail "nocwd: no undo record was written"
+_rec=$T/run/mux-undo/$(ls -A "$T/run/mux-undo" | head -1)
+grep -v '^cwd	' "$_rec" >"$_rec.x" && mv -f "$_rec.x" "$_rec"
+_sp=$(tm display-message -p '#{socket_path}')
+_o=$(env TMUX="$_sp,0,0" "$HERE/libexec/mux-undo-pane" 2>&1 || true)
+case $_o in
+*"directory was not recorded"*) ;;
+*) fail "a record with no cwd restored SILENTLY into the neighbour's
+directory: [$_o]" ;;
+esac
+_until 10 _npanes 3 || fail "nocwd: the pane should still come back -- the
+directory is the only thing lost, and losing the pane as well would be worse"
 
 # --- A PARTIAL RECORD IS REFUSED, LOUDLY ---------------------------------
 # The other half of writing the record atomically, and the half that can be

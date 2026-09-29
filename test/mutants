@@ -1484,3 +1484,21 @@ t mux-undo-pane
 - 	[ -n "$_lay" ] || _die "the undo record is unusable (no layout)"
 + 	[ -n "$_lay" ] || _lay=$_lay
 m half-written record was accepted
+
+= undo-pane-unknown-cwd-inherited-silently
+f libexec/mux-undo-pane
+t mux-undo-pane
+- 			"it comes back where its neighbour is" >&2
++ 			"it comes back where its neighbour is" >/dev/null
+m restored SILENTLY into the neighbour's
+
+= undo-pane-unknown-cwd-loses-the-pane
+f libexec/mux-undo-pane
+t mux-undo-pane
+# Inverting this sends a KNOWN cwd down the no-`-c` path, so the pane comes
+# back in its neighbour's directory -- which the slot-0 comparison catches
+# first, and catches deterministically. That comparison is exactly what a
+# real run caught once in twelve, from the same cause.
+- 	if [ -n "$_cwd" ]; then
++ 	if [ -z "$_cwd" ]; then
+m slot 0 did not come back the
