@@ -1,0 +1,151 @@
+#!/bin/sh
+# mux-send-policy.sh - WHO MAY TYPE INTO A PANE MUX CANNOT VOUCH FOR.
+# Sourced (functions only); source it, do not run it.
+#
+# mux refuses to send text into an agent that is BLOCKED (sitting at a
+# permission prompt, waiting on a human) or that has NO RECORD at all (mux
+# knows nothing about it, so it can vouch for nothing). Both refusals exist
+# for the same reason: a peer that can answer another agent's approval prompt
+# is a way for agents to approve each other and route around the person.
+#
+# THE OVERRIDE CANNOT LIVE WHERE THE AGENT CAN REACH IT, and that is the whole
+# design. A command-line flag is forgeable -- the agent composes its own argv.
+# A file under $MUX_DIR is equally forgeable, and worse for being plausible:
+# mux WRITES there (`mux save`, `mux theme`, `mux edit`), so it is user-owned
+# by design and an agent with a shell tool edits it in one line.
+#
+# So the policy is the privilege boundary this fleet already writes down: a
+# thing run by the user session lives in ~/.config and is user-editable; a
+# thing the user must NOT be able to edit lives in /etc, root-owned. The
+# override is the second kind. A human takes it with sudo; the agent it
+# governs cannot.
+#
+#   /etc/mux/send-policy      root-owned, not user-writable
+#
+# ALLOWLIST ONLY, so there is no precedence to get wrong. Absence of the file
+# means "never", an empty file means "never", and each line names something
+# permitted. There is no `deny` directive, because a two-sided policy language
+# is where order-of-evaluation bugs live and this file has exactly one job.
+#
+#   send-blocked  <scope>...   type into an agent waiting on a human
+#   send-unknown  <scope>...   type into a pane with no agent record
+#
+# TWO DIRECTIVES, NOT ONE, because they permit different things. "This worker
+# may have its prompts answered" and "this worker may be typed at blind" are
+# separate grants, and allowing one must not quietly allow the other.
+#
+# A SCOPE IS `*` OR ONE OR MORE `key:value` TOKENS, AND A LINE MATCHES ONLY
+# WHEN ALL OF THEM DO. Keys are `partition`, `session` and `window`:
+#
+#   send-blocked  *                            anywhere
+#   send-blocked  partition:work               a whole boundary
+#   send-blocked  session:api                  a whole project
+#   send-blocked  session:api window:reviewer  ONE worker in one project
+#
+# THE WINDOW IS THE UNIT A FLEET ACTUALLY HAS. An orchestrator above mux
+# spawns a WINDOW per worker in the project's session -- that is what vicus
+# does -- so `session:` alone would grant the override to every worker in the
+# project at once, which is far coarser than anyone means. And a window is
+# what a human watches, so it is the thing they can reason about granting.
+#
+# Conjunction, rather than a `session/window` path syntax, because it needs no
+# new grammar and stays allowlist-only: there is still no `deny`, so there is
+# still no precedence to get wrong.
+#
+# NO `pane:` KEY, deliberately. A pane id is stable for the pane's life and not
+# across a restore, so a policy keyed on one would silently stop applying after
+# `mux undo-pane` or a rebuild -- a permission that lapses without saying so is
+# worse than one that was never granted.
+
+# _sp_file: the policy path. Overridable ONLY for the test suite, and named so
+# that is obvious -- a variable an agent could set to point at a file it owns
+# would defeat the entire mechanism, so this must never be documented as a
+# user seam or read from config.
+_sp_file() {
+	printf '%s' "${MUX_SEND_POLICY_FILE:-/etc/mux/send-policy}"
+}
+
+# mux_send_policy_usable -> is the policy file safe to obey?
+#
+# THE TEST IS "CAN I WRITE IT", which is exactly the question that matters:
+# mux runs as the agent's own user, so if this process can write the file, so
+# can the agent, and a policy the governed party can edit is not a policy. The
+# containing DIRECTORY is checked too -- being unable to write a file is no
+# protection when you can replace it.
+#
+# Running as root makes both tests true and the policy unusable. That is the
+# honest answer rather than an inconvenience: an agent running as root is
+# outside this model entirely, and silently honouring a policy it could
+# rewrite would be the worst of both.
+mux_send_policy_usable() {
+	_spf=$(_sp_file)
+	[ -f "$_spf" ] || return 1
+	[ ! -w "$_spf" ] || return 1
+	[ ! -w "$(dirname -- "$_spf")" ] || return 1
+	return 0
+}
+
+# mux_send_policy_why -> a sentence about why the policy is not in force, or
+# empty when it is. SAID, NEVER GUESSED AT: a policy that is silently ignored
+# is worse than none, because the human who wrote it believes it applies.
+mux_send_policy_why() {
+	_spf=$(_sp_file)
+	if [ ! -f "$_spf" ]; then
+		printf 'no policy at %s' "$_spf"
+	elif [ -w "$_spf" ]; then
+		printf '%s is writable by this user, so it is not a policy' \
+			"$_spf"
+	elif [ -w "$(dirname -- "$_spf")" ]; then
+		printf '%s is in a directory this user can write,' \
+			"$(dirname -- "$_spf")"
+		printf ' so the file could be replaced'
+	fi
+}
+
+# mux_send_allowed WHAT PARTITION SESSION WINDOW -> is it permitted?
+#
+# WHAT is `blocked` or `unknown`. Every token on a line must match, and each is
+# compared as a STRING and never as a pattern -- so a window called `*` cannot
+# grant itself everything, and neither can one called `partition:work`.
+mux_send_allowed() {   # <what> <partition> <session> <window>
+	mux_send_policy_usable || return 1
+	# A SUBSHELL WITH GLOBBING OFF. Splitting a line with `set -- $_spl`
+	# also PATHNAME-EXPANDS it, so the scope token `*` became whatever
+	# files happened to be in the current directory and the systemwide
+	# grant silently never matched. Found on the first run of this
+	# function's own test, which is the only reason it is not shipping.
+	#
+	# `set -f` and a subshell rather than save-and-restore, because the
+	# matching loop returns from the middle and a restore after the loop
+	# would be skipped on every successful match.
+	( set -f
+	_spw=$1 _spp=$2 _sps=$3 _spwin=$4
+	while IFS= read -r _spl; do
+		# Full-line comments and blanks go; an inline `#` is left alone,
+		# because a name may legitimately contain one. Same rule
+		# mux_conf_clean already applies to $MUX_DIR/config.
+		case $_spl in
+		''|'#'*) continue ;;
+		esac
+		# shellcheck disable=SC2086   # tokens, split on purpose
+		set -- $_spl
+		[ "${1:-}" = "send-$_spw" ] || continue
+		shift
+		# A DIRECTIVE WITH NO SCOPE GRANTS NOTHING. `send-blocked` alone
+		# reads like "allow it", and reading it that way would turn a
+		# truncated line into a systemwide permission.
+		[ $# -gt 0 ] || continue
+		_ok=1
+		for _tok in "$@"; do
+			case $_tok in
+			'*') ;;
+			"partition:$_spp") ;;
+			"session:$_sps") ;;
+			"window:$_spwin") ;;
+			*) _ok=0; break ;;
+			esac
+		done
+		[ "$_ok" = 1 ] && exit 0
+	done <"$(_sp_file)"
+	exit 1 )
+}
