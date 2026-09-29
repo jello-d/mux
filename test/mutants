@@ -2140,3 +2140,24 @@ t mux-latch-et
 - #     latch-transport  et %h --command %c
 + #     latch-transport  et -t %h --command %c
 m documented line passes
+
+= et-probe-closed-port-waits
+f share/latch/et-probe
+t mux-latch-et
+- 1)   exit 1 ;;
++ 1)   exit 0 ;;
+m closed etserver port must answer 1
+
+= et-probe-no-nc-does-not-park-latch
+f share/latch/et-probe
+t mux-latch-et
+- command -v nc >/dev/null 2>&1 || exit 0
++ command -v nc >/dev/null 2>&1 || exit 78
+m it must answer 0
+
+= et-probe-tests-ets-port
+f share/latch/et-probe
+t mux-latch-et
+- ''|*[!0-9]*) _port=2022 ;;
++ ''|*[!0-9]*) _port=2222 ;;
+m default port

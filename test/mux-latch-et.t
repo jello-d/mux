@@ -132,4 +132,105 @@ login shell would try to run a command whose name contains spaces. More
 elements than expected means it word-split." ;;
 esac
 
+
+# --- the PROBE, which is what makes a stopped etserver diagnosable ---------
+# IT EXISTS FOR A REASON ssh-probe DOES NOT HAVE. Over ssh a failure explains
+# itself on stderr, which the classifier reads. ET writes its diagnostics to
+# stdout and propagates no remote status, so a stopped etserver reaches the
+# classifier as a bare exit 1 and nothing can tell it from anything else. The
+# probe moves that diagnosis to the one place that can still make it: before the
+# attempt, over TCP, from here.
+P=$HERE/share/latch/et-probe
+[ -x "$P" ] || fail "share/latch/et-probe is missing or not executable"
+
+# `nc` IS STUBBED, because the real one needs a network this test must not
+# touch, and because the interesting cases are its exit codes rather than its
+# bytes. NCRC is what the stub returns; NCLOG records the argv so the port
+# actually used can be asserted -- a probe that tests the wrong port parks latch
+# in a backoff about a service that is running.
+mkdir -p "$T/pbin"
+cat >"$T/pbin/nc" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$*" >>"$NCLOG"
+exit ${NCRC:-0}
+EOF
+chmod +x "$T/pbin/nc"
+for _c in sed head command timeout; do
+  _p=$(command -v "$_c" 2>/dev/null) && ln -sf "$_p" "$T/pbin/$_c"
+done
+
+probe() {   # <nc exit> [env assignments...] -> the probe's exit
+  _ncrc=$1; shift
+  : >"$T/nclog"
+  _prc=0
+  env PATH="$T/pbin:$PATH" NCRC="$_ncrc" NCLOG="$T/nclog" \
+    MUX_DIR="$T/pconf" "$@" "$P" box >/dev/null 2>&1 || _prc=$?
+  printf '%s' "$_prc"
+}
+mkdir -p "$T/pconf"
+
+# THE OPEN PORT IS THE ONLY "ATTEMPT IT" ANSWER.
+_got=$(probe 0)
+[ "$_got" = 0 ] || fail "a reachable etserver port must answer 0 (attempt it),
+got [$_got]"
+
+# A CLOSED PORT IS A WAIT, NOT A DEAD END. etserver stopped, a box still
+# booting, a firewall: all of them either heal by themselves or are fixed and
+# then heal, and this is the whole reason the hook exists.
+_got=$(probe 1)
+[ "$_got" = 1 ] || fail "a closed etserver port must answer 1 (not reachable:
+wait and retry), got [$_got]. That verdict is the one thing the classifier
+cannot reach over ET, which is why this hook is worth wiring at all."
+
+# THE PORT IT TESTS IS ET'S, AND IS OVERRIDABLE. Asserted on the argv the stub
+# recorded, because "it answered 0" is true of testing the wrong port too.
+probe 0 >/dev/null
+grep -q ' 2022$' "$T/nclog" || fail "the probe did not test ET's default port
+2022; it asked: [$(cat "$T/nclog")]"
+probe 0 MUX_ET_PORT=2099 >/dev/null
+grep -q ' 2099$' "$T/nclog" || fail "MUX_ET_PORT did not move the port the probe
+tests; it asked: [$(cat "$T/nclog")]"
+printf 'latch-et-port  2101\n' >"$T/pconf/config"
+probe 0 >/dev/null
+grep -q ' 2101$' "$T/nclog" || fail "the latch-et-port config key did not move
+the port; it asked: [$(cat "$T/nclog")]"
+rm -f "$T/pconf/config"
+
+# timeout(1)'s CODE IS A DEFINITE NO. A port that will not complete a handshake
+# inside the bound will not serve an attach either, so this is 1 rather than
+# "cannot tell" -- which keeps latch in a visible backoff instead of a silent
+# wait.
+_got=$(probe 124)
+[ "$_got" = 1 ] || fail "the bound being hit must answer 1, got [$_got]"
+
+# nc FAILING FOR ITS OWN REASONS IS "CANNOT TELL", because it says nothing about
+# the host and quietly attempting would hide a local misconfiguration.
+_got=$(probe 2)
+[ "$_got" = 78 ] || fail "an nc failure that is not a refusal must answer 78,
+got [$_got]"
+
+# NO HOST AT ALL IS 78, never 0: a probe with nothing to test must not report a
+# host usable.
+_prc=0
+env PATH="$T/pbin:$PATH" "$P" >/dev/null 2>&1 || _prc=$?
+[ "$_prc" = 78 ] || fail "no host must answer 78, got [$_prc]"
+
+# AND NO `nc` MEANS NO OPINION, WHICH IS THE ONE ANSWER THAT DIFFERS FROM
+# ssh-probe. latch treats 78 as WAIT, so answering it here would park a
+# perfectly good ET transport forever on a box that merely lacks netcat --
+# whereas a missing `ssh` genuinely means the ssh transport is dead anyway.
+# A curated PATH, not a broken stub: absence has to be modelled by absence, the
+# lesson test/mux-portability.t paid for.
+mkdir -p "$T/nonc"
+for _c in sed head command; do
+  _p=$(command -v "$_c" 2>/dev/null) && ln -sf "$_p" "$T/nonc/$_c"
+done
+[ -e "$T/nonc/nc" ] && fail "the curated PATH still has nc, so this case models
+nothing"
+_prc=0
+env -i PATH="$T/nonc" HOME="$T" "$P" box >/dev/null 2>&1 || _prc=$?
+[ "$_prc" = 0 ] || fail "with no nc the probe answered [$_prc]; it must answer 0
+(attempt it, the same as no probe at all). 78 would make latch WAIT, which holds
+a transport that works fine on any box without netcat."
+
 pass
