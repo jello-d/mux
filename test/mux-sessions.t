@@ -87,15 +87,15 @@ eq spaced-name "$(mux_sess_list $K | tr '\n' ' ')" "spacey "
 mux_sess_clear dashkey
 mux_sess_add "-n" /root/dash dashkey
 mux_sess_has "-n" dashkey \
-	|| fail "a session named -n is not recognised: grep read it as an option"
+  || fail "a session named -n is not recognised: grep read it as an option"
 mux_sess_add "-n" /root/dash dashkey          # idempotent, or the set grows
 _c=$(mux_sess_list dashkey | grep -c . || true)
 [ "$_c" = 1 ] || fail "a dash-named session was recorded $_c times"
 [ "$(mux_sess_root "-n" dashkey)" = /root/dash ] \
-	|| fail "a dash-named session lost its root"
+  || fail "a dash-named session lost its root"
 mux_sess_drop "-n" dashkey
 [ "$(mux_sess_list dashkey | grep -c . || true)" = 0 ] \
-	|| fail "a dash-named session could not be dropped"
+  || fail "a dash-named session could not be dropped"
 
 # --- membership is NOT "has a root" -------------------------------------
 # mux_sess_has answers whether a name is RECORDED. A record may legitimately
@@ -138,7 +138,7 @@ _sf=$(MUX_CACHE="$OLDC" mux_sess_file adopt)
 [ -f "$_sf" ] || fail "the old set was not adopted into \$MUX_STATE"
 eq adopt-content "$(cut -f1 "$_sf")" "legacy"
 [ ! -e "$OLDC/sessions.adopt" ] \
-	|| fail "the old file survived the move, so the next upgrade would see
+  || fail "the old file survived the move, so the next upgrade would see
 two sets and the stale one could win"
 
 # Idempotent, and it must never CLOBBER a set that already moved. If it did, an

@@ -26,9 +26,9 @@ _lib=$(dirname "$0")
 
 _ev=${1:-}
 [ -n "$_ev" ] || {
-	echo "usage: mux agent-hook <EventName>" >&2; exit 2; }
+  echo "usage: mux agent-hook <EventName>" >&2; exit 2; }
 [ $# -eq 1 ] || {
-	echo "mux: agent-hook takes one event name" >&2; exit 2; }
+  echo "mux: agent-hook takes one event name" >&2; exit 2; }
 
 # THE TABLE. A beat is an event that merely WITNESSES activity; only a turn
 # START may create `working` out of `idle`, which is why PostToolUse and
@@ -41,16 +41,16 @@ Notification)     set -- blocked ;;
 Stop)             set -- idle ;;
 SessionStart)     set -- idle ;;
 *)
-	# LOUD, not silent. An unset seam means nobody asked for anything and
-	# says nothing; a NAMED event mux does not know is a wiring error, and
-	# the integrator is claiming a contract that does not exist. The hook
-	# ends in `|| true` on its side, so the agent is never harmed by this.
-	if [ -r "$_lib/mux-log_lib" ]; then
-		. "$_lib/mux-log_lib"
-		mux_log agent "unknown hook event: $_ev"
-	fi
-	echo "mux: agent-hook: unknown event: $_ev" >&2
-	exit 2 ;;
+  # LOUD, not silent. An unset seam means nobody asked for anything and
+  # says nothing; a NAMED event mux does not know is a wiring error, and
+  # the integrator is claiming a contract that does not exist. The hook
+  # ends in `|| true` on its side, so the agent is never harmed by this.
+  if [ -r "$_lib/mux-log_lib" ]; then
+    . "$_lib/mux-log_lib"
+    mux_log agent "unknown hook event: $_ev"
+  fi
+  echo "mux: agent-hook: unknown event: $_ev" >&2
+  exit 2 ;;
 esac
 
 exec "$_lib/mux-agent-state-emit" "$@" --source "$_ev"

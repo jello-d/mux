@@ -45,40 +45,40 @@ PASS=0; FAIL=0; ERR=0
 # corpus error for a record that was fine. A parse check that cannot parse the
 # file is worse than none: it turns every result into the same wrong one.
 _parses() {   # <file>
-	# BY SHEBANG FIRST, THEN BY SUFFIX, and that order is the fix rather than
-	# the belt-and-braces it looks like. Dropping `.py` from an EXECUTED
-	# Python file (the naming convention: executed takes a bare name) left
-	# this falling through to `dash -n` on Python and reporting a corpus
-	# error for three records that were fine. A selector keyed on a suffix
-	# goes stale the moment something is renamed; a shebang travels with the
-	# file. The suffix arm stays for `mux_indicator/*.py`, which are IMPORTED
-	# and so carry no shebang at all.
-	case "$(head -1 "$1")" in
-	*python*) _pl=py ;;
-	*bash)    _pl=bash ;;
-	*)        _pl=sh ;;
-	esac
-	case "$1" in *.py) _pl=py ;; esac
-	case "$_pl" in
-	py)
-		# compile(), not py_compile: it checks the syntax and writes
-		# NOTHING. py_compile always wants an output file, refuses
-		# /dev/null outright ("will be changed into a regular one"), and
-		# left to itself would drop a .pyc beside the source that a later
-		# import would pick up.
-		python3 -c 'import sys
+  # BY SHEBANG FIRST, THEN BY SUFFIX, and that order is the fix rather than
+  # the belt-and-braces it looks like. Dropping `.py` from an EXECUTED
+  # Python file (the naming convention: executed takes a bare name) left
+  # this falling through to `dash -n` on Python and reporting a corpus
+  # error for three records that were fine. A selector keyed on a suffix
+  # goes stale the moment something is renamed; a shebang travels with the
+  # file. The suffix arm stays for `mux_indicator/*.py`, which are IMPORTED
+  # and so carry no shebang at all.
+  case "$(head -1 "$1")" in
+  *python*) _pl=py ;;
+  *bash)    _pl=bash ;;
+  *)        _pl=sh ;;
+  esac
+  case "$1" in *.py) _pl=py ;; esac
+  case "$_pl" in
+  py)
+    # compile(), not py_compile: it checks the syntax and writes
+    # NOTHING. py_compile always wants an output file, refuses
+    # /dev/null outright ("will be changed into a regular one"), and
+    # left to itself would drop a .pyc beside the source that a later
+    # import would pick up.
+    python3 -c 'import sys
 src = open(sys.argv[1]).read()
 compile(src, sys.argv[1], "exec")' "$1" 2>/dev/null
-		return $? ;;
-	bash) bash -n "$1" 2>/dev/null ;;
-	*)    dash -n "$1" 2>/dev/null ;;
-	esac
+    return $? ;;
+  bash) bash -n "$1" 2>/dev/null ;;
+  *)    dash -n "$1" 2>/dev/null ;;
+  esac
 }
 
 # How many times the exact line appears. Fixed-string, whole-line: the same
 # comparison the edit below makes, so the count cannot disagree with it.
 _occurrences() {   # <file> <line>
-	grep -Fxc -- "$2" "$1" 2>/dev/null || true
+  grep -Fxc -- "$2" "$1" 2>/dev/null || true
 }
 
 # Exact whole-line replace of the FIRST match, via awk so there is no pattern
@@ -91,18 +91,18 @@ _occurrences() {   # <file> <line>
 # cannot. The corpus was right and the instrument was wrong, again. ENVIRON does
 # no such processing, so the value awk compares is the value the corpus holds.
 _edit() {   # <file> <old> <new> -> 0 if a line changed
-	MUT_OLD=$2 MUT_NEW=$3 awk '
-		BEGIN { old = ENVIRON["MUT_OLD"]; new = ENVIRON["MUT_NEW"] }
-		!done && $0 == old { done = 1; if (new != "") print new; next }
-		{ print }
-		END { exit(done ? 0 : 1) }' "$1" >"$1.mut" || return 1
-	# Copy the CONTENT back rather than moving the temp over the original:
-	# a fresh file is created 0644, and `mv` would carry that mode across,
-	# leaving a mutated PROGRAM that cannot execute. Every test invoking it
-	# directly then died on a permission error and the driver reported the
-	# guard as broken-for-the-wrong-reason -- which is how this was found,
-	# on the very first run. Found by the instrument, in the instrument.
-	cat "$1.mut" >"$1" && rm -f "$1.mut"
+  MUT_OLD=$2 MUT_NEW=$3 awk '
+    BEGIN { old = ENVIRON["MUT_OLD"]; new = ENVIRON["MUT_NEW"] }
+    !done && $0 == old { done = 1; if (new != "") print new; next }
+    { print }
+    END { exit(done ? 0 : 1) }' "$1" >"$1.mut" || return 1
+  # Copy the CONTENT back rather than moving the temp over the original:
+  # a fresh file is created 0644, and `mv` would carry that mode across,
+  # leaving a mutated PROGRAM that cannot execute. Every test invoking it
+  # directly then died on a permission error and the driver reported the
+  # guard as broken-for-the-wrong-reason -- which is how this was found,
+  # on the very first run. Found by the instrument, in the instrument.
+  cat "$1.mut" >"$1" && rm -f "$1.mut"
 }
 
 # Run a test under a wall-clock bound. 124 is what timeout(1) reports; without
@@ -120,125 +120,125 @@ MUT_TIMEOUT_RC=124
 # a corrupt corpus rather than what it was. The same guard is on the baseline
 # run below.
 _timed() {   # <test file>
-	if command -v timeout >/dev/null 2>&1; then
-		timeout "$MUT_TIMEOUT" sh "$1" </dev/null
-	else
-		sh "$1" </dev/null
-	fi
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$MUT_TIMEOUT" sh "$1" </dev/null
+  else
+    sh "$1" </dev/null
+  fi
 }
 
 _err() { printf 'ERROR    %s\n' "$1"; shift
-	for _l in "$@"; do printf '         %s\n' "$_l"; done
-	ERR=$((ERR + 1)); }
+  for _l in "$@"; do printf '         %s\n' "$_l"; done
+  ERR=$((ERR + 1)); }
 
 _run_one() {   # name file tests old new msg
-	_n=$1; _f=$2; _ts=$3; _old=$4; _new=$5; _msg=$6
+  _n=$1; _f=$2; _ts=$3; _old=$4; _new=$5; _msg=$6
 
-	[ -f "$HERE/$_f" ] || { _err "$_n: $_f does not exist"; return; }
+  [ -f "$HERE/$_f" ] || { _err "$_n: $_f does not exist"; return; }
 
-	# A REPLACEMENT IDENTICAL TO ITS TARGET MUTATES NOTHING, and without this
-	# the run reports SURVIVED -- indicting the test for not catching a change
-	# that was never made. Sixth way a mutation silently no-ops, found
-	# 2026-09-26: the corpus is line-based, so a generator that wrote a `\n`
-	# into the `+` value produced a replacement equal to the `-` line with the
-	# intended second line orphaned below it, where the parser ignored it.
-	if [ "$_new" = "$_old" ]; then
-		_err "$_n: the replacement is IDENTICAL to the target" \
-		  "[$_old]" \
-		  "This mutates nothing, so the named test cannot fail and the" \
-		  "record would be reported as SURVIVED -- blaming the test for" \
-		  "a change that never happened. One line per directive: a" \
-		  "multi-line replacement is not supported."
-		return
-	fi
-	_cnt=$(_occurrences "$HERE/$_f" "$_old")
-	if [ "$_cnt" = 0 ]; then
-		_err "$_n: the line is not in $_f" \
-		  "looked for: [$_old]" \
-		  "A stale record leaves the file UNTOUCHED, so every named" \
-		  "test passes and that reads as 'the guard does not bite'."
-		return
-	fi
-	if [ "$_cnt" -gt 1 ]; then
-		_err "$_n: the line appears $_cnt times in $_f" \
-		  "looked for: [$_old]" \
-		  "Mutating the first occurrence may not touch the guard the" \
-		  "named test covers, and a pass would then be meaningless." \
-		  "Make the record target a line that is unique."
-		return
-	fi
+  # A REPLACEMENT IDENTICAL TO ITS TARGET MUTATES NOTHING, and without this
+  # the run reports SURVIVED -- indicting the test for not catching a change
+  # that was never made. Sixth way a mutation silently no-ops, found
+  # 2026-09-26: the corpus is line-based, so a generator that wrote a `\n`
+  # into the `+` value produced a replacement equal to the `-` line with the
+  # intended second line orphaned below it, where the parser ignored it.
+  if [ "$_new" = "$_old" ]; then
+    _err "$_n: the replacement is IDENTICAL to the target" \
+      "[$_old]" \
+      "This mutates nothing, so the named test cannot fail and the" \
+      "record would be reported as SURVIVED -- blaming the test for" \
+      "a change that never happened. One line per directive: a" \
+      "multi-line replacement is not supported."
+    return
+  fi
+  _cnt=$(_occurrences "$HERE/$_f" "$_old")
+  if [ "$_cnt" = 0 ]; then
+    _err "$_n: the line is not in $_f" \
+      "looked for: [$_old]" \
+      "A stale record leaves the file UNTOUCHED, so every named" \
+      "test passes and that reads as 'the guard does not bite'."
+    return
+  fi
+  if [ "$_cnt" -gt 1 ]; then
+    _err "$_n: the line appears $_cnt times in $_f" \
+      "looked for: [$_old]" \
+      "Mutating the first occurrence may not touch the guard the" \
+      "named test covers, and a pass would then be meaningless." \
+      "Make the record target a line that is unique."
+    return
+  fi
 
-	# A COPY, never an in-place edit with a restore. An interrupted run must
-	# not be able to leave a deliberately broken mux in the working tree,
-	# and a restore that misses one of two touched files leaks the mutation
-	# into the next record -- which is exactly what happened by hand.
-	rm -rf "$T/tree"; mkdir -p "$T/tree"
-	( cd "$HERE" && tar cf - --exclude=.git . ) | ( cd "$T/tree" && tar xf - )
+  # A COPY, never an in-place edit with a restore. An interrupted run must
+  # not be able to leave a deliberately broken mux in the working tree,
+  # and a restore that misses one of two touched files leaks the mutation
+  # into the next record -- which is exactly what happened by hand.
+  rm -rf "$T/tree"; mkdir -p "$T/tree"
+  ( cd "$HERE" && tar cf - --exclude=.git . ) | ( cd "$T/tree" && tar xf - )
 
-	_edit "$T/tree/$_f" "$_old" "$_new" || {
-		_err "$_n: the edit did not apply to the copy"; return; }
-	_parses "$T/tree/$_f" || {
-		_err "$_n: mutated $_f no longer parses" \
-		  "Invalid shell kills every test it touches on a syntax" \
-		  "error, which proves nothing about the guard."
-		return; }
+  _edit "$T/tree/$_f" "$_old" "$_new" || {
+    _err "$_n: the edit did not apply to the copy"; return; }
+  _parses "$T/tree/$_f" || {
+    _err "$_n: mutated $_f no longer parses" \
+      "Invalid shell kills every test it touches on a syntax" \
+      "error, which proves nothing about the guard."
+    return; }
 
-	_killed=0
-	for _t in $_ts; do
-		[ -f "$HERE/test/$_t.t" ] || {
-			_err "$_n: names test '$_t', which does not exist"
-			return; }
-		# BASELINE FIRST. "The test failed" only means the mutation did
-		# it if the test passed before; otherwise a pre-existing
-		# failure is counted as coverage.
-		if ! sh "$HERE/test/$_t.t" >/dev/null 2>&1 </dev/null; then
-			_err "$_n: test '$_t' FAILS on the unmutated tree" \
-			  "A test that is already red cannot tell you anything" \
-			  "about this guard. Fix the baseline first."
-			return
-		fi
-		# TIME-BOUNDED. A mutation can turn a bounded loop into an
-		# unbounded one -- removing latch's missing-hook guard drops it
-		# into its retry loop, which by default is forever with real
-		# sleeps -- and an unbounded mutant HANGS THE WHOLE RUN with no
-		# output and no diagnosis. That is the worst failure an
-		# instrument can have: it looks like slowness, so you wait.
-		# A hang is a RESULT, and this reports it as one.
-		_out=$(_timed "$T/tree/test/$_t.t" 2>&1) && continue
-		if [ "$?" = "$MUT_TIMEOUT_RC" ]; then
-			_err "$_n: '$_t' did not finish within ${MUT_TIMEOUT}s" \
-			  "The mutation probably turned a bounded loop into an" \
-			  "unbounded one. That is a real finding, but it is not a" \
-			  "kill: bound the loop in the TEST (a max-tries and a" \
-			  "no-op sleep) so the guard's absence fails instead of" \
-			  "hanging."
-			return
-		fi
-		# It died. If the record says WHY, hold it to that, or a
-		# mutation that breaks an unrelated assertion counts as cover.
-		if [ -n "$_msg" ]; then
-			case $_out in
-			*"$_msg"*) _killed=1 ;;
-			*) _err "$_n: '$_t' died for the WRONG reason" \
-			     "wanted a failure mentioning: [$_msg]" \
-			     "got: $(printf '%s' "$_out" | head -1)" \
-			     "So the mutation broke something other than the" \
-			     "assertion this record claims to exercise."
-			   return ;;
-			esac
-		else
-			_killed=1
-		fi
-	done
+  _killed=0
+  for _t in $_ts; do
+    [ -f "$HERE/test/$_t.t" ] || {
+      _err "$_n: names test '$_t', which does not exist"
+      return; }
+    # BASELINE FIRST. "The test failed" only means the mutation did
+    # it if the test passed before; otherwise a pre-existing
+    # failure is counted as coverage.
+    if ! sh "$HERE/test/$_t.t" >/dev/null 2>&1 </dev/null; then
+      _err "$_n: test '$_t' FAILS on the unmutated tree" \
+        "A test that is already red cannot tell you anything" \
+        "about this guard. Fix the baseline first."
+      return
+    fi
+    # TIME-BOUNDED. A mutation can turn a bounded loop into an
+    # unbounded one -- removing latch's missing-hook guard drops it
+    # into its retry loop, which by default is forever with real
+    # sleeps -- and an unbounded mutant HANGS THE WHOLE RUN with no
+    # output and no diagnosis. That is the worst failure an
+    # instrument can have: it looks like slowness, so you wait.
+    # A hang is a RESULT, and this reports it as one.
+    _out=$(_timed "$T/tree/test/$_t.t" 2>&1) && continue
+    if [ "$?" = "$MUT_TIMEOUT_RC" ]; then
+      _err "$_n: '$_t' did not finish within ${MUT_TIMEOUT}s" \
+        "The mutation probably turned a bounded loop into an" \
+        "unbounded one. That is a real finding, but it is not a" \
+        "kill: bound the loop in the TEST (a max-tries and a" \
+        "no-op sleep) so the guard's absence fails instead of" \
+        "hanging."
+      return
+    fi
+    # It died. If the record says WHY, hold it to that, or a
+    # mutation that breaks an unrelated assertion counts as cover.
+    if [ -n "$_msg" ]; then
+      case $_out in
+      *"$_msg"*) _killed=1 ;;
+      *) _err "$_n: '$_t' died for the WRONG reason" \
+           "wanted a failure mentioning: [$_msg]" \
+           "got: $(printf '%s' "$_out" | head -1)" \
+           "So the mutation broke something other than the" \
+           "assertion this record claims to exercise."
+         return ;;
+      esac
+    else
+      _killed=1
+    fi
+  done
 
-	if [ "$_killed" = 1 ]; then
-		printf 'killed   %s\n' "$_n"; PASS=$((PASS + 1))
-	else
-		printf 'SURVIVED %s (%s)\n' "$_n" "$_ts"
-		printf '         Nothing noticed this guard being removed, so\n'
-		printf '         the test that claims it does not cover it.\n'
-		FAIL=$((FAIL + 1))
-	fi
+  if [ "$_killed" = 1 ]; then
+    printf 'killed   %s\n' "$_n"; PASS=$((PASS + 1))
+  else
+    printf 'SURVIVED %s (%s)\n' "$_n" "$_ts"
+    printf '         Nothing noticed this guard being removed, so\n'
+    printf '         the test that claims it does not cover it.\n'
+    FAIL=$((FAIL + 1))
+  fi
 }
 
 [ -f "$CORPUS" ] || { echo "mutate: no corpus at $CORPUS" >&2; exit 2; }
@@ -250,38 +250,38 @@ _run_one() {   # name file tests old new msg
 ARGC=$#; ARGV="$*"
 M_N=; M_F=; M_T=; M_O=; M_P=; M_M=
 _flush() {
-	[ -n "$M_N" ] || return 0
-	_sel=1
-	if [ "$ARGC" -gt 0 ]; then
-		_sel=0
-		for _a in $ARGV; do [ "$_a" = "$M_N" ] && _sel=1; done
-	fi
-	[ "$_sel" = 1 ] && _run_one "$M_N" "$M_F" "$M_T" "$M_O" "$M_P" "$M_M"
-	M_N=; M_F=; M_T=; M_O=; M_P=; M_M=
+  [ -n "$M_N" ] || return 0
+  _sel=1
+  if [ "$ARGC" -gt 0 ]; then
+    _sel=0
+    for _a in $ARGV; do [ "$_a" = "$M_N" ] && _sel=1; done
+  fi
+  [ "$_sel" = 1 ] && _run_one "$M_N" "$M_F" "$M_T" "$M_O" "$M_P" "$M_M"
+  M_N=; M_F=; M_T=; M_O=; M_P=; M_M=
 }
 while IFS= read -r _line; do
-	case "$_line" in
-	'= '*) _flush; M_N=${_line#??} ;;
-	'f '*) M_F=${_line#??} ;;
-	't '*) M_T=${_line#??} ;;
-	'- '*) M_O=${_line#??} ;;
-	'+ '*) M_P=${_line#??} ;;
-	'm '*) M_M=${_line#??} ;;
-	esac
+  case "$_line" in
+  '= '*) _flush; M_N=${_line#??} ;;
+  'f '*) M_F=${_line#??} ;;
+  't '*) M_T=${_line#??} ;;
+  '- '*) M_O=${_line#??} ;;
+  '+ '*) M_P=${_line#??} ;;
+  'm '*) M_M=${_line#??} ;;
+  esac
 done <"$CORPUS"
 _flush
 
 echo ""
 printf '%d killed, %d SURVIVED, %d corpus error(s)\n' "$PASS" "$FAIL" "$ERR"
 if [ "$FAIL" != 0 ] || [ "$ERR" != 0 ]; then
-	echo "mutate: FAILED -- a guard nothing kills is not a guard"
-	exit 1
+  echo "mutate: FAILED -- a guard nothing kills is not a guard"
+  exit 1
 fi
 if [ "$PASS" = 0 ]; then
-	# The rule the suite already applies to itself: a run that reached no
-	# verdict is a failure, not a pass. Otherwise an empty corpus, or a
-	# filter that matched nothing, reports success.
-	echo "mutate: FAILED -- no mutations ran at all"
-	exit 1
+  # The rule the suite already applies to itself: a run that reached no
+  # verdict is a failure, not a pass. Otherwise an empty corpus, or a
+  # filter that matched nothing, reports success.
+  echo "mutate: FAILED -- no mutations ran at all"
+  exit 1
 fi
 echo "mutate: ok"

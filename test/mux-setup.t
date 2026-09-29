@@ -16,7 +16,7 @@ _name=mux-setup
 . "$(dirname "$0")/harness_lib"
 
 command -v python3 >/dev/null 2>&1 || {
-	printf 'skip %s (no python3)\n' "$_name"; exit 0; }
+  printf 'skip %s (no python3)\n' "$_name"; exit 0; }
 
 CDIR=$T/claude; mkdir -p "$CDIR"
 SET=$CDIR/settings.json
@@ -39,8 +39,8 @@ missing feature: [$_o]" ;;
 esac
 # A NAME BECOMES A PATH, the same rule `mux skill` follows.
 for _bad in ../../etc/passwd UPPER 'a b'; do
-	_rc=0; mux setup "$_bad" >/dev/null 2>&1 || _rc=$?
-	[ "$_rc" = 2 ] || fail "[$_bad] should be a usage error, got $_rc"
+  _rc=0; mux setup "$_bad" >/dev/null 2>&1 || _rc=$?
+  [ "$_rc" = 2 ] || fail "[$_bad] should be a usage error, got $_rc"
 done
 [ -e "$SET" ] && fail "a refusal created $SET"
 
@@ -55,10 +55,10 @@ _events=$(sed -n 's/^\([A-Za-z]*\))  *set -- .*/\1/p' "$_hookf")
 # --- a dry run changes nothing -------------------------------------------
 _o=$(mux setup claude --dry-run 2>&1) || fail "dry-run failed: $_o"
 for _e in $_events; do
-	case $_o in
-	*"$_e"*) ;;
-	*) fail "the plan does not mention $_e: [$_o]" ;;
-	esac
+  case $_o in
+  *"$_e"*) ;;
+  *) fail "the plan does not mention $_e: [$_o]" ;;
+  esac
 done
 [ -e "$SET" ] && fail "--dry-run wrote $SET"
 
@@ -87,27 +87,27 @@ case $_o in
 [$_o]" ;;
 esac
 [ "$(ls "$CDIR"/settings.json.mux-* 2>/dev/null | wc -l)" = 1 ] \
-	|| fail "expected exactly one backup file"
+  || fail "expected exactly one backup file"
 
 # EVERY EVENT IS WIRED, to `mux agent-hook <Event>` and NOT to a state: the
 # event-to-state mapping is mux's (0.52), and wiring that named states would
 # put mux's vocabulary back in somebody else's file, where changing it needs a
 # coordinated release.
 for _e in $_events; do
-	[ "$(j "any('mux agent-hook $_e' in h['command']
-		for g in d['hooks']['$_e'] for h in g['hooks'])")" = True ] \
-		|| fail "$_e is not wired to 'mux agent-hook $_e'"
+  [ "$(j "any('mux agent-hook $_e' in h['command']
+    for g in d['hooks']['$_e'] for h in g['hooks'])")" = True ] \
+    || fail "$_e is not wired to 'mux agent-hook $_e'"
 done
 [ "$(j "any('agent-emit' in h['command']
-	for v in d['hooks'].values() for g in v for h in g['hooks'])")" = False ] \
-	|| fail "it wired agent-emit, which names a STATE: that is the pre-0.52
+  for v in d['hooks'].values() for g in v for h in g['hooks'])")" = False ] \
+  || fail "it wired agent-emit, which names a STATE: that is the pre-0.52
 contract and puts mux's own vocabulary back in the integrator's file"
 
 # WHAT MUST SURVIVE. This is the assertion the verb exists to earn.
 [ "$(j "d.get('theme')")" = dark ] || fail "an unrelated key was lost"
 [ "$(j "any('someone-elses' in h['command']
-	for g in d['hooks']['Stop'] for h in g['hooks'])")" = True ] \
-	|| fail "somebody else's hook on the same event was DESTROYED, which is
+  for g in d['hooks']['Stop'] for h in g['hooks'])")" = True ] \
+  || fail "somebody else's hook on the same event was DESTROYED, which is
 the only outcome here that cannot be undone by --remove"
 
 # --- idempotent ----------------------------------------------------------
@@ -119,11 +119,11 @@ case $_o in
 *) fail "a second run was not a no-op: [$_o]" ;;
 esac
 [ "$(ls "$CDIR"/settings.json.mux-* 2>/dev/null | wc -l)" = 1 ] \
-	|| fail "a no-op run took another backup"
+  || fail "a no-op run took another backup"
 for _e in $_events; do
-	[ "$(j "len([h for g in d['hooks']['$_e'] for h in g['hooks']
-		if 'mux agent-hook' in h['command']])")" = 1 ] \
-		|| fail "$_e has more than one mux hook: it would fire twice"
+  [ "$(j "len([h for g in d['hooks']['$_e'] for h in g['hooks']
+    if 'mux agent-hook' in h['command']])")" = 1 ] \
+    || fail "$_e has more than one mux hook: it would fire twice"
 done
 
 # --- the skill is placed, which nothing else does ------------------------
@@ -131,16 +131,16 @@ _sk=$CDIR/skills/mux-agent/SKILL.md
 [ -f "$_sk" ] || fail "the skill was not installed; mux ships the agent
 instructions and until this verb nothing put them anywhere"
 head -1 "$_sk" | grep -q '^---$' \
-	|| fail "the installed skill has no frontmatter, so it never triggers"
+  || fail "the installed skill has no frontmatter, so it never triggers"
 
 # --- --remove takes back only what mux added -----------------------------
 _o=$(mux setup claude --remove --yes 2>&1) || fail "remove failed: $_o"
 [ "$(j "any('mux agent-hook' in h['command']
-	for v in d.get('hooks',{}).values() for g in v for h in g['hooks'])")" \
-	= False ] || fail "--remove left mux's wiring behind"
+  for v in d.get('hooks',{}).values() for g in v for h in g['hooks'])")" \
+  = False ] || fail "--remove left mux's wiring behind"
 [ "$(j "any('someone-elses' in h['command']
-	for g in d['hooks']['Stop'] for h in g['hooks'])")" = True ] \
-	|| fail "--remove ate somebody else's hook"
+  for g in d['hooks']['Stop'] for h in g['hooks'])")" = True ] \
+  || fail "--remove ate somebody else's hook"
 [ "$(j "d.get('theme')")" = dark ] || fail "--remove lost an unrelated key"
 [ -e "$_sk" ] && fail "--remove left the skill installed"
 _o=$(mux setup claude --remove --yes 2>&1) || fail "second remove failed"
@@ -157,7 +157,7 @@ printf '{ this is not json' >"$SET"
 _rc=0; _o=$(mux setup claude --yes 2>&1) || _rc=$?
 [ "$_rc" != 0 ] || fail "an unparseable settings file was accepted"
 [ "$(cat "$SET")" = '{ this is not json' ] \
-	|| fail "an unparseable settings file was MODIFIED: [$(cat "$SET")]"
+  || fail "an unparseable settings file was MODIFIED: [$(cat "$SET")]"
 case $_o in
 *"does not parse"*) ;;
 *) fail "the refusal did not say the file does not parse: [$_o]" ;;

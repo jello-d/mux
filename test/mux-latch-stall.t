@@ -28,17 +28,17 @@ _name=mux-latch-stall
 . "$(dirname "$0")/harness_lib"
 
 command -v ssh >/dev/null 2>&1 || {
-	printf 'skip %s (no ssh)\n' "$_name"; exit 0; }
+  printf 'skip %s (no ssh)\n' "$_name"; exit 0; }
 command -v python3 >/dev/null 2>&1 || {
-	printf 'skip %s (no python3 for the stall peer)\n' "$_name"; exit 0; }
+  printf 'skip %s (no python3 for the stall peer)\n' "$_name"; exit 0; }
 
 # THE OPTIONS UNDER TEST, taken from the shipped source. Both lines, because
 # _DEF_ALIVE is built in two steps and reading only the first would silently
 # drop ConnectTimeout -- the very option whose absence this file must catch.
 OPTS=$(sed -n "s/^_DEF_ALIVE=['\"]*\(-o [^'\"]*\)['\"]*$/\1/p" \
-	"$HERE/libexec/mux-latch" | tr '\n' ' ')
+  "$HERE/libexec/mux-latch" | tr '\n' ' ')
 OPTS="$OPTS$(sed -n 's/^_DEF_ALIVE="\$_DEF_ALIVE \(.*\)"$/\1/p' \
-	"$HERE/libexec/mux-latch")"
+  "$HERE/libexec/mux-latch")"
 case $OPTS in
 *ServerAliveInterval*) ;;
 *) fail "could not read ServerAliveInterval out of libexec/mux-latch.
@@ -88,38 +88,38 @@ CEILING=45
 PORT=$((21000 + $$ % 900))
 
 for _mode in silent banner kexinit; do
-	PORT=$((PORT + 1))
-	python3 "$T/stall.py" "$_mode" "$PORT" 2>"$T/ready" &
-	_srv=$!
-	# Wait for the listener rather than sleeping: a fixed sleep is either
-	# wasted or flaky, and this suite has paid for that before.
-	_n=0
-	while [ "$_n" -lt 100 ]; do
-		grep -q ready "$T/ready" 2>/dev/null && break
-		sleep 0.05; _n=$((_n + 1))
-	done
+  PORT=$((PORT + 1))
+  python3 "$T/stall.py" "$_mode" "$PORT" 2>"$T/ready" &
+  _srv=$!
+  # Wait for the listener rather than sleeping: a fixed sleep is either
+  # wasted or flaky, and this suite has paid for that before.
+  _n=0
+  while [ "$_n" -lt 100 ]; do
+    grep -q ready "$T/ready" 2>/dev/null && break
+    sleep 0.05; _n=$((_n + 1))
+  done
 
-	_t0=$(date +%s)
-	# `|| _rc=$?`, never a bare call: ssh failing is the EXPECTED outcome
-	# here, and under `set -e` a bare invocation takes the whole file down
-	# before the next line runs -- no ok, no FAIL, just a silent exit. This
-	# file did exactly that on its first run.
-	_rc=0
-	# shellcheck disable=SC2086   # OPTS is a list of -o flags, split on purpose
-	timeout "$CEILING" ssh -p "$PORT" -t $OPTS \
-		-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-		-o BatchMode=yes -o PasswordAuthentication=no \
-		127.0.0.1 true >/dev/null 2>&1 || _rc=$?
-	_el=$(( $(date +%s) - _t0 ))
-	kill "$_srv" 2>/dev/null || true
+  _t0=$(date +%s)
+  # `|| _rc=$?`, never a bare call: ssh failing is the EXPECTED outcome
+  # here, and under `set -e` a bare invocation takes the whole file down
+  # before the next line runs -- no ok, no FAIL, just a silent exit. This
+  # file did exactly that on its first run.
+  _rc=0
+  # shellcheck disable=SC2086   # OPTS is a list of -o flags, split on purpose
+  timeout "$CEILING" ssh -p "$PORT" -t $OPTS \
+    -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+    -o BatchMode=yes -o PasswordAuthentication=no \
+    127.0.0.1 true >/dev/null 2>&1 || _rc=$?
+  _el=$(( $(date +%s) - _t0 ))
+  kill "$_srv" 2>/dev/null || true
 
-	[ "$_rc" = 124 ] && fail "stalling at [$_mode] was NOT bounded: ssh was
+  [ "$_rc" = 124 ] && fail "stalling at [$_mode] was NOT bounded: ssh was
 still waiting after ${CEILING}s with mux's shipped transport options.
   options: $OPTS
 A peer that accepts and then goes quiet is the disruption latch exists for;
 unbounded here means latch is asleep, not slow, and its retry loop never runs."
-	[ "$_el" -lt "$CEILING" ] \
-		|| fail "[$_mode] took ${_el}s, at the ceiling"
+  [ "$_el" -lt "$CEILING" ] \
+    || fail "[$_mode] took ${_el}s, at the ceiling"
 done
 
 pass

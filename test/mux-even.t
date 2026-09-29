@@ -20,7 +20,7 @@ _name=mux-even
 . "$(dirname "$0")/harness_lib"
 
 command -v tmux >/dev/null 2>&1 || {
-	printf 'skip %s (no tmux)\n' "$_name"; exit 0; }
+  printf 'skip %s (no tmux)\n' "$_name"; exit 0; }
 
 SOCK=$(tmux_fresh_socket muxeven)
 PATH=$HERE/bin:$PATH; export PATH
@@ -34,14 +34,14 @@ trap 'cleanup' EXIT INT TERM
 geom() { tm list-panes -t t -F '#{pane_width}x#{pane_height}' | tr '\n' ' '; }
 
 build() {   # a two-up-one-bottom window, the shape mux builds
-	cleanup
-	SOCK=$(tmux_fresh_socket muxeven)
-	tm new-session -d -s t -x 161 -y 63 -c /tmp
-	tm split-window -h -t t -c /tmp
-	tm select-layout -t t even-horizontal
-	tm split-window -v -f -l 10 -t t -c /tmp
-	_bot=$(tm list-panes -t t -F '#{pane_id}' | tail -1)
-	tm set-option -p -t "$_bot" @mux-bottom 5-10
+  cleanup
+  SOCK=$(tmux_fresh_socket muxeven)
+  tm new-session -d -s t -x 161 -y 63 -c /tmp
+  tm split-window -h -t t -c /tmp
+  tm select-layout -t t even-horizontal
+  tm split-window -v -f -l 10 -t t -c /tmp
+  _bot=$(tm list-panes -t t -F '#{pane_id}' | tail -1)
+  tm set-option -p -t "$_bot" @mux-bottom 5-10
 }
 
 # --- an EVEN window is left alone -----------------------------------------
@@ -51,7 +51,7 @@ build
 _before=$(geom)
 tm run-shell "mux even" >/dev/null 2>&1 || true
 [ "$(geom)" = "$_before" ] \
-	|| fail "an already-even window was changed: [$_before] -> [$(geom)]"
+  || fail "an already-even window was changed: [$_before] -> [$(geom)]"
 
 # --- a DRIFTED row is evened out ------------------------------------------
 # The 79|81 case, reproduced by resizing rather than described.
@@ -82,11 +82,11 @@ tm set-option -p -t "$_ob" @mux-bottom 5-10     # the sibling with the answer
 _bot=$(tm list-panes -t t -F '#{pane_id}' | tail -1)
 tm set-option -pu -t "$_bot" @mux-bottom        # ... and t has lost its own
 [ -z "$(tm show-options -pqv -t "$_bot" @mux-bottom)" ] \
-	|| fail "setup: the marker was not actually cleared"
+  || fail "setup: the marker was not actually cleared"
 
 tm run-shell "mux even --all" >/dev/null 2>&1 || true
 [ "$(tm show-options -pqv -t "$_bot" @mux-bottom)" = 5-10 ] \
-	|| fail "a window that lost @mux-bottom was left frozen: nothing can
+  || fail "a window that lost @mux-bottom was left frozen: nothing can
 hold its height, and the width balance refuses too, so prefix-r and prefix-R
 both silently do nothing for it"
 
@@ -146,7 +146,7 @@ case $(geom) in
 *) fail "setup: expected a drifted row, got [$(geom)]" ;;
 esac
 env -u TMUX MUX_CTX_PARTITION="$SOCK" "$HERE/libexec/mux-even" --all \
-	>/dev/null 2>&1 || true
+  >/dev/null 2>&1 || true
 case $(geom) in
 "80x"*"80x"*) ;;
 *) fail "headless did not reach the partition's server: [$(geom)] -- it
@@ -162,7 +162,7 @@ esac
 _s=$SOCK
 cleanup
 [ ! -e "${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)/$_s" ] \
-	|| fail "cleanup killed the server and left its socket behind:
+  || fail "cleanup killed the server and left its socket behind:
 ${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)/$_s -- every run leaks one, forever"
 build
 

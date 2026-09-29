@@ -44,11 +44,11 @@ export PATH
 # forced to a dummy: the bare form's "are we in a session" guard reads it, and
 # every tmux call it gates is the stub anyway.
 run() {
-	: >"$TMUXLOG"
-	env -u MUX_SHARE TMUX="$T/default,0,0" \
-		"$HERE/bin/mux" next-blocked "$@" \
-		|| fail "next-blocked exited $?"
-	cat "$TMUXLOG"
+  : >"$TMUXLOG"
+  env -u MUX_SHARE TMUX="$T/default,0,0" \
+    "$HERE/bin/mux" next-blocked "$@" \
+    || fail "next-blocked exited $?"
+  cat "$TMUXLOG"
 }
 
 # bravo blocked since epoch 200, charlie since 100 -- charlie has waited
@@ -87,8 +87,8 @@ _got=$(run '/dev/pts/7')
 # is ATTACHED, which is the fact that actually decides whether a switch is
 # possible. Asserted with the stub answering no clients at all.
 if env -u MUX_SHARE -u TMUX MUX_NB_NOCLIENTS=1 \
-	"$HERE/bin/mux" next-blocked >/dev/null 2>&1; then
-	fail "no client attached anywhere: expected a non-zero exit"
+  "$HERE/bin/mux" next-blocked >/dev/null 2>&1; then
+  fail "no client attached anywhere: expected a non-zero exit"
 fi
 
 # --- HEADLESS: no pane, no $TMUX, which is how a REMOTE caller arrives -----
@@ -116,7 +116,7 @@ agent_rec "$T/rt/agent-state/default/p9" blocked %9 100 charlie x
 # empty state dir. That the verb REACHES the helper is already proved by the
 # cases above; what is under test here is how it picks a client.
 env -u MUX_SHARE -u TMUX MUX_CTX_PARTITION=default \
-	"$HERE/libexec/mux-next-blocked" >/dev/null 2>&1 || true
+  "$HERE/libexec/mux-next-blocked" >/dev/null 2>&1 || true
 case "$(cat "$TMUXLOG")" in
 *"/dev/pts/9"*) ;;
 *) fail "headless did not pick the most recently active client: got
@@ -141,7 +141,7 @@ mkdir -p "$T/rt/agent-state/work"
 agent_rec "$T/rt/agent-state/work/p1" blocked %1 50 worksess x
 : >"$TMUXLOG"
 env -u MUX_SHARE -u TMUX MUX_CTX_PARTITION=default \
-	"$HERE/libexec/mux-next-blocked" --partition work >/dev/null 2>&1 || true
+  "$HERE/libexec/mux-next-blocked" --partition work >/dev/null 2>&1 || true
 case "$(cat "$TMUXLOG")" in
 *"=worksess"*) ;;
 *) fail "--partition did not reach the partition's STATE: got
@@ -158,11 +158,11 @@ esac
 # plausible and wrong.
 _rc=0
 env -u MUX_SHARE -u TMUX "$HERE/libexec/mux-next-blocked" --partition \
-	>/dev/null 2>&1 || _rc=$?
+  >/dev/null 2>&1 || _rc=$?
 [ "$_rc" = 2 ] || fail "--partition with no name must exit 2, got $_rc"
 _rc=0
 env -u MUX_SHARE -u TMUX "$HERE/libexec/mux-next-blocked" --nope \
-	>/dev/null 2>&1 || _rc=$?
+  >/dev/null 2>&1 || _rc=$?
 [ "$_rc" = 2 ] || fail "an unknown option must exit 2, got $_rc"
 
 # ... and with nothing attached at all it says so rather than switching blind.
@@ -178,7 +178,7 @@ chmod +x "$T/bin/tmux"
 : >"$TMUXLOG"
 _rc=0
 env -u MUX_SHARE -u TMUX MUX_CTX_PARTITION=default \
-	"$HERE/libexec/mux-next-blocked" >/dev/null 2>&1 || _rc=$?
+  "$HERE/libexec/mux-next-blocked" >/dev/null 2>&1 || _rc=$?
 [ "$_rc" = 1 ] || fail "with no client attached it must exit 1, got $_rc"
 [ ! -s "$TMUXLOG" ] || fail "it switched something with no client attached"
 

@@ -32,11 +32,11 @@ PATH=$T/bin:$PATH; export PATH
 # the vehicle: a typed name nothing knows is refused by design, and --force
 # keeps a repeated call from tripping the already-bound guard.
 themeof() {
-	: >"$TMUXLOG"
-	( cd "$T/proj" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
-		MUX_CACHE="$T/cache" "$HERE/bin/mux" new --force "$@" ) \
-		>/dev/null 2>&1 || fail "mux new $* exited $?"
-	awk '/@mux-theme /{print $NF; exit}' "$TMUXLOG"
+  : >"$TMUXLOG"
+  ( cd "$T/proj" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
+    MUX_CACHE="$T/cache" "$HERE/bin/mux" new --force "$@" ) \
+    >/dev/null 2>&1 || fail "mux new $* exited $?"
+  awk '/@mux-theme /{print $NF; exit}' "$TMUXLOG"
 }
 
 # --- derived, and STABLE ----------------------------------------------------
@@ -49,15 +49,15 @@ _a2=$(themeof alpha)
 # pair (collisions are accepted), so assert over a spread instead: several
 # distinct names must not all collapse onto one theme.
 _seen=$(for _n in alpha bravo charlie delta echo foxtrot; do
-	themeof "$_n"
+  themeof "$_n"
 done | sort -u | grep -c .)
 [ "$_seen" -ge 3 ] \
-	|| fail "6 names produced only $_seen distinct themes; hash is degenerate"
+  || fail "6 names produced only $_seen distinct themes; hash is degenerate"
 
 # --- the derived theme must be a REAL one -----------------------------------
 [ -n "$(MUX_DIR=$T/conf; . "$HERE/libexec/mux-data_lib"
-	MUX_SHARE=$HERE/share mux_data_find themes "$_a" .theme)" ] \
-	|| fail "derived theme [$_a] is not a themes/*.theme that exists"
+  MUX_SHARE=$HERE/share mux_data_find themes "$_a" .theme)" ] \
+  || fail "derived theme [$_a] is not a themes/*.theme that exists"
 
 # --- an explicit theme in the profile wins ----------------------------------
 # `go` here, not `new`: the breakout profile IS the evidence this name exists,
@@ -65,8 +65,8 @@ done | sort -u | grep -c .)
 printf 'theme   red\n' >"$T/conf/profiles.d/pinned.profile"
 : >"$TMUXLOG"
 ( cd "$T/proj" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
-	MUX_CACHE="$T/cache" "$HERE/bin/mux" go pinned ) >/dev/null 2>&1 \
-	|| fail "mux go pinned exited $?"
+  MUX_CACHE="$T/cache" "$HERE/bin/mux" go pinned ) >/dev/null 2>&1 \
+  || fail "mux go pinned exited $?"
 _p=$(awk '/@mux-theme /{print $NF; exit}' "$TMUXLOG")
 [ "$_p" = red ] || fail "explicit theme lost: got [$_p], want red"
 

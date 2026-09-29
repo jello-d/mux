@@ -65,14 +65,14 @@ printf 'scan %s 1\n' "$T" >"$T/conf/partitions/global.partition"
 # file before it could report the code it just measured. Every case here is
 # expected to fail, so this is the common path, not the edge.
 rc() {
-	_r=0
-	( cd "$T/proj" && env -u MUX_SHARE -u TMUX PATH="$T/bin:$PATH" \
-		XDG_CONFIG_HOME="$T/conf" XDG_RUNTIME_DIR="$T/run" \
-		MUX_DIR="$T/conf" MUX_CACHE="$T/cache" \
-		EDITOR=/bin/true VISUAL=/bin/true \
-		"$HERE/bin/mux" "$@" </dev/null ) >/dev/null 2>&1 \
-		|| _r=$?
-	echo "$_r"
+  _r=0
+  ( cd "$T/proj" && env -u MUX_SHARE -u TMUX PATH="$T/bin:$PATH" \
+    XDG_CONFIG_HOME="$T/conf" XDG_RUNTIME_DIR="$T/run" \
+    MUX_DIR="$T/conf" MUX_CACHE="$T/cache" \
+    EDITOR=/bin/true VISUAL=/bin/true \
+    "$HERE/bin/mux" "$@" </dev/null ) >/dev/null 2>&1 \
+    || _r=$?
+  echo "$_r"
 }
 # Same, but keeping stderr so "a refusal SAYS why" is checkable.
 #
@@ -83,23 +83,23 @@ rc() {
 # you meant.
 # shellcheck disable=SC2069
 err() {
-	( cd "$T/proj" && env -u MUX_SHARE -u TMUX PATH="$T/bin:$PATH" \
-		XDG_CONFIG_HOME="$T/conf" XDG_RUNTIME_DIR="$T/run" \
-		MUX_DIR="$T/conf" MUX_CACHE="$T/cache" \
-		EDITOR=/bin/true VISUAL=/bin/true \
-		"$HERE/bin/mux" "$@" </dev/null ) 2>&1 >/dev/null || true
+  ( cd "$T/proj" && env -u MUX_SHARE -u TMUX PATH="$T/bin:$PATH" \
+    XDG_CONFIG_HOME="$T/conf" XDG_RUNTIME_DIR="$T/run" \
+    MUX_DIR="$T/conf" MUX_CACHE="$T/cache" \
+    EDITOR=/bin/true VISUAL=/bin/true \
+    "$HERE/bin/mux" "$@" </dev/null ) 2>&1 >/dev/null || true
 }
 # The same, but STDOUT. `mux why` reports there rather than on stderr, since a
 # diagnostic's report is its output and not an error stream.
 out() {
-	( cd "$T/proj" && env -u MUX_SHARE -u TMUX PATH="$T/bin:$PATH" \
-		XDG_CONFIG_HOME="$T/conf" XDG_RUNTIME_DIR="$T/run" \
-		MUX_DIR="$T/conf" MUX_CACHE="$T/cache" \
-		EDITOR=/bin/true VISUAL=/bin/true \
-		"$HERE/bin/mux" "$@" </dev/null ) 2>/dev/null || true
+  ( cd "$T/proj" && env -u MUX_SHARE -u TMUX PATH="$T/bin:$PATH" \
+    XDG_CONFIG_HOME="$T/conf" XDG_RUNTIME_DIR="$T/run" \
+    MUX_DIR="$T/conf" MUX_CACHE="$T/cache" \
+    EDITOR=/bin/true VISUAL=/bin/true \
+    "$HERE/bin/mux" "$@" </dev/null ) 2>/dev/null || true
 }
 is() {   # <want> <got> <what>
-	[ "$1" = "$2" ] || fail "$3: want exit $1, got $2"
+  [ "$1" = "$2" ] || fail "$3: want exit $1, got $2"
 }
 
 # --- 0: it answered ------------------------------------------------------
@@ -144,13 +144,13 @@ is 3 "$(rc rename nosuch other)"  "mux rename of a session that is not there"
 # resolves to nothing" without making the report an error stream. So the stream
 # differs by verb and the assertion follows the verb rather than flattening it.
 for _v in "go unknownname" "kill nosuchsession"; do
-	# shellcheck disable=SC2086
-	[ -n "$(err $_v)" ] \
-		|| fail "'mux $_v' exited 3 silently; the code replaces the
+  # shellcheck disable=SC2086
+  [ -n "$(err $_v)" ] \
+    || fail "'mux $_v' exited 3 silently; the code replaces the
 string match, it does not replace the explanation"
 done
 [ -n "$(out why unknownname)" ] \
-	|| fail "'mux why' exited 3 with an empty report. The code is an
+  || fail "'mux why' exited 3 with an empty report. The code is an
 addition to the explanation, not a replacement for it"
 
 # 3 MUST NOT BLEED into the ordinary refusals. If everything non-zero drifted
@@ -162,20 +162,20 @@ is 1 "$(rc theme sometheme)"      "an unknown THEME is not an unknown name"
 # Every one of these must ALSO put something on stderr. A silent non-zero is
 # the worst of both: the caller knows it failed and cannot say why.
 for _case in \
-	"rename onlyone" \
-	"theme sometheme" \
-	"resume"
+  "rename onlyone" \
+  "theme sometheme" \
+  "resume"
 do
-	# shellcheck disable=SC2086
-	set -- $_case
-	_got=$(rc "$@")
-	is 1 "$_got" "mux $_case"
-	_msg=$(err "$@")
-	[ -n "$_msg" ] || fail "mux $_case exited 1 SILENTLY, with no reason"
-	case $_msg in
-	mux:*) ;;
-	*) fail "mux $_case did not prefix its refusal: [$_msg]" ;;
-	esac
+  # shellcheck disable=SC2086
+  set -- $_case
+  _got=$(rc "$@")
+  is 1 "$_got" "mux $_case"
+  _msg=$(err "$@")
+  [ -n "$_msg" ] || fail "mux $_case exited 1 SILENTLY, with no reason"
+  case $_msg in
+  mux:*) ;;
+  *) fail "mux $_case did not prefix its refusal: [$_msg]" ;;
+  esac
 done
 
 # reload with no tmux.conf: the refusal path, reached only because
@@ -205,24 +205,24 @@ esac
 # ssh attribution sound: if any verb ever returns 3, or 255, a caller can no
 # longer tell mux's answer from the transport's.
 for _v in go resume kill reload ls hide show show-all save new help theme \
-          rename edit why check views scan agent-list agent-summary \
-          agent-doctor migrate-profiles
+    rename edit why check views scan agent-list agent-summary \
+    agent-doctor migrate-profiles
 do
-	_got=$(rc "$_v")
-	case $_got in
-	0|1|2|3) ;;
-	*) fail "mux $_v returned $_got. Only 0, 1, 2 and 3 are the contract,
+  _got=$(rc "$_v")
+  case $_got in
+  0|1|2|3) ;;
+  *) fail "mux $_v returned $_got. Only 0, 1, 2 and 3 are the contract,
 and 255/126/127 must stay attributable to the transport or the shell" ;;
-	esac
+  esac
 done
 
 # ... including with a junk argument, which is a different path through each.
 for _v in go kill theme rename edit why hide show; do
-	_got=$(rc "$_v" 'a name nothing knows')
-	case $_got in
-	0|1|2|3) ;;
-	*) fail "mux $_v <junk> returned $_got, outside the 0/1/2/3 contract" ;;
-	esac
+  _got=$(rc "$_v" 'a name nothing knows')
+  case $_got in
+  0|1|2|3) ;;
+  *) fail "mux $_v <junk> returned $_got, outside the 0/1/2/3 contract" ;;
+  esac
 done
 
 pass

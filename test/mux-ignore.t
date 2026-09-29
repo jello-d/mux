@@ -27,22 +27,22 @@ exit 0
 EOF
 chmod +x "$T/bin/tmux"
 for d in src/dup src/nested/dup src/solo src/vendor/thing; do
-	mkdir -p "$T/$d/.git"
+  mkdir -p "$T/$d/.git"
 done
 printf '#!/bin/sh\necho work\n' >"$T/conf/cc"; chmod +x "$T/conf/cc"
 printf 'context-command cc\n' >"$T/conf/config"
 
 # part IGNORE-LINES : rewrite the partition file with the given ignore body.
 part() {
-	{ printf 'scan %s/src 3\n' "$T"; [ -n "${1:-}" ] && printf '%s\n' "$1"; } \
-		>"$T/conf/partitions/work.partition"
-	rm -f "$T/cache/projects.work"
+  { printf 'scan %s/src 3\n' "$T"; [ -n "${1:-}" ] && printf '%s\n' "$1"; } \
+    >"$T/conf/partitions/work.partition"
+  rm -f "$T/cache/projects.work"
 }
 run() {
-	_d=$1; shift
-	( cd "$_d" && env -u MUX_SHARE -u TMUX -u TMUX_PANE \
-		MUX_DIR="$T/conf" MUX_CACHE="$T/cache" PATH="$T/bin:$PATH" \
-		"$HERE/bin/mux" "$@" 2>&1 )
+  _d=$1; shift
+  ( cd "$_d" && env -u MUX_SHARE -u TMUX -u TMUX_PANE \
+    MUX_DIR="$T/conf" MUX_CACHE="$T/cache" PATH="$T/bin:$PATH" \
+    "$HERE/bin/mux" "$@" 2>&1 )
 }
 # the names the map ended up holding, space separated and sorted
 names() { cut -f1 "$T/cache/projects.work" | LC_ALL=C sort | tr '\n' ' '; }

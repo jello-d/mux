@@ -85,7 +85,7 @@ esac
 # --- sealed: now it is obeyed ---------------------------------------------
 seal
 [ -z "$(mux_send_policy_why)" ] \
-	|| fail "a sealed policy still reported a reason it was not in force:
+  || fail "a sealed policy still reported a reason it was not in force:
 [$(mux_send_policy_why)]"
 yes sealed-star blocked global api reviewer
 

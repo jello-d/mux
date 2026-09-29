@@ -26,22 +26,22 @@ PATH=$T/bin:$PATH; export PATH
 # mux ARGS... : run the front end against the scratch overlay, from a scratch
 # cwd. $MUX_SHARE is scrubbed so bin/mux self-locates THIS checkout.
 mux() {
-	( cd "$T/proj" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
-		MUX_CACHE="$T/cache" "$HERE/bin/mux" "$@" 2>&1 )
+  ( cd "$T/proj" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
+    MUX_CACHE="$T/cache" "$HERE/bin/mux" "$@" 2>&1 )
 }
 # ok LABEL ARGS... : the run must succeed.
 ok() {
-	_l=$1; shift
-	mux "$@" >/dev/null || fail "$_l: \`mux $*\` should have succeeded"
+  _l=$1; shift
+  mux "$@" >/dev/null || fail "$_l: \`mux $*\` should have succeeded"
 }
 # no LABEL WANT ARGS... : the run must fail, mentioning WANT.
 no() {
-	_l=$1 _w=$2; shift 2
-	_o=$(mux "$@") && fail "$_l: \`mux $*\` should have failed"
-	case $_o in
-	*"$_w"*) ;;
-	*) fail "$_l: want [$_w] in output, got [$_o]" ;;
-	esac
+  _l=$1 _w=$2; shift 2
+  _o=$(mux "$@") && fail "$_l: \`mux $*\` should have failed"
+  case $_o in
+  *"$_w"*) ;;
+  *) fail "$_l: want [$_w] in output, got [$_o]" ;;
+  esac
 }
 
 # --force before the verb and after it are the same command. The first write

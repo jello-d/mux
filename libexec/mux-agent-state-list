@@ -52,8 +52,8 @@ _lib=$(dirname "$0")
 # fallback it used to have went stale and silently reported nothing.
 _ns=${1:-}
 if [ -z "$_ns" ] && [ -r "$_lib/mux-context_lib" ]; then
-	. "$_lib/mux-context_lib"
-	mux_ctx_resolve 2>/dev/null && _ns=$MUX_CTX_PARTITION
+  . "$_lib/mux-context_lib"
+  mux_ctx_resolve 2>/dev/null && _ns=$MUX_CTX_PARTITION
 fi
 dir=$(mux_agent_dir "$_ns")
 
@@ -63,27 +63,27 @@ _now=$(date +%s 2>/dev/null || echo 0)
 # summary's own loop does, and keeping the shape identical is what stops the
 # next edit from reintroducing the subshell trap in one of the two.
 while IFS= read -r _s; do
-	[ -n "$_s" ] || continue
-	# "STATE EPOCH" for the most-urgent live agent in this session; a
-	# session with several agent panes reports its worst, so nothing hides.
-	_se=$(mux_agent_state "$dir" "$_s")
-	_st=${_se%% *}
-	_ep=${_se#* }
-	[ -n "$_st" ] || continue
-	# A record with no usable epoch still has a real STATE, so it is
-	# reported with an age of `-` rather than dropped or given a fabricated
-	# 0. Dropping it would hide a live agent; a 0 would assert it just
-	# changed, which is a claim this has no evidence for.
-	case ${_ep:-} in
-	''|*[!0-9]*) _age=- ;;
-	*)
-		_age=$((_now - _ep))
-		# Clamp rather than print a negative: a record stamped in the
-		# future means this host's clock moved, and "0s" is the honest
-		# floor for "it began no earlier than now".
-		[ "$_age" -lt 0 ] && _age=0 ;;
-	esac
-	printf '%s %s %s\n' "$_st" "$_age" "$_s"
+  [ -n "$_s" ] || continue
+  # "STATE EPOCH" for the most-urgent live agent in this session; a
+  # session with several agent panes reports its worst, so nothing hides.
+  _se=$(mux_agent_state "$dir" "$_s")
+  _st=${_se%% *}
+  _ep=${_se#* }
+  [ -n "$_st" ] || continue
+  # A record with no usable epoch still has a real STATE, so it is
+  # reported with an age of `-` rather than dropped or given a fabricated
+  # 0. Dropping it would hide a live agent; a 0 would assert it just
+  # changed, which is a claim this has no evidence for.
+  case ${_ep:-} in
+  ''|*[!0-9]*) _age=- ;;
+  *)
+    _age=$((_now - _ep))
+    # Clamp rather than print a negative: a record stamped in the
+    # future means this host's clock moved, and "0s" is the honest
+    # floor for "it began no earlier than now".
+    [ "$_age" -lt 0 ] && _age=0 ;;
+  esac
+  printf '%s %s %s\n' "$_st" "$_age" "$_s"
 done <<EOF
 $(mux_agent_sessions "$dir")
 EOF

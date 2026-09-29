@@ -28,19 +28,19 @@ _lib=$(dirname "$0")
 MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
 
 for _l in mux-conf_lib mux-hosts_lib; do
-	[ -r "$_lib/$_l" ] || {
-		echo "mux: host-color: $_lib/$_l missing (broken install)" >&2
-		exit 1; }
-	. "$_lib/$_l"
+  [ -r "$_lib/$_l" ] || {
+    echo "mux: host-color: $_lib/$_l missing (broken install)" >&2
+    exit 1; }
+  . "$_lib/$_l"
 done
 
 case ${1:-} in
 -h|--help)
-	echo "usage: mux host-color [HOST]" >&2
-	exit 0 ;;
+  echo "usage: mux host-color [HOST]" >&2
+  exit 0 ;;
 -*)
-	echo "mux: host-color: unknown option: $1" >&2
-	exit 2 ;;
+  echo "mux: host-color: unknown option: $1" >&2
+  exit 2 ;;
 esac
 
 _h=${1:-$(mux_host_name)}
@@ -52,9 +52,9 @@ _pair=$(mux_host_hex "$_h")
 # guessed: a caller drawing ink with no fill is worse off than one that drew
 # nothing, and it would have no way to tell.
 [ -n "$_pair" ] || {
-	echo "mux: host-color: cannot resolve a hex pair for '$_h'" >&2
-	echo "mux:   its style is '$(mux_host_style "$_h")'" >&2
-	echo "mux:   colours 0-15 are the terminal's own and have no fixed" >&2
-	echo "mux:   value; set an explicit fg/bg in $MUX_DIR/hosts" >&2
-	exit 1; }
+  echo "mux: host-color: cannot resolve a hex pair for '$_h'" >&2
+  echo "mux:   its style is '$(mux_host_style "$_h")'" >&2
+  echo "mux:   colours 0-15 are the terminal's own and have no fixed" >&2
+  echo "mux:   value; set an explicit fg/bg in $MUX_DIR/hosts" >&2
+  exit 1; }
 printf '%s\n' "$_pair"

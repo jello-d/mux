@@ -15,9 +15,9 @@
 #   - trims trailing whitespace (so `theme slate ` is not the name "slate "),
 #   - drops the blank lines all of the above leaves behind.
 mux_conf_clean() {
-	sed -e 's/\r$//' \
-	    -e '/^[[:space:]]*#/d' \
-	    -e 's/[[:space:]]#.*$//' \
-	    -e 's/[[:space:]]*$//' \
-	    -e '/^[[:space:]]*$/d'
+  sed -e 's/\r$//' \
+      -e '/^[[:space:]]*#/d' \
+      -e 's/[[:space:]]#.*$//' \
+      -e 's/[[:space:]]*$//' \
+      -e '/^[[:space:]]*$/d'
 }

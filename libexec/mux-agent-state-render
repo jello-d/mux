@@ -75,11 +75,11 @@ STY_UNKNOWN='fg=colour250'
 
 ACC_WORKING=colour211    # pink, the working chip's own fg
 ACC_IDLE='#7faa00'       # warm (yellow-leaning) green as a TRUECOLOR hex, not
-                         # an indexed colour: red lifted, blue at zero. This
-                         # terminal's palette shifts the 256-colour green cube
-                         # toward blue, so colourNN greens read blue; a hex goes
-                         # out as a direct RGB escape (tmux Tc), bypassing the
-                         # palette, so this stays truly green on the chip.
+       # an indexed colour: red lifted, blue at zero. This
+       # terminal's palette shifts the 256-colour green cube
+       # toward blue, so colourNN greens read blue; a hex goes
+       # out as a direct RGB escape (tmux Tc), bypassing the
+       # palette, so this stays truly green on the chip.
 ACC_NONE=colour250       # gray, agentless recedes
 ACC_UNKNOWN=colour250
 
@@ -119,7 +119,7 @@ dir=$(mux_agent_dir)
 # because tmux escapes a real tab in a value as the two characters `\t`, so it
 # cannot appear inside a field.
 _panes=$(tmux list-panes -a \
-	-F '#{pane_id}	#{@mux-agent}	#{session_name}' 2>/dev/null || true)
+  -F '#{pane_id}	#{@mux-agent}	#{session_name}' 2>/dev/null || true)
 # EMPTY MUST STAY EMPTY. `printf '%s\n' ""` emits a NEWLINE, which `tr` turns
 # into a space, which makes `live` non-empty -- and the prune below is guarded
 # on exactly that emptiness, because an empty pane list means the QUERY FAILED
@@ -127,7 +127,7 @@ _panes=$(tmux list-panes -a \
 # broke that guard, and the existing prune assertion caught it.
 live=" "
 [ -z "$_panes" ] \
-	|| live=" $(printf '%s\n' "$_panes" | cut -f1 | tr '\n' ' ')"
+  || live=" $(printf '%s\n' "$_panes" | cut -f1 | tr '\n' ' ')"
 # Newline-delimited and newline-padded, so the membership test below is an
 # exact whole-name match rather than a substring one: `api` must not match
 # `api-2`, which is the bug this codebase has shipped four times.
@@ -136,12 +136,12 @@ $(printf '%s\n' "$_panes" | awk -F'\t' '$2 != "" { print $3 }')
 "
 # _has_agent_pane SESSION -> did mux build an agent pane in it?
 _has_agent_pane() {
-	case $_agented in
-	*"
+  case $_agented in
+  *"
 $1
 "*) return 0 ;;
-	esac
-	return 1
+  esac
+  return 1
 }
 
 # Prune phantoms once: drop any state file whose pane is gone, closing any
@@ -164,23 +164,23 @@ $1
 # that a genuinely dead pane's file survives until the next render that CAN
 # see the server -- a stale chip, which the next real render clears.
 if [ -d "$dir" ] && [ -n "${live# }" ]; then
-        for f in "$dir"/*; do
-                [ -e "$f" ] || continue
-                read -r st win pane ep nid ss <"$f" || continue
-                case "$live" in *" $pane "*) continue ;; esac
-                mux_notify_close "$nid"
-                rm -f "$f"
-        done
+  for f in "$dir"/*; do
+    [ -e "$f" ] || continue
+    read -r st win pane ep nid ss <"$f" || continue
+    case "$live" in *" $pane "*) continue ;; esac
+    mux_notify_close "$nid"
+    rm -f "$f"
+  done
 fi
 
 # Format an age in seconds as a fixed 3-column field (right-justified number and
 # unit), so the duration never changes width as it ticks and the strip holds.
 fmt_age() {
-        _a=$1
-        if   [ "$_a" -lt 60 ];   then printf '%2ds' "$_a"
-        elif [ "$_a" -lt 3600 ]; then printf '%2dm' $((_a / 60))
-        else _h=$((_a / 3600)); [ "$_h" -gt 99 ] && _h=99; printf '%2dh' "$_h"
-        fi
+  _a=$1
+  if   [ "$_a" -lt 60 ];   then printf '%2ds' "$_a"
+  elif [ "$_a" -lt 3600 ]; then printf '%2dm' $((_a / 60))
+  else _h=$((_a / 3600)); [ "$_h" -gt 99 ] && _h=99; printf '%2dh' "$_h"
+  fi
 }
 
 # The bar's current session, passed as $1 (#S). Only this one is highlighted.
@@ -191,8 +191,8 @@ current=${1:-}
 client=${2:-}
 excluded=
 if [ -r "$_lib/mux-exclude_lib" ]; then
-        . "$_lib/mux-exclude_lib"
-        excluded=$(mux_excluded "$client")
+  . "$_lib/mux-exclude_lib"
+  excluded=$(mux_excluded "$client")
 fi
 
 # --- gather: one record per visible session, in tmux order ------------------
@@ -207,27 +207,27 @@ tmux list-sessions -F '#{session_name}' 2>/dev/null >"$tmpf" || true
 now=$(date +%s)          # one instant, so every age is measured the same
 nsess=0
 while read -r sess; do
-        [ -n "$sess" ] || continue
-        mux_excluded_has "$excluded" "$sess" && continue     # mux hide
-        _pair=$(mux_agent_state "$dir" "$sess")
-        _st=${_pair%% *}; _ep=${_pair##* }
-        # NO RECORD AT ALL, and mux started an agent here: the wiring never
-        # fired. A wired agent emits on SessionStart, so the absence of ANY
-        # record is the signal -- and it is a better one than asking whether an
-        # agent process is alive right now, which would call an agent that ran
-        # and exited "no agent" and hide the very thing that is wrong.
-        # (Measured, and the reason this is not a process check: tmux reports
-        # `#{pane_current_command}` as the SHELL for a live Claude pane, and
-        # `#{pane_start_command}` keeps naming the agent long after it exits.
-        # Neither can tell a running agent from a finished one.)
-        if [ -z "$_st" ] && _has_agent_pane "$sess"; then
-                _st=unwired
-        fi
-        [ -n "$_st" ] || _st=none
-        _age=0; [ -n "$_ep" ] && _age=$((now - _ep))
-        _cur=0; [ "$sess" = "$current" ] && _cur=1
-        printf '%s %s %s %s\n' "$_cur" "$_st" "$_age" "$sess" >>"$recs"
-        nsess=$((nsess + 1))
+  [ -n "$sess" ] || continue
+  mux_excluded_has "$excluded" "$sess" && continue     # mux hide
+  _pair=$(mux_agent_state "$dir" "$sess")
+  _st=${_pair%% *}; _ep=${_pair##* }
+  # NO RECORD AT ALL, and mux started an agent here: the wiring never
+  # fired. A wired agent emits on SessionStart, so the absence of ANY
+  # record is the signal -- and it is a better one than asking whether an
+  # agent process is alive right now, which would call an agent that ran
+  # and exited "no agent" and hide the very thing that is wrong.
+  # (Measured, and the reason this is not a process check: tmux reports
+  # `#{pane_current_command}` as the SHELL for a live Claude pane, and
+  # `#{pane_start_command}` keeps naming the agent long after it exits.
+  # Neither can tell a running agent from a finished one.)
+  if [ -z "$_st" ] && _has_agent_pane "$sess"; then
+    _st=unwired
+  fi
+  [ -n "$_st" ] || _st=none
+  _age=0; [ -n "$_ep" ] && _age=$((now - _ep))
+  _cur=0; [ "$sess" = "$current" ] && _cur=1
+  printf '%s %s %s %s\n' "$_cur" "$_st" "$_age" "$sess" >>"$recs"
+  nsess=$((nsess + 1))
 done <"$tmpf"
 [ "$nsess" -gt 0 ] || exit 0
 
@@ -235,7 +235,7 @@ done <"$tmpf"
 # one-space margin in its format string. MUX_STRIP_WIDTH overrides (tests).
 budget=${MUX_STRIP_WIDTH:-}
 [ -n "$budget" ] || budget=$(tmux show-options -gqv status-right-length \
-        2>/dev/null || true)
+  2>/dev/null || true)
 [ -n "$budget" ] || budget=160
 budget=$((budget - 1))
 
@@ -254,31 +254,31 @@ budget=$((budget - VIEW_TAIL_W))
 BS= BW=0 BF=1
 _reset() { BS= BW=0 BF=1; }
 _sep() {
-        if [ "$BF" -eq 1 ]; then BF=0
-        else BS="$BS#[default]$SEP"; BW=$((BW + 1)); fi
+  if [ "$BF" -eq 1 ]; then BF=0
+  else BS="$BS#[default]$SEP"; BW=$((BW + 1)); fi
 }
 
 # _style STATE AGE -> set sty and acc (per-state chip look; blocked escalates by
 # how long it waited). Shared by every builder so the look cannot drift.
 _style() {
-        case $1 in
-        blocked)
-                if   [ "$2" -ge "$BLOCK_HOT_S" ]; then
-                        sty=$STY_BLOCK_HOT;   acc=$ACC_BLOCK_HOT
-                elif [ "$2" -ge "$BLOCK_WARM_S" ]; then
-                        sty=$STY_BLOCK_WARM;  acc=$ACC_BLOCK_WARM
-                else    sty=$STY_BLOCK_FRESH; acc=$ACC_BLOCK_FRESH
-                fi ;;
-        working) sty=$STY_WORKING; acc=$ACC_WORKING ;;
-        idle)    sty=$STY_IDLE;    acc=$ACC_IDLE ;;
-        none|'') sty=$STY_NONE;    acc=$ACC_NONE ;;
-        # UNWIRED borrows the unknown STYLE on purpose: both mean "mux cannot
-        # say", and inventing a colour for it would spend one of the few this
-        # tile has left. The GLYPH is what separates them, and each property is
-        # asserted on its own.
-        unwired) sty=$STY_UNKNOWN; acc=$ACC_UNKNOWN ;;
-        *)       sty=$STY_UNKNOWN; acc=$ACC_UNKNOWN ;;
-        esac
+  case $1 in
+  blocked)
+    if   [ "$2" -ge "$BLOCK_HOT_S" ]; then
+      sty=$STY_BLOCK_HOT;   acc=$ACC_BLOCK_HOT
+    elif [ "$2" -ge "$BLOCK_WARM_S" ]; then
+      sty=$STY_BLOCK_WARM;  acc=$ACC_BLOCK_WARM
+    else    sty=$STY_BLOCK_FRESH; acc=$ACC_BLOCK_FRESH
+    fi ;;
+  working) sty=$STY_WORKING; acc=$ACC_WORKING ;;
+  idle)    sty=$STY_IDLE;    acc=$ACC_IDLE ;;
+  none|'') sty=$STY_NONE;    acc=$ACC_NONE ;;
+  # UNWIRED borrows the unknown STYLE on purpose: both mean "mux cannot
+  # say", and inventing a colour for it would spend one of the few this
+  # tile has left. The GLYPH is what separates them, and each property is
+  # asserted on its own.
+  unwired) sty=$STY_UNKNOWN; acc=$ACC_UNKNOWN ;;
+  *)       sty=$STY_UNKNOWN; acc=$ACC_UNKNOWN ;;
+  esac
 }
 
 # _emit_session CUR STATE AGE NAME SHOWAGE -> append one session chip. With
@@ -286,156 +286,156 @@ _style() {
 # fits is exactly what it always was; SHOWAGE=0 drops the age field (the blocked
 # escalation still shows through the chip COLOUR, so no signal is lost).
 _emit_session() {
-        _c=$1 _s=$2 _a=$3 _nm=$4 _sa=$5
-        _sg=$_s; [ "$_s" = none ] && _sg=''
-        _style "$_s" "$_a"
-        _mk=$(mux_agent_glyph "$_sg")
-        _af=''
-        if [ "$_sa" -eq 1 ]; then
-                _d='   '
-                case $_s in blocked|working|idle) _d=$(fmt_age "$_a") ;; esac
-                _af=" $_d"
-        fi
-        _p=' '; _bp=' '
-        if [ "$_c" -eq 1 ]; then
-                _p="#[fg=$acc,bold]$CUR_LB#[fg=$CUR_FG]"
-                _bp="#[fg=$acc,bold]$CUR_RB"
-                sty="fg=$CUR_FG,bg=$CUR_BG,bold,underscore,us=$acc"
-        fi
-        _sep
-        BS="$BS#[range=user|s:$_nm]#[default]#[$sty]$_p$_mk $_nm$_af$_bp"
-        BS="$BS#[default]#[norange]"
-        _bw=$((${#_nm} + 5)); [ "$_sa" -eq 1 ] && _bw=$((_bw + 4))
-        BW=$((BW + _bw))
+  _c=$1 _s=$2 _a=$3 _nm=$4 _sa=$5
+  _sg=$_s; [ "$_s" = none ] && _sg=''
+  _style "$_s" "$_a"
+  _mk=$(mux_agent_glyph "$_sg")
+  _af=''
+  if [ "$_sa" -eq 1 ]; then
+    _d='   '
+    case $_s in blocked|working|idle) _d=$(fmt_age "$_a") ;; esac
+    _af=" $_d"
+  fi
+  _p=' '; _bp=' '
+  if [ "$_c" -eq 1 ]; then
+    _p="#[fg=$acc,bold]$CUR_LB#[fg=$CUR_FG]"
+    _bp="#[fg=$acc,bold]$CUR_RB"
+    sty="fg=$CUR_FG,bg=$CUR_BG,bold,underscore,us=$acc"
+  fi
+  _sep
+  BS="$BS#[range=user|s:$_nm]#[default]#[$sty]$_p$_mk $_nm$_af$_bp"
+  BS="$BS#[default]#[norange]"
+  _bw=$((${#_nm} + 5)); [ "$_sa" -eq 1 ] && _bw=$((_bw + 4))
+  BW=$((BW + _bw))
 }
 
 # _emit_cluster R -> a dim stand-in for R folded agentless sessions. No range
 # tag: it maps to no single session, so a click is a deliberate no-op.
 _emit_cluster() {
-        _sep
-        BS="$BS#[default]#[fg=colour240]·$1·#[default]"
-        BW=$((BW + 2 + ${#1}))
+  _sep
+  BS="$BS#[default]#[fg=colour240]·$1·#[default]"
+  BW=$((BW + 2 + ${#1}))
 }
 
 # _emit_edge SIDE COUNT BLOCKED -> a window-edge counter for COUNT sessions off
 # that side; if BLOCKED it wears the caution glyph, so a needs-you off-window
 # is NEVER silently lost. SIDE 'l' points left (‹), 'r' points right (›).
 _emit_edge() {
-        [ "$1" = l ] && _tx="‹$2" || _tx="$2›"
-        _sep
-        if [ "$3" -eq 1 ]; then
-                [ "$1" = l ] && _tx="$MUX_GLYPH_BLOCKED$_tx" \
-                             || _tx="$_tx$MUX_GLYPH_BLOCKED"
-                BS="$BS#[default]#[fg=colour232,bg=colour202,bold]"
-                BS="$BS$_tx#[default]"
-                BW=$((BW + 3 + ${#2}))
-        else
-                BS="$BS#[default]#[fg=colour244]$_tx#[default]"
-                BW=$((BW + 1 + ${#2}))
-        fi
+  [ "$1" = l ] && _tx="‹$2" || _tx="$2›"
+  _sep
+  if [ "$3" -eq 1 ]; then
+    [ "$1" = l ] && _tx="$MUX_GLYPH_BLOCKED$_tx" \
+           || _tx="$_tx$MUX_GLYPH_BLOCKED"
+    BS="$BS#[default]#[fg=colour232,bg=colour202,bold]"
+    BS="$BS$_tx#[default]"
+    BW=$((BW + 3 + ${#2}))
+  else
+    BS="$BS#[default]#[fg=colour244]$_tx#[default]"
+    BW=$((BW + 1 + ${#2}))
+  fi
 }
 
 # Builders: each resets and lays out the whole strip one way; the caller keeps
 # the leanest that fits.
 build_plain() {          # SHOWAGE(1|0): every session as a chip
-        _reset
-        while read -r _c _s _a _nm; do
-                _emit_session "$_c" "$_s" "$_a" "$_nm" "$1"
-        done <"$recs"
+  _reset
+  while read -r _c _s _a _nm; do
+    _emit_session "$_c" "$_s" "$_a" "$_nm" "$1"
+  done <"$recs"
 }
 build_collapse() {       # no age, runs of agentless sessions folded to ·N·
-        _reset; _run=0
-        while read -r _c _s _a _nm; do
-                if [ "$_c" -eq 0 ] && [ "$_s" = none ]; then
-                        _run=$((_run + 1)); continue
-                fi
-                [ "$_run" -gt 0 ] && { _emit_cluster "$_run"; _run=0; }
-                _emit_session "$_c" "$_s" "$_a" "$_nm" 0
-        done <"$recs"
-        # if/then, NOT `[ ... ] && ...`: this is the function's LAST statement,
-        # so a false test would make build_collapse RETURN 1 -- and its caller
-        # is `[ fits ] || build_collapse`, where a non-zero final command trips
-        # set -e and kills the render. The status bar then goes BLANK for the
-        # whole client, which is what happened whenever the strip had to
-        # collapse and the last session was not agentless (_run == 0), i.e.
-        # almost always.
-        if [ "$_run" -gt 0 ]; then _emit_cluster "$_run"; fi
+  _reset; _run=0
+  while read -r _c _s _a _nm; do
+    if [ "$_c" -eq 0 ] && [ "$_s" = none ]; then
+      _run=$((_run + 1)); continue
+    fi
+    [ "$_run" -gt 0 ] && { _emit_cluster "$_run"; _run=0; }
+    _emit_session "$_c" "$_s" "$_a" "$_nm" 0
+  done <"$recs"
+  # if/then, NOT `[ ... ] && ...`: this is the function's LAST statement,
+  # so a false test would make build_collapse RETURN 1 -- and its caller
+  # is `[ fits ] || build_collapse`, where a non-zero final command trips
+  # set -e and kills the render. The status bar then goes BLANK for the
+  # whole client, which is what happened whenever the strip had to
+  # collapse and the last session was not agentless (_run == 0), i.e.
+  # almost always.
+  if [ "$_run" -gt 0 ]; then _emit_cluster "$_run"; fi
 }
 build_window() {         # last resort: a window around current + edge counters
-        set --
-        while IFS= read -r _l; do set -- "$@" "$_l"; done <"$recs"
-        _tot=$#
-        _ci=1 _k=0
-        for _l in "$@"; do
-                _k=$((_k + 1)); case $_l in "1 "*) _ci=$_k ;; esac
-        done
-        _avail=$((budget - 12))          # reserve for two edge counters + seps
-        _lo=$_ci _hi=$_ci
-        eval "_l=\${$_ci}"; _r=${_l#* }; _r=${_r#* }; _nm=${_r#* }
-        _w=$((${#_nm} + 5))
-        _stall=0 _side=r                 # grow alternately until neither fits
-        while [ "$_stall" -lt 2 ]; do
-                _moved=0
-                if [ "$_side" = r ] && [ "$_hi" -lt "$_tot" ]; then
-                        eval "_l=\${$((_hi + 1))}"
-                        _r=${_l#* }; _r=${_r#* }; _nm=${_r#* }
-                        _nw=$((${#_nm} + 5))
-                        if [ $((_w + _nw + 1)) -le "$_avail" ]; then
-                                _hi=$((_hi + 1)); _w=$((_w + _nw + 1)); _moved=1
-                        fi
-                elif [ "$_side" = l ] && [ "$_lo" -gt 1 ]; then
-                        eval "_l=\${$((_lo - 1))}"
-                        _r=${_l#* }; _r=${_r#* }; _nm=${_r#* }
-                        _nw=$((${#_nm} + 5))
-                        if [ $((_w + _nw + 1)) -le "$_avail" ]; then
-                                _lo=$((_lo - 1)); _w=$((_w + _nw + 1)); _moved=1
-                        fi
-                fi
-                [ "$_moved" -eq 1 ] && _stall=0 || _stall=$((_stall + 1))
-                [ "$_side" = r ] && _side=l || _side=r
-        done
-        _reset
-        if [ "$_lo" -gt 1 ]; then
-                _bl=0 _i=1
-                while [ "$_i" -lt "$_lo" ]; do
-                        eval "_l=\${$_i}"; _s=${_l#* }; _s=${_s%% *}
-                        [ "$_s" = blocked ] && { _bl=1; break; }
-                        _i=$((_i + 1))
-                done
-                _emit_edge l $((_lo - 1)) "$_bl"
-        fi
-        _i=$_lo
-        while [ "$_i" -le "$_hi" ]; do
-                eval "_l=\${$_i}"
-                _c=${_l%% *}; _r=${_l#* }
-                _s=${_r%% *}; _r=${_r#* }
-                _a=${_r%% *}; _nm=${_r#* }
-                _emit_session "$_c" "$_s" "$_a" "$_nm" 0
-                _i=$((_i + 1))
-        done
-        if [ "$_hi" -lt "$_tot" ]; then
-                _bl=0 _i=$((_hi + 1))
-                while [ "$_i" -le "$_tot" ]; do
-                        eval "_l=\${$_i}"; _s=${_l#* }; _s=${_s%% *}
-                        [ "$_s" = blocked ] && { _bl=1; break; }
-                        _i=$((_i + 1))
-                done
-                _emit_edge r $((_tot - _hi)) "$_bl"
-        fi
+  set --
+  while IFS= read -r _l; do set -- "$@" "$_l"; done <"$recs"
+  _tot=$#
+  _ci=1 _k=0
+  for _l in "$@"; do
+    _k=$((_k + 1)); case $_l in "1 "*) _ci=$_k ;; esac
+  done
+  _avail=$((budget - 12))          # reserve for two edge counters + seps
+  _lo=$_ci _hi=$_ci
+  eval "_l=\${$_ci}"; _r=${_l#* }; _r=${_r#* }; _nm=${_r#* }
+  _w=$((${#_nm} + 5))
+  _stall=0 _side=r                 # grow alternately until neither fits
+  while [ "$_stall" -lt 2 ]; do
+    _moved=0
+    if [ "$_side" = r ] && [ "$_hi" -lt "$_tot" ]; then
+      eval "_l=\${$((_hi + 1))}"
+      _r=${_l#* }; _r=${_r#* }; _nm=${_r#* }
+      _nw=$((${#_nm} + 5))
+      if [ $((_w + _nw + 1)) -le "$_avail" ]; then
+        _hi=$((_hi + 1)); _w=$((_w + _nw + 1)); _moved=1
+      fi
+    elif [ "$_side" = l ] && [ "$_lo" -gt 1 ]; then
+      eval "_l=\${$((_lo - 1))}"
+      _r=${_l#* }; _r=${_r#* }; _nm=${_r#* }
+      _nw=$((${#_nm} + 5))
+      if [ $((_w + _nw + 1)) -le "$_avail" ]; then
+        _lo=$((_lo - 1)); _w=$((_w + _nw + 1)); _moved=1
+      fi
+    fi
+    [ "$_moved" -eq 1 ] && _stall=0 || _stall=$((_stall + 1))
+    [ "$_side" = r ] && _side=l || _side=r
+  done
+  _reset
+  if [ "$_lo" -gt 1 ]; then
+    _bl=0 _i=1
+    while [ "$_i" -lt "$_lo" ]; do
+      eval "_l=\${$_i}"; _s=${_l#* }; _s=${_s%% *}
+      [ "$_s" = blocked ] && { _bl=1; break; }
+      _i=$((_i + 1))
+    done
+    _emit_edge l $((_lo - 1)) "$_bl"
+  fi
+  _i=$_lo
+  while [ "$_i" -le "$_hi" ]; do
+    eval "_l=\${$_i}"
+    _c=${_l%% *}; _r=${_l#* }
+    _s=${_r%% *}; _r=${_r#* }
+    _a=${_r%% *}; _nm=${_r#* }
+    _emit_session "$_c" "$_s" "$_a" "$_nm" 0
+    _i=$((_i + 1))
+  done
+  if [ "$_hi" -lt "$_tot" ]; then
+    _bl=0 _i=$((_hi + 1))
+    while [ "$_i" -le "$_tot" ]; do
+      eval "_l=\${$_i}"; _s=${_l#* }; _s=${_s%% *}
+      [ "$_s" = blocked ] && { _bl=1; break; }
+      _i=$((_i + 1))
+    done
+    _emit_edge r $((_tot - _hi)) "$_bl"
+  fi
 }
 
 build_summary() {        # the floor: too narrow even to window; show a count
-        _reset
-        _nb=0
-        while read -r _c _s _a _nm; do
-                [ "$_s" = blocked ] && _nb=$((_nb + 1))
-        done <"$recs"
-        if [ "$_nb" -gt 0 ]; then          # keep the needs-you count, always
-                BS="#[fg=colour232,bg=colour202,bold]$MUX_GLYPH_BLOCKED$_nb"
-                BS="$BS#[default]"; BW=$((2 + ${#_nb}))
-                BS="$BS#[fg=colour244] "; BW=$((BW + 1))
-        fi
-        BS="$BS#[fg=colour244]·$nsess#[default]"; BW=$((BW + 1 + ${#nsess}))
+  _reset
+  _nb=0
+  while read -r _c _s _a _nm; do
+    [ "$_s" = blocked ] && _nb=$((_nb + 1))
+  done <"$recs"
+  if [ "$_nb" -gt 0 ]; then          # keep the needs-you count, always
+    BS="#[fg=colour232,bg=colour202,bold]$MUX_GLYPH_BLOCKED$_nb"
+    BS="$BS#[default]"; BW=$((2 + ${#_nb}))
+    BS="$BS#[fg=colour244] "; BW=$((BW + 1))
+  fi
+  BS="$BS#[fg=colour244]·$nsess#[default]"; BW=$((BW + 1 + ${#nsess}))
 }
 
 # Pick the leanest layout that fits, cheapest first: the FULL strip (same as

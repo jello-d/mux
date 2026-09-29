@@ -41,10 +41,10 @@ chmod +x "$T/bin/tmux"
 printf '161\n' >"$WIDTH"
 
 run() { : >"$LOG"; PATH="$T/bin:$PATH" "$HERE/libexec/mux-refresh" "$@" \
-	>/dev/null 2>&1 || true; }
+  >/dev/null 2>&1 || true; }
 # Just the WIDTH resizes, in order: "pane=width" per line.
 widths() { grep -- '-x' "$LOG" 2>/dev/null \
-	| sed 's/.*-t \([^ ]*\) -x \([0-9]*\).*/\1=\2/' | tr '\n' ' '; }
+  | sed 's/.*-t \([^ ]*\) -x \([0-9]*\).*/\1=\2/' | tr '\n' ' '; }
 
 # --- an even split of an even width ---------------------------------------
 # 161 columns, two panes, one border column between them: 80|80. Only the
@@ -52,14 +52,14 @@ widths() { grep -- '-x' "$LOG" 2>/dev/null \
 printf '%%0 52\n%%1 52\n%%2 10 5-10\n' >"$PANES"
 run
 [ "$(widths)" = "%0=80 " ] \
-	|| fail "two panes in 161: got [$(widths)]"
+  || fail "two panes in 161: got [$(widths)]"
 
 # --- the remainder lands leftmost, as even-horizontal does -----------------
 # 180 columns, two panes, one border: 179 to share, so 90|89 and not 89|90.
 printf '180\n' >"$WIDTH"
 run
 [ "$(widths)" = "%0=90 " ] \
-	|| fail "two panes in 180: got [$(widths)] want %0=90"
+  || fail "two panes in 180: got [$(widths)] want %0=90"
 printf '161\n' >"$WIDTH"
 
 # --- three panes ----------------------------------------------------------
@@ -67,7 +67,7 @@ printf '161\n' >"$WIDTH"
 printf '%%0 52\n%%1 52\n%%2 52\n%%3 10 5-10\n' >"$PANES"
 run
 [ "$(widths)" = "%0=53 %1=53 " ] \
-	|| fail "three panes in 161: got [$(widths)]"
+  || fail "three panes in 161: got [$(widths)]"
 
 # --- STACKED panes are refused, not mangled -------------------------------
 # Non-bottom panes of differing HEIGHT are not one row: they are stacked, an

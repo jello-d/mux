@@ -21,21 +21,21 @@ _name=mux-json
 . "$(dirname "$0")/harness_lib"
 
 command -v python3 >/dev/null 2>&1 || {
-	printf 'skip %s (no python3 to parse with)\n' "$_name"; exit 0; }
+  printf 'skip %s (no python3 to parse with)\n' "$_name"; exit 0; }
 
 . "$HERE/libexec/mux-json_lib"
 
 # rt LABEL VALUE -- emit VALUE as JSON, parse it, and require the parsed value
 # to be byte-identical to what went in.
 rt() {
-	_l=$1; _v=$2
-	printf '%s' "$_v" >"$T/in"
-	mux_json_str "$_v" >"$T/json"
-	# stderr into a file, so the FAILURE SAYS WHY. A test that reports only
-	# which case broke, with the parser's explanation lost to the terminal,
-	# is the shape this suite already refuses everywhere else.
-	MUX_T_IN=$T/in MUX_T_JSON=$T/json python3 - 2>"$T/err" <<'PY' \
-		|| fail "$_l: $(cat "$T/err" 2>/dev/null)"
+  _l=$1; _v=$2
+  printf '%s' "$_v" >"$T/in"
+  mux_json_str "$_v" >"$T/json"
+  # stderr into a file, so the FAILURE SAYS WHY. A test that reports only
+  # which case broke, with the parser's explanation lost to the terminal,
+  # is the shape this suite already refuses everywhere else.
+  MUX_T_IN=$T/in MUX_T_JSON=$T/json python3 - 2>"$T/err" <<'PY' \
+    || fail "$_l: $(cat "$T/err" 2>/dev/null)"
 import json, os, sys
 raw = open(os.environ["MUX_T_JSON"], "rb").read()
 want = open(os.environ["MUX_T_IN"], "rb").read()
@@ -105,7 +105,7 @@ eq num-doc "$_o" '{"n":null}'
 
 # --- mux_json_array -------------------------------------------------------
 eq arr-two   "$(printf '{"a":1}\n{"b":2}\n' | mux_json_array)" \
-	'[{"a":1},{"b":2}]'
+  '[{"a":1},{"b":2}]'
 eq arr-one   "$(printf '{"a":1}\n' | mux_json_array)"          '[{"a":1}]'
 # EMPTY IS `[]`, NOT NOTHING. A consumer parses one document either way, so a
 # host with no sessions answers the same SHAPE as one with five -- which is
@@ -117,7 +117,7 @@ eq arr-blank "$(printf '\n\n' | mux_json_array)"               '[]'
 # exists for: a trailing comma is a document no parser accepts, so one bad
 # element would make the entire answer unreadable rather than degrade.
 _doc=$( { mux_json_str 'a "quoted" one'; printf '\n'
-	  mux_json_str 'a \ backslashed one'; printf '\n'; } | mux_json_array)
+    mux_json_str 'a \ backslashed one'; printf '\n'; } | mux_json_array)
 printf '%s' "$_doc" >"$T/doc"
 MUX_T_DOC=$T/doc python3 - <<'PY' || fail "the assembled array did not parse"
 import json, os, sys

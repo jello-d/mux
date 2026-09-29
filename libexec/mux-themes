@@ -43,7 +43,7 @@ MUX_SHARE=${MUX_SHARE:-$(dirname "$0")/../share}
 # would be a second copy of the very rule that lib exists to hold.
 _paths=$(dirname "$0")/mux-paths_lib
 [ -r "$_paths" ] || {
-	echo "mux-themes: $_paths missing (incomplete install)" >&2; exit 1; }
+  echo "mux-themes: $_paths missing (incomplete install)" >&2; exit 1; }
 . "$_paths"
 # AFTER the source, obviously, and it was not: assigning this above the `.` line
 # left STAMPDIR empty and every stamp read and write landed at `/mux-themes...`.
@@ -54,7 +54,7 @@ STAMPDIR=$(mux_cache_dir)
 # server gets and the palette the help shows come from one resolution.
 _data=$(dirname "$0")/mux-data_lib
 [ -r "$_data" ] || {
-	echo "mux-themes: $_data missing (incomplete install)" >&2; exit 1; }
+  echo "mux-themes: $_data missing (incomplete install)" >&2; exit 1; }
 . "$_data"
 
 # The shared comment/normalize rule (see bin/mux); a fallback strips only
@@ -74,7 +74,7 @@ fi
 # resolved defaults file. Resolved, so an overlay fragment REPLACES its shipped
 # twin rather than being pushed after it.
 theme_inputs() {
-	mux_data_files themes .theme
+  mux_data_files themes .theme
 }
 
 # Content hash over that resolved set (paths and bytes, since sha256sum prints
@@ -82,54 +82,54 @@ theme_inputs() {
 # removed all move it. An empty set hashes to a constant -- pushing nothing,
 # which is safe.
 themes_hash() {
-	_tf=$(theme_inputs)
-	[ -n "$_tf" ] || { echo none; return 0; }
-	printf '%s\n' "$_tf" | LC_ALL=C sort | xargs -r sha256sum \
-		| sha256sum | cut -d' ' -f1
+  _tf=$(theme_inputs)
+  [ -n "$_tf" ] || { echo none; return 0; }
+  printf '%s\n' "$_tf" | LC_ALL=C sort | xargs -r sha256sum \
+    | sha256sum | cut -d' ' -f1
 }
 
 # Push every fragment's styles as @theme-<name>-bar/-window, plus the per-mode
 # defaults, to the server addressed by "$@" (tmux args: none for the ambient
 # server, or -L <sock> for a named one). An unknown key fails loud.
 push_palette() {
-	# Normalize each fragment via mux_conf_clean into a temp (comments, inline
-	# ` #`, trailing space, CRLF), then read from the FILE so a bad-key exit
-	# aborts. #rrggbb survives (only WHITESPACE-hash begins a comment). A bad-key
-	# exit leaks the temps, but it aborts the whole run, so that is moot.
-	#
-	# The resolved fragment LIST goes through a file for the same reason: a
-	# `for _f in $(...)` would split a path containing a space, and piping
-	# into `while read` would put the bad-key exit in a subshell, which would
-	# carry on rather than abort.
-	_ct=$(mktemp)
-	_fl=$(mktemp)
-	mux_data_files themes .theme >"$_fl"
-	while IFS= read -r _f; do
-		_name=${_f##*/}
-		_name=${_name%.theme}
-		mux_conf_clean < "$_f" > "$_ct"
-		while read -r _k _v; do
-			case $_k in
-			bar) tmux "$@" set -g "@theme-$_name-bar" "$_v" ;;
-			window) tmux "$@" set -g "@theme-$_name-window" "$_v" ;;
-			accent) tmux "$@" set -g "@theme-$_name-accent" "$_v" ;;
-			border) tmux "$@" set -g "@theme-$_name-border" "$_v" ;;
-			select) tmux "$@" set -g "@theme-$_name-select" "$_v" ;;
-			prompt) tmux "$@" set -g "@theme-$_name-prompt" "$_v" ;;
-			*)
-				echo "mux-themes: $_f: bad key: $_k" >&2
-				exit 1 ;;
-			esac
-		done <"$_ct"
-	done <"$_fl"
-	rm -f "$_fl"
-	rm -f "$_ct"
+  # Normalize each fragment via mux_conf_clean into a temp (comments, inline
+  # ` #`, trailing space, CRLF), then read from the FILE so a bad-key exit
+  # aborts. #rrggbb survives (only WHITESPACE-hash begins a comment). A bad-key
+  # exit leaks the temps, but it aborts the whole run, so that is moot.
+  #
+  # The resolved fragment LIST goes through a file for the same reason: a
+  # `for _f in $(...)` would split a path containing a space, and piping
+  # into `while read` would put the bad-key exit in a subshell, which would
+  # carry on rather than abort.
+  _ct=$(mktemp)
+  _fl=$(mktemp)
+  mux_data_files themes .theme >"$_fl"
+  while IFS= read -r _f; do
+    _name=${_f##*/}
+    _name=${_name%.theme}
+    mux_conf_clean < "$_f" > "$_ct"
+    while read -r _k _v; do
+      case $_k in
+      bar) tmux "$@" set -g "@theme-$_name-bar" "$_v" ;;
+      window) tmux "$@" set -g "@theme-$_name-window" "$_v" ;;
+      accent) tmux "$@" set -g "@theme-$_name-accent" "$_v" ;;
+      border) tmux "$@" set -g "@theme-$_name-border" "$_v" ;;
+      select) tmux "$@" set -g "@theme-$_name-select" "$_v" ;;
+      prompt) tmux "$@" set -g "@theme-$_name-prompt" "$_v" ;;
+      *)
+        echo "mux-themes: $_f: bad key: $_k" >&2
+        exit 1 ;;
+      esac
+    done <"$_ct"
+  done <"$_fl"
+  rm -f "$_fl"
+  rm -f "$_ct"
 }
 
 # Record socket KEY as synced to HASH.
 stamp_write() {         # KEY HASH
-	mkdir -p "$STAMPDIR"
-	printf '%s\n' "$2" >"$STAMPDIR/mux-themes.$1.sha"
+  mkdir -p "$STAMPDIR"
+  printf '%s\n' "$2" >"$STAMPDIR/mux-themes.$1.sha"
 }
 
 # Drop stamps whose socket has no server behind it any more.
@@ -150,15 +150,15 @@ stamp_write() {         # KEY HASH
 # next load rewrites it. That is also why this never touches anything but
 # stamps.
 prune_stamps() {
-	[ -d "$STAMPDIR" ] || return 0
-	for _ps in "$STAMPDIR"/mux-themes.*.sha; do
-		[ -e "$_ps" ] || continue
-		_pk=${_ps##*/mux-themes.}
-		_pk=${_pk%.sha}
-		[ -n "$_pk" ] || continue
-		tmux -L "$_pk" list-sessions >/dev/null 2>&1 || rm -f "$_ps"
-	done
-	return 0
+  [ -d "$STAMPDIR" ] || return 0
+  for _ps in "$STAMPDIR"/mux-themes.*.sha; do
+    [ -e "$_ps" ] || continue
+    _pk=${_ps##*/mux-themes.}
+    _pk=${_pk%.sha}
+    [ -n "$_pk" ] || continue
+    tmux -L "$_pk" list-sessions >/dev/null 2>&1 || rm -f "$_ps"
+  done
+  return 0
 }
 
 # Heal one server: KEY names it (for the stamp), ARGS addresses it. Skip when
@@ -166,67 +166,67 @@ prune_stamps() {
 # $2 is the tmux socket ARGS -- `-L work`, two words -- so it must word-split.
 # shellcheck disable=SC2086
 heal() {                # KEY ARGS HASH
-	_stamp="$STAMPDIR/mux-themes.$1.sha"
-	[ "$(cat "$_stamp" 2>/dev/null || true)" = "$3" ] && return 0
-	tmux $2 list-sessions >/dev/null 2>&1 || return 0
-	push_palette $2
-	stamp_write "$1" "$3"
+  _stamp="$STAMPDIR/mux-themes.$1.sha"
+  [ "$(cat "$_stamp" 2>/dev/null || true)" = "$3" ] && return 0
+  tmux $2 list-sessions >/dev/null 2>&1 || return 0
+  push_palette $2
+  stamp_write "$1" "$3"
 }
 
 case "${1:-}" in
 load)
-	# Ambient server: push honouring $TMUX, stamp under its socket name.
-	_key=$(tmux display-message -p '#{socket_path}' 2>/dev/null || true)
-	_key=${_key##*/}
-	[ -n "$_key" ] || _key=default
-	push_palette
-	stamp_write "$_key" "$(themes_hash)"
-	# After the stamp, never before: a failure here must not cost the
-	# server the palette it just loaded.
-	prune_stamps
-	;;
+  # Ambient server: push honouring $TMUX, stamp under its socket name.
+  _key=$(tmux display-message -p '#{socket_path}' 2>/dev/null || true)
+  _key=${_key##*/}
+  [ -n "$_key" ] || _key=default
+  push_palette
+  stamp_write "$_key" "$(themes_hash)"
+  # After the stamp, never before: a failure here must not cost the
+  # server the palette it just loaded.
+  prune_stamps
+  ;;
 sync)
-	_h=$(themes_hash)
-	# The global partition is addressed as -L global (unambiguous -- never
-	# the ambient $TMUX server, which may be another partition's).
-	heal global "-L global" "$_h"
-	# Plus every non-default context server the hook names, each healed only
-	# if it is up.
-	# Line by line: a partition name may contain a space, and splitting it
-	# would heal two servers that do not exist while missing the real one.
-	while IFS= read -r _s; do
-		[ -n "$_s" ] || continue
-		heal "$_s" "-L $_s" "$_h"
-	done <<EOF
+  _h=$(themes_hash)
+  # The global partition is addressed as -L global (unambiguous -- never
+  # the ambient $TMUX server, which may be another partition's).
+  heal global "-L global" "$_h"
+  # Plus every non-default context server the hook names, each healed only
+  # if it is up.
+  # Line by line: a partition name may contain a space, and splitting it
+  # would heal two servers that do not exist while missing the real one.
+  while IFS= read -r _s; do
+    [ -n "$_s" ] || continue
+    heal "$_s" "-L $_s" "$_h"
+  done <<EOF
 $(mux_ctx_partitions)
 EOF
-	;;
+  ;;
 ''|list)
-	# Bare `mux themes` LISTS them. It used to print an internal usage
-	# string -- a helper's business, not an answer to the obvious question
-	# asked of a verb one character away from `mux theme`.
-	printf 'themes:\n'
-	mux_data_stems themes .theme | tr '\n' ' ' | fold -s -w 70 \
-		| sed -e 's/^/  /' -e 's/[[:space:]]*$//'
-	printf '\n'
-	_d=$(mux_data_find themes defaults '')
-	if [ -n "$_d" ]; then
-		printf 'default: %s' \
-			"$(mux_conf_clean <"$_d" | awk '$1=="default"{print $2;exit}')"
-		_dv=$(mux_conf_clean <"$_d" | awk '$1=="derive"{print $2;exit}')
-		[ -n "$_dv" ] && printf '  (unset themes: %s)' "$_dv"
-		printf '\n'
-	fi
-	printf 'swatches: mux help colors\n'
-	;;
+  # Bare `mux themes` LISTS them. It used to print an internal usage
+  # string -- a helper's business, not an answer to the obvious question
+  # asked of a verb one character away from `mux theme`.
+  printf 'themes:\n'
+  mux_data_stems themes .theme | tr '\n' ' ' | fold -s -w 70 \
+    | sed -e 's/^/  /' -e 's/[[:space:]]*$//'
+  printf '\n'
+  _d=$(mux_data_find themes defaults '')
+  if [ -n "$_d" ]; then
+    printf 'default: %s' \
+      "$(mux_conf_clean <"$_d" | awk '$1=="default"{print $2;exit}')"
+    _dv=$(mux_conf_clean <"$_d" | awk '$1=="derive"{print $2;exit}')
+    [ -n "$_dv" ] && printf '  (unset themes: %s)' "$_dv"
+    printf '\n'
+  fi
+  printf 'swatches: mux help colors\n'
+  ;;
 prune)
-	# The same sweep `load` does, on demand. Exposed as a verb for two
-	# reasons: it is the only way to TEST the prune without an ambient
-	# server to hang a load off, and it is the escape hatch for a box that
-	# accumulated stamps before this existed (60 of them, here).
-	prune_stamps
-	;;
+  # The same sweep `load` does, on demand. Exposed as a verb for two
+  # reasons: it is the only way to TEST the prune without an ambient
+  # server to hang a load off, and it is the escape hatch for a box that
+  # accumulated stamps before this existed (60 of them, here).
+  prune_stamps
+  ;;
 *)
-	echo "usage: mux themes [load|sync|list|prune]" >&2
-	exit 2 ;;
+  echo "usage: mux themes [load|sync|list|prune]" >&2
+  exit 2 ;;
 esac

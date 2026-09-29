@@ -47,12 +47,12 @@
 
 # mux_log_path -> the log file, or empty when logging is off.
 mux_log_path() {
-	case ${MUX_LOG:-} in
-	none) return 0 ;;
-	?*)   printf '%s' "$MUX_LOG"; return 0 ;;
-	esac
-	printf '%s/mux.log' \
-		"${MUX_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/mux}"
+  case ${MUX_LOG:-} in
+  none) return 0 ;;
+  ?*)   printf '%s' "$MUX_LOG"; return 0 ;;
+  esac
+  printf '%s/mux.log' \
+    "${MUX_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/mux}"
 }
 
 # mux_log SUBSYS MESSAGE... -> append one line. Always returns 0.
@@ -67,23 +67,23 @@ mux_log_path() {
 # One short line through a single >> is atomic under O_APPEND on Linux, which is
 # what makes two concurrent latches safe to interleave without locking.
 mux_log() {   # <subsystem> <message...>
-	_ml_f=$(mux_log_path)
-	[ -n "$_ml_f" ] || return 0
-	_ml_s=$1; shift
-	[ -n "${1:-}" ] || return 0
+  _ml_f=$(mux_log_path)
+  [ -n "$_ml_f" ] || return 0
+  _ml_s=$1; shift
+  [ -n "${1:-}" ] || return 0
 
-	_ml_d=$(dirname "$_ml_f")
-	[ -d "$_ml_d" ] || mkdir -p "$_ml_d" 2>/dev/null || return 0
+  _ml_d=$(dirname "$_ml_f")
+  [ -d "$_ml_d" ] || mkdir -p "$_ml_d" 2>/dev/null || return 0
 
-	_ml_max=${MUX_LOG_MAX:-262144}
-	if [ -f "$_ml_f" ] \
-	   && [ "$(wc -c 2>/dev/null <"$_ml_f" || echo 0)" -gt "$_ml_max" ]
-	then
-		: 2>/dev/null >"$_ml_f" || return 0
-	fi
+  _ml_max=${MUX_LOG_MAX:-262144}
+  if [ -f "$_ml_f" ] \
+     && [ "$(wc -c 2>/dev/null <"$_ml_f" || echo 0)" -gt "$_ml_max" ]
+  then
+    : 2>/dev/null >"$_ml_f" || return 0
+  fi
 
-	printf '%s %s[%s] %s\n' \
-		"$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$_ml_s" "$$" "$*" \
-		2>/dev/null >>"$_ml_f" || return 0
-	return 0
+  printf '%s %s[%s] %s\n' \
+    "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$_ml_s" "$$" "$*" \
+    2>/dev/null >>"$_ml_f" || return 0
+  return 0
 }

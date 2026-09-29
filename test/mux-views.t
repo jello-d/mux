@@ -51,15 +51,15 @@ printf '161x64 161x63' >"$WINSZ"
 # differs in size but sits on bravo, so it contends over nothing -- tmux sizes
 # a window from the clients attached to ITS session, not from every client.
 calm() { printf '/dev/pts/0 161x64 alpha 100\n/dev/pts/1 161x56 bravo 100\n' \
-	>"$CLIENTS"; }
+  >"$CLIENTS"; }
 # tense: two DIFFERENT sizes on the SAME session, which is the only shape in
 # which window-size decides anything.
 tense() { printf '/dev/pts/0 161x64 alpha 100\n/dev/pts/1 161x56 alpha 100\n' \
-	>"$CLIENTS"; }
+  >"$CLIENTS"; }
 
 views() {
-	env -u TMUX -u MUX_SHARE PATH="$T/bin:$PATH" MUX_DIR="$T/conf" \
-		MUX_CACHE="$T/cache" "$HERE/libexec/mux-views" "$@" 2>&1
+  env -u TMUX -u MUX_SHARE PATH="$T/bin:$PATH" MUX_DIR="$T/conf" \
+    MUX_CACHE="$T/cache" "$HERE/libexec/mux-views" "$@" 2>&1
 }
 has() { case "$1" in *"$2"*) ;; *) fail "$3: want [$2] in [$1]" ;; esac; }
 no_has() { case "$1" in *"$2"*) fail "$3: unwanted [$2] in [$1]" ;; esac; }
@@ -82,16 +82,16 @@ _o=$(views --chip /dev/pts/0)
 has "$_o" "range=user|v:" "chip: not clickable (no range tag)"
 _v=$(printf '%s' "$_o" | sed 's/#\[[^]]*\]//g' | tr -d '\n')
 [ "$(printf '%s' "$_v" | wc -m)" -eq 1 ] \
-        || fail "the chip must be exactly ONE column: [$_v]"
+  || fail "the chip must be exactly ONE column: [$_v]"
 
 # --- SHAPE carries control: the mode you chose ----------------------------
 # The glyphs are the mathematical floor and ceiling symbols, so the picture is
 # the name; auto is the one that moves.
 glyph() { views --chip /dev/pts/0 | sed 's/#\[[^]]*\]//g' | tr -d '\n'; }
 for _pair in 'latest ✱' 'smallest ┻' 'largest ┳'; do
-        printf '%s\n' "${_pair%% *}" >"$OPT"
-        [ "$(glyph)" = "${_pair##* }" ] || fail \
-                "window-size ${_pair%% *} wants ${_pair##* }, drew $(glyph)"
+  printf '%s\n' "${_pair%% *}" >"$OPT"
+  [ "$(glyph)" = "${_pair##* }" ] || fail \
+    "window-size ${_pair%% *} wants ${_pair##* }, drew $(glyph)"
 done
 # An unknown window-size (tmux's `manual`, or a future one) must still draw
 # something legible rather than an empty cell.
@@ -111,7 +111,7 @@ style() { views --chip /dev/pts/0 | grep -o 'fg=colour[0-9]*' | head -1; }
 # state the mode could not move.
 calm
 [ "$(style)" = "fg=colour240" ] \
-        || fail "a differently-sized client on ANOTHER session read as \
+  || fail "a differently-sized client on ANOTHER session read as \
 tension ($(style))"
 [ "$(glyph)" = "✱" ] || fail "calm changed the SHAPE; only colour may move"
 
@@ -122,12 +122,12 @@ printf '161x64 161x63' >"$WINSZ"          # window == client minus status: fit
 printf '161x64 161x50' >"$WINSZ"          # window SMALLER: dead rows
 [ "$(style)" = "fg=colour214" ] || fail "slack: wrong colour ($(style))"
 no_has "$(views --chip /dev/pts/0)" "bg=colour202" \
-        "slack is harmless; it must not wear the alarm"
+  "slack is harmless; it must not wear the alarm"
 
 printf '161x56 161x63' >"$WINSZ"          # window BIGGER: content off screen
 _c=$(views --chip /dev/pts/0)
 has "$_c" "bg=colour202" \
-        "clipped must wear the caution colour -- it is the one that costs you"
+  "clipped must wear the caution colour -- it is the one that costs you"
 # The FOREGROUND is the half that makes it read as an alarm rather than a
 # label, and it is deliberately not the near-black the blocked chip uses on
 # this same orange -- the two must not be confusable at a glance.
@@ -143,33 +143,33 @@ printf '161x64 161x63' >"$WINSZ"
 tense
 printf '161x64 161x63' >"$WINSZ"
 [ "$(style)" = "fg=colour255" ] \
-        || fail "client 64 showing a 63-row window is FIT, not $(style)"
+  || fail "client 64 showing a 63-row window is FIT, not $(style)"
 
 # --- an explicit MUX_VIEW_SOCKET WINS over the resolved partition ----------
 # Overwriting it made the variable look honoured while being ignored, so a
 # caller aiming at one server was silently answered about another.
 : >"$LOG"
 env -u TMUX -u MUX_SHARE PATH="$T/bin:$PATH" MUX_DIR="$T/conf" \
-        MUX_VIEW_SOCKET=probe "$HERE/libexec/mux-views" --chip /dev/pts/0 \
-        >/dev/null 2>&1 || true
+  MUX_VIEW_SOCKET=probe "$HERE/libexec/mux-views" --chip /dev/pts/0 \
+  >/dev/null 2>&1 || true
 has "$(cat "$LOG")" "-L probe" "an explicit MUX_VIEW_SOCKET was ignored"
 
 # --- setting the mode writes the tmux name, not mux's ----------------------
 for _pair in 'auto latest' 'floor smallest' 'ceil largest'; do
-	printf 'latest\n' >"$OPT"; : >"$LOG"
-	views "${_pair%% *}" >/dev/null
-	has "$(cat "$LOG")" "window-size ${_pair##* }" \
-		"mux views ${_pair%% *} did not set ${_pair##* }"
+  printf 'latest\n' >"$OPT"; : >"$LOG"
+  views "${_pair%% *}" >/dev/null
+  has "$(cat "$LOG")" "window-size ${_pair##* }" \
+    "mux views ${_pair%% *} did not set ${_pair##* }"
 done
 
 # --- `next` cycles, which is what clicking the chip does ------------------
 printf 'latest\n' >"$OPT"
 views next >/dev/null; [ "$(cat "$OPT")" = smallest ] \
-	|| fail "next from auto should reach floor, got $(cat "$OPT")"
+  || fail "next from auto should reach floor, got $(cat "$OPT")"
 views next >/dev/null; [ "$(cat "$OPT")" = largest ] \
-	|| fail "next from floor should reach ceil, got $(cat "$OPT")"
+  || fail "next from floor should reach ceil, got $(cat "$OPT")"
 views next >/dev/null; [ "$(cat "$OPT")" = latest ] \
-	|| fail "next from ceil should wrap to auto, got $(cat "$OPT")"
+  || fail "next from ceil should wrap to auto, got $(cat "$OPT")"
 
 # --- refusals --------------------------------------------------------------
 _o=$(views nosuchmode) && fail "an unknown mode should exit non-zero"

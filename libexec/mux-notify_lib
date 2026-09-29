@@ -37,50 +37,50 @@
 # MUX_NOTIFY_CLOSER: the render pass can clear several phantoms in one run and
 # there is no reason to re-probe per notification.
 _mux_notify_closer() {
-	if [ -z "${MUX_NOTIFY_CLOSER:-}" ]; then
-		MUX_NOTIFY_CLOSER=none
-		for _nc in gdbus busctl dbus-send makoctl; do
-			if command -v "$_nc" >/dev/null 2>&1; then
-				MUX_NOTIFY_CLOSER=$_nc
-				break
-			fi
-		done
-	fi
-	printf '%s' "$MUX_NOTIFY_CLOSER"
+  if [ -z "${MUX_NOTIFY_CLOSER:-}" ]; then
+    MUX_NOTIFY_CLOSER=none
+    for _nc in gdbus busctl dbus-send makoctl; do
+      if command -v "$_nc" >/dev/null 2>&1; then
+        MUX_NOTIFY_CLOSER=$_nc
+        break
+      fi
+    done
+  fi
+  printf '%s' "$MUX_NOTIFY_CLOSER"
 }
 
 # mux_notify_close ID -- clear a notification mux raised, because the state
 # that raised it has passed. Never fails, and does nothing at all for an empty
 # ID (the common case: most state files carry no notification).
 mux_notify_close() {
-	[ -n "${1:-}" ] || return 0
-	if [ -n "${MUX_NOTIFY_CLOSE:-}" ]; then
-		$MUX_NOTIFY_CLOSE "$1" >/dev/null 2>&1 || true
-		return 0
-	fi
-	case $(_mux_notify_closer) in
-	gdbus)
-		gdbus call --session \
-			--dest org.freedesktop.Notifications \
-			--object-path /org/freedesktop/Notifications \
-			--method \
-			org.freedesktop.Notifications.CloseNotification \
-			"$1" >/dev/null 2>&1 || true ;;
-	busctl)
-		busctl --user call org.freedesktop.Notifications \
-			/org/freedesktop/Notifications \
-			org.freedesktop.Notifications CloseNotification \
-			u "$1" >/dev/null 2>&1 || true ;;
-	dbus-send)
-		dbus-send --session --type=method_call \
-			--dest=org.freedesktop.Notifications \
-			/org/freedesktop/Notifications \
-			org.freedesktop.Notifications.CloseNotification \
-			"uint32:$1" >/dev/null 2>&1 || true ;;
-	makoctl)
-		makoctl dismiss -n "$1" >/dev/null 2>&1 || true ;;
-	esac
-	return 0
+  [ -n "${1:-}" ] || return 0
+  if [ -n "${MUX_NOTIFY_CLOSE:-}" ]; then
+    $MUX_NOTIFY_CLOSE "$1" >/dev/null 2>&1 || true
+    return 0
+  fi
+  case $(_mux_notify_closer) in
+  gdbus)
+    gdbus call --session \
+      --dest org.freedesktop.Notifications \
+      --object-path /org/freedesktop/Notifications \
+      --method \
+      org.freedesktop.Notifications.CloseNotification \
+      "$1" >/dev/null 2>&1 || true ;;
+  busctl)
+    busctl --user call org.freedesktop.Notifications \
+      /org/freedesktop/Notifications \
+      org.freedesktop.Notifications CloseNotification \
+      u "$1" >/dev/null 2>&1 || true ;;
+  dbus-send)
+    dbus-send --session --type=method_call \
+      --dest=org.freedesktop.Notifications \
+      /org/freedesktop/Notifications \
+      org.freedesktop.Notifications.CloseNotification \
+      "uint32:$1" >/dev/null 2>&1 || true ;;
+  makoctl)
+    makoctl dismiss -n "$1" >/dev/null 2>&1 || true ;;
+  esac
+  return 0
 }
 
 # mux_notify_send URGENCY SUMMARY BODY -> the new notification's id on stdout,
@@ -99,13 +99,13 @@ mux_notify_close() {
 # [app-name=mux] block) style or route these without also catching every other
 # notification on the box.
 mux_notify_send() {
-	_nu=${1:-normal}
-	_nsum=${2:-}
-	_nbody=${3:-}
-	if [ -n "${MUX_NOTIFY_SEND:-}" ]; then
-		$MUX_NOTIFY_SEND "$_nu" "$_nsum" "$_nbody" 2>/dev/null || true
-		return 0
-	fi
-	command -v notify-send >/dev/null 2>&1 || return 0
-	notify-send -a mux -u "$_nu" -p "$_nsum" "$_nbody" 2>/dev/null || true
+  _nu=${1:-normal}
+  _nsum=${2:-}
+  _nbody=${3:-}
+  if [ -n "${MUX_NOTIFY_SEND:-}" ]; then
+    $MUX_NOTIFY_SEND "$_nu" "$_nsum" "$_nbody" 2>/dev/null || true
+    return 0
+  fi
+  command -v notify-send >/dev/null 2>&1 || return 0
+  notify-send -a mux -u "$_nu" -p "$_nsum" "$_nbody" 2>/dev/null || true
 }

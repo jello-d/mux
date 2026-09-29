@@ -96,7 +96,7 @@
 # would defeat the entire mechanism, so this must never be documented as a
 # user seam or read from config.
 _sp_file() {
-	printf '%s' "${MUX_SEND_POLICY_FILE:-/etc/mux/send-policy}"
+  printf '%s' "${MUX_SEND_POLICY_FILE:-/etc/mux/send-policy}"
 }
 
 # mux_send_policy_usable -> is the policy file safe to obey?
@@ -112,28 +112,28 @@ _sp_file() {
 # outside this model entirely, and silently honouring a policy it could
 # rewrite would be the worst of both.
 mux_send_policy_usable() {
-	_spf=$(_sp_file)
-	[ -f "$_spf" ] || return 1
-	[ ! -w "$_spf" ] || return 1
-	[ ! -w "$(dirname -- "$_spf")" ] || return 1
-	return 0
+  _spf=$(_sp_file)
+  [ -f "$_spf" ] || return 1
+  [ ! -w "$_spf" ] || return 1
+  [ ! -w "$(dirname -- "$_spf")" ] || return 1
+  return 0
 }
 
 # mux_send_policy_why -> a sentence about why the policy is not in force, or
 # empty when it is. SAID, NEVER GUESSED AT: a policy that is silently ignored
 # is worse than none, because the human who wrote it believes it applies.
 mux_send_policy_why() {
-	_spf=$(_sp_file)
-	if [ ! -f "$_spf" ]; then
-		printf 'no policy at %s' "$_spf"
-	elif [ -w "$_spf" ]; then
-		printf '%s is writable by this user, so it is not a policy' \
-			"$_spf"
-	elif [ -w "$(dirname -- "$_spf")" ]; then
-		printf '%s is in a directory this user can write,' \
-			"$(dirname -- "$_spf")"
-		printf ' so the file could be replaced'
-	fi
+  _spf=$(_sp_file)
+  if [ ! -f "$_spf" ]; then
+    printf 'no policy at %s' "$_spf"
+  elif [ -w "$_spf" ]; then
+    printf '%s is writable by this user, so it is not a policy' \
+      "$_spf"
+  elif [ -w "$(dirname -- "$_spf")" ]; then
+    printf '%s is in a directory this user can write,' \
+      "$(dirname -- "$_spf")"
+    printf ' so the file could be replaced'
+  fi
 }
 
 # mux_send_allowed WHAT PARTITION SESSION WINDOW CLASS -> is it permitted?
@@ -147,45 +147,45 @@ mux_send_policy_why() {
 # applied, and putting it here would let a future caller reach the allowlist
 # with a human pane by forgetting a check.
 mux_send_allowed() {   # <what> <partition> <session> <window> <class>
-	mux_send_policy_usable || return 1
-	# A SUBSHELL WITH GLOBBING OFF. Splitting a line with `set -- $_spl`
-	# also PATHNAME-EXPANDS it, so the scope token `*` became whatever
-	# files happened to be in the current directory and the systemwide
-	# grant silently never matched. Found on the first run of this
-	# function's own test, which is the only reason it is not shipping.
-	#
-	# `set -f` and a subshell rather than save-and-restore, because the
-	# matching loop returns from the middle and a restore after the loop
-	# would be skipped on every successful match.
-	( set -f
-	_spw=$1 _spp=$2 _sps=$3 _spwin=$4 _spc=$5
-	while IFS= read -r _spl; do
-		# Full-line comments and blanks go; an inline `#` is left alone,
-		# because a name may legitimately contain one. Same rule
-		# mux_conf_clean already applies to $MUX_DIR/config.
-		case $_spl in
-		''|'#'*) continue ;;
-		esac
-		# shellcheck disable=SC2086   # tokens, split on purpose
-		set -- $_spl
-		[ "${1:-}" = "send-$_spw" ] || continue
-		shift
-		# A DIRECTIVE WITH NO SCOPE GRANTS NOTHING. `send-blocked` alone
-		# reads like "allow it", and reading it that way would turn a
-		# truncated line into a systemwide permission.
-		[ $# -gt 0 ] || continue
-		_ok=1
-		for _tok in "$@"; do
-			case $_tok in
-			'*') ;;
-			"partition:$_spp") ;;
-			"session:$_sps") ;;
-			"window:$_spwin") ;;
-			"control:$_spc") ;;
-			*) _ok=0; break ;;
-			esac
-		done
-		[ "$_ok" = 1 ] && exit 0
-	done <"$(_sp_file)"
-	exit 1 )
+  mux_send_policy_usable || return 1
+  # A SUBSHELL WITH GLOBBING OFF. Splitting a line with `set -- $_spl`
+  # also PATHNAME-EXPANDS it, so the scope token `*` became whatever
+  # files happened to be in the current directory and the systemwide
+  # grant silently never matched. Found on the first run of this
+  # function's own test, which is the only reason it is not shipping.
+  #
+  # `set -f` and a subshell rather than save-and-restore, because the
+  # matching loop returns from the middle and a restore after the loop
+  # would be skipped on every successful match.
+  ( set -f
+  _spw=$1 _spp=$2 _sps=$3 _spwin=$4 _spc=$5
+  while IFS= read -r _spl; do
+    # Full-line comments and blanks go; an inline `#` is left alone,
+    # because a name may legitimately contain one. Same rule
+    # mux_conf_clean already applies to $MUX_DIR/config.
+    case $_spl in
+    ''|'#'*) continue ;;
+    esac
+    # shellcheck disable=SC2086   # tokens, split on purpose
+    set -- $_spl
+    [ "${1:-}" = "send-$_spw" ] || continue
+    shift
+    # A DIRECTIVE WITH NO SCOPE GRANTS NOTHING. `send-blocked` alone
+    # reads like "allow it", and reading it that way would turn a
+    # truncated line into a systemwide permission.
+    [ $# -gt 0 ] || continue
+    _ok=1
+    for _tok in "$@"; do
+      case $_tok in
+      '*') ;;
+      "partition:$_spp") ;;
+      "session:$_sps") ;;
+      "window:$_spwin") ;;
+      "control:$_spc") ;;
+      *) _ok=0; break ;;
+      esac
+    done
+    [ "$_ok" = 1 ] && exit 0
+  done <"$(_sp_file)"
+  exit 1 )
 }

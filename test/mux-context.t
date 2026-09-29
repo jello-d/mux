@@ -29,9 +29,9 @@ mkdir -p "$MUX_DIR/partitions" "$MUX_DIR/contexts" "$MUX_SHARE/partitions"
 eq() { [ "$2" = "$3" ] || fail "$1: got [$2] want [$3]"; }
 # cc BODY: install a context-command with that body.
 cc() {
-	printf '#!/bin/sh\n%s\n' "$1" >"$T/cc"
-	chmod +x "$T/cc"
-	printf 'context-command %s\n' "$T/cc" >"$MUX_DIR/config"
+  printf '#!/bin/sh\n%s\n' "$1" >"$T/cc"
+  chmod +x "$T/cc"
+  printf 'context-command %s\n' "$T/cc" >"$MUX_DIR/config"
 }
 
 # --- no command at all: the baseline ---------------------------------------
@@ -53,10 +53,10 @@ eq builtin-no-label "$MUX_CFG_label" ""
 
 # --- token validation -------------------------------------------------------
 for _bad in '../etc' 'Work' 'has space' '-lead' 'trail-' 'a/b'; do
-	mux_ctx_valid "$_bad" && fail "validator accepted [$_bad]"
+  mux_ctx_valid "$_bad" && fail "validator accepted [$_bad]"
 done
 for _good in manifest a acme-2 x9; do
-	mux_ctx_valid "$_good" || fail "validator rejected [$_good]"
+  mux_ctx_valid "$_good" || fail "validator rejected [$_good]"
 done
 # An invalid token is an ERROR, not a quiet fall back to global.
 cc 'echo ../../etc'
@@ -99,7 +99,7 @@ eq lonely-scan "$MUX_CFG_scan" ""
 
 # --- partition file supplies the settings ----------------------------------
 printf 'label Manifest\ntheme orange\nscan %s/w 3\n' "$T" \
-	>"$MUX_DIR/partitions/work.partition"
+  >"$MUX_DIR/partitions/work.partition"
 cc 'echo manifest'
 mux_ctx_resolve || fail "resolve failed with a partition file"
 eq part-token "$MUX_CTX_TOKEN" manifest
@@ -127,7 +127,7 @@ eq gpu-scan "$MUX_CFG_scan" "$T/g 3"
 
 # --- the context wins over its partition -----------------------------------
 printf 'partition global\ntheme cyan\nscan %s/own 2\n' "$T" \
-	>"$MUX_DIR/contexts/gpu.context"
+  >"$MUX_DIR/contexts/gpu.context"
 mux_ctx_resolve || fail "resolve failed with context overrides"
 eq ctx-over-part "$MUX_CFG_theme" cyan
 # A context's scan REPLACES the partition's rather than adding to it.
@@ -135,7 +135,7 @@ eq ctx-scan-replaces "$MUX_CFG_scan" "$T/own 2"
 
 # --- repeatable scan within one file ---------------------------------------
 printf 'scan %s/a 1\nscan %s/b 2\n' "$T" "$T" \
-	>"$MUX_DIR/partitions/global.partition"
+  >"$MUX_DIR/partitions/global.partition"
 printf 'partition global\n' >"$MUX_DIR/contexts/gpu.context"
 mux_ctx_resolve || fail "resolve failed with repeated scan keys"
 eq scan-repeat "$(printf '%s' "$MUX_CFG_scan" | tr '\n' '|')" "$T/a 1|$T/b 2"
@@ -144,7 +144,7 @@ eq scan-repeat "$(printf '%s' "$MUX_CFG_scan" | tr '\n' '|')" "$T/a 1|$T/b 2"
 # These files are commonly generated; a newer mux writing a key this one does
 # not know must not break it.
 printf 'partition global\nfuture-key whatever\ntheme red\n' \
-	>"$MUX_DIR/contexts/gpu.context"
+  >"$MUX_DIR/contexts/gpu.context"
 mux_ctx_resolve || fail "an unknown key should not fail resolution"
 eq unknown-key-ok "$MUX_CFG_theme" red
 

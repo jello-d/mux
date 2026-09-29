@@ -81,8 +81,8 @@ pass() { MUX_T_SAID=1; printf 'ok   %s\n' "$_name"; exit 0; }
 # without going red, which is the failure this whole suite exists to prevent.
 # One writer here means the next format change breaks compilation, not silence.
 agent_rec() {   # FILE STATE PANE EPOCH SESSION [NOTIF]
-	mkdir -p -- "$(dirname -- "$1")"
-	printf '%s 0 %s %s %s %s\n' "$2" "$3" "$4" "${6:--}" "$5" >"$1"
+  mkdir -p -- "$(dirname -- "$1")"
+  printf '%s 0 %s %s %s %s\n' "$2" "$3" "$4" "${6:--}" "$5" >"$1"
 }
 
 # tmux_fresh_socket [PREFIX] -> a socket name this test run has not used.
@@ -106,9 +106,9 @@ agent_rec() {   # FILE STATE PANE EPOCH SESSION [NOTIF]
 # by seconds (checked, still present after 2s), so it is not the signal either.
 _tmux_sock_n=0
 tmux_fresh_socket() {   # [prefix]
-	_tmux_sock_n=$((_tmux_sock_n + 1))
-	_tmux_sock_last=${1:-muxt}$$-$_tmux_sock_n
-	printf '%s' "$_tmux_sock_last"
+  _tmux_sock_n=$((_tmux_sock_n + 1))
+  _tmux_sock_last=${1:-muxt}$$-$_tmux_sock_n
+  printf '%s' "$_tmux_sock_last"
 }
 
 # tmux_drop_socket [NAME] -- kill that server AND remove the socket file.
@@ -124,8 +124,8 @@ tmux_fresh_socket() {   # [prefix]
 # mux's own rule, turned on its own suite: mux clears the litter mux makes.
 # The name is never reused, so removing the file cannot race anything.
 tmux_drop_socket() {   # [name]
-	_ds=${1:-${_tmux_sock_last:-}}
-	[ -n "$_ds" ] || return 0
-	tmux -L "$_ds" kill-server 2>/dev/null || true
-	rm -f "${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)/$_ds" 2>/dev/null || true
+  _ds=${1:-${_tmux_sock_last:-}}
+  [ -n "$_ds" ] || return 0
+  tmux -L "$_ds" kill-server 2>/dev/null || true
+  rm -f "${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)/$_ds" 2>/dev/null || true
 }

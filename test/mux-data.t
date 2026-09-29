@@ -11,7 +11,7 @@ _name=mux-data
 MUX_SHARE=$T/share
 MUX_DIR=$T/dir
 mkdir -p "$MUX_SHARE/themes" "$MUX_SHARE/agents" "$MUX_SHARE/shapes" \
-	"$MUX_DIR/themes"
+  "$MUX_DIR/themes"
 # shipped: two themes, one agent, one shape, the default layout, a defaults file
 : >"$MUX_SHARE/themes/purple.theme"
 : >"$MUX_SHARE/themes/cyan.theme"
@@ -26,36 +26,36 @@ mkdir -p "$MUX_SHARE/themes" "$MUX_SHARE/agents" "$MUX_SHARE/shapes" \
 : >"$MUX_DIR/api.layout"
 
 eq() {  # LABEL GOT WANT
-	[ "$2" = "$3" ] || fail "$1: got [$2] want [$3]"
+  [ "$2" = "$3" ] || fail "$1: got [$2] want [$3]"
 }
 
 # --- mux_data_find: the overlay wins, the shipped copy is the fallback ------
 eq overlay-wins   "$(mux_data_find themes purple .theme)" \
-                  "$MUX_DIR/themes/purple.theme"
+      "$MUX_DIR/themes/purple.theme"
 eq shipped-fallback "$(mux_data_find themes cyan .theme)" \
-                  "$MUX_SHARE/themes/cyan.theme"
+      "$MUX_SHARE/themes/cyan.theme"
 eq overlay-only   "$(mux_data_find themes neon .theme)" \
-                  "$MUX_DIR/themes/neon.theme"
+      "$MUX_DIR/themes/neon.theme"
 eq missing-empty  "$(mux_data_find themes nosuch .theme)" ""
 
 # An EMPTY kind is the data root, where layouts live -- no doubled slash, and
 # the shipped default.layout resolves (a fresh install's `mux go` depends on
 # it) while a user layout of its own name still wins.
 eq layout-shipped "$(mux_data_find '' default .layout)" \
-                  "$MUX_SHARE/default.layout"
+      "$MUX_SHARE/default.layout"
 eq layout-overlay "$(mux_data_find '' api .layout)" "$MUX_DIR/api.layout"
 # A nested kind, as `include shapes/code` reaches it.
 eq shape-shipped  "$(mux_data_find shapes code .layout)" \
-                  "$MUX_SHARE/shapes/code.layout"
+      "$MUX_SHARE/shapes/code.layout"
 # An EMPTY ext, for the extensionless themes/defaults file.
 eq noext          "$(mux_data_find themes defaults '')" \
-                  "$MUX_SHARE/themes/defaults"
+      "$MUX_SHARE/themes/defaults"
 
 # --- mux_data_stems: the union, sorted, with no name listed twice -----------
 # purple exists in BOTH roots and must appear ONCE -- an override is the same
 # name, not a second theme.
 eq stems-union "$(mux_data_stems themes .theme | tr '\n' ' ')" \
-               "cyan neon purple "
+         "cyan neon purple "
 eq stems-agents "$(mux_data_stems agents .agent | tr '\n' ' ')" "claude "
 eq stems-layouts "$(mux_data_stems '' .layout | tr '\n' ' ')" "api default "
 # defaults has no .theme extension, so it is not a theme NAME.
@@ -65,7 +65,7 @@ esac
 
 # --- mux_data_files: every stem resolved to the file mux would read ---------
 eq files-resolved "$(mux_data_files themes .theme | tr '\n' ' ')" \
-	"$MUX_SHARE/themes/cyan.theme \
+  "$MUX_SHARE/themes/cyan.theme \
 $MUX_DIR/themes/neon.theme $MUX_DIR/themes/purple.theme "
 
 # --- empty roots ------------------------------------------------------------
@@ -73,9 +73,9 @@ $MUX_DIR/themes/neon.theme $MUX_DIR/themes/purple.theme "
 # used to print an empty `mux help colors`).
 MUX_DIR=$T/nonexistent
 eq no-overlay-stems "$(mux_data_stems themes .theme | tr '\n' ' ')" \
-                    "cyan purple "
+        "cyan purple "
 eq no-overlay-find  "$(mux_data_find themes purple .theme)" \
-                    "$MUX_SHARE/themes/purple.theme"
+        "$MUX_SHARE/themes/purple.theme"
 # Neither root present: empty, not an error (callers report the miss).
 MUX_SHARE=$T/nonexistent
 eq no-roots-stems "$(mux_data_stems themes .theme)" ""

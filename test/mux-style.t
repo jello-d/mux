@@ -37,27 +37,27 @@ cat >"$T/bin/tmux" <<'EOF'
 #!/bin/sh
 case "$1 $2" in
 "show-options -gqv")
-	# global theme options: enough for the happy path
-	case "$3" in
-	@theme-purple-bar)    printf 'bg=colour54,fg=colour231\n' ;;
-	@theme-purple-window) printf 'fg=colour16,bg=colour141\n' ;;
-	@theme-purple-accent) printf 'fg=colour141\n' ;;
-	esac
-	exit 0 ;;
+  # global theme options: enough for the happy path
+  case "$3" in
+  @theme-purple-bar)    printf 'bg=colour54,fg=colour231\n' ;;
+  @theme-purple-window) printf 'fg=colour16,bg=colour141\n' ;;
+  @theme-purple-accent) printf 'fg=colour141\n' ;;
+  esac
+  exit 0 ;;
 esac
 case "$*" in
 "show-options -qv -t "*)
-	_o=${*##* }
-	awk -F'\t' -v k="$_o" '$1==k{print $2; exit}' "$OPTS" 2>/dev/null ;;
+  _o=${*##* }
+  awk -F'\t' -v k="$_o" '$1==k{print $2; exit}' "$OPTS" 2>/dev/null ;;
 "set-option -t "*)
-	# set-option -t SESSION NAME VALUE
-	shift 3; _n=$1; shift; _v=$*
-	printf 'set %s\n' "$_n" >>"$SETLOG"
-	# Exact field compare, not a grep pattern: an option name with a regex
-	# metacharacter would otherwise never be replaced (see mux-click.t).
-	awk -F'\t' -v k="$_n" '$1 != k' "$OPTS" 2>/dev/null >"$OPTS.t" || :
-	mv -f "$OPTS.t" "$OPTS"
-	printf '%s\t%s\n' "$_n" "$_v" >>"$OPTS" ;;
+  # set-option -t SESSION NAME VALUE
+  shift 3; _n=$1; shift; _v=$*
+  printf 'set %s\n' "$_n" >>"$SETLOG"
+  # Exact field compare, not a grep pattern: an option name with a regex
+  # metacharacter would otherwise never be replaced (see mux-click.t).
+  awk -F'\t' -v k="$_n" '$1 != k' "$OPTS" 2>/dev/null >"$OPTS.t" || :
+  mv -f "$OPTS.t" "$OPTS"
+  printf '%s\t%s\n' "$_n" "$_v" >>"$OPTS" ;;
 esac
 exit 0
 EOF
@@ -76,8 +76,8 @@ chmod +x "$T/conf/cc"
 printf 'context-command cc\n' >"$T/conf/config"
 
 style() {
-	env PATH="$T/bin:$PATH" MUX_DIR="$T/conf" HOME="$T" \
-		"$HERE/libexec/mux-style" "$@" 2>&1
+  env PATH="$T/bin:$PATH" MUX_DIR="$T/conf" HOME="$T" \
+    "$HERE/libexec/mux-style" "$@" 2>&1
 }
 opt()  { awk -F'\t' -v k="$1" '$1==k{print $2; exit}' "$OPTS" 2>/dev/null; }
 # `grep -c` prints 0 AND exits 1 on no match, so `|| echo 0` would append a
@@ -94,7 +94,7 @@ case $_o in
 *) fail "no banner for a labelled context: [$_o]" ;;
 esac
 [ "$(opt @mux-prefix)" = "[WORK] " ] \
-	|| fail "the title prefix was not set: [$(opt @mux-prefix)]"
+  || fail "the title prefix was not set: [$(opt @mux-prefix)]"
 
 # --- MUX owns the style: a label with no style still gets a banner -------
 # The regression this guards: the style came from the integrator, so omitting
@@ -116,7 +116,7 @@ reset
 _o=$(CTX_TOKEN=work style -q proj $$)
 [ -z "$_o" ] || fail "-q printed something, which would wedge the pane: [$_o]"
 [ "$(opt @mux-prefix)" = "[WORK] " ] \
-	|| fail "-q skipped the side effects it exists to apply"
+  || fail "-q skipped the side effects it exists to apply"
 [ -n "$(opt status-style)" ] || fail "-q did not apply the theme"
 
 # --- no label: no banner, and the prefix is CLEARED ---------------------
@@ -129,7 +129,7 @@ case $_o in
 *'[['*) fail "a banner appeared for a context with no label: [$_o]" ;;
 esac
 [ -z "$(opt @mux-prefix)" ] \
-	|| fail "a stale title prefix survived: [$(opt @mux-prefix)]"
+  || fail "a stale title prefix survived: [$(opt @mux-prefix)]"
 printf 'label WORK\n' >"$T/conf/contexts/work.context"
 
 # --- set_opt writes only when the value CHANGES ------------------------
@@ -141,7 +141,7 @@ _first=$(sets)
 : >"$SETLOG"
 CTX_TOKEN=work style -q proj $$ >/dev/null
 [ "$(sets)" -eq 0 ] \
-	|| fail "a second identical run still wrote $(sets) option(s)"
+  || fail "a second identical run still wrote $(sets) option(s)"
 
 # --- the host chip -----------------------------------------------------
 # Default: derived from the name, so an unconfigured host still gets a legible
@@ -189,12 +189,12 @@ _asked=$(head -1 "$PIDLOG")
 _tp=$(ps -o tpgid= -p $$ 2>/dev/null | tr -d ' ')
 case ${_tp:-} in
 ''|-*|0) # no controlling terminal, so there is no foreground group to find:
-	 # the documented fallback is the pane pid itself.
-	 [ "$_asked" = "$$" ] \
-		|| fail "with no tpgid it should fall back to the pane pid,
+   # the documented fallback is the pane pid itself.
+   [ "$_asked" = "$$" ] \
+    || fail "with no tpgid it should fall back to the pane pid,
 asked [$_asked] want [$$]" ;;
 *)	 [ "$_asked" = "$_tp" ] \
-		|| fail "asked [$_asked], want the foreground group [$_tp]" ;;
+    || fail "asked [$_asked], want the foreground group [$_tp]" ;;
 esac
 
 # With a KNOWN foreground group, the right field is read. MUX_STYLE_PROC exists
@@ -209,12 +209,12 @@ esac
 reset
 mkdir -p "$T/fakeproc/4242"
 printf '4242 ((my cmd) (x)) S 1 3 4 5 777 0 0\n' \
-	>"$T/fakeproc/4242/stat"
+  >"$T/fakeproc/4242/stat"
 env PATH="$T/bin:$PATH" MUX_DIR="$T/conf" HOME="$T" CTX_TOKEN=work \
-	MUX_STYLE_PROC="$T/fakeproc" \
-	"$HERE/libexec/mux-style" -q proj 4242 >/dev/null 2>&1
+  MUX_STYLE_PROC="$T/fakeproc" \
+  "$HERE/libexec/mux-style" -q proj 4242 >/dev/null 2>&1
 [ "$(head -1 "$PIDLOG")" = 777 ] \
-	|| fail "the foreground group was misread: asked [$(head -1 "$PIDLOG")],
+  || fail "the foreground group was misread: asked [$(head -1 "$PIDLOG")],
 the stat line's tpgid is 777"
 
 # A pid with no /proc entry falls back to the pane pid rather than failing: the
@@ -222,7 +222,7 @@ the stat line's tpgid is 777"
 reset
 _o=$(CTX_TOKEN=work style -q proj 999999 2>&1) || fail "a dead pid was fatal"
 [ "$(head -1 "$PIDLOG")" = 999999 ] \
-	|| fail "a dead pid did not fall back: [$(head -1 "$PIDLOG")]"
+  || fail "a dead pid did not fall back: [$(head -1 "$PIDLOG")]"
 
 # --- a missing context hook must not break the status line ------------
 # The bar is drawn every tick; a broken overlay is not a reason to lose it.

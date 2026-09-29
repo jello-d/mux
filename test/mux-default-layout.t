@@ -40,24 +40,24 @@ export PATH
 # -u MUX_SHARE so bin/mux self-locates THIS checkout's share/, not an installed
 # one; -u TMUX so the run reads as a plain shell, not a live client.
 ( cd "$T/proj" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/emptyconf" \
-	MUX_CACHE="$T/cache" "$HERE/bin/mux" go ) \
-	|| fail "mux go on a fresh install exited $?"
+  MUX_CACHE="$T/cache" "$HERE/bin/mux" go ) \
+  || fail "mux go on a fresh install exited $?"
 
 # The shape actually got built: a session named zz-scratch, opened on the
 # window the default layout declares, and a full-width bottom pane.
 grep -q 'new-session -d -s proj -n main' "$TMUXLOG" \
-	|| fail "no new-session for the default layout (see $TMUXLOG)"
+  || fail "no new-session for the default layout (see $TMUXLOG)"
 grep -q 'split-window -v -f' "$TMUXLOG" \
-	|| fail "the default layout built no bottom pane"
+  || fail "the default layout built no bottom pane"
 grep -q 'attach-session -t =proj' "$TMUXLOG" \
-	|| fail "mux did not attach the session it built"
+  || fail "mux did not attach the session it built"
 
 # An explicit PROFILE that does not exist must still fail loud -- building from
 # defaults is for the NO-profile case, it must not paper over a typo.
 if ( cd "$T/proj" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/emptyconf" \
-	MUX_CACHE="$T/cache" "$HERE/bin/mux" go proj nosuchprofile \
-	>/dev/null 2>&1 ); then
-	fail "an unknown explicit PROFILE should fail, not fall back"
+  MUX_CACHE="$T/cache" "$HERE/bin/mux" go proj nosuchprofile \
+  >/dev/null 2>&1 ); then
+  fail "an unknown explicit PROFILE should fail, not fall back"
 fi
 
 pass

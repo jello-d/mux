@@ -28,16 +28,16 @@ LIB=$HERE/libexec/mux-log_lib
 
 L=$T/state/mux.log
 lg() {   # <subsys> <msg...> -- through the real lib, never by hand
-	( . "$LIB"; MUX_STATE="$T/state" mux_log "$@" )
+  ( . "$LIB"; MUX_STATE="$T/state" mux_log "$@" )
 }
 rd() {   # [args...] -> reader stdout+stderr
-	env MUX_STATE="$T/state" "$HERE/bin/mux" log "$@" 2>&1
+  env MUX_STATE="$T/state" "$HERE/bin/mux" log "$@" 2>&1
 }
 rc() {   # [args...] -> reader exit code
-	_r=0
-	env MUX_STATE="$T/state" "$HERE/bin/mux" log "$@" >/dev/null 2>&1 \
-		|| _r=$?
-	echo "$_r"
+  _r=0
+  env MUX_STATE="$T/state" "$HERE/bin/mux" log "$@" >/dev/null 2>&1 \
+    || _r=$?
+  echo "$_r"
 }
 has() { case "$1" in *"$2"*) ;; *) fail "$3: want [$2] in: $1" ;; esac; }
 no_has() { case "$1" in *"$2"*) fail "$3: unwanted [$2] in: $1" ;; esac; }
@@ -69,7 +69,7 @@ _p() { ( . "$LIB"; MUX_STATE="$T/state" mux_log_path ); }
 [ "$(_p)" = "$L" ] || fail "unset MUX_LOG must give the default path, got $(_p)"
 [ "$(MUX_LOG=none _p)" = "" ] || fail "MUX_LOG=none must resolve to no path"
 [ "$(MUX_LOG=$T/elsewhere.log _p)" = "$T/elsewhere.log" ] \
-	|| fail "an explicit MUX_LOG path must win"
+  || fail "an explicit MUX_LOG path must win"
 
 # --- the format: timestamp, subsystem[pid], message ----------------------
 lg latch 'attaching -- northgate via ssh'
@@ -89,7 +89,7 @@ esac
 # assertion comparing against $$ would pass whether the field tracked the writer
 # or were hardcoded. A child `sh -c` has a pid of its own.
 _kid=$(sh -c '. "$1"; MUX_STATE="$2" mux_log latch "from a child process"; \
-	echo $$' -- "$LIB" "$T/state")
+  echo $$' -- "$LIB" "$T/state")
 _got=$(grep 'from a child process' "$L" | sed 's/.*latch\[\([0-9]*\)\].*/\1/')
 [ "$_got" = "$_kid" ] || fail "the pid field does not track the WRITER:
   the child's pid was [$_kid], the log recorded [$_got]"
@@ -103,7 +103,7 @@ _before=$(wc -l <"$L")
 lg latch
 lg latch ''
 [ "$(wc -l <"$L")" = "$_before" ] \
-	|| fail "an empty message was logged as an entry"
+  || fail "an empty message was logged as an entry"
 
 # --- A WRITE MUST NEVER FAIL ITS CALLER ---------------------------------
 # The contract that matters most. latch is holding a live session; it must not
@@ -118,14 +118,14 @@ lg latch ''
 # each is mutated separately in test/mutants; a comment claiming the first case
 # covers the write would have been wrong.
 ( . "$LIB"; MUX_LOG=/proc/definitely/not/writable/x mux_log latch 'x' ) \
-	|| fail "an unwritable PATH made mux_log fail (the mkdir guard).
+  || fail "an unwritable PATH made mux_log fail (the mkdir guard).
 Best-effort is the contract: a full disk must not kill the latch
 that is holding your session."
 mkdir -p "$T/ro"; chmod 500 "$T/ro"
 ( . "$LIB"; MUX_LOG=$T/ro/sub/x.log mux_log latch 'x' ) \
-	|| fail "an uncreatable DIRECTORY made mux_log fail (the mkdir guard)"
+  || fail "an uncreatable DIRECTORY made mux_log fail (the mkdir guard)"
 ( . "$LIB"; MUX_LOG=$T/ro/x.log mux_log latch 'x' ) \
-	|| fail "an unwritable DIRECTORY made mux_log fail (the write guard)"
+  || fail "an unwritable DIRECTORY made mux_log fail (the write guard)"
 chmod 700 "$T/ro"
 
 # --- the subsystem filter matches the FIELD, not the line ---------------
@@ -166,9 +166,9 @@ has "$(rd -n 1 latch)" "three" "-n 1 returned the OLDEST entry, not the newest"
 : >"$L"
 _i=0
 while [ "$_i" -lt 40 ]; do
-	( . "$LIB"; MUX_STATE="$T/state" MUX_LOG_MAX=400 \
-		mux_log latch "entry number $_i padded out to take up room" )
-	_i=$((_i + 1))
+  ( . "$LIB"; MUX_STATE="$T/state" MUX_LOG_MAX=400 \
+    mux_log latch "entry number $_i padded out to take up room" )
+  _i=$((_i + 1))
 done
 _sz=$(wc -c <"$L")
 [ "$_sz" -le 1200 ] || fail "the log grew to $_sz bytes against MUX_LOG_MAX=400,

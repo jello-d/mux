@@ -21,7 +21,7 @@ _name=mux-stamp-prune
 . "$(dirname "$0")/harness_lib"
 
 command -v tmux >/dev/null 2>&1 || {
-	printf 'skip %s (no tmux)\n' "$_name"; exit 0; }
+  printf 'skip %s (no tmux)\n' "$_name"; exit 0; }
 
 SOCK=$(tmux_fresh_socket muxprune)
 cleanup() { tmux_drop_socket "$SOCK"; rm -rf "$T"; }
@@ -32,9 +32,9 @@ mkdir -p "$STAMPS"
 stamp() { printf 'somehash\n' >"$STAMPS/mux-themes.$1.sha"; }
 have()  { [ -e "$STAMPS/mux-themes.$1.sha" ]; }
 n_stamps() {
-	_n=0
-	for _f in "$STAMPS"/*; do [ -e "$_f" ] && _n=$((_n + 1)); done
-	echo "$_n"
+  _n=0
+  for _f in "$STAMPS"/*; do [ -e "$_f" ] && _n=$((_n + 1)); done
+  echo "$_n"
 }
 
 # NO DEFENSIVE kill-server FIRST. The name is fresh, so there is nothing to
@@ -43,7 +43,7 @@ n_stamps() {
 # the create is guarded by a skip, so losing it reported "cannot start a tmux
 # server" and quietly dropped the whole file's coverage.
 tmux -L "$SOCK" new-session -d -s keepme 'sleep 120' 2>/dev/null \
-	|| { printf 'skip %s (cannot start a tmux server)\n' "$_name"; exit 0; }
+  || { printf 'skip %s (cannot start a tmux server)\n' "$_name"; exit 0; }
 
 # One live socket, three that are gone. The live one is the assertion that
 # matters: a prune that removed everything would also pass a count check.
@@ -54,8 +54,8 @@ stamp "a-name-with-dashes"
 [ "$(n_stamps)" = 4 ] || fail "setup: expected 4 stamps, got $(n_stamps)"
 
 env MUX_CACHE="$STAMPS" MUX_SHARE="$HERE/share" MUX_DIR="$T/conf" \
-	"$HERE/libexec/mux-themes" prune >/dev/null 2>&1 \
-	|| fail "mux themes prune exited non-zero"
+  "$HERE/libexec/mux-themes" prune >/dev/null 2>&1 \
+  || fail "mux themes prune exited non-zero"
 
 have "$SOCK" || fail "THE LIVE SOCKET'S STAMP WAS PRUNED. Its server is up, so
 the next load would re-push a palette that was already correct -- and a prune
@@ -64,24 +64,24 @@ checked by name."
 have deadone && fail "a stamp whose socket has no server survived the prune"
 have deadtwo && fail "a stamp whose socket has no server survived the prune"
 have "a-name-with-dashes" \
-	&& fail "a dead stamp whose KEY contains dashes survived; the key is
+  && fail "a dead stamp whose KEY contains dashes survived; the key is
 parsed out of the filename, so a name with punctuation in it must still parse"
 [ "$(n_stamps)" = 1 ] || fail "expected only the live stamp to remain, got
 $(for _f in "$STAMPS"/*; do [ -e "$_f" ] && printf '%s ' "${_f##*/}"; done)"
 
 # --- IDEMPOTENT, and safe on an empty or absent directory --------------
 env MUX_CACHE="$STAMPS" MUX_SHARE="$HERE/share" MUX_DIR="$T/conf" \
-	"$HERE/libexec/mux-themes" prune >/dev/null 2>&1 \
-	|| fail "a second prune exited non-zero"
+  "$HERE/libexec/mux-themes" prune >/dev/null 2>&1 \
+  || fail "a second prune exited non-zero"
 have "$SOCK" || fail "the live stamp did not survive a second prune"
 
 rm -f "$STAMPS"/mux-themes.*.sha
 env MUX_CACHE="$STAMPS" MUX_SHARE="$HERE/share" MUX_DIR="$T/conf" \
-	"$HERE/libexec/mux-themes" prune >/dev/null 2>&1 \
-	|| fail "prune on an empty stamp dir must be a no-op, not an error"
+  "$HERE/libexec/mux-themes" prune >/dev/null 2>&1 \
+  || fail "prune on an empty stamp dir must be a no-op, not an error"
 env MUX_CACHE="$T/nothing-here" MUX_SHARE="$HERE/share" MUX_DIR="$T/conf" \
-	"$HERE/libexec/mux-themes" prune >/dev/null 2>&1 \
-	|| fail "prune on a MISSING stamp dir must be a no-op, not an error"
+  "$HERE/libexec/mux-themes" prune >/dev/null 2>&1 \
+  || fail "prune on a MISSING stamp dir must be a no-op, not an error"
 
 # --- IT TOUCHES NOTHING BUT STAMPS ------------------------------------
 # $MUX_CACHE also holds the discovery map and in-progress profile edits. A prune
@@ -91,12 +91,12 @@ printf 'a draft\n' >"$STAMPS/edit/proj.profile"
 printf 'name\t/path\n' >"$STAMPS/projects.global"
 stamp deadthree
 env MUX_CACHE="$STAMPS" MUX_SHARE="$HERE/share" MUX_DIR="$T/conf" \
-	"$HERE/libexec/mux-themes" prune >/dev/null 2>&1 || true
+  "$HERE/libexec/mux-themes" prune >/dev/null 2>&1 || true
 [ -f "$STAMPS/edit/proj.profile" ] \
-	|| fail "the prune deleted an in-progress profile EDIT. Those are
+  || fail "the prune deleted an in-progress profile EDIT. Those are
 unreconstructible work, and they live in the same directory."
 [ -f "$STAMPS/projects.global" ] \
-	|| fail "the prune deleted the discovery map"
+  || fail "the prune deleted the discovery map"
 have deadthree && fail "the dead stamp survived while siblings were at risk"
 
 pass

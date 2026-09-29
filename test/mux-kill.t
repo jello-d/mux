@@ -30,19 +30,19 @@ cat >"$T/bin/tmux" <<'EOF'
 #!/bin/sh
 case "$*" in
 *kill-server*)
-	printf 'kill-server\n' >>"$KILLED"; : >"$LIVE" ;;
+  printf 'kill-server\n' >>"$KILLED"; : >"$LIVE" ;;
 *kill-session*)
-	_n=${*##*=}
-	printf 'kill-session %s\n' "$_n" >>"$KILLED"
-	grep -vxF "$_n" "$LIVE" 2>/dev/null >"$LIVE.t" || :
-	mv -f "$LIVE.t" "$LIVE" ;;
+  _n=${*##*=}
+  printf 'kill-session %s\n' "$_n" >>"$KILLED"
+  grep -vxF "$_n" "$LIVE" 2>/dev/null >"$LIVE.t" || :
+  mv -f "$LIVE.t" "$LIVE" ;;
 *has-session*)
-	_n=${*##*=}
-	grep -qxF "$_n" "$LIVE" 2>/dev/null && exit 0
-	exit 1 ;;
+  _n=${*##*=}
+  grep -qxF "$_n" "$LIVE" 2>/dev/null && exit 0
+  exit 1 ;;
 *list-sessions*)
-	[ -s "$LIVE" ] || exit 1
-	cat "$LIVE" ;;
+  [ -s "$LIVE" ] || exit 1
+  cat "$LIVE" ;;
 *window_index*) printf '0\n' ;;
 *pane_id*)      printf '%%1\n' ;;
 esac
@@ -53,19 +53,19 @@ printf 'scan %s 1\n' "$T" >"$T/conf/partitions/global.partition"
 
 # mux ANSWER VERB... : run with ANSWER on stdin (the confirmation prompt).
 mux() {
-	_ans=$1; shift
-	printf '%s\n' "$_ans" | ( cd "$T/proj" && env -u MUX_SHARE -u TMUX \
-		PATH="$T/bin:$PATH" MUX_DIR="$T/conf" MUX_CACHE="$T/cache" \
-		"$HERE/bin/mux" "$@" ) 2>&1
+  _ans=$1; shift
+  printf '%s\n' "$_ans" | ( cd "$T/proj" && env -u MUX_SHARE -u TMUX \
+    PATH="$T/bin:$PATH" MUX_DIR="$T/conf" MUX_CACHE="$T/cache" \
+    "$HERE/bin/mux" "$@" ) 2>&1
 }
 live()   { sort "$LIVE" 2>/dev/null | tr '\n' ' '; }
 killed() { cat "$KILLED"; }
 reset()  {
-	printf 'alpha\nbravo\ncharlie\n' >"$LIVE"
-	: >"$KILLED"
-	mkdir -p "$T/cache"
-	printf 'alpha\t%s\nbravo\t%s\ncharlie\t%s\n' "$T/proj" "$T/proj" \
-		"$T/proj" >"$T/state/sessions.global"
+  printf 'alpha\nbravo\ncharlie\n' >"$LIVE"
+  : >"$KILLED"
+  mkdir -p "$T/cache"
+  printf 'alpha\t%s\nbravo\t%s\ncharlie\t%s\n' "$T/proj" "$T/proj" \
+    "$T/proj" >"$T/state/sessions.global"
 }
 recorded() { cut -f1 "$T/state/sessions.global" 2>/dev/null | tr '\n' ' '; }
 
@@ -73,18 +73,18 @@ recorded() { cut -f1 "$T/state/sessions.global" 2>/dev/null | tr '\n' ' '; }
 # The load-bearing case. Every one of these answers means "no", and the only
 # acceptable outcome is that all three sessions are still there afterwards.
 for _no in "" "n" "no" "NO" "nope" "yes please" "Y E S" "1" "q"; do
-	reset
-	_o=$(mux "$_no" kill --all)
-	case $_o in
-	*aborted*|*"no sessions"*) ;;
-	*) fail "answer [$_no]: expected an abort, got: $_o" ;;
-	esac
-	[ -z "$(killed)" ] \
-		|| fail "answer [$_no] DESTROYED sessions: $(killed)"
-	[ "$(live)" = "alpha bravo charlie " ] \
-		|| fail "answer [$_no] changed the live set: [$(live)]"
-	[ "$(recorded)" = "alpha bravo charlie " ] \
-		|| fail "answer [$_no] cleared the recorded set: [$(recorded)]"
+  reset
+  _o=$(mux "$_no" kill --all)
+  case $_o in
+  *aborted*|*"no sessions"*) ;;
+  *) fail "answer [$_no]: expected an abort, got: $_o" ;;
+  esac
+  [ -z "$(killed)" ] \
+    || fail "answer [$_no] DESTROYED sessions: $(killed)"
+  [ "$(live)" = "alpha bravo charlie " ] \
+    || fail "answer [$_no] changed the live set: [$(live)]"
+  [ "$(recorded)" = "alpha bravo charlie " ] \
+    || fail "answer [$_no] cleared the recorded set: [$(recorded)]"
 done
 
 # --- it shows you WHAT you are about to lose, before asking ---------------
@@ -92,8 +92,8 @@ done
 reset
 _o=$(mux no kill --all)
 for _s in alpha bravo charlie; do
-	printf '%s\n' "$_o" | grep -q "$_s" \
-		|| fail "the prompt did not name session $_s: $_o"
+  printf '%s\n' "$_o" | grep -q "$_s" \
+    || fail "the prompt did not name session $_s: $_o"
 done
 case $_o in
 *"cannot be undone"*) ;;
@@ -111,10 +111,10 @@ esac
 reset
 _o=$(mux yes kill --all)
 printf '%s\n' "$(killed)" | grep -qx 'kill-server' \
-	|| fail "a confirmed kill --all did not kill the server: [$(killed)]"
+  || fail "a confirmed kill --all did not kill the server: [$(killed)]"
 [ -z "$(live)" ] || fail "sessions survived a confirmed kill: [$(live)]"
 [ -z "$(recorded)" ] \
-	|| fail "the recorded set survived, so resume would rebuild: [$(recorded)]"
+  || fail "the recorded set survived, so resume would rebuild: [$(recorded)]"
 
 # --- the accepted answers, as the code actually defines them --------------
 # Documenting rather than endorsing: the prompt says "Type yes", and a bare `y`
@@ -122,10 +122,10 @@ printf '%s\n' "$(killed)" | grep -qx 'kill-server' \
 # irreversible action. Pinned so the set cannot widen silently; narrowing it to
 # match the prompt would be a deliberate change, and this test would say so.
 for _yes in yes YES y Y; do
-	reset
-	mux "$_yes" kill --all >/dev/null
-	printf '%s\n' "$(killed)" | grep -qx 'kill-server' \
-		|| fail "answer [$_yes] did not confirm: [$(killed)]"
+  reset
+  mux "$_yes" kill --all >/dev/null
+  printf '%s\n' "$(killed)" | grep -qx 'kill-server' \
+    || fail "answer [$_yes] did not confirm: [$(killed)]"
 done
 
 # --- no sessions at all is not an error, and kills nothing ---------------
@@ -145,9 +145,9 @@ printf 'api\napi-old\n' >"$LIVE"
 : >"$KILLED"
 mux "" kill api >/dev/null
 printf '%s\n' "$(killed)" | grep -qx 'kill-session api' \
-	|| fail "kill api did not kill api: [$(killed)]"
+  || fail "kill api did not kill api: [$(killed)]"
 printf '%s\n' "$(killed)" | grep -q 'api-old' \
-	&& fail "kill api also killed api-old"
+  && fail "kill api also killed api-old"
 [ "$(live)" = "api-old " ] || fail "wrong survivor set: [$(live)]"
 
 # --- killing an unknown name is a loud refusal, not a silent success ----

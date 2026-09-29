@@ -14,8 +14,8 @@ printf '%s\n' "$*" >>"$TMUXLOG"
 case "$*" in
 *has-session*)   [ -n "${LIVE:-}" ] && exit 0; exit 1 ;;
 *list-sessions*)
-	[ -n "${LIVE:-}" ] || exit 1
-	printf '%s %s\n' "$LIVE" "$LIVEROOT" ;;
+  [ -n "${LIVE:-}" ] || exit 1
+  printf '%s %s\n' "$LIVE" "$LIVEROOT" ;;
 *window_index*)  printf '0\n' ;;
 *pane_id*)       printf '%%1\n' ;;
 esac
@@ -26,13 +26,13 @@ TMUXLOG=$T/log; export TMUXLOG
 PATH=$T/bin:$PATH; export PATH
 
 mux() {
-	( cd "$T/proj" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
-		MUX_CACHE="$T/cache" "$HERE/bin/mux" "$@" ) 2>&1
+  ( cd "$T/proj" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
+    MUX_CACHE="$T/cache" "$HERE/bin/mux" "$@" ) 2>&1
 }
 fails() {  # LABEL WANT ARGS...
-	_l=$1 _w=$2; shift 2
-	_o=$(mux "$@") && fail "$_l: expected a non-zero exit, got [$_o]"
-	case $_o in *"$_w"*) ;; *) fail "$_l: want [$_w], got [$_o]" ;; esac
+  _l=$1 _w=$2; shift 2
+  _o=$(mux "$@") && fail "$_l: expected a non-zero exit, got [$_o]"
+  case $_o in *"$_w"*) ;; *) fail "$_l: want [$_w], got [$_o]" ;; esac
 }
 
 # --- the flag forms and the retired verbs are the same command --------------
@@ -156,11 +156,11 @@ mux go >/dev/null || fail "same-root attach should not be guarded"
 # usage summary. Silently, because printing usage is a plausible thing for a
 # help verb to do, so nothing looked wrong.
 for _t in agents themes profiles; do
-	_o=$(mux help "$_t" 2>&1 | head -1)
-	case $_o in
-	"$_t"*) ;;
-	*) fail "mux help $_t did not reach the topic: [$_o]" ;;
-	esac
+  _o=$(mux help "$_t" 2>&1 | head -1)
+  case $_o in
+  "$_t"*) ;;
+  *) fail "mux help $_t did not reach the topic: [$_o]" ;;
+  esac
 done
 # ... and a bare `mux help` is still the usage summary.
 case "$(mux help 2>&1 | head -1)" in
@@ -177,84 +177,84 @@ esac
 # script(1) supplies the pty. Skipped rather than failed where it is absent: the
 # package's stated floor is a shell and a checkout.
 if command -v script >/dev/null 2>&1; then
-	_pal=$(script -qc "env -u TMUX $HERE/bin/mux help palette" /dev/null \
-		</dev/null 2>&1 || true)
-	case $_pal in
-	*"needs a terminal"*) fail "script(1) did not provide a pty" ;;
-	esac
-	# All three bands of the 256-colour space are labelled, so a truncated
-	# grid is visible rather than merely shorter.
-	for _band in "system 0-15" "cube 16-231" "grayscale 232-255"; do
-		case $_pal in
-		*"$_band"*) ;;
-		*) fail "the palette is missing the $_band band" ;;
-		esac
-	done
-	# Every colour is present, and each cell carries a real SGR pair (fg AND
-	# bg), since the whole point is that any colour works as either.
-	for _n in 0 15 16 231 232 255; do
-		case $_pal in
-		*"48;5;${_n}m"*) ;;
-		*) fail "colour $_n has no background SGR in the grid" ;;
-		esac
-	done
-	case $_pal in
-	*"38;5;"*) ;;
-	*) fail "the grid sets no foreground, so a dark cell is unreadable" ;;
-	esac
-	# And it resets: a grid that leaks its last background would tint the
-	# rest of the terminal.
-	case $_pal in
-	*"[0m"*) ;;
-	*) fail "the palette never resets its styling" ;;
-	esac
+  _pal=$(script -qc "env -u TMUX $HERE/bin/mux help palette" /dev/null \
+    </dev/null 2>&1 || true)
+  case $_pal in
+  *"needs a terminal"*) fail "script(1) did not provide a pty" ;;
+  esac
+  # All three bands of the 256-colour space are labelled, so a truncated
+  # grid is visible rather than merely shorter.
+  for _band in "system 0-15" "cube 16-231" "grayscale 232-255"; do
+    case $_pal in
+    *"$_band"*) ;;
+    *) fail "the palette is missing the $_band band" ;;
+    esac
+  done
+  # Every colour is present, and each cell carries a real SGR pair (fg AND
+  # bg), since the whole point is that any colour works as either.
+  for _n in 0 15 16 231 232 255; do
+    case $_pal in
+    *"48;5;${_n}m"*) ;;
+    *) fail "colour $_n has no background SGR in the grid" ;;
+    esac
+  done
+  case $_pal in
+  *"38;5;"*) ;;
+  *) fail "the grid sets no foreground, so a dark cell is unreadable" ;;
+  esac
+  # And it resets: a grid that leaks its last background would tint the
+  # rest of the terminal.
+  case $_pal in
+  *"[0m"*) ;;
+  *) fail "the palette never resets its styling" ;;
+  esac
 
-	# An explicit FG applies to every cell, rather than the per-cell black
-	# and white contrast the bare form picks.
-	_pf=$(script -qc "env -u TMUX $HERE/bin/mux help palette 226" \
-		/dev/null </dev/null 2>&1 || true)
-	case $_pf in
-	*"fg 226 over every bg"*) ;;
-	*) fail "an explicit palette fg was not honoured: [$_pf]" ;;
-	esac
-	case $_pf in
-	*"38;5;226m"*) ;;
-	*) fail "the requested fg never reached a cell" ;;
-	esac
+  # An explicit FG applies to every cell, rather than the per-cell black
+  # and white contrast the bare form picks.
+  _pf=$(script -qc "env -u TMUX $HERE/bin/mux help palette 226" \
+    /dev/null </dev/null 2>&1 || true)
+  case $_pf in
+  *"fg 226 over every bg"*) ;;
+  *) fail "an explicit palette fg was not honoured: [$_pf]" ;;
+  esac
+  case $_pf in
+  *"38;5;226m"*) ;;
+  *) fail "the requested fg never reached a cell" ;;
+  esac
 
-	# The status-bar PREVIEW form, which renders four chosen colours as the
-	# bar would actually draw them. Reachable only through `test`, so it was
-	# the last unexercised path in the file.
-	_pt=$(script -qc \
-		"env -u TMUX $HERE/bin/mux help palette test 231 54 16 214" \
-		/dev/null </dev/null 2>&1 || true)
-	case $_pt in
-	*"bar fg=231 bg=54"*) ;;
-	*) fail "the preview did not echo the bar colours: [$_pt]" ;;
-	esac
-	case $_pt in
-	*"active fg=16 bg=214"*) ;;
-	*) fail "the preview did not echo the active colours" ;;
-	esac
-	# It draws a real chip, not just a description.
-	case $_pt in
-	*"48;5;54m"*) ;;
-	*) fail "the preview rendered no bar background" ;;
-	esac
+  # The status-bar PREVIEW form, which renders four chosen colours as the
+  # bar would actually draw them. Reachable only through `test`, so it was
+  # the last unexercised path in the file.
+  _pt=$(script -qc \
+    "env -u TMUX $HERE/bin/mux help palette test 231 54 16 214" \
+    /dev/null </dev/null 2>&1 || true)
+  case $_pt in
+  *"bar fg=231 bg=54"*) ;;
+  *) fail "the preview did not echo the bar colours: [$_pt]" ;;
+  esac
+  case $_pt in
+  *"active fg=16 bg=214"*) ;;
+  *) fail "the preview did not echo the active colours" ;;
+  esac
+  # It draws a real chip, not just a description.
+  case $_pt in
+  *"48;5;54m"*) ;;
+  *) fail "the preview rendered no bar background" ;;
+  esac
 fi
 
 # An unusable fg spec is refused with the accepted forms named, and exit 2 --
 # not silently ignored, which would render a grid that answers a question you
 # did not ask.
 if command -v script >/dev/null 2>&1; then
-	_bad=$(script -qec "env -u TMUX $HERE/bin/mux help palette notacolour" \
-		/dev/null </dev/null 2>&1 || true)
-	case $_bad in
-	*"0-255, colourN, #rrggbb"*) ;;
-	*) fail "a bad palette fg was not explained: [$_bad]" ;;
-	esac
+  _bad=$(script -qec "env -u TMUX $HERE/bin/mux help palette notacolour" \
+    /dev/null </dev/null 2>&1 || true)
+  case $_bad in
+  *"0-255, colourN, #rrggbb"*) ;;
+  *) fail "a bad palette fg was not explained: [$_bad]" ;;
+  esac
 else
-	printf 'note: %s palette grid unchecked (no script(1))\n' "$_name"
+  printf 'note: %s palette grid unchecked (no script(1))\n' "$_name"
 fi
 
 # Without a terminal it refuses cleanly rather than emitting escapes into a

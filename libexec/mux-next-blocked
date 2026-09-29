@@ -32,25 +32,25 @@ _lib=$(dirname "$0")
 _part=
 _pflag=0
 while [ $# -gt 0 ]; do
-	case $1 in
-	--partition)
-		_pflag=1; _part=${2:-}
-		# GUARDED, because `shift 2` on a bare `--partition` is a shell
-		# error that also exits 2 -- the right code for the wrong
-		# reason, and one no mutation of the real guard could ever be
-		# distinguished from.
-		if [ $# -gt 1 ]; then shift; fi ;;
-	--) shift; break ;;
-	-*) echo "mux: next-blocked: unknown option: $1" >&2; exit 2 ;;
-	*)  break ;;
-	esac
-	shift
+  case $1 in
+  --partition)
+    _pflag=1; _part=${2:-}
+    # GUARDED, because `shift 2` on a bare `--partition` is a shell
+    # error that also exits 2 -- the right code for the wrong
+    # reason, and one no mutation of the real guard could ever be
+    # distinguished from.
+    if [ $# -gt 1 ]; then shift; fi ;;
+  --) shift; break ;;
+  -*) echo "mux: next-blocked: unknown option: $1" >&2; exit 2 ;;
+  *)  break ;;
+  esac
+  shift
 done
 # A bare --partition is a usage error, not a silent fall back to the caller's
 # own partition: a click composed without its name would jump somewhere
 # plausible and wrong, which is this codebase's recurring failure shape.
 [ "$_pflag" = 0 ] || [ -n "$_part" ] || {
-	echo "mux: next-blocked: --partition needs a name" >&2; exit 2; }
+  echo "mux: next-blocked: --partition needs a name" >&2; exit 2; }
 
 client=${1:-}
 current=${2:-}
@@ -73,47 +73,47 @@ current=${2:-}
 _ns=$_part
 [ -n "$_ns" ] || [ -n "${TMUX:-}" ] || _ns=${MUX_CTX_PARTITION:-global}
 _nb() {
-	if [ -n "$_ns" ]; then tmux -L "$_ns" "$@"
-	else tmux "$@"; fi
+  if [ -n "$_ns" ]; then tmux -L "$_ns" "$@"
+  else tmux "$@"; fi
 }
 # No CLIENT given (the bare `mux next-blocked`): resolve the client of the pane
 # we are in, which means we have to BE in one -- switch-client needs a target.
 if [ -z "$client" ]; then
-	if [ -n "${TMUX:-}" ]; then
-		client=$(_nb display-message -p '#{client_name}' \
-			2>/dev/null || true)
-	else
-		# HEADLESS, which is how a REMOTE caller arrives. The tray
-		# indicator reaches a latched host over the same transport it
-		# polls with, so there is no pane to resolve from -- and there
-		# does not need to be, because a tray item EXISTS only when a
-		# latch does, which means a client is attached and the human is
-		# looking at it.
-		#
-		# MOST RECENTLY ACTIVE, and the limitation is worth stating:
-		# with several clients on that box (a latch and someone sitting
-		# at its console) this picks the one used last, which is
-		# usually but not always the one you meant. Precise attribution
-		# would need the attach to record its own $SSH_TTY, which is
-		# more plumbing than the ambiguity has so far been worth --
-		# revisit if it ever picks wrong in practice.
-		client=$(_nb list-clients \
-			-F '#{client_activity} #{client_name}' 2>/dev/null \
-			| sort -rn | awk 'NR == 1 { print $2 }')
-	fi
-	[ -n "$client" ] || {
-		echo "mux: no attached client to switch" >&2; exit 1; }
+  if [ -n "${TMUX:-}" ]; then
+    client=$(_nb display-message -p '#{client_name}' \
+      2>/dev/null || true)
+  else
+    # HEADLESS, which is how a REMOTE caller arrives. The tray
+    # indicator reaches a latched host over the same transport it
+    # polls with, so there is no pane to resolve from -- and there
+    # does not need to be, because a tray item EXISTS only when a
+    # latch does, which means a client is attached and the human is
+    # looking at it.
+    #
+    # MOST RECENTLY ACTIVE, and the limitation is worth stating:
+    # with several clients on that box (a latch and someone sitting
+    # at its console) this picks the one used last, which is
+    # usually but not always the one you meant. Precise attribution
+    # would need the attach to record its own $SSH_TTY, which is
+    # more plumbing than the ambiguity has so far been worth --
+    # revisit if it ever picks wrong in practice.
+    client=$(_nb list-clients \
+      -F '#{client_activity} #{client_name}' 2>/dev/null \
+      | sort -rn | awk 'NR == 1 { print $2 }')
+  fi
+  [ -n "$client" ] || {
+    echo "mux: no attached client to switch" >&2; exit 1; }
 fi
 if [ -z "$current" ]; then
-	current=$(_nb display-message -c "$client" -p '#{client_session}' \
-		2>/dev/null || true)
+  current=$(_nb display-message -c "$client" -p '#{client_session}' \
+    2>/dev/null || true)
 fi
 
 . "$_lib/mux-agent-state_lib"
 excluded=
 if [ -r "$_lib/mux-exclude_lib" ]; then
-	. "$_lib/mux-exclude_lib"
-	excluded=$(mux_excluded "$client")
+  . "$_lib/mux-exclude_lib"
+  excluded=$(mux_excluded "$client")
 fi
 dir=$(mux_agent_dir "$_ns")
 
@@ -124,21 +124,21 @@ dir=$(mux_agent_dir "$_ns")
 # waited longest".
 best= bestep=
 while IFS= read -r s; do
-	[ -n "$s" ] || continue
-	mux_excluded_has "$excluded" "$s" && continue      # mux hide
-	[ "$s" = "$current" ] && continue
-	pair=$(mux_agent_state "$dir" "$s")
-	[ "${pair%% *}" = blocked ] || continue
-	ep=${pair##* }
-	[ -n "$ep" ] || ep=9999999999
-	if [ -z "$best" ] || [ "$ep" -lt "$bestep" ]; then best=$s; bestep=$ep; fi
+  [ -n "$s" ] || continue
+  mux_excluded_has "$excluded" "$s" && continue      # mux hide
+  [ "$s" = "$current" ] && continue
+  pair=$(mux_agent_state "$dir" "$s")
+  [ "${pair%% *}" = blocked ] || continue
+  ep=${pair##* }
+  [ -n "$ep" ] || ep=9999999999
+  if [ -z "$best" ] || [ "$ep" -lt "$bestep" ]; then best=$s; bestep=$ep; fi
 done <<EOF
 $(_nb list-sessions -F '#{session_name}' 2>/dev/null)
 EOF
 
 [ -n "$best" ] || exit 0            # nothing blocked; nowhere to jump
 if [ -n "$client" ]; then
-	_nb switch-client -c "$client" -t "=$best"
+  _nb switch-client -c "$client" -t "=$best"
 else
-	_nb switch-client -t "=$best"
+  _nb switch-client -t "=$best"
 fi

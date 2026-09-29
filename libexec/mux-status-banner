@@ -17,8 +17,8 @@ set -eu
 # Stash the pristine default once; rebuild from it every time.
 def=$(tmux show -gqv @mux-sf0-default)
 if [ -z "$def" ]; then
-	def=$(tmux show -gqv "status-format[0]")
-	tmux set -g @mux-sf0-default "$def"
+  def=$(tmux show -gqv "status-format[0]")
+  tmux set -g @mux-sf0-default "$def"
 fi
 
 # The two banners. Commas inside the styles are escaped #, so the #{?...} parser

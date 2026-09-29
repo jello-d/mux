@@ -50,25 +50,25 @@
 # came back as `a  b`, silently, with the backslash gone -- data loss in the
 # one function whose entire job is not losing characters. ENVIRON is bytes.
 mux_json_str() {
-	MUX_JSON_V="${1-}" LC_ALL=C awk '
-	BEGIN {
-		s = ENVIRON["MUX_JSON_V"]
-		for (i = 0; i < 32; i++) ord[sprintf("%c", i)] = i
-		n = length(s); o = ""
-		for (i = 1; i <= n; i++) {
-			c = substr(s, i, 1)
-			if (c == "\"")      o = o "\\\""
-			else if (c == "\\") o = o "\\\\"
-			else if (c == "\b") o = o "\\b"
-			else if (c == "\f") o = o "\\f"
-			else if (c == "\n") o = o "\\n"
-			else if (c == "\r") o = o "\\r"
-			else if (c == "\t") o = o "\\t"
-			else if (c in ord)  o = o sprintf("\\u%04x", ord[c])
-			else                o = o c
-		}
-		printf "\"%s\"", o
-	}'
+  MUX_JSON_V="${1-}" LC_ALL=C awk '
+  BEGIN {
+    s = ENVIRON["MUX_JSON_V"]
+    for (i = 0; i < 32; i++) ord[sprintf("%c", i)] = i
+    n = length(s); o = ""
+    for (i = 1; i <= n; i++) {
+      c = substr(s, i, 1)
+      if (c == "\"")      o = o "\\\""
+      else if (c == "\\") o = o "\\\\"
+      else if (c == "\b") o = o "\\b"
+      else if (c == "\f") o = o "\\f"
+      else if (c == "\n") o = o "\\n"
+      else if (c == "\r") o = o "\\r"
+      else if (c == "\t") o = o "\\t"
+      else if (c in ord)  o = o sprintf("\\u%04x", ord[c])
+      else                o = o c
+    }
+    printf "\"%s\"", o
+  }'
 }
 
 # mux_json_num VALUE -> the number, or `null` when it is not one.
@@ -82,10 +82,10 @@ mux_json_str() {
 # Integers only, with an optional leading minus: every number mux has is a
 # count, an age or an epoch.
 mux_json_num() {
-	case "${1-}" in
-	''|-|*[!0-9-]*|?*-*) printf 'null' ;;
-	*) printf '%s' "$1" ;;
-	esac
+  case "${1-}" in
+  ''|-|*[!0-9-]*|?*-*) printf 'null' ;;
+  *) printf '%s' "$1" ;;
+  esac
 }
 
 # mux_json_array -- reads one JSON value per line on stdin, prints the array.
@@ -100,10 +100,10 @@ mux_json_num() {
 # argument the session set already makes for its own format, and it is only
 # true while every value goes through the escaper.
 mux_json_array() {
-	_ja=
-	while IFS= read -r _jl; do
-		[ -n "$_jl" ] || continue
-		if [ -z "$_ja" ]; then _ja=$_jl; else _ja=$_ja,$_jl; fi
-	done
-	printf '[%s]' "$_ja"
+  _ja=
+  while IFS= read -r _jl; do
+    [ -n "$_jl" ] || continue
+    if [ -z "$_ja" ]; then _ja=$_jl; else _ja=$_ja,$_jl; fi
+  done
+  printf '[%s]' "$_ja"
 }

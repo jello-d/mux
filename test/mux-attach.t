@@ -43,15 +43,15 @@ printf 'scan %s 3\n' "$T" >"$T/conf/partitions/global.partition"
 # go SOCKET_IN_TMUX : run `mux go proj` with $TMUX claiming that socket.
 # TMUX_PANE is set, as it always is inside a pane.
 go() {
-	: >"$TMUXLOG"
-	# `|| _r=$?` rather than a bare run: under `set -eu` a non-zero exit
-	# would abort this function before it could report the code, and a
-	# non-zero exit is one of the outcomes under test.
-	_r=0
-	( cd "$T/proj" && env -u MUX_SHARE MUX_DIR="$T/conf" \
-		MUX_CACHE="$T/cache" TMUX="/tmp/fake/$1,123,0" TMUX_PANE=%9 \
-		"$HERE/bin/mux" go proj ) >"$T/out" 2>&1 || _r=$?
-	printf '%s' "$_r"
+  : >"$TMUXLOG"
+  # `|| _r=$?` rather than a bare run: under `set -eu` a non-zero exit
+  # would abort this function before it could report the code, and a
+  # non-zero exit is one of the outcomes under test.
+  _r=0
+  ( cd "$T/proj" && env -u MUX_SHARE MUX_DIR="$T/conf" \
+    MUX_CACHE="$T/cache" TMUX="/tmp/fake/$1,123,0" TMUX_PANE=%9 \
+    "$HERE/bin/mux" go proj ) >"$T/out" 2>&1 || _r=$?
+  printf '%s' "$_r"
 }
 did() { grep -q "$1" "$TMUXLOG"; }
 
@@ -88,6 +88,6 @@ did 'switch-client' && fail "leaked \$TMUX switched a client that is not ours"
 _rc=$(go otherpart)
 [ "$_rc" = 0 ] || fail "cross-socket from outside a pane should attach"
 did 'attach-session -t =proj' \
-	|| fail "cross-socket outside a pane did not attach"
+  || fail "cross-socket outside a pane did not attach"
 
 pass

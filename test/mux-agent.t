@@ -17,14 +17,14 @@ _name=mux-agent
 . "$(dirname "$0")/harness_lib"
 
 command -v python3 >/dev/null 2>&1 || {
-	printf 'skip %s (no python3 to parse with)\n' "$_name"; exit 0; }
+  printf 'skip %s (no python3 to parse with)\n' "$_name"; exit 0; }
 
 XDG_RUNTIME_DIR=$T/run
 MUX_DIR=$T/conf
 MUX_CACHE=$T/cache
 export XDG_RUNTIME_DIR MUX_DIR MUX_CACHE
 mkdir -p "$XDG_RUNTIME_DIR/agent-state/global" \
-	"$XDG_RUNTIME_DIR/agent-state/work" "$MUX_DIR/partitions" "$T/bin"
+  "$XDG_RUNTIME_DIR/agent-state/work" "$MUX_DIR/partitions" "$T/bin"
 
 agent_rec "$XDG_RUNTIME_DIR/agent-state/global/p1" blocked %1 100 alpha x
 agent_rec "$XDG_RUNTIME_DIR/agent-state/global/p2" working %2 200 bravo x
@@ -49,23 +49,23 @@ _sock=
 [ "${1:-}" = -L ] && _sock=$2
 case "$*" in
 *list-clients*)
-	case " ${WATCHED:-} " in
-	*" $_sock "*) printf '/dev/pts/1\n' ;;
-	esac ;;
+  case " ${WATCHED:-} " in
+  *" $_sock "*) printf '/dev/pts/1\n' ;;
+  esac ;;
 *capture-pane*)
-	printf 'CAPTURED %s\n' "$*" >>"$CAPLOG"
-	printf 'line one\nhe said "hi" \\ there\n' ;;
+  printf 'CAPTURED %s\n' "$*" >>"$CAPLOG"
+  printf 'line one\nhe said "hi" \\ there\n' ;;
 *list-panes*)
-	# One line per pane: id TAB class. $PANECLASS is "id=class,..." and
-	# $NOSERVER makes the query FAIL, which is a different answer from an
-	# empty one and the whole reason peers reports null rather than a
-	# default.
-	[ -z "${NOSERVER:-}" ] || exit 1
-	printf '%%1\t%s\n%%2\t%s\n' "${CLASS1:-}" "${CLASS2:-}" ;;
+  # One line per pane: id TAB class. $PANECLASS is "id=class,..." and
+  # $NOSERVER makes the query FAIL, which is a different answer from an
+  # empty one and the whole reason peers reports null rather than a
+  # default.
+  [ -z "${NOSERVER:-}" ] || exit 1
+  printf '%%1\t%s\n%%2\t%s\n' "${CLASS1:-}" "${CLASS2:-}" ;;
 *window_name*)   printf '%s\n' "${WINNAME:-main}" ;;
 *@mux-control*)  printf '%s\n' "${CLASS:-}" ;;
 *load-buffer*|*paste-buffer*|*send-keys*|*delete-buffer*)
-	printf 'TMUX %s\n' "$*" >>"$CAPLOG" ;;
+  printf 'TMUX %s\n' "$*" >>"$CAPLOG" ;;
 esac
 exit 0
 EOF
@@ -75,24 +75,24 @@ CAPLOG=$T/caplog; export CAPLOG
 
 RC=0
 run() {   # <args...> -> stdout in $OUT, exit in $RC
-	RC=0
-	OUT=$(env -u TMUX -u MUX_SHARE MUX_DIR="$MUX_DIR" \
-		MUX_CACHE="$MUX_CACHE" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
-		PATH="$T/bin:$PATH" WATCHED="${WATCHED:-}" \
-		CAPLOG="${CAPLOG:-/dev/null}" CLASS="${CLASS:-}" \
-		WINNAME="${WINNAME:-main}" MUX_LOG="$T/log" \
-		CLASS1="${CLASS1:-}" CLASS2="${CLASS2:-}" \
-		NOSERVER="${NOSERVER:-}" \
-		MUX_SEND_POLICY_FILE="$T/etc/send-policy" \
-		"$HERE/bin/mux" agent "$@" 2>"$T/err") || RC=$?
+  RC=0
+  OUT=$(env -u TMUX -u MUX_SHARE MUX_DIR="$MUX_DIR" \
+    MUX_CACHE="$MUX_CACHE" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
+    PATH="$T/bin:$PATH" WATCHED="${WATCHED:-}" \
+    CAPLOG="${CAPLOG:-/dev/null}" CLASS="${CLASS:-}" \
+    WINNAME="${WINNAME:-main}" MUX_LOG="$T/log" \
+    CLASS1="${CLASS1:-}" CLASS2="${CLASS2:-}" \
+    NOSERVER="${NOSERVER:-}" \
+    MUX_SEND_POLICY_FILE="$T/etc/send-policy" \
+    "$HERE/bin/mux" agent "$@" 2>"$T/err") || RC=$?
 }
 
 # jq EXPR -- evaluate a python expression over the parsed document in $OUT.
 # `d` is the document. Prints the result, or fails loudly if it did not parse.
 jq() {
-	printf '%s' "$OUT" >"$T/doc"
-	MUX_T_DOC=$T/doc MUX_T_EXPR=$1 python3 - 2>"$T/jerr" <<'PY' \
-		|| fail "the answer did not parse: $(cat "$T/jerr")
+  printf '%s' "$OUT" >"$T/doc"
+  MUX_T_DOC=$T/doc MUX_T_EXPR=$1 python3 - 2>"$T/jerr" <<'PY' \
+    || fail "the answer did not parse: $(cat "$T/jerr")
   got: $OUT"
 import json, os, sys
 raw = open(os.environ["MUX_T_DOC"]).read()
@@ -195,17 +195,17 @@ eq peers-rc "$RC" 0
 eq peers-ok "$(jq 'd["status"]')" ok
 eq peers-n "$(jq 'len(d["peers"])')" 2
 eq peers-names "$(jq 'sorted(p["session"] for p in d["peers"])')" \
-	"['alpha', 'bravo']"
+  "['alpha', 'bravo']"
 eq peers-state \
-	"$(jq '[p["state"] for p in d["peers"] if p["session"]=="alpha"][0]')" \
-	blocked
+  "$(jq '[p["state"] for p in d["peers"] if p["session"]=="alpha"][0]')" \
+  blocked
 # THE ROOT COMES FROM THE SESSION SET, which is a different source from the
 # state files -- and sourcing mux-sessions_lib without mux-paths_lib gave every
 # peer an empty root plus six `mux_state_path: not found` lines on stderr. A
 # plausible answer, silently wrong: exactly the lib-needs-a-lib trap.
 eq peers-root \
-	"$(jq '[p["root"] for p in d["peers"] if p["session"]=="alpha"][0]')" \
-	/srv/alpha
+  "$(jq '[p["root"] for p in d["peers"] if p["session"]=="alpha"][0]')" \
+  /srv/alpha
 
 # AGE, NOT AN EPOCH, resolved against the clock that wrote it. The obvious
 # design emits the epoch and works until the reader is on another machine,
@@ -226,25 +226,25 @@ eq peers-age-sane "$(jq 'all(p["age"] >= 0 for p in d["peers"])')" True
 # host's clock moved, and "0" is the honest floor for "it began no earlier
 # than now". Without a case for it the clamp is a guard nothing can kill.
 agent_rec "$XDG_RUNTIME_DIR/agent-state/global/p8" idle %8 \
-	"$(( $(date +%s) + 3600 ))" ahead x
+  "$(( $(date +%s) + 3600 ))" ahead x
 printf 'ahead\t/srv/ahead\n' >>"$MUX_STATE/sessions.global"
 run peers
 eq peers-clamped \
-	"$(jq '[p["age"] for p in d["peers"] if p["session"]=="ahead"][0]')" 0
+  "$(jq '[p["age"] for p in d["peers"] if p["session"]=="ahead"][0]')" 0
 eq peers-age-is-age \
-	"$(jq '[p["age"] for p in d["peers"] if p["session"]=="fresh"][0] < 60')" \
-	True
+  "$(jq '[p["age"] for p in d["peers"] if p["session"]=="fresh"][0] < 60')" \
+  True
 
 # --- peers reports WHO CONTROLS each pane ---------------------------------
 # So a caller can see the classification without attempting a send and reading
 # the refusal. One tmux query per PARTITION rather than per peer.
 CLASS2=agent run peers
 eq peers-class-default \
-	"$(jq '[p["control"] for p in d["peers"] if p["session"]=="alpha"][0]')" \
-	human
+  "$(jq '[p["control"] for p in d["peers"] if p["session"]=="alpha"][0]')" \
+  human
 eq peers-class-agent \
-	"$(jq '[p["control"] for p in d["peers"] if p["session"]=="bravo"][0]')" \
-	agent
+  "$(jq '[p["control"] for p in d["peers"] if p["session"]=="bravo"][0]')" \
+  agent
 
 # NULL IS NOT `human`, and that distinction is the point. With no server
 # reachable -- a remote `peers` at boot, which this verb is designed for --
@@ -254,20 +254,20 @@ NOSERVER=1 run peers
 eq peers-headless-rc "$RC" 0
 eq peers-headless-n "$(jq 'len(d["peers"])')" 4
 eq peers-headless-null "$(jq 'all(p["control"] is None for p in d["peers"])')" \
-	True
+  True
 # ... and the rest of the answer is unaffected, which is what makes it a
 # missing FIELD rather than a missing answer.
 eq peers-headless-state \
-	"$(jq '[p["state"] for p in d["peers"] if p["session"]=="alpha"][0]')" \
-	blocked
+  "$(jq '[p["state"] for p in d["peers"] if p["session"]=="alpha"][0]')" \
+  blocked
 
 # A PANE THAT IS GONE but whose record is not: the class is unknowable, which
 # is null rather than the default. `wsess` records pane %3, which the stub
 # does not list.
 CLASS2=agent run peers --partition work
 eq peers-stale-pane \
-	"$(jq '[p["control"] for p in d["peers"] if p["session"]=="wsess"][0]')" \
-	None
+  "$(jq '[p["control"] for p in d["peers"] if p["session"]=="wsess"][0]')" \
+  None
 
 # --- peers is scoped to ONE partition, and --all widens it ----------------
 run peers
@@ -278,7 +278,7 @@ eq peers-other "$(jq 'set(p["partition"] for p in d["peers"])')" "{'work'}"
 eq peers-other-n "$(jq 'len(d["peers"])')" 1
 run peers --all
 eq peers-all "$(jq 'sorted(set(p["partition"] for p in d["peers"]))')" \
-	"['global', 'work']"
+  "['global', 'work']"
 
 # An unknown partition is not an error here: it has no sessions, so it has no
 # peers, and `[]` is an answer. Inventing a refusal would make a caller
@@ -311,7 +311,7 @@ eq read-pane "$(jq 'd["pane"]')" %1
 _read bravo
 eq read-pane-other "$(jq 'd["pane"]')" %2
 grep -q 'CAPTURED -L ' "$CAPLOG" \
-	|| fail "read captured from the DEFAULT tmux socket, not the
+  || fail "read captured from the DEFAULT tmux socket, not the
 partition's: $(cat "$CAPLOG")"
 # AND THE TEXT SURVIVES A ROUND TRIP, quotes and backslash included. This is
 # the first verb whose payload is arbitrary terminal output, which is exactly
@@ -322,11 +322,11 @@ eq read-text "$(jq 'd["text"].splitlines()[1]')" 'he said "hi" \ there'
 # scrollback can be enormous, and a verb whose default answer is unbounded is
 # one a caller learns to be afraid of.
 grep -q 'capture-pane -p -J -t %1$' "$CAPLOG" \
-	|| fail "the default capture asked for scrollback: $(cat "$CAPLOG")"
+  || fail "the default capture asked for scrollback: $(cat "$CAPLOG")"
 : >"$CAPLOG"
 _read alpha -n 50
 grep -q -- '-S -50' "$CAPLOG" \
-	|| fail "-n did not reach capture-pane: $(cat "$CAPLOG")"
+  || fail "-n did not reach capture-pane: $(cat "$CAPLOG")"
 
 # AN OPTION IS AN OPTION WHEREVER IT SITS. The front end stops parsing at the
 # first positional, which is tolerable for a human who can see the result and
@@ -366,10 +366,10 @@ eq wait-waited "$(jq 'd["waited"] < 3')" True
 # which is the same shape mux-latch-stall.t uses for its own stalled peers.
 RC=0
 OUT=$(env -u TMUX -u MUX_SHARE MUX_DIR="$MUX_DIR" MUX_CACHE="$MUX_CACHE" \
-	XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" PATH="$T/bin:$PATH" \
-	CAPLOG="${CAPLOG:-/dev/null}" \
-	timeout 20 "$HERE/bin/mux" agent wait alpha idle -t 1 2>"$T/err") \
-	|| RC=$?
+  XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" PATH="$T/bin:$PATH" \
+  CAPLOG="${CAPLOG:-/dev/null}" \
+  timeout 20 "$HERE/bin/mux" agent wait alpha idle -t 1 2>"$T/err") \
+  || RC=$?
 [ "$RC" != 124 ] || fail "wait never returned: its timeout is not bounding
 anything, so a caller asking about a session that never changes hangs forever"
 eq wait-to-rc "$RC" 1
@@ -402,7 +402,7 @@ seal_pol() { chmod 0444 "$T/etc/send-policy"; chmod 0555 "$T/etc"; }
 # pol LINE -- replace the policy and seal it, which four cases below do.
 pol() { unseal_pol; printf '%s\n' "$1" >"$T/etc/send-policy"; seal_pol; }
 unseal_pol() { chmod 0755 "$T/etc" 2>/dev/null || true
-	chmod 0644 "$T/etc/send-policy" 2>/dev/null || true; }
+  chmod 0644 "$T/etc/send-policy" 2>/dev/null || true; }
 trap 'chmod 0755 "$T/etc" 2>/dev/null || true' EXIT INT TERM
 
 # `bravo` is WORKING, which needs no override: a turn that is running buffers
@@ -419,11 +419,11 @@ eq send-bytes "$(jq 'd["bytes"]')" 11
 # keystrokes. Anything multi-line would otherwise submit its first line alone
 # and leave the rest arriving as a fresh prompt.
 grep -q 'paste-buffer -p ' "$CAPLOG" \
-	|| fail "the text was not pasted in BRACKETED mode: $(cat "$CAPLOG")"
+  || fail "the text was not pasted in BRACKETED mode: $(cat "$CAPLOG")"
 # ... into a buffer named for this process and deleted on paste, so a human's
 # own tmux buffers are not clobbered by an agent talking to a peer.
 grep -q 'paste-buffer .*-d ' "$CAPLOG" \
-	|| fail "the staging buffer was not deleted: $(cat "$CAPLOG")"
+  || fail "the staging buffer was not deleted: $(cat "$CAPLOG")"
 grep -q 'send-keys .*Enter' "$CAPLOG" || fail "Enter was never sent"
 
 # EVERY tmux CALL NAMES THE PARTITION'S SOCKET. A bare `tmux` asks the DEFAULT
@@ -433,19 +433,19 @@ grep -q 'send-keys .*Enter' "$CAPLOG" || fail "Enter was never sent"
 # only a REAL server caught it. Third time this repo has paid for it, after
 # mux-even and next-blocked, so it is asserted rather than remembered.
 grep -q 'TMUX -L ' "$CAPLOG" \
-	|| fail "send talked to the DEFAULT tmux socket instead of the
+  || fail "send talked to the DEFAULT tmux socket instead of the
 partition's: $(cat "$CAPLOG")"
 
 : >"$CAPLOG"
 run send bravo 'no newline' --no-enter
 grep -q 'send-keys .*Enter' "$CAPLOG" \
-	&& fail "--no-enter still pressed Enter: $(cat "$CAPLOG")"
+  && fail "--no-enter still pressed Enter: $(cat "$CAPLOG")"
 
 # STDIN, so a long charge is not an argv-length problem.
 _o=$(printf 'from stdin' | env -u TMUX -u MUX_SHARE MUX_DIR="$MUX_DIR" \
-	MUX_CACHE="$MUX_CACHE" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
-	PATH="$T/bin:$PATH" CAPLOG="$CAPLOG" \
-	"$HERE/bin/mux" agent send bravo - 2>&1)
+  MUX_CACHE="$MUX_CACHE" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
+  PATH="$T/bin:$PATH" CAPLOG="$CAPLOG" \
+  "$HERE/bin/mux" agent send bravo - 2>&1)
 case $_o in
 *'"bytes":10'*) ;;
 *) fail "the stdin form did not read the text: [$_o]" ;;
@@ -536,7 +536,7 @@ eq unk-granted-rc "$RC" 0
 # A send is a mutation, and the one mux makes on another agent's behalf. It is
 # also the audit trail the layer above would otherwise have to build.
 grep -q 'send\[' "$T/log" 2>/dev/null \
-	|| fail "a send was not logged: [$(cat "$T/log" 2>/dev/null)]"
+  || fail "a send was not logged: [$(cat "$T/log" 2>/dev/null)]"
 grep -q 'odd' "$T/log" || fail "the log did not name the session"
 unseal_pol
 
@@ -570,11 +570,11 @@ eq noverb-status "$(jq 'd["status"]')" usage
 # must not be able to mean two different exits, or a reader that switches on
 # one will disagree with a shell that switches on the other.
 for _case in 'nosuchverb usage 2' 'status ok 0'; do
-	# shellcheck disable=SC2086   # three words per entry, split on purpose
-	set -- $_case
-	WATCHED=global run "$1"
-	eq "agree-$1-rc" "$RC" "$3"
-	eq "agree-$1-status" "$(jq 'd["status"]')" "$2"
+  # shellcheck disable=SC2086   # three words per entry, split on purpose
+  set -- $_case
+  WATCHED=global run "$1"
+  eq "agree-$1-rc" "$RC" "$3"
+  eq "agree-$1-status" "$(jq 'd["status"]')" "$2"
 done
 
 # --- mux's exit-code contract is NOT widened ------------------------------
@@ -583,13 +583,13 @@ done
 # attributes 126, 127 and 255 to the shell and to ssh precisely because mux
 # never emits them.
 for _args in 'status' 'nosuchverb' 'status --nope' ''; do
-	# shellcheck disable=SC2086   # deliberate word split
-	WATCHED=global run $_args
-	case $RC in
-	0|1|2|3) ;;
-	*) fail "\`mux agent $_args\` exited $RC, outside mux's four codes --
+  # shellcheck disable=SC2086   # deliberate word split
+  WATCHED=global run $_args
+  case $RC in
+  0|1|2|3) ;;
+  *) fail "\`mux agent $_args\` exited $RC, outside mux's four codes --
 126, 127 and 255 must stay attributable to the shell and to ssh" ;;
-	esac
+  esac
 done
 
 pass

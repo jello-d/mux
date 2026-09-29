@@ -71,8 +71,8 @@ t mux-strip
 = agent-list-negative-age
 f libexec/mux-agent-state-list
 t mux-agent-list
-- 		[ "$_age" -lt 0 ] && _age=0 ;;
-+ 		;;
+-     [ "$_age" -lt 0 ] && _age=0 ;;
++     ;;
 m clamp to 0
 
 = doctor-orphan-pass-removed
@@ -85,64 +85,64 @@ m no state record was not surfaced
 = doctor-stale-check-removed
 f libexec/mux-agent-doctor
 t mux-agent-doctor
-- 		elif _at_prompt "$_pane" "${_acomm:-}"; then
-+ 		elif false; then
+-     elif _at_prompt "$_pane" "${_acomm:-}"; then
++     elif false; then
 m stale 'working' record was not surfaced
 
 = doctor-stale-not-counted
 f libexec/mux-agent-doctor
 t mux-agent-doctor
-- 	'*** STALE'*)  echo stale  >>"$_dir/.doctor.$$" ;;
-+ 	'*** STALE'*)  echo drift  >>"$_dir/.doctor.$$" ;;
+-   '*** STALE'*)  echo stale  >>"$_dir/.doctor.$$" ;;
++   '*** STALE'*)  echo drift  >>"$_dir/.doctor.$$" ;;
 m did not name its cause
 
 = kill-all-confirm-accepts-anything
 f bin/mux
 t mux-kill
--                 *) echo "mux: aborted"; exit 0 ;;
-+                 *) ;;
+-     *) echo "mux: aborted"; exit 0 ;;
++     *) ;;
 m expected an abort
 
 = rename-forgets-the-set
 f bin/mux
 t mux-rename
--                 mux_sess_add "$_new" "$_oroot" "$part"
-+                 :
+-     mux_sess_add "$_new" "$_oroot" "$part"
++     :
 m did not follow the rename
 
 = theme-persist-appends-always
 f bin/mux
 t mux-theme
--         if grep -qE '^[[:space:]]*theme[[:space:]]' "$1"; then
-+         if false; then
+-   if grep -qE '^[[:space:]]*theme[[:space:]]' "$1"; then
++   if false; then
 m second theme line
 
 = theme-cycle-next-offby1
 f bin/mux
 t mux-theme
--                 [ "$_idx" -eq 0 ] && _j=1 || _j=$((_idx % _n + 1))
-+                 [ "$_idx" -eq 0 ] && _j=1 || _j=$((_idx % _n + 2))
+-     [ "$_idx" -eq 0 ] && _j=1 || _j=$((_idx % _n + 1))
++     [ "$_idx" -eq 0 ] && _j=1 || _j=$((_idx % _n + 2))
 m next from aaa
 
 = reload-accepts-missing-conf
 f bin/mux
 t mux-ls
--         [ -f "$TMUX_CONF" ] || {
-+         true || {
+-   [ -f "$TMUX_CONF" ] || {
++   true || {
 m exited 0
 
 = style-quiet-leaks-banner
 f libexec/mux-style
 t mux-style
--         if [ "$quiet" = 0 ]; then
-+         if true; then
+-   if [ "$quiet" = 0 ]; then
++   if true; then
 m wedge the pane
 
 = style-setopt-writes-always
 f libexec/mux-style
 t mux-style
--         [ "$_c" = "$2" ] || tmux set-option -t "$session" "$1" "$2"
-+ 	tmux set-option -t "$session" "$1" "$2"
+-   [ "$_c" = "$2" ] || tmux set-option -t "$session" "$1" "$2"
++   tmux set-option -t "$session" "$1" "$2"
 m still wrote
 
 = click-accepts-any-tag
@@ -162,22 +162,22 @@ m accumulated banners
 = check-bindings-not-asserted
 f libexec/mux-check
 t mux-check
-- 		_bound "$_k" || _nb="$_nb $_k"
-+ 		_bound "$_k" || true
+-     _bound "$_k" || _nb="$_nb $_k"
++     _bound "$_k" || true
 m broken bindings
 
 = exit-unknown-verb-not-2
 f bin/mux
 t mux-exit
--         *) echo "mux: unknown verb: $cmd" >&2; usage ;;
-+         *) echo "mux: unknown verb: $cmd" >&2; exit 0 ;;
+-   *) echo "mux: unknown verb: $cmd" >&2; usage ;;
++   *) echo "mux: unknown verb: $cmd" >&2; exit 0 ;;
 m an unknown verb
 
 = exit-reload-refusal-silent
 f bin/mux
 t mux-exit
--                 echo "mux: no tmux.conf at $TMUX_CONF" >&2; exit 1; }
-+                 echo "" >&2; exit 1; }
+-     echo "mux: no tmux.conf at $TMUX_CONF" >&2; exit 1; }
++     echo "" >&2; exit 1; }
 m did not name the missing file
 
 = caps-omission-guard-off
@@ -189,92 +189,92 @@ m NOT in the capability
 = caps-usable-always-false
 f bin/mux
 t mux-capabilities
-- 			if _cap_usable "$_cn"; then
-+ 			if false; then
+-       if _cap_usable "$_cn"; then
++       if false; then
 m agent-list should be usable
 
 = latch-denied-becomes-retryable
 f share/latch/ssh-classify
 t mux-latch
-- 		printf 'denied'
-+ 		printf 'probing'
+-     printf 'denied'
++     printf 'probing'
 m offered a rejected credential
 
 = latch-preflight-block-still-attempts
 f libexec/mux-latch
 t mux-latch
-- 	if [ "$_ar" = 1 ]; then
-+ 	if false; then
+-   if [ "$_ar" = 1 ]; then
++   if false; then
 m expected blocked then probing then ended
 
 = latch-quit-is-retried
 f share/latch/ssh-classify
 t mux-latch
-- 	printf 'ended' ;;
-+ 	printf 'probing' ;;
+-   printf 'ended' ;;
++   printf 'probing' ;;
 m a deliberate quit should exit 0
 
 = latch-cannot-tell-read-as-usable
 f libexec/mux-latch
 t mux-latch
-- 	*)  return 2 ;;
-+ 	*)  return 0 ;;
+-   *)  return 2 ;;
++   *)  return 0 ;;
 m unexpected probe exit was treated as usable
 
 = latch-gone-silently-recreated
 f share/latch/ssh-classify
 t mux-latch
-- 	printf 'gone' ;;
-+ 	printf 'probing' ;;
+-   printf 'gone' ;;
++   printf 'probing' ;;
 m a vanished session was retried
 
 = latch-single-flight-off
 f libexec/mux-latch
 t mux-latch
-- 	*) if kill -0 "$_other" 2>/dev/null; then
-+ 	*) if false; then
+-   *) if kill -0 "$_other" 2>/dev/null; then
++   *) if false; then
 m a concurrent latch should refuse
 
 = latch-hostkey-treated-as-retryable
 f share/latch/ssh-classify
 t mux-latch
-- 	if _saw 'host key verification'; then
-+ 	if false; then
+-   if _saw 'host key verification'; then
++   if false; then
 m should report untrusted
 
 = latch-say-detail-truncated
 f libexec/mux-latch
 t mux-latch
-- 	_sd=$(_clean "$*")
-+ 	_sd=$(_clean "$1")
+-   _sd=$(_clean "$*")
++   _sd=$(_clean "$1")
 m denied explanation was cut off
 
 = latch-no-probe-waits-forever
 f libexec/mux-latch
 t mux-latch
-- 	if [ -n "$PROBE" ]; then
-+ 	if true; then
+-   if [ -n "$PROBE" ]; then
++   if true; then
 m with no probe configured latch
 
 = latch-c-word-splits
 f libexec/mux-latch
 t mux-latch
-- 			set -- "$@" "$_rc_cmd"
-+ 			set -- "$@" $_rc_cmd
+-       set -- "$@" "$_rc_cmd"
++       set -- "$@" $_rc_cmd
 m must arrive as ONE argv element
 
 = latch-q-not-quoted
 f libexec/mux-latch
 t mux-latch
-- 			set -- "$@" "$(_shquote "$_rc_cmd")"
-+ 			set -- "$@" "$_rc_cmd"
+-       set -- "$@" "$(_shquote "$_rc_cmd")"
++       set -- "$@" "$_rc_cmd"
 m quoted for the remote shell
 
 = latch-missing-hook-silent
 f libexec/mux-latch
 t mux-latch
-- 	[ -n "$1" ] || return 0
-+ 	return 0
+-   [ -n "$1" ] || return 0
++   return 0
 m config error (exit 2)
 
 = attach-only-creates-anyway
@@ -287,29 +287,29 @@ m on a dead session must say
 = latch-negotiation-not-cached
 f libexec/mux-latch
 t mux-latch
-- 	_remote_cmd
-+ 	_cmd=$(_remote_cmd)
+-   _remote_cmd
++   _cmd=$(_remote_cmd)
 m must arrive as ONE argv element
 
 = latch-always-attach-only
 f libexec/mux-latch
 t mux-latch
-- 	if [ "$_attempts" -gt 0 ] && _remote_can_attach_only; then
-+ 	if [ "$_attempts" -gt 0 ]; then
+-   if [ "$_attempts" -gt 0 ] && _remote_can_attach_only; then
++   if [ "$_attempts" -gt 0 ]; then
 m must keep the creating form
 
 = latch-bare-guesses-a-session
 f libexec/mux-latch
 t mux-latch
-- 		_cmd='mux resume'
-+ 		_cmd="mux go $_host"
+-     _cmd='mux resume'
++     _cmd="mux go $_host"
 m must send 'mux resume'
 
 = latch-terminal-never-repaired
 f libexec/mux-latch
 t mux-latch
-- 	$RESTORE >/dev/null 2>&1 || true
-+ 	: >/dev/null 2>&1 || true
+-   $RESTORE >/dev/null 2>&1 || true
++   : >/dev/null 2>&1 || true
 m repair must come FIRST
 
 = sane-sprays-without-a-tty
@@ -322,29 +322,29 @@ m bytes with no
 = latch-liveness-context-dropped
 f libexec/mux-latch
 t mux-latch
-- 		if [ "$_rc" = 1 ] && ! _errsaw 'mux:' && ! _errsaw 'usage:'; then
-+ 		if false; then
+-     if [ "$_rc" = 1 ] && ! _errsaw 'mux:' && ! _errsaw 'usage:'; then
++     if false; then
 m it rules out the network
 
 = latch-alive-query-always
 f libexec/mux-latch
 t mux-latch
-- 		if [ "$_rc" = 1 ] && ! _errsaw 'mux:' && ! _errsaw 'usage:'; then
-+ 		if true; then
+-     if [ "$_rc" = 1 ] && ! _errsaw 'mux:' && ! _errsaw 'usage:'; then
++     if true; then
 m made a liveness query for an exit 1
 
 = latch-unreachable-read-as-gone
 f libexec/mux-latch
 t mux-latch
-- 	0|1|2) return 0 ;;   # mux answered something: the far side is up
-+ 	0|1|2|255) return 0 ;;   # mux answered something: the far side is up
+-   0|1|2) return 0 ;;   # mux answered something: the far side is up
++   0|1|2|255) return 0 ;;   # mux answered something: the far side is up
 m report must say the
 
 = why-unknown-answers-success
 f bin/mux
 t mux-why
--            && [ -z "$w_file" ]; then
-+            && false; then
+-      && [ -z "$w_file" ]; then
++      && false; then
 m must exit 3
 
 = classify-ignores-exit-3
@@ -357,36 +357,36 @@ m a vanished session was retried
 = latch-discards-far-side-message
 f libexec/mux-latch
 t mux-latch
-- 		_say refused "$(_errline)"
-+ 		_say refused "something went wrong"
+-     _say refused "$(_errline)"
++     _say refused "something went wrong"
 m must be reported, not replaced
 
 = sessions-back-in-the-cache
 f libexec/mux-paths_lib
 t mux-sessions
-- 	printf '%s' "${MUX_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/mux}"
-+ 	printf '%s' "${MUX_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/mux}"
+-   printf '%s' "${MUX_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/mux}"
++   printf '%s' "${MUX_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/mux}"
 m must live under $MUX_STATE
 
 = sessions-migration-clobbers
 f libexec/mux-paths_lib
 t mux-sessions
-- 	if [ ! -e "$_mpn" ] && [ -e "$_mpo" ]; then
-+ 	if [ -e "$_mpo" ]; then
+-   if [ ! -e "$_mpn" ] && [ -e "$_mpo" ]; then
++   if [ -e "$_mpo" ]; then
 m adopt-no-clobber
 
 = stamp-prune-takes-the-live-one
 f libexec/mux-themes
 t mux-stamp-prune
-- 		tmux -L "$_pk" list-sessions >/dev/null 2>&1 || rm -f "$_ps"
-+ 		rm -f "$_ps"
+-     tmux -L "$_pk" list-sessions >/dev/null 2>&1 || rm -f "$_ps"
++     rm -f "$_ps"
 m LIVE SOCKET'S STAMP WAS PRUNED
 
 = stamp-prune-matches-too-broadly
 f libexec/mux-themes
 t mux-stamp-prune
-- 	for _ps in "$STAMPDIR"/mux-themes.*.sha; do
-+ 	for _ps in "$STAMPDIR"/*; do
+-   for _ps in "$STAMPDIR"/mux-themes.*.sha; do
++   for _ps in "$STAMPDIR"/*; do
 m survived while siblings were at risk
 
 = auth-master-no-shortcircuit
@@ -427,71 +427,71 @@ m took longer than a
 = scan-prune-empty-list
 f libexec/mux-scan_lib
 t mux-discover
-- 	[ -n "$_spk" ] || return 0
-+ 	:
+-   [ -n "$_spk" ] || return 0
++   :
 m prune deleted anyway
 
 = scan-prune-takes-live-map
 f libexec/mux-scan_lib
 t mux-discover
-- 		*" $_spn "*) ;;
-+ 		*" __never__ "*) ;;
+-     *" $_spn "*) ;;
++     *" __never__ "*) ;;
 m LIVE partition's map was pruned
 
 = hostcolor-leading-zero-is-octal
 f libexec/mux-hosts_lib
 t mux-host-color
-- 		0?*) _hc=${_hc#0} ;;
-+ 		000?*) _hc=${_hc#0} ;;
+-     0?*) _hc=${_hc#0} ;;
++     000?*) _hc=${_hc#0} ;;
 m padded-vs-not
 
 = hostcolor-cube-level-shifted
 f libexec/mux-hosts_lib
 t mux-host-color
-- 	0) printf '0' ;;   1) printf '95' ;;  2) printf '135' ;;
-+ 	0) printf '0' ;;   1) printf '96' ;;  2) printf '135' ;;
+-   0) printf '0' ;;   1) printf '95' ;;  2) printf '135' ;;
++   0) printf '0' ;;   1) printf '96' ;;  2) printf '135' ;;
 m cube: got
 
 = hostcolor-greyscale-base
 f libexec/mux-hosts_lib
 t mux-host-color
-- 		_hv=$((8 + (_hc - 232) * 10))
-+ 		_hv=$(((_hc - 232) * 10))
+-     _hv=$((8 + (_hc - 232) * 10))
++     _hv=$(((_hc - 232) * 10))
 m greyscale: got
 
 = hostcolor-half-a-pair
 f libexec/mux-hosts_lib
 t mux-host-color
-- 	[ -n "$_hfh" ] && [ -n "$_hbh" ] || return 0
-+ 	:
+-   [ -n "$_hfh" ] && [ -n "$_hbh" ] || return 0
++   :
 m refuses: got
 
 = indicator-unknown-verb-installs
 f indicator/setup.sh
 t mux-indicator-setup
-- 	   exit 2 ;;
-+ 	   exit 0 ;;
+-      exit 2 ;;
++      exit 0 ;;
 m unknown verb must exit 2
 
 = indicator-check-colours-a-pipe
 f indicator/setup.sh
 t mux-indicator-setup
-- 	if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
-+ 	if true; then
+-   if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
++   if true; then
 m ANSI colour into a pipe
 
 = indicator-stale-unit-reads-current
 f indicator/setup.sh
 t mux-indicator-setup
-- 	if cmp -s "$PKG_DIR/$UNIT" "$UNIT_DIR/$UNIT" 2>/dev/null
-+ 	if [ -f "$UNIT_DIR/$UNIT" ]
+-   if cmp -s "$PKG_DIR/$UNIT" "$UNIT_DIR/$UNIT" 2>/dev/null
++   if [ -f "$UNIT_DIR/$UNIT" ]
 m DRIFTED unit file read as current
 
 = indicator-check-never-fails
 f indicator/setup.sh
 t mux-indicator-setup
-- 	bad() { printf '  %s[FAIL]%s %s\n' "$_R" "$_O" "$*"; RC=1; }
-+ 	bad() { printf '  %s[FAIL]%s %s\n' "$_R" "$_O" "$*"; :; }
+-   bad() { printf '  %s[FAIL]%s %s\n' "$_R" "$_O" "$*"; RC=1; }
++   bad() { printf '  %s[FAIL]%s %s\n' "$_R" "$_O" "$*"; :; }
 m must exit non-zero
 
 = render-check-keyed-on-count
@@ -512,64 +512,64 @@ m idle
 = doctor-repair-not-opt-in
 f libexec/mux-agent-doctor
 t mux-agent-doctor
-- 			if [ "$_repair" -eq 1 ]; then
-+ 			if true; then
+-       if [ "$_repair" -eq 1 ]; then
++       if true; then
 m record was not surfaced
 
 = doctor-repair-ignores-epoch
 f libexec/mux-agent-doctor
 t mux-agent-doctor
-- 	[ "$_fs" = working ] && [ "$_fe" = "$2" ] || return 1
-+ 	[ "$_fs" = working ] || return 1
+-   [ "$_fs" = working ] && [ "$_fe" = "$2" ] || return 1
++   [ "$_fs" = working ] || return 1
 m was clobbered
 
 = doctor-repair-restamps-epoch
 f libexec/mux-agent-doctor
 t mux-agent-doctor
-- 		idle "$_fw" "$_fp" "$_fe" "${_fn:--}" "$_fsess" \
-+ 		idle "$_fw" "$_fp" "$(date +%s)" "${_fn:--}" "$_fsess" \
+-     idle "$_fw" "$_fp" "$_fe" "${_fn:--}" "$_fsess" \
++     idle "$_fw" "$_fp" "$(date +%s)" "${_fn:--}" "$_fsess" \
 m the epoch was rewritten
 
 = doctor-repair-fails-after-fixing
 f libexec/mux-agent-doctor
 t mux-agent-doctor
-- 	REPAIRED*)     echo fixed  >>"$_dir/.doctor.$$" ;;
-+ 	REPAIRED*)     echo stale  >>"$_dir/.doctor.$$" ;;
+-   REPAIRED*)     echo fixed  >>"$_dir/.doctor.$$" ;;
++   REPAIRED*)     echo stale  >>"$_dir/.doctor.$$" ;;
 m must exit 0
 
 = doctor-unknown-option-is-a-namespace
 f libexec/mux-agent-doctor
 t mux-agent-doctor
-- 	-*) echo "mux: agent-doctor: unknown option: $1" >&2
-+ 	--no-such-flag) echo "mux: agent-doctor: unknown option: $1" >&2
+-   -*) echo "mux: agent-doctor: unknown option: $1" >&2
++   --no-such-flag) echo "mux: agent-doctor: unknown option: $1" >&2
 m must exit 2
 
 = log-write-failure-propagates
 f libexec/mux-log_lib
 t mux-log
-- 		2>/dev/null >>"$_ml_f" || return 0
-+ 		2>/dev/null >>"$_ml_f" || return 1
+-     2>/dev/null >>"$_ml_f" || return 0
++     2>/dev/null >>"$_ml_f" || return 1
 m unwritable DIRECTORY made mux_log fail
 
 = log-never-truncates
 f libexec/mux-log_lib
 t mux-log
-- 	_ml_max=${MUX_LOG_MAX:-262144}
-+ 	_ml_max=999999999
+-   _ml_max=${MUX_LOG_MAX:-262144}
++   _ml_max=999999999
 m cap is not firing
 
 = log-none-still-writes
 f libexec/mux-log_lib
 t mux-log
-- 	none) return 0 ;;
-+ 	none) : ;;
+-   none) return 0 ;;
++   none) : ;;
 m OFF
 
 = log-filter-matches-whole-line
 f libexec/mux-log
 t mux-log
-- 		awk -v s="$_sub" '{ f = $2; sub(/\[.*/, "", f); if (f == s) print }'
-+ 		grep -F -- "$_sub"
+-     awk -v s="$_sub" '{ f = $2; sub(/\[.*/, "", f); if (f == s) print }'
++     grep -F -- "$_sub"
 m matched the MESSAGE
 
 = log-missing-reads-as-empty
@@ -582,8 +582,8 @@ m no log yet
 = log-mkdir-failure-propagates
 f libexec/mux-log_lib
 t mux-log
-- 	[ -d "$_ml_d" ] || mkdir -p "$_ml_d" 2>/dev/null || return 0
-+ 	[ -d "$_ml_d" ] || mkdir -p "$_ml_d" 2>/dev/null || return 1
+-   [ -d "$_ml_d" ] || mkdir -p "$_ml_d" 2>/dev/null || return 0
++   [ -d "$_ml_d" ] || mkdir -p "$_ml_d" 2>/dev/null || return 1
 m unwritable PATH made mux_log fail
 
 = indicator-ignores-exit-code
@@ -624,8 +624,8 @@ m parsed as a colour
 = latch-lock-pid-read-with-cat
 f libexec/mux-latch
 t mux-latch
-- 	read -r _other 2>/dev/null <"$_lock" || _other=
-+ 	_other=$(cat "$_lock" 2>/dev/null || true)
+-   read -r _other 2>/dev/null <"$_lock" || _other=
++   _other=$(cat "$_lock" 2>/dev/null || true)
 m trap deleted the HOLDER's lock
 
 = latch-lock-omits-the-target
@@ -659,57 +659,57 @@ m test_the_command_is_ONE_argv_element
 = indicator-code-drift-not-recorded
 f indicator/setup.sh
 t mux-indicator-setup
-- 			|| _cc_drift="$_cc_drift $_cc_b"
-+ 			|| :
+-       || _cc_drift="$_cc_drift $_cc_b"
++       || :
 m DRIFTED file read as current
 
 = latch-option-read-as-host
 f libexec/mux-latch
 t mux-latch
-- 	-*) echo "mux: latch: unknown option: $1" >&2; _usage >&2; exit 2 ;;
-+ 	--nope) echo "mux: latch: unknown option: $1" >&2; _usage >&2; exit 2 ;;
+-   -*) echo "mux: latch: unknown option: $1" >&2; _usage >&2; exit 2 ;;
++   --nope) echo "mux: latch: unknown option: $1" >&2; _usage >&2; exit 2 ;;
 m must be an unknown option
 
 = latch-stale-locks-never-reaped
 f libexec/mux-latch
 t mux-latch
-- 	*) kill -0 "$_sp" 2>/dev/null || rm -f "$_stale" ;;
-+ 	*) : ;;
+-   *) kill -0 "$_sp" 2>/dev/null || rm -f "$_stale" ;;
++   *) : ;;
 m was not reaped
 
 = latch-sweep-eats-its-own-lock
 f libexec/mux-latch
 t mux-latch
-- 	[ "$_stale" = "$_lock" ] && continue
-+ 	[ "$_stale" = "$_lock" ] && rm -f "$_stale"
+-   [ "$_stale" = "$_lock" ] && continue
++   [ "$_stale" = "$_lock" ] && rm -f "$_stale"
 m no lock existed at hostwith_part_sess.lock
 
 = latch-sweep-reaps-live-locks
 f libexec/mux-latch
 t mux-latch
-- 	*) kill -0 "$_sp" 2>/dev/null || rm -f "$_stale" ;;
-+ 	*) rm -f "$_stale" ;;
+-   *) kill -0 "$_sp" 2>/dev/null || rm -f "$_stale" ;;
++   *) rm -f "$_stale" ;;
 m deleted a LIVE latch's lock
 
 = undo-pane-always-inserts-before
 f libexec/mux-undo-pane
 t mux-undo-pane
-- 		_before=
-+ 		:
+-     _before=
++     :
 m did not come back the
 
 = undo-pane-replays-quoted-command
 f libexec/mux-undo-pane
 t mux-undo-pane
-- 		printf 'command\t%s\n' "$(_unquote "$(_lookup "$_gone" "$_cmds")")"
-+ 		printf 'command\t%s\n' "$(_lookup "$_gone" "$_cmds")"
+-     printf 'command\t%s\n' "$(_unquote "$(_lookup "$_gone" "$_cmds")")"
++     printf 'command\t%s\n' "$(_lookup "$_gone" "$_cmds")"
 m the recorded command is still tmux's DISPLAY form
 
 = undo-pane-not-idempotent
 f libexec/mux-undo-pane
 t mux-undo-pane
-- 	if [ -n "${_n:-}" ] && [ "${_have:-0}" -ge "$_n" ]; then
-+ 	if false; then
+-   if [ -n "${_n:-}" ] && [ "${_have:-0}" -ge "$_n" ]; then
++   if false; then
 m added a pane to a window that was already whole
 
 = indicator-mark-uses-the-prefix
@@ -722,29 +722,29 @@ m test_the_tail_is_what_distinguishes
 = latch-transport-text-unsanitised
 f libexec/mux-latch
 t mux-latch
-- 	_sd=$(_clean "$*")
-+ 	_sd=$*
+-   _sd=$(_clean "$*")
++   _sd=$*
 m carriage return from the transport reached
 
 = latch-animation-not-tty-gated
 f libexec/mux-latch
 t mux-latch
-- 	if [ "$_TTY" -eq 0 ] || [ "${1:-0}" -le 1 ]; then
-+ 	if false; then
+-   if [ "$_TTY" -eq 0 ] || [ "${1:-0}" -le 1 ]; then
++   if false; then
 m drew escape sequences into a
 
 = resume-rebuild-not-logged
 f bin/mux
 t mux-resume
--                 && mux_log resume "rebuilt$rs_builtn ($rs_up already up)"
-+                 && true
+-     && mux_log resume "rebuilt$rs_builtn ($rs_up already up)"
++     && true
 m rebuild wrote nothing to the log
 
 = resume-failure-not-logged
 f bin/mux
 t mux-resume
--                 mux_log resume "could NOT build:$(printf '%s' "$rs_failed" \
-+                 true "$(printf '%s' "$rs_failed" \
+-     mux_log resume "could NOT build:$(printf '%s' "$rs_failed" \
++     true "$(printf '%s' "$rs_failed" \
 m failed to rebuild was not logged
 
 = indicator-mark-not-drawn
@@ -820,29 +820,29 @@ m test_a_CHANGED_INK_repaints_even_when_the_mark_is_the_same
 = indicator-code-check-cwd-tautology
 f indicator/setup.sh
 t mux-indicator-code-check
-- 	(cd / && "$VENV/bin/python" -c \
-+ 	("$VENV/bin/python" -c \
+-   (cd / && "$VENV/bin/python" -c \
++   ("$VENV/bin/python" -c \
 m stale code passed when checked from INSIDE
 
 = indicator-code-check-self-comparison
 f indicator/setup.sh
 t mux-indicator-code-check
-- 	if [ "$_cc_dir" = "$PKG_DIR/mux_indicator" ]; then
-+ 	if false; then
+-   if [ "$_cc_dir" = "$PKG_DIR/mux_indicator" ]; then
++   if false; then
 m a self-comparison reported a verdict
 
 = latch-spinner-doubled-backslash
 f libexec/mux-latch
 t mux-latch
-- 	*) _g=\\ ;;
-+ 	*) _g='\\' ;;
+-   *) _g=\\ ;;
++   *) _g='\\' ;;
 m DOUBLED backslash
 
 = latch-spinner-does-not-cycle
 f libexec/mux-latch
 t mux-latch
-- 	_spin=$(( (_spin + 1) % 4 ))
-+ 	_spin=0
+-   _spin=$(( (_spin + 1) % 4 ))
++   _spin=0
 m not cycling
 
 = indicator-reconcile-republishes-everything
@@ -939,68 +939,68 @@ m test_a_TILE_STILL_RENDERS_with_no_fonts_at_all
 = rank-blocked-demoted
 f libexec/mux-agent-state_lib
 t mux-agent-rank
-- 	blocked) echo 3 ;;
-+ 	blocked) echo 1 ;;
+-   blocked) echo 3 ;;
++   blocked) echo 1 ;;
 m must outrank working
 = rank-working-not-above-idle
 f libexec/mux-agent-state_lib
 t mux-agent-rank
-- 	working) echo 2 ;;
-+ 	working) echo 0 ;;
+-   working) echo 2 ;;
++   working) echo 0 ;;
 m must outrank idle
 = rank-unknown-outranks-everything
 f libexec/mux-agent-state_lib
 t mux-agent-rank
-- 	*)       echo 0 ;;
-+ 	*)       echo 9 ;;
+-   *)       echo 0 ;;
++   *)       echo 9 ;;
 m must outrank an UNKNOWN word
 = worst-wins-comparison-inverted
 f libexec/mux-agent-state_lib
 t mux-agent-rank
-- 		[ "$_r" -gt "$_br" ] && { _br=$_r; _best=$_st; _bestep=$_e; }
-+ 		[ "$_r" -lt "$_br" ] && { _br=$_r; _best=$_st; _bestep=$_e; }
+-     [ "$_r" -gt "$_br" ] && { _br=$_r; _best=$_st; _bestep=$_e; }
++     [ "$_r" -lt "$_br" ] && { _br=$_r; _best=$_st; _bestep=$_e; }
 m should beat
 = sessions-dedup-disabled
 f libexec/mux-agent-state_lib
 t mux-agent-rank
-- 		*"$MUX_AGENT_NL$_ss$MUX_AGENT_NL"*) continue ;;
-+ 		*"$MUX_AGENT_NL$_ss$MUX_AGENT_NL"*) ;;
+-     *"$MUX_AGENT_NL$_ss$MUX_AGENT_NL"*) continue ;;
++     *"$MUX_AGENT_NL$_ss$MUX_AGENT_NL"*) ;;
 m distinct sessions
 = sess-add-not-idempotent
 f libexec/mux-sessions_lib
 t mux-sessions
-- 	mux_sess_has "$1" "${3:-}" && return 0
-+ 	:
+-   mux_sess_has "$1" "${3:-}" && return 0
++   :
 
 = sess-has-is-root-not-membership
 f libexec/mux-sessions_lib
 t mux-sessions
-- 	cut -f1 "$_sf" 2>/dev/null | grep -qxF -- "$1"
-+ 	awk -F'\t' -v n="$1" '$1==n && $2!=""' "$_sf" | grep -q .
+-   cut -f1 "$_sf" 2>/dev/null | grep -qxF -- "$1"
++   awk -F'\t' -v n="$1" '$1==n && $2!=""' "$_sf" | grep -q .
 
 = sess-drop-takes-everything
 f libexec/mux-sessions_lib
 t mux-sessions
-- 	awk -F'\t' -v n="$1" '$1!=n' "$_sf" 2>/dev/null >"$_st"
-+ 	awk -F'\t' -v n="$1" '0' "$_sf" 2>/dev/null >"$_st"
+-   awk -F'\t' -v n="$1" '$1!=n' "$_sf" 2>/dev/null >"$_st"
++   awk -F'\t' -v n="$1" '0' "$_sf" 2>/dev/null >"$_st"
 
 = sess-add-drops-the-root
 f libexec/mux-sessions_lib
 t mux-sessions
-- 	printf '%s\t%s\n' "$1" "$2" 2>/dev/null >>"$_sf" || true
-+ 	printf '%s\t%s\n' "$1" "" 2>/dev/null >>"$_sf" || true
+-   printf '%s\t%s\n' "$1" "$2" 2>/dev/null >>"$_sf" || true
++   printf '%s\t%s\n' "$1" "" 2>/dev/null >>"$_sf" || true
 
 = sess-file-ignores-the-partition
 f libexec/mux-sessions_lib
 t mux-sessions
-- 	_sk=${1:-${MUX_CTX_PARTITION:-global}}
-+ 	_sk=global
+-   _sk=${1:-${MUX_CTX_PARTITION:-global}}
++   _sk=global
 
 = sess-has-dash-name-read-as-options
 f libexec/mux-sessions_lib
 t mux-sessions
-- 	cut -f1 "$_sf" 2>/dev/null | grep -qxF -- "$1"
-+ 	cut -f1 "$_sf" 2>/dev/null | grep -qxF "$1"
+-   cut -f1 "$_sf" 2>/dev/null | grep -qxF -- "$1"
++   cut -f1 "$_sf" 2>/dev/null | grep -qxF "$1"
 m a session named -n is not recognised
 
 = latch-serveralive-disabled
@@ -1021,71 +1021,71 @@ m stalling at [silent] was NOT bounded
 = beat-never-corroborates
 f libexec/mux-agent-state-emit
 t mux-session-names
-- 		rm -f "$_beatf" 2>/dev/null || true
-+ 		exit 0
+-     rm -f "$_beatf" 2>/dev/null || true
++     exit 0
 m a SECOND beat did not corroborate
 
 = beat-mark-survives-a-transition
 f libexec/mux-agent-state-emit
 t mux-session-names
 - [ "$state" = "${_pstate:-}" ] || rm -f "$_beatf" 2>/dev/null || true
-+ 	:
++   :
 m did not clear the beat mark
 
 = beat-never-marks-the-first
 f libexec/mux-agent-state-emit
 t mux-session-names
-- 	if [ -z "$_bfirst" ]; then
-+ 	if true; then
+-   if [ -z "$_bfirst" ]; then
++   if true; then
 m a SECOND beat did not corroborate
 
 = beat-window-ignored
 f libexec/mux-agent-state-emit
 t mux-session-names
-- 	if [ "$((_bnow - _bfirst))" -le "$_BEAT_WINDOW" ] \
-+ 	if true \
+-   if [ "$((_bnow - _bfirst))" -le "$_BEAT_WINDOW" ] \
++   if true \
 m far outside the window
 
 = undo-pane-drops-the-pane-options
 f libexec/mux-undo-pane
 t mux-undo-pane
-- 	[ -n "${_ob:-}" ] && tmux set-option -p -t "$_new" \
-+ 	[ -z "${_ob:-}" ] && tmux set-option -p -t "$_new" \
+-   [ -n "${_ob:-}" ] && tmux set-option -p -t "$_new" \
++   [ -z "${_ob:-}" ] && tmux set-option -p -t "$_new" \
 m @mux-bottom did not come back
 
 = even-does-not-balance
 f libexec/mux-even
 t mux-even
-- 	_balance "$_w"
-+ 	:
+-   _balance "$_w"
++   :
 m the drifted row was not evened
 
 = even-only-current-window
 f libexec/mux-even
 t mux-even
-- 	_wins=$(_tx list-windows -a -F '#{window_id}' 2>/dev/null || true)
-+ 	_wins=$(_tx display-message -p '#{window_id}' 2>/dev/null || true)
+-   _wins=$(_tx list-windows -a -F '#{window_id}' 2>/dev/null || true)
++   _wins=$(_tx display-message -p '#{window_id}' 2>/dev/null || true)
 m did not reach a session the client is not on
 
 = even-invents-a-spec
 f libexec/mux-even
 t mux-even
-- 		if [ -n "$_consensus" ]; then
-+ 		if true; then
+-     if [ -n "$_consensus" ]; then
++     if true; then
 m it claimed to restore a spec
 
 = check-blind-to-hooks
 f libexec/mux-check
 t mux-check
-- 			| grep -qE 'mux |@mux-' || _nh="$_nh $_h"
-+ 			| grep -qE '.' || _nh="$_nh $_h"
+-       | grep -qE 'mux |@mux-' || _nh="$_nh $_h"
++       | grep -qE '.' || _nh="$_nh $_h"
 m a foreign hook was accepted
 
 = check-keys-hardcoded
 f libexec/mux-check
 t mux-check
-- 	_want_keys=$(sed -n \
-+ 	_want_keys=$(printf '( ) b r R' \
+-   _want_keys=$(sed -n \
++   _want_keys=$(printf '( ) b r R' \
 m not bound to mux
 
 = agent-hook-notification-not-blocked
@@ -1112,16 +1112,16 @@ m did not reach the log
 = agent-hook-unknown-event-silent
 f libexec/mux-agent-hook
 t mux-agent-hook
-- 	echo "mux: agent-hook: unknown event: $_ev" >&2
-+ 	exit 0
+-   echo "mux: agent-hook: unknown event: $_ev" >&2
++   exit 0
 m an unknown event must exit 2
 
 
 = next-blocked-headless-takes-first
 f libexec/mux-next-blocked
 t mux-next-blocked
-- 			| sort -rn | awk 'NR == 1 { print $2 }')
-+ 			| awk 'NR == 1 { print $2 }')
+-       | sort -rn | awk 'NR == 1 { print $2 }')
++       | awk 'NR == 1 { print $2 }')
 m did not pick the most recently active
 
 = next-blocked-ns-split-again
@@ -1134,8 +1134,8 @@ m did not pick the most recently active
 = next-blocked-headless-refuses
 f libexec/mux-next-blocked
 t mux-next-blocked
-- 		echo "mux: no attached client to switch" >&2; exit 1; }
-+ 		echo "mux: no attached client to switch" >&2; exit 0; }
+-     echo "mux: no attached client to switch" >&2; exit 1; }
++     echo "mux: no attached client to switch" >&2; exit 0; }
 m expected a non-zero exit
 
 = indicator-click-polls-instead
@@ -1162,43 +1162,43 @@ m test_the_hook_is_SPLIT_not_shelled
 = even-headless-wrong-socket
 f libexec/mux-even
 t mux-even
-- 	else tmux -L "$_ns" "$@"; fi
-+ 	else tmux "$@"; fi
+-   else tmux -L "$_ns" "$@"; fi
++   else tmux "$@"; fi
 m headless did not reach the partition's server
 
 = summary-all-reports-one-partition
 f libexec/mux-agent-state-summary
 t mux-agent-summary
 - for _d in "$_root"/*; do
-+ 	for _d in "$(mux_agent_dir "$_ns")"; do
++   for _d in "$(mux_agent_dir "$_ns")"; do
 m did not report the OTHER partition
 
 = summary-all-drops-the-empty-caller
 f libexec/mux-agent-state-summary
 t mux-agent-summary
 - *) printf '%s %s\n' "${_ns:-global}" "none 0" ;;
-+ 	*) ;;
++   *) ;;
 m --all should still answer once
 
 = resume-unknown-partition-accepted
 f bin/mux
 t mux-resume
--         case " $(mux_ctx_partitions | tr '\n' ' ') " in
-+         case " $rs_want " in
+-   case " $(mux_ctx_partitions | tr '\n' ' ') " in
++   case " $rs_want " in
 m an unknown partition should exit 3
 
 = resume-focus-check-removed
 f bin/mux
 t mux-resume
--            && ! mux_sess_has "$rs_focus" "$rs_key"; then
-+            && false; then
+-      && ! mux_sess_has "$rs_focus" "$rs_key"; then
++      && false; then
 m an unknown focus session should exit 3
 
 = resume-focus-checked-after-the-rebuild
 f bin/mux
 t mux-resume
--                 printf '%s\n' "$rs_set" | sed 's/^/mux:   /' >&2
-+                 _resume_rebuild "$rs_key" "$rs_set"
+-     printf '%s\n' "$rs_set" | sed 's/^/mux:   /' >&2
++     _resume_rebuild "$rs_key" "$rs_set"
 m it rebuilt before checking the focus target
 
 = resume-failed-context-resumes-anyway
@@ -1211,8 +1211,8 @@ m a FAILED context-command should refuse
 = latch-colon-is-a-session-again
 f libexec/mux-latch
 t mux-latch
-- 	if [ -n "$_part" ]; then
-+ 	if false; then
+-   if [ -n "$_part" ]; then
++   if false; then
 m the colon must name a PARTITION
 
 = latch-bare-host-grows-a-partition
@@ -1331,8 +1331,8 @@ m --partition did not reach the partition's STATE
 = next-blocked-partition-wrong-socket
 f libexec/mux-next-blocked
 t mux-next-blocked
-- 	if [ -n "$_ns" ]; then tmux -L "$_ns" "$@"
-+ 	if [ -n "$_ns" ]; then tmux "$@"
+-   if [ -n "$_ns" ]; then tmux -L "$_ns" "$@"
++   if [ -n "$_ns" ]; then tmux "$@"
 m --partition did not reach the partition's SERVER
 
 = next-blocked-bare-partition-accepted
@@ -1443,30 +1443,30 @@ m test_a_host_that_LOSES_a_partition_loses_its_item
 = indicator-running-daemon-not-checked
 f indicator/setup.sh
 t mux-indicator-setup
-- 	_running_current
-+ 	:
+-   _running_current
++   :
 m a stopped unit was not reported as such
 
 = indicator-stale-daemon-compared-backwards
 f indicator/setup.sh
 t mux-indicator-setup
-- 		[ "$_rn_f" -nt "/proc/$_rn_pid" ] || continue
-+ 		[ "$_rn_f" -ot "/proc/$_rn_pid" ] || continue
+-     [ "$_rn_f" -nt "/proc/$_rn_pid" ] || continue
++     [ "$_rn_f" -ot "/proc/$_rn_pid" ] || continue
 m code older than the process was called stale
 
 = indicator-service-restart-unreported
 f indicator/setup.sh
 t mux-indicator-setup
-- 		echo "mux-indicator: service $UNIT installed, enabled, RESTARTED"
-+ 		echo "mux-indicator: service $UNIT installed + enabled"
+-     echo "mux-indicator: service $UNIT installed, enabled, RESTARTED"
++     echo "mux-indicator: service $UNIT installed + enabled"
 m the restart happened and was not reported
 
 
 = summary-attached-ignored
 f libexec/mux-agent-state-summary
 t mux-agent-summary
-- 	[ "$_att" -eq 0 ] || _watched "$_p" || continue
-+ 	:
+-   [ "$_att" -eq 0 ] || _watched "$_p" || continue
++   :
 m attached-only
 
 = summary-attached-keeps-the-empty-caller
@@ -1480,30 +1480,30 @@ m attached-other
 = summary-watched-asks-the-wrong-server
 f libexec/mux-agent-state-summary
 t mux-agent-summary
-- 	tmux -L "$1" list-clients -F '#{client_name}' 2>/dev/null | grep -q .
-+ 	tmux list-clients -F '#{client_name}' 2>/dev/null | grep -q .
+-   tmux -L "$1" list-clients -F '#{client_name}' 2>/dev/null | grep -q .
++   tmux list-clients -F '#{client_name}' 2>/dev/null | grep -q .
 m attached-only
 
 
 = undo-pane-record-not-atomic
 f libexec/mux-undo-pane
 t mux-undo-pane
-- 	mv -f "$_rt" "$_rf" 2>/dev/null || rm -f "$_rt" 2>/dev/null
-+ 	rm -f "$_rt" 2>/dev/null
+-   mv -f "$_rt" "$_rf" 2>/dev/null || rm -f "$_rt" 2>/dev/null
++   rm -f "$_rt" 2>/dev/null
 m no undo record was written
 
 = undo-pane-partial-record-accepted
 f libexec/mux-undo-pane
 t mux-undo-pane
-- 	[ -n "$_lay" ] || _die "the undo record is unusable (no layout)"
-+ 	[ -n "$_lay" ] || _lay=$_lay
+-   [ -n "$_lay" ] || _die "the undo record is unusable (no layout)"
++   [ -n "$_lay" ] || _lay=$_lay
 m half-written record was accepted
 
 = undo-pane-unknown-cwd-inherited-silently
 f libexec/mux-undo-pane
 t mux-undo-pane
-- 			"it comes back where its neighbour is" >&2
-+ 			"it comes back where its neighbour is" >/dev/null
+-       "it comes back where its neighbour is" >&2
++       "it comes back where its neighbour is" >/dev/null
 m restored SILENTLY into the neighbour's
 
 = undo-pane-unknown-cwd-loses-the-pane
@@ -1513,79 +1513,79 @@ t mux-undo-pane
 # back in its neighbour's directory -- which the slot-0 comparison catches
 # first, and catches deterministically. That comparison is exactly what a
 # real run caught once in twelve, from the same cause.
-- 	if [ -n "$_cwd" ]; then
-+ 	if [ -z "$_cwd" ]; then
+-   if [ -n "$_cwd" ]; then
++   if [ -z "$_cwd" ]; then
 m slot 0 did not come back the
 
 = json-backslash-not-escaped
 f libexec/mux-json_lib
 t mux-json
-- 			else if (c == "\\") o = o "\\\\"
-+ 			else if (0) o = o ""
+-       else if (c == "\\") o = o "\\\\"
++       else if (0) o = o ""
 m backslash:
 
 = json-control-chars-raw
 f libexec/mux-json_lib
 t mux-json
-- 			else if (c in ord)  o = o sprintf("\\u%04x", ord[c])
-+ 			else if (0)         o = o ""
+-       else if (c in ord)  o = o sprintf("\\u%04x", ord[c])
++       else if (0)         o = o ""
 m bell:
 
 = json-value-through-awk-v
 f libexec/mux-json_lib
 t mux-json
-- 	MUX_JSON_V="${1-}" LC_ALL=C awk '
-+ 	LC_ALL=C awk -v MUX_JSON_V="${1-}" '
+-   MUX_JSON_V="${1-}" LC_ALL=C awk '
++   LC_ALL=C awk -v MUX_JSON_V="${1-}" '
 m plain:
 
 = json-num-unvalidated
 f libexec/mux-json_lib
 t mux-json
-- 	''|-|*[!0-9-]*|?*-*) printf 'null' ;;
-+ 	'') printf 'null' ;;
+-   ''|-|*[!0-9-]*|?*-*) printf 'null' ;;
++   '') printf 'null' ;;
 m num-word
 
 = json-array-no-separator
 f libexec/mux-json_lib
 t mux-json
-- 		if [ -z "$_ja" ]; then _ja=$_jl; else _ja=$_ja,$_jl; fi
-+ 		_ja=$_ja$_jl
+-     if [ -z "$_ja" ]; then _ja=$_jl; else _ja=$_ja,$_jl; fi
++     _ja=$_ja$_jl
 m arr-two
 
 = json-empty-array-is-nothing
 f libexec/mux-json_lib
 t mux-json
-- 	printf '[%s]' "$_ja"
-+ 	printf '%s' "$_ja"
+-   printf '[%s]' "$_ja"
++   printf '%s' "$_ja"
 m arr-two
 
 
 = agent-failure-not-json
 f libexec/mux-agent
 t mux-agent
-- 		"$(mux_json_str "$1")" "$(mux_json_str "$3")"
-+ 		"$1" "$3"
+-     "$(mux_json_str "$1")" "$(mux_json_str "$3")"
++     "$1" "$3"
 m the answer did not parse
 
 = agent-refusal-goes-to-stderr
 f libexec/mux-agent
 t mux-agent
-- 		"$(mux_json_str "$1")" "$(mux_json_str "$3")"
-+ 		"$(mux_json_str "$1")" "$(mux_json_str "$3")" >&2
+-     "$(mux_json_str "$1")" "$(mux_json_str "$3")"
++     "$(mux_json_str "$1")" "$(mux_json_str "$3")" >&2
 m the answer did not parse
 
 = agent-status-word-ignored
 f libexec/mux-agent
 t mux-agent
-- 	_out usage 2 "usage: mux agent <status|peers|read|wait|send> ..."
-+ 	_out ok 2 "usage: mux agent <status|peers|read|wait|send> ..."
+-   _out usage 2 "usage: mux agent <status|peers|read|wait|send> ..."
++   _out ok 2 "usage: mux agent <status|peers|read|wait|send> ..."
 m noverb-status
 
 = agent-exit-disagrees-with-status
 f libexec/mux-agent
 t mux-agent
-- 	exit "$2"
-+ 	exit 0
+-   exit "$2"
++   exit 0
 m badverb-rc
 
 = agent-status-unfiltered-by-default
@@ -1598,218 +1598,218 @@ m status-parts
 = agent-count-emitted-as-a-string
 f libexec/mux-agent
 t mux-agent
-- 			"$(mux_json_num "${_n:-}")"
-+ 			"$(mux_json_str "${_n:-}")"
+-       "$(mux_json_num "${_n:-}")"
++       "$(mux_json_str "${_n:-}")"
 m status-count
 
 = agent-peers-root-not-looked-up
 f libexec/mux-agent
 t mux-agent
-- 						"$(mux_sess_root "$_s" "$_p")")"
-+ 						"$(printf "")")"
+-             "$(mux_sess_root "$_s" "$_p")")"
++             "$(printf "")")"
 m peers-root
 
 = agent-peers-emits-an-epoch
 f libexec/mux-agent
 t mux-agent
-- 				*)  _ag=$((_now - _ep))
-+ 				*)  _ag=$_ep
+-         *)  _ag=$((_now - _ep))
++         *)  _ag=$_ep
 m peers-clamped
 
 = agent-peers-negative-age
 f libexec/mux-agent
 t mux-agent
-- 				    [ "$_ag" -lt 0 ] && _ag=0 ;;
-+ 				    true
+-             [ "$_ag" -lt 0 ] && _ag=0 ;;
++             true
 m peers-clamped
 
 = agent-peers-ignores-the-partition
 f libexec/mux-agent
 t mux-agent
-- 		--partition)
-+ 		--ignored)
+-     --partition)
++     --ignored)
 m peers-other
 
 = agent-peers-all-is-one-partition
 f libexec/mux-agent
 t mux-agent
-- 	[ "$_pa" -eq 0 ] || _which=$(
-+ 	true && _which=$(
+-   [ "$_pa" -eq 0 ] || _which=$(
++   true && _which=$(
 m peers-n
 
 = agent-read-pane-not-resolved
 f libexec/mux-agent
 t mux-agent
-- 	_pane=$(mux_agent_pane "$_rd" "$_rsess")
-+ 	_pane=$(printf %%1)
+-   _pane=$(mux_agent_pane "$_rd" "$_rsess")
++   _pane=$(printf %%1)
 m read-pane
 
 = agent-read-defaults-to-scrollback
 f libexec/mux-agent
 t mux-agent
-- 	[ -z "$_rn" ] || set -- "$@" -S "-$_rn"
-+ 	set -- "$@" -S "-${_rn:-1000}"
+-   [ -z "$_rn" ] || set -- "$@" -S "-$_rn"
++   set -- "$@" -S "-${_rn:-1000}"
 m the default capture asked for scrollback
 
 = agent-read-unknown-session-is-empty
 f libexec/mux-agent
 t mux-agent
-- 	mux_agent_sessions "$_rd" | grep -qxF -- "$1" || _out no-such-name 3 \
-+ 	mux_agent_sessions "$_rd" | grep -q "" || _out no-such-name 3 \
+-   mux_agent_sessions "$_rd" | grep -qxF -- "$1" || _out no-such-name 3 \
++   mux_agent_sessions "$_rd" | grep -q "" || _out no-such-name 3 \
 m read-unknown-rc
 
 = agent-wait-never-times-out
 f libexec/mux-agent
 t mux-agent
-- 		[ "$_el" -lt "$_wt" ] || break
-+ 		true
+-     [ "$_el" -lt "$_wt" ] || break
++     true
 m wait never returned
 
 = agent-wait-timeout-exits-zero
 f libexec/mux-agent
 t mux-agent
-- 	exit 1
-+ 	exit 0
+-   exit 1
++   exit 0
 m wait-to-rc
 
 = agent-wait-hides-the-real-state
 f libexec/mux-agent
 t mux-agent
-- 		"$(mux_json_str "${_se%% *}")" \
-+ 		"$(mux_json_str "$_want")" \
+-     "$(mux_json_str "${_se%% *}")" \
++     "$(mux_json_str "$_want")" \
 m wait-to-state
 
 = send-policy-file-writability-unchecked
 f libexec/mux-send-policy_lib
 t mux-send-policy
-- 	[ ! -w "$_spf" ] || return 1
-+ 	:
+-   [ ! -w "$_spf" ] || return 1
++   :
 m writable-file
 
 = send-policy-dir-writability-unchecked
 f libexec/mux-send-policy_lib
 t mux-send-policy
-- 	[ ! -w "$(dirname -- "$_spf")" ] || return 1
-+ 	:
+-   [ ! -w "$(dirname -- "$_spf")" ] || return 1
++   :
 m writable-dir
 
 = send-policy-missing-file-permits
 f libexec/mux-send-policy_lib
 t mux-send-policy
-- 	[ -f "$_spf" ] || return 1
-+ 	:
+-   [ -f "$_spf" ] || return 1
++   :
 m a missing policy wrote to stderr
 
 = send-policy-tokens-are-alternatives
 f libexec/mux-send-policy_lib
 t mux-send-policy
-- 			*) _ok=0; break ;;
-+ 			*) ;;
+-       *) _ok=0; break ;;
++       *) ;;
 m part-nomatch
 
 = send-policy-bare-directive-grants
 f libexec/mux-send-policy_lib
 t mux-send-policy
-- 		[ $# -gt 0 ] || continue
-+ 		true
+-     [ $# -gt 0 ] || continue
++     true
 m bare-directive
 
 = send-policy-directives-interchangeable
 f libexec/mux-send-policy_lib
 t mux-send-policy
-- 		[ "${1:-}" = "send-$_spw" ] || continue
-+ 		[ "${1:-}" != zzz ] || continue
+-     [ "${1:-}" = "send-$_spw" ] || continue
++     [ "${1:-}" != zzz ] || continue
 m unknown-not-granted
 
 = send-policy-globs-the-scope
 f libexec/mux-send-policy_lib
 t mux-send-policy
-- 	( set -f
-+ 	(
+-   ( set -f
++   (
 m sealed-star
 
 = send-policy-class-token-ignored
 f libexec/mux-send-policy_lib
 t mux-send-policy
-- 			"control:$_spc") ;;
-+ 			"control:zzz") ;;
+-       "control:$_spc") ;;
++       "control:zzz") ;;
 m class-agent
 
 = send-policy-class-matches-any
 f libexec/mux-send-policy_lib
 t mux-send-policy
-- 			"window:$_spwin") ;;
-+ 			"window:$_spwin"|control:*) ;;
+-       "window:$_spwin") ;;
++       "window:$_spwin"|control:*) ;;
 m class-hybrid
 
 = agent-send-default-socket
 f libexec/mux-agent
 t mux-agent
-- 	tmux -L "${_rp:-global}" "$@"
-+ 	tmux "$@"
+-   tmux -L "${_rp:-global}" "$@"
++   tmux "$@"
 m DEFAULT tmux socket
 
 = agent-send-human-gate-removed
 f libexec/mux-agent
 t mux-agent
-- 		if [ "$_sclass" = human ]; then
-+ 		if false; then
+-     if [ "$_sclass" = human ]; then
++     if false; then
 m blk-msg
 
 = agent-send-ack-not-required
 f libexec/mux-agent
 t mux-agent
-- 		[ "$_sack_prompt" -eq 1 ] || _refuse blocked --answer-prompt
-+ 		:
+-     [ "$_sack_prompt" -eq 1 ] || _refuse blocked --answer-prompt
++     :
 m grant-rc
 
 = agent-send-blind-ack-not-required
 f libexec/mux-agent
 t mux-agent
-- 		[ "$_sack_blind" -eq 1 ] || _refuse unknown --blind
-+ 		:
+-     [ "$_sack_blind" -eq 1 ] || _refuse unknown --blind
++     :
 m unk-noack-rc
 
 = agent-send-unclassified-is-agent
 f libexec/mux-agent
 t mux-agent
-- 	*) _sclass=human ;;
-+ 	*) _sclass=agent ;;
+-   *) _sclass=human ;;
++   *) _sclass=agent ;;
 m blk-class
 
 = agent-send-not-bracketed
 f libexec/mux-agent
 t mux-agent
-- 	_tx paste-buffer -p -d -b "$_sbuf" -t "$_spane" 2>/dev/null || {
-+ 	_tx paste-buffer -d -b "$_sbuf" -t "$_spane" 2>/dev/null || {
+-   _tx paste-buffer -p -d -b "$_sbuf" -t "$_spane" 2>/dev/null || {
++   _tx paste-buffer -d -b "$_sbuf" -t "$_spane" 2>/dev/null || {
 m BRACKETED
 
 = agent-send-leaves-the-buffer
 f libexec/mux-agent
 t mux-agent
-- 	_tx paste-buffer -p -d -b "$_sbuf" -t "$_spane" 2>/dev/null || {
-+ 	_tx paste-buffer -p -b "$_sbuf" -t "$_spane" 2>/dev/null || {
+-   _tx paste-buffer -p -d -b "$_sbuf" -t "$_spane" 2>/dev/null || {
++   _tx paste-buffer -p -b "$_sbuf" -t "$_spane" 2>/dev/null || {
 m staging buffer was not deleted
 
 = agent-send-unlogged
 f libexec/mux-agent
 t mux-agent
-- 		mux_log send "$_ssess (${_rp:-global}/${_swin:-?}) $_sclass \
-+ 		: "$_ssess \
+-     mux_log send "$_ssess (${_rp:-global}/${_swin:-?}) $_sclass \
++     : "$_ssess \
 m was not logged
 
 = agent-peers-unset-class-is-null
 f libexec/mux-agent
 t mux-agent
-- 					*) _cl=human ;;
-+ 					*) _cl= ;;
+-           *) _cl=human ;;
++           *) _cl= ;;
 m peers-class-default
 
 = agent-peers-stale-pane-gets-a-default
 f libexec/mux-agent
 t mux-agent
-- 						| grep -q "^$_pn	" \
-+ 						| true \
+-             | grep -q "^$_pn	" \
++             | true \
 m peers-stale-pane
 
 = skill-name-is-a-path
@@ -1822,15 +1822,15 @@ m should be a usage error
 = skill-missing-lists-nothing
 f libexec/mux-skill
 t mux-skill
-- 			echo "mux: skill: have: ${_d##*/}" >&2
-+ 			:
+-       echo "mux: skill: have: ${_d##*/}" >&2
++       :
 m did not name what there IS
 
 = skill-missing-exits-zero
 f libexec/mux-skill
 t mux-skill
-- 	echo "mux: skill: no skill called $_name" >&2
-+ 	echo "mux: skill: no skill called $_name" >&2; exit 0
+-   echo "mux: skill: no skill called $_name" >&2
++   echo "mux: skill: no skill called $_name" >&2; exit 0
 m should exit 1
 
 = skill-frontmatter-missing-is-fatal
@@ -1850,57 +1850,57 @@ m carries YAML frontmatter
 = latch-hostkey-is-untrusted-not-denied
 f share/latch/ssh-classify
 t mux-latch
-- 		printf 'untrusted'
-+ 		printf 'denied'
+-     printf 'untrusted'
++     printf 'denied'
 m not denied
 
 = latch-untrusted-retries
 f libexec/mux-latch
 t mux-latch
-- 		if [ "$_untrusted" -le "$UNTRUSTED_TRIES" ]; then
-+ 		if false; then
+-     if [ "$_untrusted" -le "$UNTRUSTED_TRIES" ]; then
++     if false; then
 m expected exactly 3
 
 = latch-untrusted-is-bounded
 f libexec/mux-latch
 t mux-latch
-- 		if [ "$_untrusted" -le "$UNTRUSTED_TRIES" ]; then
-+ 		if true; then
+-     if [ "$_untrusted" -le "$UNTRUSTED_TRIES" ]; then
++     if true; then
 m expected exactly 3
 
 = latch-untrusted-quotes-the-transport
 f libexec/mux-latch
 t mux-latch
-- 			_say untrusted "  $_uline"
-+ 			:
+-       _say untrusted "  $_uline"
++       :
 m not quoted
 
 = latch-backoff-reset-on-progress
 f libexec/mux-latch
 t mux-latch
-- 		[ "$_el" -ge "$PROGRESS" ] && _delay=$BACKOFF
-+ 		[ "$_el" -ge "$PROGRESS" ] && :
+-     [ "$_el" -ge "$PROGRESS" ] && _delay=$BACKOFF
++     [ "$_el" -ge "$PROGRESS" ] && :
 m did not reset the
 
 = latch-untrusted-reason-whole
 f libexec/mux-latch
 t mux-latch
-- 			_uw="$_uw its key really changed"
-+ 			_uw="$_uw"
+-       _uw="$_uw its key really changed"
++       _uw="$_uw"
 m cut off mid-sentence
 
 = check-skill-assembles
 f libexec/mux-check
 t mux-check
-- 	if "$(dirname "$0")/mux-skill" >/dev/null 2>&1; then
-+ 	if true; then
+-   if "$(dirname "$0")/mux-skill" >/dev/null 2>&1; then
++   if true; then
 m cannot be assembled exited 0
 
 = agent-status-is-scoped
 f libexec/mux-agent
 t mux-agent
-- 		[ -z "$_spart" ] || [ "$_p" = "$_spart" ] || continue
-+ 		[ -z "$_spart" ] || [ "$_p" = "$_p" ] || continue
+-     [ -z "$_spart" ] || [ "$_p" = "$_spart" ] || continue
++     [ -z "$_spart" ] || [ "$_p" = "$_p" ] || continue
 m scoped-default
 
 = agent-status-all-widens
@@ -1913,8 +1913,8 @@ m all-widens
 = agent-status-partition-flag
 f libexec/mux-agent
 t mux-agent
-- 		_spart=$2; shift 2 ;;
-+ 		shift 2 ;;
+-     _spart=$2; shift 2 ;;
++     shift 2 ;;
 m part-is-named
 
 = setup-indicator-drift-is-said
@@ -1934,43 +1934,43 @@ m fired with no
 = undo-foreign-record-is-refused
 f libexec/mux-undo-pane
 t mux-undo-pane
-- 	if [ "$_srv" != "${_now_srv:-}" ]; then
-+ 	if false; then
+-   if [ "$_srv" != "${_now_srv:-}" ]; then
++   if false; then
 m another server was accepted
 
 = undo-unattributable-record-is-refused
 f libexec/mux-undo-pane
 t mux-undo-pane
-- 	if [ -z "$_srv" ]; then
-+ 	if false; then
+-   if [ -z "$_srv" ]; then
++   if false; then
 m foreign-server
 
 = undo-foreign-record-is-discarded
 f libexec/mux-undo-pane
 t mux-undo-pane
-- 		rm -f "$_f"   # it can never become valid; do not repeat this
-+ 		:
+-     rm -f "$_f"   # it can never become valid; do not repeat this
++     :
 m refused and KEPT
 
 = undo-writer-and-checker-are-wired-together
 f libexec/mux-undo-pane
 t mux-undo-pane
-- 		printf 'server\t%s\n' "$_sid"
-+ 		printf 'notserver\\t%s\\n' "$_sid"
+-     printf 'server\t%s\n' "$_sid"
++     printf 'notserver\\t%s\\n' "$_sid"
 m undo restored no pane
 
 = strip-unwired-is-detected
 f libexec/mux-agent-state-render
 t mux-strip
--         if [ -z "$_st" ] && _has_agent_pane "$sess"; then
-+         if false; then
+-   if [ -z "$_st" ] && _has_agent_pane "$sess"; then
++   if false; then
 m must draw the unwired glyph
 
 = strip-unwired-glyph-is-its-own
 f libexec/mux-agent-state_lib
 t mux-strip
-- 	unwired) printf '%s' "$MUX_GLYPH_UNWIRED" ;;
-+ 	unwired) printf '%s' "$MUX_GLYPH_NONE" ;;
+-   unwired) printf '%s' "$MUX_GLYPH_UNWIRED" ;;
++   unwired) printf '%s' "$MUX_GLYPH_NONE" ;;
 m must draw the unwired glyph
 
 = setup-preserves-foreign-hooks
@@ -1990,8 +1990,8 @@ m was not a no-op
 = check-unwired-is-reported
 f libexec/mux-check
 t mux-check
-- 				printf '%s\n' "$_s"
-+ 				:
+-         printf '%s\n' "$_s"
++         :
 m was not reported
 
 = setup-says-what-is-wrong-with-the-file

@@ -29,27 +29,27 @@ cat >"$T/bin/tmux" <<'EOF'
 case "$*" in
 *switch-client*) printf 'switch %s\n' "$*" >>"$LOG" ;;
 "show -gqv "*)
-	awk -F'\t' -v k="${*##* }" '$1==k{print $2; exit}' "$OPTS" 2>/dev/null ;;
+  awk -F'\t' -v k="${*##* }" '$1==k{print $2; exit}' "$OPTS" 2>/dev/null ;;
 "set -g "*)
-	shift 2; _n=$1; shift; _v=$*
-	printf 'set %s\n' "$_n" >>"$LOG"
-	# An exact FIELD compare, not a grep pattern: the real option name here
-	# is `status-format[0]`, and [0] is a regex character class -- so a
-	# grep-based removal silently kept the old line and every read returned
-	# the stale first match. A stub that models the tool wrongly is worse
-	# than no test; this one produced a confident false failure.
-	awk -F'\t' -v k="$_n" '$1 != k' "$OPTS" 2>/dev/null >"$OPTS.t" || :
-	mv -f "$OPTS.t" "$OPTS"
-	printf '%s\t%s\n' "$_n" "$_v" >>"$OPTS" ;;
+  shift 2; _n=$1; shift; _v=$*
+  printf 'set %s\n' "$_n" >>"$LOG"
+  # An exact FIELD compare, not a grep pattern: the real option name here
+  # is `status-format[0]`, and [0] is a regex character class -- so a
+  # grep-based removal silently kept the old line and every read returned
+  # the stale first match. A stub that models the tool wrongly is worse
+  # than no test; this one produced a confident false failure.
+  awk -F'\t' -v k="$_n" '$1 != k' "$OPTS" 2>/dev/null >"$OPTS.t" || :
+  mv -f "$OPTS.t" "$OPTS"
+  printf '%s\t%s\n' "$_n" "$_v" >>"$OPTS" ;;
 esac
 exit 0
 EOF
 chmod +x "$T/bin/tmux"
 
 click() {
-	: >"$LOG"
-	env PATH="$T/bin:$PATH" "$HERE/libexec/mux-click" "$@" 2>&1
-	cat "$LOG"
+  : >"$LOG"
+  env PATH="$T/bin:$PATH" "$HERE/libexec/mux-click" "$@" 2>&1
+  cat "$LOG"
 }
 opt() { awk -F'\t' -v k="$1" '$1==k{print $2; exit}' "$OPTS" 2>/dev/null; }
 
@@ -73,9 +73,9 @@ esac
 # Each of these is a mis-click. Landing somewhere would be worse than nothing,
 # so the only acceptable outcome is an empty log and a zero exit.
 for _bad in '' 's:' 'x:alpha' 'alpha' 'user|s:alpha' '-' 'S:alpha'; do
-	_rc=0; _o=$(click "$_bad" '/dev/pts/3') || _rc=$?
-	[ "$_rc" -eq 0 ] || fail "tag [$_bad] exited $_rc instead of no-opping"
-	[ -z "$_o" ] || fail "tag [$_bad] acted on a mis-click: [$_o]"
+  _rc=0; _o=$(click "$_bad" '/dev/pts/3') || _rc=$?
+  [ "$_rc" -eq 0 ] || fail "tag [$_bad] exited $_rc instead of no-opping"
+  [ -z "$_o" ] || fail "tag [$_bad] acted on a mis-click: [$_o]"
 done
 
 # --- the v: tension chip cycles the VIEW MODE, not a session -------------
@@ -91,9 +91,9 @@ cp "$HERE/libexec/mux-click" "$T/vbin/mux-click"
 : >"$LOG"
 env PATH="$T/bin:$PATH" "$T/vbin/mux-click" 'v:fit' '/dev/pts/3' >/dev/null 2>&1
 grep -qx 'views next' "$LOG" \
-	|| fail "the tension chip did not cycle the view mode: [$(cat "$LOG")]"
+  || fail "the tension chip did not cycle the view mode: [$(cat "$LOG")]"
 grep -q 'switch-client' "$LOG" \
-	&& fail "the tension chip was treated as a session switch"
+  && fail "the tension chip was treated as a session switch"
 
 # --- the banner is IDEMPOTENT across re-runs ----------------------------
 # It rebuilds status-format[0] from a stashed pristine default. Appending
@@ -103,7 +103,7 @@ printf 'status-format[0]\tPRISTINE\n' >"$OPTS"
 banner() { env PATH="$T/bin:$PATH" "$HERE/libexec/mux-status-banner" 2>&1; }
 banner || fail "the banner script failed"
 [ "$(opt @mux-sf0-default)" = PRISTINE ] \
-	|| fail "the pristine default was not stashed: [$(opt @mux-sf0-default)]"
+  || fail "the pristine default was not stashed: [$(opt @mux-sf0-default)]"
 _first=$(opt 'status-format[0]')
 case $_first in
 PRISTINE*) ;;
@@ -117,19 +117,19 @@ esac
 # Re-run twice more: the value must be IDENTICAL, not accumulated.
 banner >/dev/null; banner >/dev/null
 [ "$(opt 'status-format[0]')" = "$_first" ] \
-	|| fail "re-running accumulated banners:
+  || fail "re-running accumulated banners:
 first: $_first
 now:   $(opt 'status-format[0]')"
 # ... and the count of banner fragments stays at one.
 _n=$(printf '%s' "$(opt 'status-format[0]')" \
-	| awk '{ n = gsub(/align=centre/, ""); print n }')
+  | awk '{ n = gsub(/align=centre/, ""); print n }')
 [ "$_n" -eq 1 ] || fail "status-format[0] carries $_n banners, want 1"
 
 # --- the stash is read, not re-captured, once it exists -----------------
 # If it re-stashed on every run, the second stash would capture the ALREADY
 # BANNERED value and the pristine default would be lost for good.
 [ "$(opt @mux-sf0-default)" = PRISTINE ] \
-	|| fail "the stash was overwritten with a bannered value:
+  || fail "the stash was overwritten with a bannered value:
 $(opt @mux-sf0-default)"
 
 pass

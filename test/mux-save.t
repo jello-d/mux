@@ -30,14 +30,14 @@ case "$*" in
 *list-windows*)  cat "$WINDOWS" ;;
 *"@mux-theme"*)  cat "$THEMEF" 2>/dev/null || true ;;
 *list-panes*)
-	# index|bottom|agent|command, in the format order bin/mux asks for.
-	case "$*" in
-	*pane_index*) cat "$PANES" ;;
-	*) grep '|5-10|' "$PANES" \
-		| while IFS='|' read -r _i b a c; do
-			printf '%s|%s\n' "$b" "$c"
-		  done ;;
-	esac ;;
+  # index|bottom|agent|command, in the format order bin/mux asks for.
+  case "$*" in
+  *pane_index*) cat "$PANES" ;;
+  *) grep '|5-10|' "$PANES" \
+    | while IFS='|' read -r _i b a c; do
+      printf '%s|%s\n' "$b" "$c"
+      done ;;
+  esac ;;
 esac
 exit 0
 EOF
@@ -49,17 +49,17 @@ printf '0 main\n' >"$WINDOWS"
 # index|bottom|agent|command -- the middle pane is the agent, the last the
 # full-width bottom, i.e. exactly the shipped default arrangement.
 {
-	printf '0|||bash\n'
-	printf '1||1|bash\n'
-	printf '2|5-10||bash\n'
+  printf '0|||bash\n'
+  printf '1||1|bash\n'
+  printf '2|5-10||bash\n'
 } >"$PANES"
 : >"$THEMEF"
 
 save() {
-	: >"$TMUXLOG"
-	( cd "$T/proj" && env -u MUX_SHARE MUX_DIR="$T/conf" \
-		MUX_CACHE="$T/cache" TMUX="$T/default,0,proj" \
-		"$HERE/bin/mux" save "$@" ) 2>&1
+  : >"$TMUXLOG"
+  ( cd "$T/proj" && env -u MUX_SHARE MUX_DIR="$T/conf" \
+    MUX_CACHE="$T/cache" TMUX="$T/default,0,proj" \
+    "$HERE/bin/mux" save "$@" ) 2>&1
 }
 row() { grep '^proj ' "$T/conf/profiles" 2>/dev/null || true; }
 
@@ -92,9 +92,9 @@ case "$(row)" in *layout=proj*) ;; *) fail "the row does not name the layout" ;;
 esac
 # The agent pane must survive the round trip as `pane agent`, not as a shell.
 grep -qE '^pane[[:space:]]+agent' "$T/conf/layouts/proj.layout" \
-	|| fail "the agent pane was saved as a plain shell"
+  || fail "the agent pane was saved as a plain shell"
 grep -qE '^bottom[[:space:]]+5-10' "$T/conf/layouts/proj.layout" \
-	|| fail "the bottom pane was not captured"
+  || fail "the bottom pane was not captured"
 
 # --- re-saving an UNCHANGED session is a silent no-op ----------------------
 # The arrangement now matches the layout the previous save wrote, so it is
@@ -112,6 +112,6 @@ case $_o in *"use --force"*) ;; *) fail "unhelpful overwrite error: [$_o]" ;;
 esac
 save --force >/dev/null || fail "--force did not allow the overwrite"
 grep -qE '^window[[:space:]]+third' "$T/conf/layouts/proj.layout" \
-	|| fail "--force did not write the new arrangement"
+  || fail "--force did not write the new arrangement"
 
 pass

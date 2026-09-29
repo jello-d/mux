@@ -16,14 +16,14 @@ client=${2:-}
 # settled on the bar without looking up a verb.
 case "$range" in
 v:*)
-        exec "$(dirname "$0")/mux-views" next ;;
+  exec "$(dirname "$0")/mux-views" next ;;
 esac
 
 case "$range" in s:?*) ;; *) exit 0 ;; esac
 sess=${range#s:}
 
 if [ -n "$client" ]; then
-        tmux switch-client -c "$client" -t "=$sess" 2>/dev/null || true
+  tmux switch-client -c "$client" -t "=$sess" 2>/dev/null || true
 else
-        tmux switch-client -t "=$sess" 2>/dev/null || true
+  tmux switch-client -t "=$sess" 2>/dev/null || true
 fi

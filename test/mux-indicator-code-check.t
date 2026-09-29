@@ -28,24 +28,24 @@ mkdir -p "$T/venv/bin"
 cat >"$T/venv/bin/python" <<EOF
 #!/bin/sh
 if [ -f ./mux_indicator/__init__.py ]; then
-	printf '%s\n' "\$PWD/mux_indicator"
+  printf '%s\n' "\$PWD/mux_indicator"
 else
-	cat "$T/where"
+  cat "$T/where"
 fi
 EOF
 chmod +x "$T/venv/bin/python"
 
 run() {   # -> the check's output, rc ignored (a sandbox has no systemd)
-	( cd "$1" && env MUX_INDICATOR_VENV="$T/venv" \
-		MUX_INDICATOR_BIN="$T/bin" NO_COLOR=1 \
-		sh "$SETUP" check 2>&1 ) || true
+  ( cd "$1" && env MUX_INDICATOR_VENV="$T/venv" \
+    MUX_INDICATOR_BIN="$T/bin" NO_COLOR=1 \
+    sh "$SETUP" check 2>&1 ) || true
 }
 
 # --- 1. A GENUINELY STALE INSTALL IS REPORTED, from either directory --------
 # The installed copy exists and differs, which is the case the marker is for.
 mkdir -p "$T/installed/mux_indicator"
 for f in "$HERE"/indicator/mux_indicator/*.py; do
-	printf '# not the shipped file\n' >"$T/installed/mux_indicator/${f##*/}"
+  printf '# not the shipped file\n' >"$T/installed/mux_indicator/${f##*/}"
 done
 echo "$T/installed/mux_indicator" >"$T/where"
 
@@ -53,9 +53,9 @@ run "$HERE/indicator" >"$T/inside"
 run "$T" >"$T/outside"
 
 grep -q 'installed code is STALE' "$T/inside" \
-	|| fail "stale code passed when checked from INSIDE the package dir"
+  || fail "stale code passed when checked from INSIDE the package dir"
 grep -q 'installed code is STALE' "$T/outside" \
-	|| fail "stale code passed when checked from outside"
+  || fail "stale code passed when checked from outside"
 
 # THE TWO MUST AGREE. Asserted separately from either verdict above, because a
 # check that is right from one directory and wrong from another is the actual
@@ -72,7 +72,7 @@ mkdir -p "$T/installed/mux_indicator"
 cp "$HERE"/indicator/mux_indicator/*.py "$T/installed/mux_indicator/"
 run "$HERE/indicator" >"$T/fresh"
 grep -q 'installed code matches' "$T/fresh" \
-	|| fail "a byte-identical install was reported stale"
+  || fail "a byte-identical install was reported stale"
 
 # --- 3. A SELF-COMPARISON IS REFUSED, NOT PASSED ----------------------------
 # The venv importing the source tree cannot answer the question at all: there
@@ -81,8 +81,8 @@ grep -q 'installed code matches' "$T/fresh" \
 echo "$HERE/indicator/mux_indicator" >"$T/where"
 run "$HERE/indicator" >"$T/self"
 grep -q 'vacuous' "$T/self" \
-	|| fail "a self-comparison reported a verdict instead of refusing"
+  || fail "a self-comparison reported a verdict instead of refusing"
 grep -q 'installed code matches' "$T/self" \
-	&& fail "a self-comparison reported the code CURRENT"
+  && fail "a self-comparison reported the code CURRENT"
 
 pass

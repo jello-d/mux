@@ -47,35 +47,35 @@ _lib=$(dirname "$0")
 _die() { echo "mux: setup: $*" >&2; exit 1; }
 
 _usage() {
-	echo "usage: mux setup <AGENT> [--yes] [--remove] [--dry-run]"
-	echo "  wire an agent's lifecycle hooks to mux, and install its skill"
-	echo "  --yes       apply without asking (for a provisioner)"
-	echo "  --remove    take mux's wiring back out"
-	echo "  --dry-run   show what would change and stop"
+  echo "usage: mux setup <AGENT> [--yes] [--remove] [--dry-run]"
+  echo "  wire an agent's lifecycle hooks to mux, and install its skill"
+  echo "  --yes       apply without asking (for a provisioner)"
+  echo "  --remove    take mux's wiring back out"
+  echo "  --dry-run   show what would change and stop"
 }
 
 # The agents mux ships a descriptor for. DERIVED, so a new .agent file is
 # offered here the day it lands rather than when somebody remembers.
 _known() {
-	for _k in "$MUX_SHARE"/agents/*.agent; do
-		[ -r "$_k" ] || continue
-		_kb=${_k##*/}; printf '%s\n' "${_kb%.agent}"
-	done
+  for _k in "$MUX_SHARE"/agents/*.agent; do
+    [ -r "$_k" ] || continue
+    _kb=${_k##*/}; printf '%s\n' "${_kb%.agent}"
+  done
 }
 
 _agent= _yes=0 _remove=0 _dry=0
 while [ $# -gt 0 ]; do
-	case $1 in
-	-h|--help) _usage; exit 0 ;;
-	--yes|-y)  _yes=1; shift ;;
-	--remove)  _remove=1; shift ;;
-	--dry-run) _dry=1; shift ;;
-	-*) echo "mux: setup: unknown option: $1" >&2; _usage >&2; exit 2 ;;
-	*)
-		[ -z "$_agent" ] || {
-			echo "mux: setup: one agent at a time" >&2; exit 2; }
-		_agent=$1; shift ;;
-	esac
+  case $1 in
+  -h|--help) _usage; exit 0 ;;
+  --yes|-y)  _yes=1; shift ;;
+  --remove)  _remove=1; shift ;;
+  --dry-run) _dry=1; shift ;;
+  -*) echo "mux: setup: unknown option: $1" >&2; _usage >&2; exit 2 ;;
+  *)
+    [ -z "$_agent" ] || {
+      echo "mux: setup: one agent at a time" >&2; exit 2; }
+    _agent=$1; shift ;;
+  esac
 done
 
 [ -n "$_agent" ] || { _usage >&2; exit 2; }
@@ -83,13 +83,13 @@ done
 # picks a file, so a traversal must be refused as a usage error and not read.
 case $_agent in
 ''|*[!a-z0-9-]*|-*|*-)
-	echo "mux: setup: not an agent name: $_agent" >&2; exit 2 ;;
+  echo "mux: setup: not an agent name: $_agent" >&2; exit 2 ;;
 esac
 if ! _known | grep -qxF -- "$_agent"; then
-	echo "mux: setup: mux ships no descriptor for $_agent" >&2
-	_known | while IFS= read -r _h; do
-		echo "mux: setup: have: $_h" >&2; done
-	exit 1
+  echo "mux: setup: mux ships no descriptor for $_agent" >&2
+  _known | while IFS= read -r _h; do
+    echo "mux: setup: have: $_h" >&2; done
+  exit 1
 fi
 
 # THE EVENTS COME FROM MUX, not from a list typed here. `mux agent-hook`'s
@@ -110,14 +110,14 @@ _cdir=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
 _settings=$_cdir/settings.json
 
 command -v python3 >/dev/null 2>&1 || {
-	echo "mux: setup: python3 is needed to edit $_settings safely." >&2
-	echo "mux: setup: add these to its \"hooks\" object by hand:" >&2
-	for _e in $_events; do
-		printf '  "%s": [{"hooks":[{"type":"command",' "$_e" >&2
-		printf '"command":"mux agent-hook %s ' "$_e" >&2
-		printf '>/dev/null 2>&1 || true"}]}]\n' >&2
-	done
-	exit 1
+  echo "mux: setup: python3 is needed to edit $_settings safely." >&2
+  echo "mux: setup: add these to its \"hooks\" object by hand:" >&2
+  for _e in $_events; do
+    printf '  "%s": [{"hooks":[{"type":"command",' "$_e" >&2
+    printf '"command":"mux agent-hook %s ' "$_e" >&2
+    printf '>/dev/null 2>&1 || true"}]}]\n' >&2
+  done
+  exit 1
 }
 
 # RUN DIRECTLY, not as `python3 "$_impl"`. Dropping the suffix is only half the
@@ -136,7 +136,7 @@ _mode=apply
 # a preview computed by different logic than the write is a preview that can
 # lie. `plan` prints what would change and exits 0 having touched nothing.
 _plan=$(MUX_SETUP_EVENTS="$_events" "$_impl" plan "$_settings" \
-		"$_mode" 2>&1) || _die "$_plan"
+    "$_mode" 2>&1) || _die "$_plan"
 printf '%s\n' "$_plan"
 case $_plan in
 *'nothing to change'*) exit 0 ;;
@@ -147,18 +147,18 @@ esac
 # neither a tty nor --yes this REFUSES rather than assuming consent, because
 # the one thing a config-editing verb must not do is surprise somebody.
 if [ "$_yes" -eq 0 ]; then
-	[ -t 0 ] || _die "not a terminal and no --yes: refusing to edit" \
-		"$_settings unasked"
-	printf 'apply this to %s? [y/N] ' "$_settings" >&2
-	read -r _ans || _ans=
-	case ${_ans:-} in
-	y|Y|yes|YES) ;;
-	*) echo "mux: setup: nothing changed" >&2; exit 1 ;;
-	esac
+  [ -t 0 ] || _die "not a terminal and no --yes: refusing to edit" \
+    "$_settings unasked"
+  printf 'apply this to %s? [y/N] ' "$_settings" >&2
+  read -r _ans || _ans=
+  case ${_ans:-} in
+  y|Y|yes|YES) ;;
+  *) echo "mux: setup: nothing changed" >&2; exit 1 ;;
+  esac
 fi
 
 _out=$(MUX_SETUP_EVENTS="$_events" "$_impl" write "$_settings" \
-		"$_mode" 2>&1) || _die "$_out"
+    "$_mode" 2>&1) || _die "$_out"
 printf '%s\n' "$_out"
 
 # --- the skill ------------------------------------------------------------
@@ -169,12 +169,12 @@ printf '%s\n' "$_out"
 # here beside the wiring rather than leaking into `mux skill`.
 _skdir=$_cdir/skills/mux-agent
 if [ "$_remove" -eq 1 ]; then
-	if [ -f "$_skdir/SKILL.md" ]; then
-		rm -f "$_skdir/SKILL.md"
-		rmdir "$_skdir" 2>/dev/null || true
-		echo "mux: setup: removed $_skdir/SKILL.md"
-	fi
-	exit 0
+  if [ -f "$_skdir/SKILL.md" ]; then
+    rm -f "$_skdir/SKILL.md"
+    rmdir "$_skdir" 2>/dev/null || true
+    echo "mux: setup: removed $_skdir/SKILL.md"
+  fi
+  exit 0
 fi
 mkdir -p "$_skdir" 2>/dev/null || _die "cannot create $_skdir"
 # RELEASE-MATCHED, which is why it is generated rather than linked: a symlink
@@ -186,9 +186,9 @@ mkdir -p "$_skdir" 2>/dev/null || _die "cannot create $_skdir"
 # command runs) and would hide the one thing worth seeing here: mux-skill
 # says precisely why it could not assemble the document.
 if "$_lib/mux-skill" >"$_skdir/SKILL.md.new"; then
-	mv -f "$_skdir/SKILL.md.new" "$_skdir/SKILL.md"
-	echo "mux: setup: installed $_skdir/SKILL.md"
+  mv -f "$_skdir/SKILL.md.new" "$_skdir/SKILL.md"
+  echo "mux: setup: installed $_skdir/SKILL.md"
 else
-	rm -f "$_skdir/SKILL.md.new"
-	echo "mux: setup: could not render the skill (mux skill failed)" >&2
+  rm -f "$_skdir/SKILL.md.new"
+  echo "mux: setup: could not render the skill (mux skill failed)" >&2
 fi

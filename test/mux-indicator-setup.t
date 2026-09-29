@@ -26,7 +26,7 @@ SETUP=$HERE/indicator/setup.sh
 
 mkdir -p "$T/bin" "$T/venv/bin" "$T/xdg"
 for _c in sed awk grep cat rm mkdir ln cmp install printf dirname basename; do
-	_p=$(command -v "$_c" 2>/dev/null) && ln -sf "$_p" "$T/bin/$_c"
+  _p=$(command -v "$_c" 2>/dev/null) && ln -sf "$_p" "$T/bin/$_c"
 done
 # Records what it was asked to do and always succeeds, so the script's own
 # `|| true` guards are not what makes this pass.
@@ -38,12 +38,12 @@ if [ "${2:-}" = is-enabled ]; then printf '%s\n' "${SCTL_ENABLED:-disabled}"; fi
 case "$*" in
 *MainPID*) printf '%s\n' "${SCTL_PID:-0}" ;;
 *restart*)
-	# A restart that FAILS, on demand: the message decides which of the two
-	# failure answers the script is supposed to give.
-	if [ -n "${SCTL_FAIL:-}" ]; then
-		printf '%s\n' "$SCTL_FAIL" >&2
-		exit 1
-	fi ;;
+  # A restart that FAILS, on demand: the message decides which of the two
+  # failure answers the script is supposed to give.
+  if [ -n "${SCTL_FAIL:-}" ]; then
+    printf '%s\n' "$SCTL_FAIL" >&2
+    exit 1
+  fi ;;
 esac
 exit 0
 EOF
@@ -54,13 +54,13 @@ UNITF=$T/xdg/systemd/user/$UNIT
 
 OUT=; RC=0
 run() {   # <verb ...>
-	: >"$SCTL"
-	RC=0
-	OUT=$(env PATH="$T/bin" HOME="$HOME" XDG_CONFIG_HOME="$T/xdg" \
-		MUX_INDICATOR_VENV="$T/venv" MUX_INDICATOR_BIN="$T/bin" \
-		SCTL="$SCTL" SCTL_ENABLED="${SCTL_ENABLED:-disabled}" \
-		SCTL_PID="${SCTL_PID:-0}" SCTL_FAIL="${SCTL_FAIL:-}" \
-		"$SETUP" "$@" 2>&1) || RC=$?
+  : >"$SCTL"
+  RC=0
+  OUT=$(env PATH="$T/bin" HOME="$HOME" XDG_CONFIG_HOME="$T/xdg" \
+    MUX_INDICATOR_VENV="$T/venv" MUX_INDICATOR_BIN="$T/bin" \
+    SCTL="$SCTL" SCTL_ENABLED="${SCTL_ENABLED:-disabled}" \
+    SCTL_PID="${SCTL_PID:-0}" SCTL_FAIL="${SCTL_FAIL:-}" \
+    "$SETUP" "$@" 2>&1) || RC=$?
 }
 # has PATTERN MESSAGE. NOT `has "$OUT" PATTERN MESSAGE`, which eleven calls in
 # this file used to do: `case $OUT in *"$OUT"*)` matches unconditionally, so
@@ -68,8 +68,8 @@ run() {   # <verb ...>
 # Found by mutation, which is the only thing that can tell those apart: two
 # guards removed from setup.sh SURVIVED against a green suite.
 has() {
-	[ "$#" -eq 2 ] || fail "has takes PATTERN MESSAGE, got $#: $*"
-	case $OUT in *"$1"*) ;; *) fail "$2:
+  [ "$#" -eq 2 ] || fail "has takes PATTERN MESSAGE, got $#: $*"
+  case $OUT in *"$1"*) ;; *) fail "$2:
 $OUT" ;; esac
 }
 
@@ -164,7 +164,7 @@ SCTL_FAIL='Job for mux-indicator.service failed' run service
 has "RESTART FAILED" "a failed restart was not reported as one"
 has "OLD code" "the failure did not say what it means for the running daemon"
 has "Job for mux-indicator.service failed" \
-	"systemctl's own reason was swallowed"
+  "systemctl's own reason was swallowed"
 
 # --- uninstall removes what it installed, and is idempotent ------------
 ln -sf "$T/venv/bin/mux-indicator" "$T/bin/mux-indicator"
@@ -178,7 +178,7 @@ $(cat "$SCTL")"
 # THE VENV SURVIVES, deliberately: rebuilding it is minutes and a network, so
 # uninstall removing it would make a reinstall expensive for no reason.
 [ -x "$T/venv/bin/mux-indicator" ] \
-	|| fail "uninstall deleted the venv. It says it leaves it in place, and
+  || fail "uninstall deleted the venv. It says it leaves it in place, and
 rebuilding is minutes and a network."
 has 'venv' "uninstall should say the venv was left"
 
@@ -275,31 +275,31 @@ chmod +x "$T/venv/bin/python"
 for _f in "$HERE"/indicator/mux_indicator/*.py; do cp "$_f" "$SITE/"; done
 
 if [ -d "/proc/$$" ]; then
-	# NOT RUNNING is not stale: there is no process to be wrong about, and a
-	# headless box with no graphical session is a healthy version of this.
-	SCTL_PID=0 run check
-	has "not running" "a stopped unit was not reported as such"
-	case $OUT in
-	*"RUNNING daemon started BEFORE"*) fail "a unit that is not running was
+  # NOT RUNNING is not stale: there is no process to be wrong about, and a
+  # headless box with no graphical session is a healthy version of this.
+  SCTL_PID=0 run check
+  has "not running" "a stopped unit was not reported as such"
+  case $OUT in
+  *"RUNNING daemon started BEFORE"*) fail "a unit that is not running was
 called stale; there is no process there to be stale" ;;
-	esac
+  esac
 
-	# Code the daemon could have loaded: everything predates it.
-	find "$SITE" -name '*.py' -exec touch -t 197001020000 {} +
-	SCTL_PID=$$ run check
-	has "running daemon is on the installed code" \
-		"code older than the process was called stale"
+  # Code the daemon could have loaded: everything predates it.
+  find "$SITE" -name '*.py' -exec touch -t 197001020000 {} +
+  SCTL_PID=$$ run check
+  has "running daemon is on the installed code" \
+    "code older than the process was called stale"
 
-	# ... and now an install lands UNDER a daemon that is still running: the
-	# file is newer than the process, so the process cannot be running it.
-	touch "$SITE/render.py"
-	SCTL_PID=$$ run check
-	has "RUNNING daemon started BEFORE" \
-		"a daemon older than its own code was not reported"
-	has "render.py" "the stale-process report did not name the file"
-	[ "$RC" = 1 ] || fail "a daemon running code it predates must fail the
+  # ... and now an install lands UNDER a daemon that is still running: the
+  # file is newer than the process, so the process cannot be running it.
+  touch "$SITE/render.py"
+  SCTL_PID=$$ run check
+  has "RUNNING daemon started BEFORE" \
+    "a daemon older than its own code was not reported"
+  has "render.py" "the stale-process report did not name the file"
+  [ "$RC" = 1 ] || fail "a daemon running code it predates must fail the
 check, got $RC. Passing is what stops a provisioner ever restarting it."
-	has "setup.sh service" "the stale-process report named no remedy"
+  has "setup.sh service" "the stale-process report named no remedy"
 fi
 rm -rf "$T/site"
 

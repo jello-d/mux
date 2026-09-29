@@ -52,23 +52,23 @@ printf '%%1\n%%2\n%%3\n' >"$PANES"
 # everything after it.
 # epoch 1 keeps ages stable and large.
 st() { printf '%s 0 %s 1 %s %s\n' "$2" "$1" "${4:--}" "$3" \
-	>"$T/run/agent-state/global/${1#%}"; }
+  >"$T/run/agent-state/global/${1#%}"; }
 st %1 blocked alpha
 st %2 working delta
 # bravo and charlie have no agent at all -- the fold candidates.
 
 # render CURRENT BUDGET -> the strip, tmux format escapes and all.
 render() {
-	env -u TMUX -u TMUX_PANE XDG_RUNTIME_DIR="$T/run" \
-		MUX_STRIP_WIDTH="$2" PATH="$T/bin:$PATH" \
-		"$HERE/libexec/mux-agent-state-render" "$1" testclient 2>/dev/null
+  env -u TMUX -u TMUX_PANE XDG_RUNTIME_DIR="$T/run" \
+    MUX_STRIP_WIDTH="$2" PATH="$T/bin:$PATH" \
+    "$HERE/libexec/mux-agent-state-render" "$1" testclient 2>/dev/null
 }
 # The VISIBLE text: tmux #[...] directives carry no display width.
 vis() { printf '%s' "$1" | sed 's/#\[[^]]*\]//g'; }
 has() { case "$1" in *"$2"*) ;; *) fail "$3: want [$2] in [$(vis "$1")]" ;;
-	esac; }
+  esac; }
 no_has() { case "$1" in *"$2"*) fail "$3: unwanted [$2] in [$(vis "$1")]" ;;
-	esac; }
+  esac; }
 
 # --- UNWIRED: mux started an agent and has never heard from it ------------
 # THE FIRST-RUN FAILURE, and the reason it needs a glyph of its own: install
@@ -111,7 +111,7 @@ printf '%%1\n%%2\n%%3\n' >"$PANES"
 # --- the widest tier: every session, with its age -------------------------
 _o=$(vis "$(render delta 400)")
 for _s in alpha bravo charlie delta; do
-	has "$_o" "$_s" "full strip: missing $_s"
+  has "$_o" "$_s" "full strip: missing $_s"
 done
 has "$_o" "$MUX_GLYPH_BLOCKED" "full strip: no blocked glyph"
 # fmt_age renders a fixed 3-col field; epoch 1 pins it at the 99h ceiling.
@@ -135,19 +135,19 @@ has "$_o" "$MUX_GLYPH_BLOCKED" "summary: dropped the needs-you count"
 # how this first passed while proving nothing.
 _saw_age=0 _saw_noage=0 _saw_fold=0 _saw_edge=0 _saw_sum=0
 _check() {
-	_r=$(vis "$(render delta "$1")")
-	[ -n "$_r" ] || fail "width $1: empty strip"
-	case $_r in
-	*"$MUX_GLYPH_BLOCKED"*|*alpha*) ;;
-	*) fail "width $1: the blocked session vanished -- [$_r]" ;;
-	esac
-	case $_r in
-	*"·2·"*)   _saw_fold=1 ;;
-	*"‹"*|*"›"*) _saw_edge=1 ;;
-	*99h*)                 _saw_age=1 ;;
-	*alpha*)               _saw_noage=1 ;;
-	*)                     _saw_sum=1 ;;
-	esac
+  _r=$(vis "$(render delta "$1")")
+  [ -n "$_r" ] || fail "width $1: empty strip"
+  case $_r in
+  *"$MUX_GLYPH_BLOCKED"*|*alpha*) ;;
+  *) fail "width $1: the blocked session vanished -- [$_r]" ;;
+  esac
+  case $_r in
+  *"·2·"*)   _saw_fold=1 ;;
+  *"‹"*|*"›"*) _saw_edge=1 ;;
+  *99h*)                 _saw_age=1 ;;
+  *alpha*)               _saw_noage=1 ;;
+  *)                     _saw_sum=1 ;;
+  esac
 }
 _w=1
 while [ "$_w" -le 100 ]; do _check "$_w"; _w=$((_w + 1)); done
@@ -165,11 +165,11 @@ for _w in 140 200 400; do _check "$_w"; done
 _prev=0
 _w=1
 while [ "$_w" -le 400 ]; do
-	_len=$(printf '%s' "$(vis "$(render delta "$_w")")" | wc -m | tr -d ' ')
-	[ "$_len" -ge "$_prev" ] || fail \
-		"width $_w produced a shorter strip than a narrower budget"
-	_prev=$_len
-	_w=$((_w + 40))
+  _len=$(printf '%s' "$(vis "$(render delta "$_w")")" | wc -m | tr -d ' ')
+  [ "$_len" -ge "$_prev" ] || fail \
+    "width $_w produced a shorter strip than a narrower budget"
+  _prev=$_len
+  _w=$((_w + 40))
 done
 
 # --- the view indicator is FIXED FURNITURE at the right edge --------------
@@ -187,12 +187,12 @@ done
 # the pre-existing floor, not something the indicator introduced.)
 _w=400
 while [ "$_w" -ge 10 ]; do
-	_r=$(vis "$(render delta "$_w")")
-	case $_r in
-	*"✱"*) ;;
-	*) fail "width $_w: the view indicator was dropped -- [$_r]" ;;
-	esac
-	_w=$((_w - 1))
+  _r=$(vis "$(render delta "$_w")")
+  case $_r in
+  *"✱"*) ;;
+  *) fail "width $_w: the view indicator was dropped -- [$_r]" ;;
+  esac
+  _w=$((_w - 1))
 done
 # ... and it is the LAST thing on the strip, after a separator.
 _edge=$(vis "$(render delta 400)")
@@ -213,7 +213,7 @@ no_has "$_o" charlie "hidden session still on the strip"
 has "$_o" bravo "hiding one session dropped another"
 # ... and another client is unaffected: the set is keyed per client.
 _o2=$(vis "$(env -u TMUX XDG_RUNTIME_DIR="$T/run" MUX_STRIP_WIDTH=400 \
-	PATH="$T/bin:$PATH" "$HERE/libexec/mux-agent-state-render" delta other)")
+  PATH="$T/bin:$PATH" "$HERE/libexec/mux-agent-state-render" delta other)")
 has "$_o2" charlie "hiding leaked to another client"
 rm -f "$T/run/mux-exclude/testclient"
 
@@ -246,7 +246,7 @@ cp "$T/bin/tmux.broken" "$T/bin/tmux"
 render delta 400 >/dev/null 2>&1 || true
 _after=$(ls "$T/run/agent-state/global" 2>/dev/null | tr '\n' ' ')
 [ "$_after" = "$_kept" ] \
-	|| fail "a failed pane query pruned state: had [$_kept] left [$_after]"
+  || fail "a failed pane query pruned state: had [$_kept] left [$_after]"
 # Put the working stub back for everything below.
 cat >"$T/bin/tmux" <<'EOF'
 #!/bin/sh
@@ -268,7 +268,7 @@ st %9 blocked ghost
 [ -f "$T/run/agent-state/global/9" ] || fail "setup: no phantom to prune"
 render delta 400 >/dev/null
 [ -f "$T/run/agent-state/global/9" ] \
-	&& fail "a state file for a dead pane survived the render"
+  && fail "a state file for a dead pane survived the render"
 # ... and a LIVE pane's file is untouched.
 [ -f "$T/run/agent-state/global/1" ] || fail "pruned a live pane's state"
 

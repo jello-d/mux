@@ -33,28 +33,28 @@ chmod +x "$T/bin/tmux"
 # Two repos sharing a basename, plus two that do not: the work partition's
 # actual shape (PlatformOS under both the tree root and vendor-repos/).
 for d in src/dup src/nested/dup src/solo src/other; do
-	mkdir -p "$T/$d/.git"
+  mkdir -p "$T/$d/.git"
 done
 printf 'scan %s/src 3\n' "$T" >"$T/conf/partitions/work.partition"
 printf '#!/bin/sh\necho work\n' >"$T/conf/cc"; chmod +x "$T/conf/cc"
 printf 'context-command cc\n' >"$T/conf/config"
 
 run() {
-	_d=$1; shift
-	( cd "$_d" && env -u MUX_SHARE -u TMUX -u TMUX_PANE \
-		MUX_DIR="$T/conf" MUX_CACHE="$T/cache" PATH="$T/bin:$PATH" \
-		"$HERE/bin/mux" "$@" 2>&1 )
+  _d=$1; shift
+  ( cd "$_d" && env -u MUX_SHARE -u TMUX -u TMUX_PANE \
+    MUX_DIR="$T/conf" MUX_CACHE="$T/cache" PATH="$T/bin:$PATH" \
+    "$HERE/bin/mux" "$@" 2>&1 )
 }
 has() {  # OUTPUT WANT LABEL
-	case "$1" in
-	*"$2"*) ;;
-	*) fail "$3: want [$2] in: $1" ;;
-	esac
+  case "$1" in
+  *"$2"*) ;;
+  *) fail "$3: want [$2] in: $1" ;;
+  esac
 }
 no_has() {
-	case "$1" in
-	*"$2"*) fail "$3: did NOT want [$2] in: $1" ;;
-	esac
+  case "$1" in
+  *"$2"*) fail "$3: did NOT want [$2] in: $1" ;;
+  esac
 }
 # One field's line. `where` legitimately says "the project you are in" on every
 # run, so a negative assertion about the ROOT has to be scoped to root's line.
@@ -92,11 +92,11 @@ has "$_o" "REFUSES" "unknown: did not say go would refuse"
 # caller has to parse English to learn that a name resolved to nothing.
 _wrc=0; run "$T" why nosuchproject >/dev/null 2>&1 || _wrc=$?
 [ "$_wrc" = 3 ] \
-	|| fail "why on a name nothing knows must exit 3 (mux's standard
+  || fail "why on a name nothing knows must exit 3 (mux's standard
 unknown-name code), got $_wrc"
 _wrc=0; run "$T" why dup >/dev/null 2>&1 || _wrc=$?
 [ "$_wrc" != 3 ] \
-	|| fail "why exited 3 for a name that IS known (ambiguously). 3 means
+  || fail "why exited 3 for a name that IS known (ambiguously). 3 means
 the name resolves to nothing, and an ambiguous name resolves to too much"
 _g=$(run "$T" go nosuchproject) && fail "go should refuse an unknown name"
 

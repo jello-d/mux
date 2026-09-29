@@ -24,12 +24,12 @@ export LOG
 # Stub every backend to log "<name> <args>". notify-send also prints an id, as
 # `-p` makes the real one do.
 for _c in gdbus busctl dbus-send makoctl; do
-	cat >"$T/bin/$_c" <<EOF
+  cat >"$T/bin/$_c" <<EOF
 #!/bin/sh
 printf '%s %s\n' "$_c" "\$*" >>"\$LOG"
 exit 0
 EOF
-	chmod +x "$T/bin/$_c"
+  chmod +x "$T/bin/$_c"
 done
 cat >"$T/bin/notify-send" <<'EOF'
 #!/bin/sh
@@ -60,28 +60,28 @@ _saved=$PATH
 # have no tools to rebuild the dir with. MUX_NOTIFY_CLOSER is cleared because
 # the lib caches its probe there.
 only() {
-	PATH=$_saved
-	rm -rf "$T/only"; mkdir -p "$T/only"
-	for _b; do cp "$T/bin/$_b" "$T/only/$_b"; done
-	: >"$LOG"
-	# Deliberately REPLACING PATH: the point is a host with no backend.
-	# shellcheck disable=SC2123
-	PATH=$T/only MUX_NOTIFY_CLOSER=
+  PATH=$_saved
+  rm -rf "$T/only"; mkdir -p "$T/only"
+  for _b; do cp "$T/bin/$_b" "$T/only/$_b"; done
+  : >"$LOG"
+  # Deliberately REPLACING PATH: the point is a host with no backend.
+  # shellcheck disable=SC2123
+  PATH=$T/only MUX_NOTIFY_CLOSER=
 }
 # Pure shell, for the same reason: `cat` is not on the reduced PATH.
 logged() {
-	_l=
-	if [ -f "$LOG" ]; then
-		while IFS= read -r _ln; do _l=$_l$_ln'
+  _l=
+  if [ -f "$LOG" ]; then
+    while IFS= read -r _ln; do _l=$_l$_ln'
 '; done <"$LOG"
-	fi
-	printf '%s' "$_l"
+  fi
+  printf '%s' "$_l"
 }
 has() {
-	case "$(logged)" in
-	*"$1"*) ;;
-	*) fail "$2: want [$1] in log, got [$(logged)]" ;;
-	esac
+  case "$(logged)" in
+  *"$1"*) ;;
+  *) fail "$2: want [$1] in log, got [$(logged)]" ;;
+  esac
 }
 
 # --- close: the backend preference order -----------------------------------
@@ -181,16 +181,16 @@ chmod +x "$T/emitbin/tmux"
 
 _sf=$T/run/agent-state/global/5
 emit() {
-	env XDG_RUNTIME_DIR="$T/run" TMUX=/tmp/fake/global,1,0 TMUX_PANE=%5 \
-		PATH="$T/emitbin:$_saved" LOG="$LOG" \
-		"$HERE/libexec/mux-agent-state-emit" "$1"
+  env XDG_RUNTIME_DIR="$T/run" TMUX=/tmp/fake/global,1,0 TMUX_PANE=%5 \
+    PATH="$T/emitbin:$_saved" LOG="$LOG" \
+    "$HERE/libexec/mux-agent-state-emit" "$1"
 }
 # Record: state window pane epoch notif SESSION. The notif id is field 5 --
 # the session moved to the END so a name containing a space survives, and
 # notif is `-` rather than empty so an absent one cannot shift the fields.
 notif_of() {
-	read -r _a _b _c _d _e _f <"$_sf" || true
-	case ${_e:-} in -|'') printf '' ;; *) printf '%s' "$_e" ;; esac
+  read -r _a _b _c _d _e _f <"$_sf" || true
+  case ${_e:-} in -|'') printf '' ;; *) printf '%s' "$_e" ;; esac
 }
 
 # Starting work notifies nobody -- that transition is YOU, not the agent.
@@ -234,8 +234,8 @@ esac
 _bc=$T/emit.log
 : >"$_bc"
 env XDG_RUNTIME_DIR="$T/run" TMUX=/tmp/fake/global,1,0 TMUX_PANE=%5 \
-        PATH="$T/emitbin:$_saved" LOG="$LOG" MUX_EMIT_LOG="$_bc" \
-        "$HERE/libexec/mux-agent-state-emit" idle >/dev/null 2>&1 || true
+  PATH="$T/emitbin:$_saved" LOG="$LOG" MUX_EMIT_LOG="$_bc" \
+  "$HERE/libexec/mux-agent-state-emit" idle >/dev/null 2>&1 || true
 case "$(cat "$_bc")" in
 *idle*was=working*) ;;
 *) fail "the breadcrumb did not record the transition: [$(cat "$_bc")]" ;;
@@ -279,10 +279,10 @@ EOF
 chmod +x "$T/ttlbin/closer"
 mkdir -p "$T/run/agent-state/global"
 ttlemit() {
-	: >"$CLOSELOG"
-	env XDG_RUNTIME_DIR="$T/run" TMUX=/tmp/fake/global,1,0 TMUX_PANE=%40 \
-	MUX_NOTIFY_CLOSE="$T/ttlbin/closer" PATH="$T/ttlbin:$PATH" \
-	"$HERE/libexec/mux-agent-state-emit" "$@" >/dev/null 2>&1
+  : >"$CLOSELOG"
+  env XDG_RUNTIME_DIR="$T/run" TMUX=/tmp/fake/global,1,0 TMUX_PANE=%40 \
+  MUX_NOTIFY_CLOSE="$T/ttlbin/closer" PATH="$T/ttlbin:$PATH" \
+  "$HERE/libexec/mux-agent-state-emit" "$@" >/dev/null 2>&1
 }
 
 # A FRESH id is still closed on a real state change. This is the behaviour the
@@ -291,23 +291,23 @@ _now=$(date +%s)
 printf 'idle 0 %%40 %s 522 charon\n' "$_now" >"$T/run/agent-state/global/40"
 ttlemit working
 grep -qx 'closed 522' "$CLOSELOG" \
-	|| fail "a fresh id was not closed on a state change: [$(cat "$CLOSELOG")]"
+  || fail "a fresh id was not closed on a state change: [$(cat "$CLOSELOG")]"
 
 # A STALE id must be dropped silently, never handed to the closer.
 printf 'idle 0 %%40 %s 522 charon\n' "$((_now - 200000))" \
-	>"$T/run/agent-state/global/40"
+  >"$T/run/agent-state/global/40"
 ttlemit working
 [ ! -s "$CLOSELOG" ] \
-	|| fail "a 55-hour-old id was closed: [$(cat "$CLOSELOG")]"
+  || fail "a 55-hour-old id was closed: [$(cat "$CLOSELOG")]"
 # ... and it is not carried into the new record either.
 _n=$(cut -d' ' -f5 <"$T/run/agent-state/global/40")
 [ "$_n" = - ] || fail "a stale id survived into the record: [$_n]"
 
 # The window is configurable, and the boundary is respected.
 printf 'idle 0 %%40 %s 522 charon\n' "$((_now - 10))" \
-	>"$T/run/agent-state/global/40"
+  >"$T/run/agent-state/global/40"
 MUX_NOTIF_TTL=5 ttlemit working
 [ ! -s "$CLOSELOG" ] \
-	|| fail "MUX_NOTIF_TTL was ignored: [$(cat "$CLOSELOG")]"
+  || fail "MUX_NOTIF_TTL was ignored: [$(cat "$CLOSELOG")]"
 
 pass

@@ -8,9 +8,9 @@
 
 # mux_exclude_file <client-name> -> this client's hidden-sessions file path.
 mux_exclude_file() {
-        _rt=${XDG_RUNTIME_DIR:-/tmp/user-$(id -u)}
-        _ck=$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '_')
-        printf '%s/mux-exclude/%s' "$_rt" "$_ck"
+  _rt=${XDG_RUNTIME_DIR:-/tmp/user-$(id -u)}
+  _ck=$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '_')
+  printf '%s/mux-exclude/%s' "$_rt" "$_ck"
 }
 
 # The only delimiter safe for a set of session names. A name MAY contain a
@@ -24,9 +24,9 @@ MUX_EXCL_NL='
 
 # mux_excluded <client-name> -> the hidden set, ONE NAME PER LINE (or empty).
 mux_excluded() {
-        _f=$(mux_exclude_file "$1")
-        [ -f "$_f" ] || return 0
-        cat "$_f"
+  _f=$(mux_exclude_file "$1")
+  [ -f "$_f" ] || return 0
+  cat "$_f"
 }
 
 # mux_excluded_has <set> <name> -> is NAME hidden? Whole-line exact match.
@@ -39,8 +39,8 @@ mux_excluded() {
 # Takes the SET rather than the client so a caller reads the file once and then
 # tests every session against it -- the status strip does this on every redraw.
 mux_excluded_has() {
-        case "$MUX_EXCL_NL$1$MUX_EXCL_NL" in
-        *"$MUX_EXCL_NL$2$MUX_EXCL_NL"*) return 0 ;;
-        esac
-        return 1
+  case "$MUX_EXCL_NL$1$MUX_EXCL_NL" in
+  *"$MUX_EXCL_NL$2$MUX_EXCL_NL"*) return 0 ;;
+  esac
+  return 1
 }
