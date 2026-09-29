@@ -109,8 +109,7 @@ class Load(unittest.TestCase):
         that went empty when you detached would be a regression."""
         got = load(self.d)
         self.assertEqual(got,
-                         [(local_label(),
-                           ["mux", "agent-summary", "--all", "--attached"])])
+                         [(local_label(), ["mux", "agent", "status"])])
 
     def test_local_comes_first(self):
         """So the left-hand item does not move as latches come and go."""
@@ -153,7 +152,7 @@ class RemoteCommand(unittest.TestCase):
         self.assertEqual(argv[0], "ssh")
         self.assertEqual(argv[1], "box")
         self.assertEqual(len(argv), 3)
-        self.assertIn("agent-summary", argv[2])
+        self.assertIn("agent status", argv[2])
 
     def test_a_LOGIN_shell_is_used(self):
         """sshd runs a remote command WITHOUT a login shell, so a bare
@@ -426,18 +425,24 @@ class ActivateCommand(unittest.TestCase):
         to ask for, and over a transport N partitions must not mean N ssh
         connections."""
         argv = sources.remote_argv("box", template="ssh %h %q")
-        self.assertIn("mux agent-summary --all", " ".join(argv))
+        self.assertIn("mux agent status", " ".join(argv))
 
-    def test_the_poll_asks_only_for_what_someone_is_WATCHING(self):
-        """A tray item means a human is looking at this. Remotely that is what
-        the latch registry already encodes; locally it is an attached client.
-        Without `--attached` a partition with a live server and no terminal
-        window showing it published an item nobody could act on."""
+    def test_the_poll_reads_the_MACHINE_contract(self):
+        """The tray is a program, so it reads the surface that promises a
+        stable shape. That is the whole point of the namespace: polling the
+        human-facing summary meant improving it for a terminal could silently
+        break this, and nothing declared which was which.
+
+        The attached-only property moved WITH the verb -- it is the default of
+        `mux agent status` now, asserted in test/mux-agent.t rather than here,
+        because it became the contract's promise instead of this caller's
+        flag."""
         argv = sources.remote_argv("box", template="ssh %h %q")
-        self.assertIn("--attached", " ".join(argv))
+        self.assertIn("mux agent status", " ".join(argv))
+        self.assertNotIn("agent-summary", " ".join(argv))
 
-    def test_the_poll_still_asks_for_agent_summary(self):
+    def test_the_poll_is_not_the_CLICK(self):
         """The other direction, asserted separately: a default that leaked the
         activate command would break the feed itself."""
         argv = sources.remote_argv("box", template="ssh %h %q")
-        self.assertIn("mux agent-summary", " ".join(argv))
+        self.assertNotIn("next-blocked", " ".join(argv))
