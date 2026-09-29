@@ -273,8 +273,14 @@ else
   # `u` (0.43) and `E` (0.50), so a server missing both passed clean.
   # Deriving it means the assertion grows with the fragment and cannot
   # drift from it again.
+  # ANY bind whose command mentions mux, not just `run-shell` ones. The
+  # narrower pattern missed `prefix ?` the day it was added, because that one
+  # is a `display-popup` -- which is the same silent-shrink this derivation
+  # exists to prevent, reproduced by the shape of the match rather than by a
+  # hand-written list. A bind that does NOT mention mux is still excluded: it
+  # is tmux's own, or another config's.
   _want_keys=$(sed -n \
-    's/^bind \([^ -][^ ]*\) run-shell "mux .*/\1/p' \
+    's/^bind \([^ -][^ ]*\) .*"mux .*/\1/p' \
     "$MUX_SHARE/mux.tmux" 2>/dev/null | sort -u | tr '\n' ' ')
   _nb=
   for _k in $_want_keys; do

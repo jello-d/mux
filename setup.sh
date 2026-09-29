@@ -56,7 +56,41 @@ do_install() {
   _man_pages | while IFS= read -r _m; do
     _ln "$_m" "$_man/$(basename "$(dirname "$_m")")/$(basename "$_m")"; done
   echo "$PKG: linked into $PREFIX (bin, libexec/$PKG, share/$PKG, man)"
+  _tmux_conf_notice
   _indicator_notice
+}
+
+# THE SECOND STEP EVERY NEW USER HAS TO BE TOLD ABOUT. Linking mux into PATH
+# does nothing visible: the status bar, the bindings and the strip all come from
+# `source-file .../mux.tmux` in the user's own tmux.conf, and until that line
+# exists mux looks installed and inert. That is the same "fully installed and
+# fully broken" state `mux check` exists to catch, met one step earlier.
+#
+# IT SAYS RATHER THAN EDITS, deliberately, and this is the line where the
+# install-placement rule bites: a tmux.conf is the user's own file, not a
+# package input. mux writes `mux setup claude` into an agent's config because
+# that verb's whole PURPOSE is that step and it asks first; an installer editing
+# your tmux.conf as a side effect of `install` is a different thing, and the one
+# irreversible mistake available here.
+#
+# SILENT WHEN THE LINE IS ALREADY THERE, so a re-install is quiet and this
+# cannot become noise people learn to skip. The check is textual and looks in
+# both conventional locations plus $XDG_CONFIG_HOME.
+_tmux_conf_notice() {
+  _frag=$_shr/$PKG/mux.tmux
+  for _c in "${XDG_CONFIG_HOME:-$HOME/.config}/tmux/tmux.conf" \
+      "$HOME/.tmux.conf"; do
+    [ -r "$_c" ] || continue
+    if grep -q -- "$PKG/mux.tmux" "$_c" 2>/dev/null; then return 0; fi
+  done
+  echo "$PKG: NOTE nothing sources mux's tmux fragment yet, so the status" >&2
+  echo "$PKG:      bar, the agent strip and the key bindings will not" >&2
+  echo "$PKG:      appear. Add this to your tmux.conf and reload tmux:" >&2
+  echo "$PKG:" >&2
+  echo "$PKG:        source-file $_frag" >&2
+  echo "$PKG:        source-file $_shr/$PKG/mux-opinions.tmux   # optional" >&2
+  echo "$PKG:" >&2
+  echo "$PKG:      Then: mux setup claude   (wires your agent's hooks)" >&2
 }
 
 # AN INSTALLED INDICATOR IS A SECOND PACKAGE THAT TALKS TO THIS ONE, and core

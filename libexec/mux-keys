@@ -1,0 +1,55 @@
+#!/bin/sh
+# mux-keys: what mux's key bindings do. Bound to prefix-? as a popup.
+#
+#   mux keys
+#
+# `b`, `B`, `(`, `)`, `u`, `r`, `R` and `E` are not guessable, and a key nobody
+# can find is a feature nobody has. The README lists them, which helps exactly
+# once; this is the copy you can reach from inside the session you are trying to
+# use, which is where the question actually occurs.
+#
+# THE DESCRIPTIONS ARE DATA (`share/keys`) AND THE BINDINGS ARE THE FRAGMENT'S.
+# Nothing here binds anything and nothing here hardcodes a key list: the suite
+# asserts both directions between the two files, so a binding added without a
+# description fails, and so does a description for a key nothing binds. mux has
+# already paid for a hand-written key list that stopped growing with the
+# features -- `mux check` asserted `( ) b r R` while the fragment had also bound
+# `u` and `E`, and reported a green check against a server missing both.
+#
+# THE PREFIX IS READ FROM THE SERVER rather than assumed to be C-b. A user who
+# has rebound it (this fleet has) would otherwise be told to press something
+# that does nothing, which is worse than saying nothing.
+set -eu
+
+_lib=$(dirname "$0")
+[ -d "${MUX_SHARE:-}" ] || MUX_SHARE=$_lib/../share
+
+_keys=$MUX_SHARE/keys
+[ -r "$_keys" ] || { echo "mux: keys: $_keys is missing" >&2; exit 1; }
+
+# The live prefix, if there is a server to ask. Outside tmux there is nothing to
+# ask, so the label stays generic rather than guessing.
+_prefix=$(tmux show-options -gv prefix 2>/dev/null || true)
+case ${_prefix:-} in
+'') _prefix=prefix ;;
+C-*|M-*) ;;
+*) _prefix=prefix ;;
+esac
+
+printf '\n  mux keys  (press %s then the key)\n\n' "$_prefix"
+while IFS='	' read -r _k _d; do
+  case ${_k:-} in
+  ''|'#'*) continue ;;
+  esac
+  [ -n "${_d:-}" ] || continue
+  printf '    %-3s %s\n' "$_k" "$_d"
+done <"$_keys"
+cat <<'EOF'
+
+  Also: click a session on the strip to jump to it.
+
+  Not a key: `mux` on its own picks a session, `mux go NAME` opens one,
+  `mux why` explains where every setting came from, and `mux check` says
+  whether this install is actually working.
+EOF
+printf '\n'

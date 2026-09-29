@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.75" "User Commands"
+.TH MUX 1 "" "mux 0.76" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -979,7 +979,7 @@ It always exits 0: it is a pure report, and a non\-zero exit would be
 indistinguishable from the transport.
 .PP
 .EX
-mux 0.75
+mux 0.76
 capabilities 1
 agent\-list 1
 agent\-summary 1
@@ -1533,6 +1533,53 @@ It is deliberately NOT
 everything under that verb promises one JSON object on stdout, and one
 printing markdown would make the promise a convention with an exception, which
 is not a contract.
+.TP
+.B mux demo " [" \-\-stop "] [" \-\-no\-attach ]
+A throwaway mux to look at, for someone who has just installed it and sees
+nothing. Four sessions, four pretend agents cycling through states, on ITS OWN
+tmux server. The strip only means something with several agents in several
+states, and reading about that is not the same as glancing at it.
+.IP
+IT CANNOT REACH ANYTHING REAL, which is what makes it safe to ship: the
+agent-state namespace is derived from the socket, so a pretend agent cannot
+write a record a real session reads, cannot appear in a real strip, and cannot
+be killed along with something you care about.
+.B \-\-stop
+removes the server and the namespace and leaves nothing behind. It is
+deliberately NOT a partition: a partition would have to be declared and would
+then show up in
+.BR "mux resume \-\-list" ,
+in latch's targets and in the tray.
+.IP
+THE AGENTS ARE FAKE AND THE MACHINERY IS REAL. Each pane runs
+.I share/demo/fake-agent
+which drives mux through
+.B mux agent-hook
+exactly as a wired agent's lifecycle does, so the strip, the colours, the
+escalation and
+.B prefix b
+all come from the shipped code rather than from a fixture, and the demo cannot
+drift away from the product.
+.TP
+.B mux keys
+What mux's key bindings do, also bound to
+.BR "prefix ?" .
+.RB ` b ',
+.RB ` B ',
+.RB ` ( ',
+.RB ` ) ',
+.RB ` u ',
+.RB ` r ',
+.RB ` R '
+and
+.RB ` E '
+are not guessable, and a key nobody can find is a feature nobody has. The
+descriptions are data
+.RI ( share/keys )
+and the bindings are the fragment's; the suite asserts BOTH directions between
+them, so the sheet cannot drift from the keys it documents. The prefix shown is
+read from the running server rather than assumed, because telling someone to
+press C\-b when they have rebound it is worse than saying nothing.
 .TP
 .B mux setup " " \fIAGENT\fR " [" \-\-yes "] [" \-\-remove "] [" \-\-dry\-run ]
 Wire that agent's lifecycle hooks to mux, and install its skill. THE HARDEST

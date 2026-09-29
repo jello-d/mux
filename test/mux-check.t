@@ -234,9 +234,15 @@ has "status-right is not mux's renderer" "a foreign status-right passed"
 # the fragment had also bound u and E, so the test would have gone on passing
 # a server missing both -- asserting a green check against a stale idea of
 # what green means.
+# ANY bind whose command mentions mux, matching what the check now derives.
+# The narrower `run-shell` pattern missed `prefix ?` (a `display-popup`) the day
+# it was added, on BOTH sides -- so the check stopped expecting it and this
+# fixture stopped providing it, and the two agreed with each other about a key
+# neither was looking at. Both patterns move together or the agreement is
+# worthless.
 _healthy_keys() {
   : >"$KEYS"
-  sed -n 's/^bind \([^ -][^ ]*\) run-shell "\(mux .*\)"$/\1 \2/p' \
+  sed -n 's/^bind \([^ -][^ ]*\) .*"\(mux [^"]*\)".*$/\1 \2/p' \
     "$HERE/share/mux.tmux" | while read -r _k _cmd; do
     printf 'bind-key    -T prefix %s       run-shell "%s"\n' \
       "$_k" "$_cmd"

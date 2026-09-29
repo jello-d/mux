@@ -73,6 +73,16 @@ bind R run-shell "mux refresh --force"
 # bottom-pane height, which tmux has no way to know about.
 bind E run-shell "mux even --all"
 
+# prefix+? = WHAT ARE THE KEYS. `b`, `B`, `(`, `)`, `u`, `r`, `R` and `E` are
+# not guessable, and a key nobody can find is a feature nobody has. The list is
+# `mux keys`, which reads its descriptions from share/keys and is checked in
+# both directions against the binds above, so it cannot drift from them.
+#
+# `display-popup -E` needs tmux 3.2; on an older one the key reports an error
+# and `mux keys` still works as a command. Not worth a version guard in a
+# fragment that is sourced once at server start.
+bind ? display-popup -E -w 62 -h 18 "mux keys; read -r _"
+
 # --- colour themes ---------------------------------------------------------
 # THE COLOUR IS NOT THE BOUNDARY (see mux-style). It is cosmetic: a default that
 # any session may override with a `theme` directive in its layout. A theme names

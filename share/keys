@@ -1,0 +1,22 @@
+# share/keys - what each mux key binding does, for `mux keys` and prefix-?.
+#
+# DATA, not a second copy of the bindings. The bindings live in `share/mux.tmux`
+# and nothing here rebinds anything; this file only names them. The suite checks
+# BOTH directions -- every key the fragment binds must be described here, and
+# every key described here must be bound there -- so the cheat sheet cannot
+# quietly drift from the keys it claims to document. That is the same failure
+# `mux check` was built to catch one layer down: a list written by hand stops
+# growing with the features.
+#
+# Format: KEY<TAB>one line, imperative, no trailing full stop. Lines starting
+# with `#` and blank lines are ignored. The order here is the order shown, so it
+# is grouped by what you reach for rather than alphabetically.
+b	jump to the agent that has been blocked longest
+B	go back to the session you came from
+)	next session (skips ones you have hidden)
+(	previous session
+u	put back the pane you just closed by accident
+E	even out every window on this server
+r	rebuild this window's layout
+R	rebuild it from the profile, discarding local changes
+?	this list
