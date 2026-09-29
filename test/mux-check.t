@@ -78,6 +78,24 @@ has "tmux present" "no tmux line"
 has "package data" "no package-data line"
 has "config overlay" "no overlay line"
 has "scan root $T/src" "the configured scan root was not checked"
+has "agent instructions assemble" "the skill was not checked"
+
+# --- A PARTIAL SKILL INSTALL IS A FAIL, not an OK -------------------------
+# The document is a body plus a frontmatter file, and a skill emitted WITHOUT
+# the frontmatter installs cleanly, errors nothing and then never triggers --
+# so `share/skills` being present is not the question. This is the case a
+# presence check passes and the reason the marker runs the thing.
+mv "$T/share/skills/mux-agent/frontmatter.yaml" "$T/fm.stash"
+check >/dev/null
+[ "$RC" -ne 0 ] || fail "a skill that cannot be assembled exited 0:
+$OUT"
+has "[FAIL]" "a partial skill install did not FAIL"
+has "cannot assemble" "the FAIL did not say what was wrong:
+$OUT"
+mv "$T/fm.stash" "$T/share/skills/mux-agent/frontmatter.yaml"
+check >/dev/null
+[ "$RC" -eq 0 ] || fail "restoring the frontmatter did not restore health:
+$OUT"
 
 # --- a FAIL must set the exit code ----------------------------------------
 # Each of these is raised from a DIFFERENT part of the file, which is the

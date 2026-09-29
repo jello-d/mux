@@ -79,6 +79,7 @@ latch() {
 		MUX_LATCH_BACKOFF=1 MUX_LATCH_BLOCKED_WAIT=1 \
 		MUX_LATCH_MAX_TRIES="${MAXT:-6}" \
 		MUX_LATCH_UNTRUSTED_TRIES="${UT:-4}" \
+		MUX_LATCH_PROGRESS="${PROG:-30}" \
 		"$HERE/libexec/mux-latch" "$@" >/dev/null 2>&1 || _lr=$?
 	echo "$_lr"
 }
@@ -130,6 +131,58 @@ storm this design exists to prevent, and a backoff does not make it not one"
 case "$(seq_of)" in
 *denied*) ;;
 *) fail "a rejected credential was not reported as denied: [$(seq_of)]" ;;
+esac
+
+# --- PROGRESS RESETS THE BACKOFF --------------------------------------
+# `_delay` was set once and only ever doubled, making it a RATCHET: the first
+# disruption in a latch's life pinned it at BACKOFF_MAX for the rest of the
+# process. Found in a live log, not here -- a 35-hour-old latch opened a fresh
+# outage with "retrying in 60s" where a reset would have said 2s. The harm is
+# worst for a SHORT blip, where five seconds of lost wifi costs a minute of
+# downtime, which on a roaming laptop is the common case.
+#
+# Asserted through the REPORTED DELAY, because that is the observable: the
+# transport stub returns instantly, so PROGRESS is what decides whether an
+# attempt counted as having had a session.
+_run_drops() {   # <progress threshold> -> stderr of a 3-drop run
+	: >"$SCRIPT"
+	_i=0; while [ "$_i" -lt 6 ]; do _i=$((_i + 1))
+		printf '%s\n' "$_drop" >>"$SCRIPT"
+	done
+	env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
+		T_AUTH="$T_AUTH" T_PROBE="$T_PROBE" STATES="$STATES" \
+		TRIES="$TRIES" AUTHLOG="$AUTHLOG" SCRIPT="$SCRIPT" \
+		MUX_LATCH_TRANSPORT="$T/bin/transport %h %s" \
+		MUX_LATCH_AUTH="$T/bin/auth" MUX_LATCH_PROBE="$T/bin/probe" \
+		MUX_LATCH_SLEEP="$T/bin/nosleep" MUX_LATCH_BACKOFF=1 \
+		MUX_LATCH_PROGRESS="$1" MUX_LATCH_MAX_TRIES=3 \
+		"$HERE/libexec/mux-latch" box proj >/dev/null 2>"$T/bo" || true
+	cat "$T/bo"
+}
+
+# With a threshold above any attempt, nothing counts as progress and the delay
+# GROWS. This is the pre-existing behaviour, asserted so the reset cannot be
+# mistaken for "the backoff stopped working".
+_o=$(_run_drops 9999)
+case $_o in
+*'retrying in 2s'*) ;;
+*) fail "with no attempt counting as progress the backoff must still double;
+never seeing 2s means the growth is gone:
+$_o" ;;
+esac
+
+# With a threshold of 0 every attempt counts, so the delay must RETURN to
+# BACKOFF each time and never reach 2s.
+_o=$(_run_drops 0)
+case $_o in
+*'retrying in 2s'*) fail "an attempt that counted as progress did not reset the
+backoff: the delay kept growing, which is the ratchet this fixes:
+$_o" ;;
+esac
+case $_o in
+*'retrying in 1s'*) ;;
+*) fail "no retry was reported at all, so this asserts nothing:
+$_o" ;;
 esac
 
 # --- A HOST KEY REFUSAL IS BOUNDED, NOT IMMEDIATELY TERMINAL ----------
