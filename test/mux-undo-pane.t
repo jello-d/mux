@@ -62,6 +62,20 @@ trap 'cleanup' INT TERM
 rotate() {
 	cleanup
 	SOCK=$(tmux_fresh_socket muxundo)
+	# AND THE RECORDS GO WITH THE SERVER. This is the whole undo-pane flake,
+	# finally caught: a record is keyed by WINDOW ID, every fresh tmux server
+	# calls its first window `@0`, and $XDG_RUNTIME_DIR is shared across
+	# cycles -- so the previous cycle's record sits at the path this cycle
+	# will write. `_recorded` only asks whether the DIRECTORY is non-empty,
+	# so it returned true instantly from the stale file and the undo then
+	# raced the new recorder. When it lost, the slot-0 cycle restored the
+	# SLOT-1 record: cwd /etc, slot 1, which is exactly the observed
+	# `before [30:/tmp 9:/etc 19:/usr] / after [30:/etc 9:/etc 19:/usr]`.
+	#
+	# Measured at roughly 1 in 6 isolated runs before this line existed.
+	# The product half of the same root cause is fixed separately, and is
+	# asserted below: a record now names its server and is refused elsewhere.
+	rm -rf "$T/run/mux-undo"
 }
 
 # POLLED, NOT SLEPT. Every wait here is for a condition that is observable, so
@@ -341,6 +355,70 @@ directory: [$_o]" ;;
 esac
 _until 10 _npanes 3 || fail "nocwd: the pane should still come back -- the
 directory is the only thing lost, and losing the pane as well would be worse"
+
+# --- A RECORD BELONGS TO ONE SERVER -------------------------------------
+# THE ROOT CAUSE OF THE FLAKE THIS FILE SPENT FIVE SIGHTINGS ON, and a live
+# product bug in its own right. A record is keyed by WINDOW ID, and a window id
+# is NOT unique across server lifetimes: every fresh tmux server calls its first
+# window `@0` (measured). So a record outlives the server that wrote it, and the
+# next server's first window inherits it.
+#
+# VERIFIED BY HAND BEFORE THIS WAS WRITTEN: a brand new server on a different
+# socket, with one pane and nothing ever lost in it, restored a pane from a dead
+# server's window -- with that window's command, cwd and LAYOUT, which is
+# applied positionally and so resizes the survivors too. Plausible, wrong,
+# silent: this codebase's recurring failure shape.
+#
+# The record's server is rewritten rather than a second server being driven,
+# because what is under test is the CHECK, and a fixture that needs two live
+# servers to say one thing is a fixture that can fail for other reasons.
+build
+stage "a record belongs to one server"
+tm send-keys -t t.1 'exit' Enter
+_until 10 _npanes 2 || fail "otherserver: the pane did not close"
+_until 10 _recorded || fail "otherserver: no undo record was written"
+_rec=$T/run/mux-undo/$(ls -A "$T/run/mux-undo" | head -1)
+sed 's/^server	.*/server	999999/' "$_rec" >"$_rec.x" && mv -f "$_rec.x" "$_rec"
+_sp=$(tm display-message -p '#{socket_path}')
+_rc=0
+_o=$(env TMUX="$_sp,0,0" "$HERE/libexec/mux-undo-pane" 2>&1) || _rc=$?
+[ "$_rc" != 0 ] || fail "a record from another server was accepted"
+case $_o in
+*"server that is gone"*) ;;
+*) fail "the refusal did not say the record belongs to another server, so a
+phantom restore is indistinguishable from a real one: [$_o]" ;;
+esac
+_npanes 2 || fail "a record from another server RESTORED A PANE: $(state)"
+# AND IT IS DISCARDED, or every press repeats the refusal for a record that can
+# never become valid.
+[ -n "$(ls -A "$T/run/mux-undo" 2>/dev/null)" ] \
+	&& fail "the foreign record was refused and KEPT, so the window is stuck
+answering this instead of the ordinary 'nothing to undo'"
+
+# A RECORD THAT CANNOT SAY is refused too, on the same rule the latch hooks
+# follow: an edge nobody can check must not report success. This is what a
+# record written by a mux older than the field looks like.
+build
+stage "a record with no server field"
+tm send-keys -t t.1 'exit' Enter
+_until 10 _npanes 2 || fail "noserver: the pane did not close"
+_until 10 _recorded || fail "noserver: no undo record was written"
+_rec=$T/run/mux-undo/$(ls -A "$T/run/mux-undo" | head -1)
+grep -v '^server	' "$_rec" >"$_rec.x" && mv -f "$_rec.x" "$_rec"
+_sp=$(tm display-message -p '#{socket_path}')
+_rc=0
+_o=$(env TMUX="$_sp,0,0" "$HERE/libexec/mux-undo-pane" 2>&1) || _rc=$?
+[ "$_rc" != 0 ] || fail "a record that cannot name its server was accepted"
+_npanes 2 || fail "an unattributable record RESTORED A PANE: $(state)"
+# A DIFFERENT SENTENCE FROM THE FOREIGN CASE, because they are one condition
+# for the code and different news for a human: "this is someone else's" and
+# "this cannot be attributed at all" want different reactions, and sharing a
+# message would make the second a lie about the first.
+case $_o in
+*"does not say which server"*) ;;
+*) fail "an unattributable record was refused with the foreign-server
+sentence, which is not what happened: [$_o]" ;;
+esac
 
 # --- A PARTIAL RECORD IS REFUSED, LOUDLY ---------------------------------
 # The other half of writing the record atomically, and the half that can be
