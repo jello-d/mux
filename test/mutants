@@ -1678,3 +1678,52 @@ t mux-agent
 - 		"$(mux_json_str "${_se%% *}")" \
 + 		"$(mux_json_str "$_want")" \
 m wait-to-state
+
+= send-policy-file-writability-unchecked
+f libexec/mux-send-policy.sh
+t mux-send-policy
+- 	[ ! -w "$_spf" ] || return 1
++ 	:
+m writable-file
+
+= send-policy-dir-writability-unchecked
+f libexec/mux-send-policy.sh
+t mux-send-policy
+- 	[ ! -w "$(dirname -- "$_spf")" ] || return 1
++ 	:
+m writable-dir
+
+= send-policy-missing-file-permits
+f libexec/mux-send-policy.sh
+t mux-send-policy
+- 	[ -f "$_spf" ] || return 1
++ 	:
+m a missing policy wrote to stderr
+
+= send-policy-tokens-are-alternatives
+f libexec/mux-send-policy.sh
+t mux-send-policy
+- 			*) _ok=0; break ;;
++ 			*) ;;
+m part-nomatch
+
+= send-policy-bare-directive-grants
+f libexec/mux-send-policy.sh
+t mux-send-policy
+- 		[ $# -gt 0 ] || continue
++ 		true
+m bare-directive
+
+= send-policy-directives-interchangeable
+f libexec/mux-send-policy.sh
+t mux-send-policy
+- 		[ "${1:-}" = "send-$_spw" ] || continue
++ 		[ "${1:-}" != zzz ] || continue
+m unknown-not-granted
+
+= send-policy-globs-the-scope
+f libexec/mux-send-policy.sh
+t mux-send-policy
+- 	( set -f
++ 	(
+m sealed-star
