@@ -35,12 +35,46 @@
 # separate grants, and allowing one must not quietly allow the other.
 #
 # A SCOPE IS `*` OR ONE OR MORE `key:value` TOKENS, AND A LINE MATCHES ONLY
-# WHEN ALL OF THEM DO. Keys are `partition`, `session` and `window`:
+# WHEN ALL OF THEM DO. Keys are `control`, `partition`, `session`, `window`:
 #
-#   send-blocked  *                            anywhere
+#   send-blocked  control:agent                any agent-supervised worker
+#   send-blocked  control:hybrid session:api   hybrid, in one project only
 #   send-blocked  partition:work               a whole boundary
-#   send-blocked  session:api                  a whole project
 #   send-blocked  session:api window:reviewer  ONE worker in one project
+#
+# WHO CONTROLS THE PANE IS THE REAL QUESTION, and it is a different one from
+# where the pane is. What makes answering a prompt wrong is not that an agent
+# typed it -- it is that the prompt was ADDRESSED TO A HUMAN. A worker spawned
+# by an agent and supervised by an agent usurps no human decision; it has a
+# supervision ladder, and the class is what lets mux respect that ladder
+# instead of pretending every prompt belongs to a person.
+#
+#   human    NEVER. Not a token here at all -- see below.
+#   agent    supervised by an agent. Reasonably granted as a whole class:
+#            multi-agent work is not possible without it, and per-window
+#            grants do not scale to a village of eight generated names.
+#   hybrid   IT DEPENDS, which is exactly why it is its own class. Grantable,
+#            but deliberately and usually scoped to a project.
+#
+# `control:human` IS NOT A TOKEN AND CANNOT BE WRITTEN. A human-controlled
+# pane is refused BEFORE this file is consulted, so `never` is structural
+# rather than a property of the operator having written the right tokens --
+# `send-blocked window:reviewer` must not grant a human's pane by omission.
+#
+# AND HYBRID MUST NOT COLLAPSE INTO HUMAN, which was the first design here and
+# was wrong in the dangerous direction: if it had, the only way to grant a
+# hybrid pane would have been a `human` grant, so expressing the MIDDLING case
+# would have forced the door open for the strictest one.
+#
+# The class is ORGANISATIONAL, NOT A SECURITY BOUNDARY, and that is worth
+# saying plainly rather than letting a later reader mistake it for a sandbox.
+# mux runs as the agent's own uid, so any mark mux can read is one the agent
+# can rewrite, and an agent that wants to answer its neighbour's prompt can
+# call `tmux send-keys` directly today. What the refusal buys is narrower and
+# still worth having: the dangerous thing stops being the EASY thing, the
+# default sits outside the agent's reach so the posture cannot drift, and a
+# bypass goes through tmux -- outside mux's audit log, which is itself a
+# signal.
 #
 # THE WINDOW IS THE UNIT A FLEET ACTUALLY HAS. An orchestrator above mux
 # spawns a WINDOW per worker in the project's session -- that is what vicus
@@ -102,12 +136,17 @@ mux_send_policy_why() {
 	fi
 }
 
-# mux_send_allowed WHAT PARTITION SESSION WINDOW -> is it permitted?
+# mux_send_allowed WHAT PARTITION SESSION WINDOW CLASS -> is it permitted?
 #
 # WHAT is `blocked` or `unknown`. Every token on a line must match, and each is
 # compared as a STRING and never as a pattern -- so a window called `*` cannot
 # grant itself everything, and neither can one called `partition:work`.
-mux_send_allowed() {   # <what> <partition> <session> <window>
+#
+# THE CALLER MUST HAVE REFUSED A `human` CLASS ALREADY. This function does not
+# check for it, on purpose: a gate that lives in one place cannot be half
+# applied, and putting it here would let a future caller reach the allowlist
+# with a human pane by forgetting a check.
+mux_send_allowed() {   # <what> <partition> <session> <window> <class>
 	mux_send_policy_usable || return 1
 	# A SUBSHELL WITH GLOBBING OFF. Splitting a line with `set -- $_spl`
 	# also PATHNAME-EXPANDS it, so the scope token `*` became whatever
@@ -119,7 +158,7 @@ mux_send_allowed() {   # <what> <partition> <session> <window>
 	# matching loop returns from the middle and a restore after the loop
 	# would be skipped on every successful match.
 	( set -f
-	_spw=$1 _spp=$2 _sps=$3 _spwin=$4
+	_spw=$1 _spp=$2 _sps=$3 _spwin=$4 _spc=$5
 	while IFS= read -r _spl; do
 		# Full-line comments and blanks go; an inline `#` is left alone,
 		# because a name may legitimately contain one. Same rule
@@ -142,6 +181,7 @@ mux_send_allowed() {   # <what> <partition> <session> <window>
 			"partition:$_spp") ;;
 			"session:$_sps") ;;
 			"window:$_spwin") ;;
+			"control:$_spc") ;;
 			*) _ok=0; break ;;
 			esac
 		done

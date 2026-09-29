@@ -28,9 +28,13 @@ seal() { chmod 0444 "$POL"; chmod 0555 "$T/etc"; }
 unseal() { chmod 0755 "$T/etc"; chmod 0644 "$POL"; }
 trap 'chmod 0755 "$T/etc" 2>/dev/null || true' EXIT INT TERM
 
-allow() { mux_send_allowed "$@"; }
-yes() { allow "$2" "$3" "$4" "$5" || fail "$1: should have been permitted"; }
-no()  { ! allow "$2" "$3" "$4" "$5" || fail "$1: should have been REFUSED"; }
+# CLASS DEFAULTS TO `agent` in these helpers, because a human-controlled pane
+# never reaches this file at all -- `send` refuses it before the policy is
+# consulted, so "never" is structural rather than a token an operator has to
+# remember. That gate is asserted in test/mux-agent.t, where it lives.
+allow() { mux_send_allowed "$2" "$3" "$4" "$5" "${6:-agent}"; }
+yes() { allow "$@" || fail "$1: should have been permitted"; }
+no()  { ! allow "$@" || fail "$1: should have been REFUSED"; }
 
 # --- with no policy at all, nothing is permitted --------------------------
 # The default has to be the safe one, because the common case is a box where
@@ -120,6 +124,33 @@ unseal; printf 'send-blocked session:api window:reviewer\n' >"$POL"; seal
 yes both-match    blocked global api reviewer
 no  wrong-window  blocked global api builder
 no  wrong-session blocked global other reviewer
+
+# --- control: the class is a scope token too -------------------------------
+# WHO CONTROLS THE PANE is a different question from where it is, and it is
+# the one that decides whether answering a prompt usurps a human. Granting the
+# whole `agent` class is what makes a village workable: eight workers with
+# generated names cannot each get a line in a root-owned file before vicus is
+# allowed to operate.
+unseal; printf 'send-blocked control:agent\n' >"$POL"; seal
+yes class-agent  blocked global api reviewer agent
+no  class-hybrid blocked global api reviewer hybrid
+
+# HYBRID IS ITS OWN CLASS, and grantable separately. Folding it into `human`
+# was the first design and was wrong in the dangerous direction: the only way
+# to grant a hybrid pane would then have been a human grant, so expressing the
+# MIDDLING case would have forced the door open for the strictest one.
+unseal; printf 'send-blocked control:hybrid session:api\n' >"$POL"; seal
+yes hybrid-scoped    blocked global api reviewer hybrid
+no  hybrid-elsewhere blocked global other reviewer hybrid
+no  agent-not-hybrid blocked global api reviewer agent
+
+# A BROAD GRANT STILL DOES NOT REACH A HUMAN PANE, because this file is never
+# consulted for one. Asserted here as the honest limit of what this function
+# can promise: it would happily match, which is exactly why the gate is not
+# in it.
+unseal; printf 'send-blocked *\n' >"$POL"; seal
+yes star-agent  blocked global api reviewer agent
+yes star-hybrid blocked global api reviewer hybrid
 
 # --- a directive with NO scope grants nothing -----------------------------
 # `send-blocked` alone reads like "allow it", and reading it that way would
