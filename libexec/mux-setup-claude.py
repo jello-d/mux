@@ -1,0 +1,147 @@
+#!/usr/bin/env python3
+"""Edit Claude Code's settings.json hooks, idempotently and reversibly.
+
+Called by `mux setup claude`, never directly. TWO MODES OVER ONE
+IMPLEMENTATION: `plan` prints what would change and writes nothing, `write`
+does it -- and both compute the change with the SAME function, because a
+preview produced by different code than the write is a preview that can lie.
+
+WHY PYTHON AT ALL, in a package that is otherwise POSIX sh: mux ships a JSON
+emitter and no parser, and editing a file somebody else owns means reading what
+is already in it. Hand-rolling that in shell is how a user's settings get
+mangled. This runs once, at human speed, so the dependency costs nothing where
+it would be unacceptable in the status bar.
+
+IT TOUCHES ONLY MUX'S OWN ENTRIES. Every other hook in the file, and every
+other key, survives -- asserted in test/mux-setup.t, because the failure that
+matters here is not "mux did not get wired", it is "mux ate somebody's
+configuration".
+"""
+import json
+import os
+import shutil
+import sys
+import time
+
+
+# The command mux wants for an event. `mux agent-hook <EventName>` and NOT a
+# state: the mapping from event to state belongs to mux (0.52), so wiring that
+# named states would put mux's vocabulary back in somebody else's file.
+#
+# `>/dev/null 2>&1 || true` because a hook must never harm the agent it hangs
+# off. mux-agent-hook exits 2 on an event it does not know, and that is
+# information for a log rather than a reason to fail a turn.
+def command_for(event):
+    return "mux agent-hook %s >/dev/null 2>&1 || true" % event
+
+
+def is_ours(entry):
+    """Is this hook entry mux's?
+
+    MATCHED ON `mux agent-hook`, which also catches an entry an OLDER mux
+    wrote with different redirections, so an upgrade rewrites instead of
+    appending a second one that fires twice. It deliberately does NOT match
+    `mux agent-emit`: that is the pre-0.52 wiring an integrator may still own,
+    and silently deleting somebody else's plugin entry is not this verb's
+    business.
+    """
+    for hook in entry.get("hooks", []):
+        if "mux agent-hook" in str(hook.get("command", "")):
+            return True
+    return False
+
+
+def plan(doc, events, remove):
+    """-> (new document, list of human-readable changes). Pure."""
+    changes = []
+    hooks = dict(doc.get("hooks") or {})
+    for event in events:
+        want = command_for(event)
+        others = [e for e in (hooks.get(event) or []) if not is_ours(e)]
+        mine = [e for e in (hooks.get(event) or []) if is_ours(e)]
+        if remove:
+            if mine:
+                changes.append("remove %s" % event)
+            if others:
+                hooks[event] = others
+            else:
+                hooks.pop(event, None)
+            continue
+        # ALREADY EXACTLY RIGHT is the common case on a re-run, and saying
+        # "nothing to change" is what makes this safe in a provisioner.
+        if mine == [{"hooks": [{"type": "command", "command": want}]}]:
+            continue
+        changes.append("%s %s" % ("update" if mine else "add", event))
+        hooks[event] = others + [
+            {"hooks": [{"type": "command", "command": want}]}]
+    new = dict(doc)
+    if hooks:
+        new["hooks"] = hooks
+    else:
+        new.pop("hooks", None)
+    return new, changes
+
+
+def main():
+    if len(sys.argv) != 4:
+        sys.stderr.write("usage: mux-setup-claude.py plan|write FILE MODE\n")
+        return 2
+    action, path, mode = sys.argv[1:4]
+    events = os.environ.get("MUX_SETUP_EVENTS", "").split()
+    if not events:
+        sys.stderr.write("no events supplied\n")
+        return 1
+    remove = mode == "remove"
+
+    doc = {}
+    if os.path.exists(path):
+        try:
+            with open(path) as fh:
+                doc = json.load(fh)
+        except (ValueError, OSError) as exc:
+            # LOUD AND UNCHANGED. A settings file that does not parse is one a
+            # human has to look at; rewriting it from scratch would be the
+            # worst possible reading of "idempotent".
+            sys.stderr.write("%s does not parse as JSON (%s); "
+                             "refusing to touch it\n" % (path, exc))
+            return 1
+    if not isinstance(doc, dict):
+        sys.stderr.write("%s is not a JSON object; refusing\n" % path)
+        return 1
+
+    new, changes = plan(doc, events, remove)
+    if not changes:
+        print("mux: setup: nothing to change in %s" % path)
+        return 0
+    if action == "plan":
+        print("mux: setup: would %s in %s" % (", ".join(changes), path))
+        if not remove:
+            for event in events:
+                print("  %s -> %s" % (event, command_for(event)))
+        return 0
+
+    # A BACKUP, and its path is printed. That is what makes this reversible
+    # even for a failure nobody predicted: `--remove` undoes the intended
+    # change, and the copy undoes everything else.
+    if os.path.exists(path):
+        stamp = time.strftime("%Y%m%d%H%M%S")
+        backup = "%s.mux-%s" % (path, stamp)
+        shutil.copy2(path, backup)
+        print("mux: setup: backed up %s -> %s" % (path, backup))
+    else:
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+
+    # ATOMIC: a temp file beside it, then a rename. The same rule mux-undo-pane
+    # had to learn the hard way -- `> file` truncates before a byte lands, so a
+    # reader that finds the file existing can read it empty.
+    tmp = "%s.mux-tmp.%d" % (path, os.getpid())
+    with open(tmp, "w") as fh:
+        json.dump(new, fh, indent=2)
+        fh.write("\n")
+    os.replace(tmp, path)
+    print("mux: setup: %s in %s" % (", ".join(changes), path))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

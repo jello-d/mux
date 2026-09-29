@@ -333,6 +333,47 @@ else
 	*"mux style"*) ok "status-left draws the session chip" ;;
 	*) warn "status-left is not mux's -- session chip styling is off" ;;
 	esac
+
+	# AN AGENT MUX STARTED AND HAS NEVER HEARD FROM. This is the first-run
+	# failure and the one a presence check cannot see: everything is
+	# installed, the strip draws, and every chip reads the same as a plain
+	# shell because nothing ever told the agent to report. The strip now
+	# draws these as `unwired` rather than `none`; this says WHY and names
+	# the fix, which is the half a glyph cannot carry.
+	#
+	# A WARN, not a FAIL: the agent's own configuration is the user's, a
+	# provisioner's `apply` cannot repair it, and `--no-agent` sessions are
+	# a deliberate reason to have none. Advisory is the honest level.
+	if [ -r "$(dirname "$0")/mux-agent-state.sh" ]; then
+		. "$(dirname "$0")/mux-agent-state.sh"
+		_adir=$(mux_agent_dir 2>/dev/null || true)
+		# THE WHOLE PIPELINE IS THE SUBSTITUTION, so no temp file is
+		# needed to get a value out of a `while` that runs in a
+		# subshell. The first draft used one and wrote
+		# `tr ... <file 2>/dev/null`, which silences NOTHING: the
+		# redirections apply left to right, so a failing open happens
+		# while stderr is still the terminal. test/lint.t greps for
+		# exactly that shape and caught it.
+		_unwired=$(_vt list-panes -a \
+			-F '#{@mux-agent}	#{session_name}' 2>/dev/null \
+			| while IFS='	' read -r _m _s; do
+				[ -n "${_m:-}" ] || continue
+				[ -n "${_s:-}" ] || continue
+				# THE FIRST FIELD, not the whole answer.
+				# `mux_agent_state` returns "STATE EPOCH" and
+				# with no record that is a single SPACE, which
+				# is non-empty -- so testing the pair skipped
+				# every session and this could never fire.
+				_pair=$(mux_agent_state "$_adir" "$_s")
+				[ -n "${_pair%% *}" ] && continue
+				printf '%s\n' "$_s"
+			done | sort -u | tr '\n' ' ')
+		case ${_unwired% } in
+		'') ok "every agent session has reported its state" ;;
+		*)  warn "no agent state from: ${_unwired% } -- the agent's hooks" \
+			"are not wired. Fix with: mux setup <agent>" ;;
+		esac
+	fi
 fi
 
 exit "$RC"

@@ -18,6 +18,18 @@
 # stay in agent-state-render, which owns the bar's look.
 MUX_GLYPH_BLOCKED='⚠️' ; MUX_GLYPH_WORKING='🧠' ; MUX_GLYPH_IDLE='✅'
 MUX_GLYPH_NONE='⚫'    ; MUX_GLYPH_UNKNOWN='❓'
+# UNWIRED: mux STARTED an agent in this session and has never heard from it.
+# A PLUG, not a question mark, because the answer is not unknown -- it is that
+# nothing is connected. `❓` already means something else and rarer (a state
+# word this mux cannot draw, which only a newer mux across a transport
+# produces), and conflating the common actionable case with the exotic one
+# would waste the only glyph a newcomer will ever need to look up.
+#
+# THIS IS THE FIRST-RUN FAILURE. Install mux, start a session, and every chip
+# reads `⚫` -- which is also what a plain shell looks like, so nothing says
+# the hooks were never wired and the reasonable conclusion is that mux does not
+# work. It is not a state an agent can emit and never appears in a record.
+MUX_GLYPH_UNWIRED='🔌'
 
 # A literal newline, as a constant: the one delimiter a session name cannot
 # contain, so it is what separates a set of them.
@@ -130,6 +142,7 @@ mux_agent_glyph() {
 	working) printf '%s' "$MUX_GLYPH_WORKING" ;;
 	idle)    printf '%s' "$MUX_GLYPH_IDLE" ;;
 	'')      printf '%s' "$MUX_GLYPH_NONE" ;;
+	unwired) printf '%s' "$MUX_GLYPH_UNWIRED" ;;
 	*)       printf '%s' "$MUX_GLYPH_UNKNOWN" ;;
 	esac
 }

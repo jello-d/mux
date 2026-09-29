@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.74" "User Commands"
+.TH MUX 1 "" "mux 0.75" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -979,7 +979,7 @@ It always exits 0: it is a pure report, and a non\-zero exit would be
 indistinguishable from the transport.
 .PP
 .EX
-mux 0.74
+mux 0.75
 capabilities 1
 agent\-list 1
 agent\-summary 1
@@ -1533,6 +1533,50 @@ It is deliberately NOT
 everything under that verb promises one JSON object on stdout, and one
 printing markdown would make the promise a convention with an exception, which
 is not a contract.
+.TP
+.B mux setup " " \fIAGENT\fR " [" \-\-yes "] [" \-\-remove "] [" \-\-dry\-run ]
+Wire that agent's lifecycle hooks to mux, and install its skill. THE HARDEST
+PART OF MUX IS THE FIRST TEN MINUTES and it is this step: install mux, start a
+session, and the strip is full of
+.B \(bu
+glyphs, because nothing has told the agent to report anything. The reward the
+README promises sits on the far side of the one step nobody wants to do by
+hand, so a new user reasonably concludes mux does not work.
+.IP
+IT WRITES SOMEBODY ELSE'S CONFIGURATION FILE, which every other part of mux
+refuses to do \(em
+.B mux skill
+prints rather than installs, deliberately. The difference is that this verb's
+whole purpose IS that step: a seam nobody can cross for you is not a seam, it
+is a gap. So it is confined to one verb, it prints exactly what it will change
+before changing it, it backs the file up and names the copy, and
+.B \-\-remove
+puts it back. Without
+.B \-\-yes
+and without a terminal it REFUSES rather than assuming consent.
+.IP
+IDEMPOTENT BY CONSTRUCTION: entries are keyed by event and replaced wholesale,
+so running it twice is running it once. That matters more than it sounds \(em a
+hook appended twice FIRES twice, and a second
+.I working
+after a turn ends is exactly the straggler mux spent two releases learning to
+discard. Only mux's own entries are touched; another tool's hook on the same
+event survives, which is the property the suite spends most of its assertions
+on.
+.IP
+THE MAPPING IS NOT IN THE WIRING. The hooks say only WHAT HAPPENED
+.RB ( "mux agent-hook " \fIEventName\fR )
+and mux decides what it means, so the events come from mux's own table and a
+rule change stays a mux release rather than a coordinated one. Which agents are
+possible is DATA:
+.I share/agents/*.agent
+is scraped, so an unknown name is refused with the list.
+.IP
+Editing the settings file safely means reading what is already in it, so this
+one verb uses
+.BR python3 (1).
+It is a one-shot, human-speed command rather than a hot path; with no python3
+it prints the block and says where it goes.
 .TP
 .B mux agent " " \fIVERB\fR " [" \fIoptions\fR ]
 THE MACHINE CONTRACT: a surface a program is invited to depend on, and

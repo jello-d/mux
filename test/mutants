@@ -1958,3 +1958,45 @@ t mux-undo-pane
 - 		printf 'server\t%s\n' "$_sid"
 + 		printf 'notserver\\t%s\\n' "$_sid"
 m undo restored no pane
+
+= strip-unwired-is-detected
+f libexec/agent-state-render
+t mux-strip
+-         if [ -z "$_st" ] && _has_agent_pane "$sess"; then
++         if false; then
+m must draw the unwired glyph
+
+= strip-unwired-glyph-is-its-own
+f libexec/mux-agent-state.sh
+t mux-strip
+- 	unwired) printf '%s' "$MUX_GLYPH_UNWIRED" ;;
++ 	unwired) printf '%s' "$MUX_GLYPH_NONE" ;;
+m must draw the unwired glyph
+
+= setup-preserves-foreign-hooks
+f libexec/mux-setup-claude.py
+t mux-setup
+-         others = [e for e in (hooks.get(event) or []) if not is_ours(e)]
++         others = []
+m was DESTROYED
+
+= setup-is-idempotent
+f libexec/mux-setup-claude.py
+t mux-setup
+-         if mine == [{"hooks": [{"type": "command", "command": want}]}]:
++         if False:
+m was not a no-op
+
+= check-unwired-is-reported
+f libexec/mux-check
+t mux-check
+- 				printf '%s\n' "$_s"
++ 				:
+m was not reported
+
+= setup-says-what-is-wrong-with-the-file
+f libexec/mux-setup-claude.py
+t mux-setup
+-             sys.stderr.write("%s does not parse as JSON (%s); "
++             sys.stderr.write("%s is no good (%s); "
+m does not parse

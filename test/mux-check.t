@@ -24,11 +24,13 @@ cp -R "$HERE/share/." "$T/share/"
 # absent it prints nothing and exits 0, which is what every case before the
 # tmux-state section expects (and what "no server attached" looks like).
 KEYS=$T/keys; SROPT=$T/sropt; SLOPT=$T/slopt; HOOKS=$T/hooks
-export KEYS SROPT SLOPT HOOKS
+PANES=$T/panes
+export KEYS SROPT SLOPT HOOKS PANES
 cat >"$T/bin/tmux" <<'EOF'
 #!/bin/sh
 case "$*" in
 *list-keys*)                       [ -f "$KEYS" ]  && cat "$KEYS" ;;
+*list-panes*)                      [ -f "$PANES" ] && cat "$PANES" ;;
 *"show-options -gv status-right"*) [ -f "$SROPT" ] && cat "$SROPT" ;;
 *"show-options -gv status-left"*)  [ -f "$SLOPT" ] && cat "$SLOPT" ;;
 # FILTERED BY THE HOOK ASKED FOR, like the real thing. Returning the whole
@@ -260,6 +262,36 @@ has "status-right draws the agent strip" "a correct status-right was not seen"
 has "status-left draws the session chip" "a correct status-left was not seen"
 no_has "not bound to mux" "a healthy server reported broken bindings"
 has "tmux hooks live" "a correctly hooked server was not recognised"
+
+# --- AN AGENT MUX STARTED AND HAS NEVER HEARD FROM ------------------------
+# The first-run failure, and the one a presence check cannot see: everything is
+# installed, the strip draws, and every chip reads the same as a plain shell
+# because nothing ever told the agent to report. The GLYPH says something is
+# wrong; this says what, and names the fix.
+#
+# A WARN, not a FAIL: the agent's own config is the user's, a provisioner's
+# `apply` cannot repair it, and `--no-agent` is a deliberate reason to have no
+# agent at all. Advisory is the honest level.
+# TWO FIELDS, because that is what the CHECK asks tmux for
+# (`#{@mux-agent}\t#{session_name}`): it needs no pane ids, unlike the strip.
+# The stub answers from a file whatever format was requested, so each fixture
+# has to match its own consumer.
+printf '1\tunwired-sess\n' >"$PANES"
+check >/dev/null
+has "no agent state from: unwired-sess" "a session with an agent pane and no
+record was not reported, so the only sign of unwired hooks is a glyph that
+looks exactly like a plain shell"
+has "mux setup" "the WARN did not name the command that fixes it; a gap named
+without a remedy invites two different fixes"
+no_has "[FAIL]" "an unwired agent must not FAIL the check, which a provisioner
+reads as drift its apply can repair -- and it cannot"
+
+# ... and the healthy case SAYS SO, because a check that is silent on success
+# cannot be told from one that never ran. (No marker, so mux started no agent.)
+printf '\tplain-sess\n' >"$PANES"
+check >/dev/null
+has "every agent session has reported" "the healthy case is silent"
+rm -f "$PANES"
 
 # --- A SERVER CARRYING AN OLDER SET OF BINDINGS ---------------------------
 # The exact live failure, and the one a hardcoded list cannot see: the server
