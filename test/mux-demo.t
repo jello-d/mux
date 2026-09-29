@@ -26,7 +26,7 @@ mkdir -p "$XDG_RUNTIME_DIR"
 SOCK=$(tmux_fresh_socket mux.demotest)
 demo() { env -u MUX_SHARE MUX_DEMO_SOCKET="$SOCK" "$HERE/bin/mux" demo "$@"; }
 cleanup() { tmux_drop_socket "$SOCK"; }
-trap 'cleanup' EXIT INT TERM
+t_trap 'cleanup'
 
 _until() {   # <seconds> <command...>
   _lim=$(( ${1} * 20 )); shift

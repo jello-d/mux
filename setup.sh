@@ -56,8 +56,73 @@ do_install() {
   _man_pages | while IFS= read -r _m; do
     _ln "$_m" "$_man/$(basename "$(dirname "$_m")")/$(basename "$_m")"; done
   echo "$PKG: linked into $PREFIX (bin, libexec/$PKG, share/$PKG, man)"
+  _reload_live
   _tmux_conf_notice
   _indicator_notice
+}
+
+# The conventional tmux.conf locations, one per line. Factored because two
+# callers below ask DIFFERENT questions of the same list, and the list itself is
+# the part that would drift.
+_tmux_confs() {
+  for _c in "${XDG_CONFIG_HOME:-$HOME/.config}/tmux/tmux.conf" \
+      "$HOME/.tmux.conf"; do
+    [ -r "$_c" ] && printf '%s\n' "$_c"; done
+}
+# A HERE-DOC, NOT A PIPELINE, and the first version got this wrong in the
+# direction that suppresses a warning: a `while` loop fed by a pipe runs in a
+# SUBSHELL, so a `return` inside it cannot answer for this function -- and a
+# loop that runs ZERO times (no tmux.conf at all, which is every fresh box)
+# exits 0, i.e. "found". The notice then never fired for the one user who needs
+# it. Caught by test/setup.t on the first run.
+_conf_mentions() {   # PATTERN -> 0 if any tmux.conf contains it
+  while IFS= read -r _c; do
+    [ -n "$_c" ] || continue
+    grep -q -- "$1" "$_c" 2>/dev/null && return 0
+  done <<EOF
+$(_tmux_confs)
+EOF
+  return 1
+}
+
+# INSTALLING A FILE DOES NOT RELOAD A RUNNING SERVER, which is this package's
+# most expensive recurring bug rather than a detail. A live tmux keeps the
+# bindings, hooks and status format it read at START, so every new binding is
+# inert on the machine that just received it: `mux undo-pane` was unreachable on
+# both boxes for two releases that way, and `prefix ?` repeated it in 0.77. The
+# only thing that fixes it is `mux reload`, so the install does it rather than
+# leaving a correct install that behaves like a broken one.
+#
+# IT ALSO CLOSES A PROVISIONER'S LOOP. A provisioner runs `apply` only when
+# `check` FAILS, and mux's check now correctly FAILS on a stale server -- so
+# without this the drift is reported forever by a pin whose install already
+# ran ("APPLY DID NOT FIX: mux -- failing before AND after", observed
+# 2026-09-29). Prevention belongs here, in the step that made the file new.
+#
+# NOT THE SAME CALL AS THE TWO NOTICES BELOW, and the line between them is
+# ownership rather than caution. A tmux.conf is the user's own FILE and an
+# installer must not write it; the indicator is a separate PACKAGE whose stale
+# code a restart could not fix anyway. A reload is neither: it is idempotent, it
+# is the verb mux ships for exactly this, and the state it refreshes is mux's
+# own.
+#
+# GUARDED ON THE LIVE CONFIG NAMING THIS INSTALL, which is what keeps it honest:
+# if nothing sources THIS prefix's fragment then these servers are not running
+# this install and reloading them would push an unrelated config -- and in a
+# test sandbox it would reach the developer's real server. `mux reload` itself
+# never STARTS a server and says so when there was nothing up.
+_reload_live() {
+  command -v tmux >/dev/null 2>&1 || return 0
+  _conf_mentions "$_shr/$PKG/mux.tmux" || return 0
+  _out=$("$_bin/$PKG" reload 2>&1) || {
+    echo "$PKG: NOTE could not reload live tmux servers: $_out" >&2
+    echo "$PKG:      a running server keeps the bindings and hooks it read" >&2
+    echo "$PKG:      at start, so run \`mux reload\` once that is fixed." >&2
+    return 0; }
+  case $_out in
+  *'no running servers'*) return 0 ;;
+  *) echo "$PKG: ${_out#mux: }" ;;
+  esac
 }
 
 # THE SECOND STEP EVERY NEW USER HAS TO BE TOLD ABOUT. Linking mux into PATH
@@ -78,11 +143,10 @@ do_install() {
 # both conventional locations plus $XDG_CONFIG_HOME.
 _tmux_conf_notice() {
   _frag=$_shr/$PKG/mux.tmux
-  for _c in "${XDG_CONFIG_HOME:-$HOME/.config}/tmux/tmux.conf" \
-      "$HOME/.tmux.conf"; do
-    [ -r "$_c" ] || continue
-    if grep -q -- "$PKG/mux.tmux" "$_c" 2>/dev/null; then return 0; fi
-  done
+  # ANY mux fragment, not this prefix's: a user who installed elsewhere has
+  # already done this step, and nagging them would be wrong. The reload above
+  # asks the narrower question on purpose.
+  _conf_mentions "$PKG/mux.tmux" && return 0
   echo "$PKG: NOTE nothing sources mux's tmux fragment yet, so the status" >&2
   echo "$PKG:      bar, the agent strip and the key bindings will not" >&2
   echo "$PKG:      appear. Add this to your tmux.conf and reload tmux:" >&2

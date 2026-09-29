@@ -2018,8 +2018,8 @@ m said nothing about sourcing
 = setup-tmux-conf-notice-is-quiet
 f setup.sh
 t setup
--     if grep -q -- "$PKG/mux.tmux" "$_c" 2>/dev/null; then return 0; fi
-+     :
+-   _conf_mentions "$PKG/mux.tmux" && return 0
++   :
 m fired with the fragment already sourced
 
 = demo-state-not-removed-on-stop
@@ -2084,3 +2084,17 @@ t mux-agent-hook
 - if [ -n "$_unless_working" ] && [ "$_pstate" = working ]; then
 + if [ -n "$state" ] && [ "$_pstate" = working ]; then
 m Stop could not end a turn
+
+= setup-install-reloads-live-servers
+f setup.sh
+t setup
+-   _reload_live
++   :
+m was not brought current
+
+= setup-reload-only-for-this-install
+f setup.sh
+t setup
+-   _conf_mentions "$_shr/$PKG/mux.tmux" || return 0
++   _conf_mentions "$_shr/$PKG/mux.tmux" || :
+m pushed an unrelated config

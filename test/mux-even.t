@@ -26,7 +26,7 @@ SOCK=$(tmux_fresh_socket muxeven)
 PATH=$HERE/bin:$PATH; export PATH
 tm() { tmux -L "$SOCK" "$@"; }
 cleanup() { tmux_drop_socket "$SOCK"; }
-trap 'cleanup' EXIT INT TERM
+t_trap 'cleanup'
 
 # RUN THROUGH run-shell, which is how the key binding invokes it: a bare
 # `mux even` here would talk to the DEFAULT socket, not this test's server,

@@ -25,7 +25,7 @@ command -v tmux >/dev/null 2>&1 || {
 
 SOCK=$(tmux_fresh_socket muxprune)
 cleanup() { tmux_drop_socket "$SOCK"; rm -rf "$T"; }
-trap cleanup EXIT INT TERM
+t_trap 'cleanup'
 
 STAMPS=$T/cache
 mkdir -p "$STAMPS"

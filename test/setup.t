@@ -92,6 +92,67 @@ grep -q 'setup.sh indicator' "$T/out" || fail "the notice did not name the
 command that fixes it; a gap named without a remedy invites two different fixes"
 rm -f "$T/bin/mux-indicator"
 
+# --- A LIVE SERVER IS RELOADED, because installing a file does not ----------
+# This package's most expensive recurring bug: a running tmux keeps the
+# bindings, hooks and status format it read at START, so a new binding is inert
+# on the machine that just received it. `mux undo-pane` was unreachable on two
+# boxes for two releases that way and `prefix ?` repeated it. It also loops a
+# provisioner forever, because apply runs only when check FAILS and mux's check
+# now correctly fails on a stale server.
+#
+# THE DEFAULT SOCKET IS WHAT `mux reload` FRESHENS, so this drives that rather
+# than a fresh named one -- which is safe ONLY because harness_lib pins
+# TMUX_TMPDIR inside $T. Without that pin this case would source a
+# scratch config into the developer's own live server.
+if command -v tmux >/dev/null 2>&1; then
+  _inst() {
+    env PREFIX="$T" XDG_BIN_HOME="$T/bin" XDG_DATA_HOME="$T/share" NO_COLOR=1 \
+      HOME="$T" XDG_CONFIG_HOME="$T/conf-tmux-parent" PATH="$T/bin:$PATH" \
+      sh "$HERE/setup.sh" install 2>&1
+  }
+  _sr() { tmux show-options -gv status-right 2>/dev/null || true; }
+  if env HOME="$T" PATH="$T/bin:$PATH" tmux new-session -d -s reloadme \
+      -x 80 -y 24 2>/dev/null; then
+    # A CONFIG THAT NAMES SOMEBODY ELSE'S INSTALL IS LEFT ALONE, first,
+    # because that is the case where reloading would push an unrelated
+    # config into servers that never ran this prefix.
+    #
+    # THE FIXTURE IS A VALID CONF THAT SETS SOMETHING OBSERVABLE, which is
+    # the only version that can FAIL. The first attempt used a conf whose
+    # single line was `source-file /nowhere/else/mux.tmux`: sourcing it
+    # errors, so nothing changed either way and deleting the guard was
+    # undetectable. A fixture that cannot express the bug proves nothing.
+    printf "set -g status-right 'SOMEONE-ELSES-CONF'\n" \
+      >"$T/conf-tmux-parent/tmux/tmux.conf"
+    tmux set-option -g status-right 'STALE' 2>/dev/null
+    _o=$(_inst) || fail "install errored with a live server"
+    [ "$(_sr)" = STALE ] || fail "the install reloaded a server whose config
+does not source THIS install's fragment, so it pushed an unrelated config:
+status-right is now [$(_sr)]"
+    case $_o in
+    *reloaded*) fail "install claimed a reload it must not have done: $_o" ;;
+    esac
+
+    # ... and one that DOES name it is brought current, which is the whole
+    # point: the assertion is on the live server's own option, not on the
+    # message, because a message is what the old behaviour already had.
+    printf 'source-file %s/share/mux/mux.tmux\n' "$T" \
+      >"$T/conf-tmux-parent/tmux/tmux.conf"
+    _o=$(_inst) || fail "install errored reloading a live server"
+    case $(_sr) in
+    *'mux agent-render'*) ;;
+    *) fail "a live server running THIS install was not brought current by the
+install: status-right is [$(_sr)]. A binding or hook added by this release is
+inert on this machine, and mux check reports drift that apply cannot fix." ;;
+    esac
+    case $_o in
+    *reloaded*) ;;
+    *) fail "the install reloaded a server and did not say so: $_o" ;;
+    esac
+    tmux_drop_socket default
+  fi
+fi
+
 # uninstall: every link removed
 run uninstall >/dev/null 2>&1 || fail "uninstall errored"
 [ -e "$T/bin/mux" ] && fail "bin/mux link not removed"
