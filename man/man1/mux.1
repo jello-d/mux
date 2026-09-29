@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.62" "User Commands"
+.TH MUX 1 "" "mux 0.63" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -979,7 +979,7 @@ It always exits 0: it is a pure report, and a non\-zero exit would be
 indistinguishable from the transport.
 .PP
 .EX
-mux 0.62
+mux 0.63
 capabilities 1
 agent\-list 1
 agent\-summary 1
@@ -1455,6 +1455,59 @@ A failure to REACH the far side is never cached as a capability verdict. The
 transport failing says nothing whatever about the remote's version, so the
 question stays open and is asked again \(em the same rule as everywhere else
 here: cannot tell is not no.
+.SS The agent contract
+.TP
+.B mux agent " " \fIVERB\fR " [" \fIoptions\fR ]
+THE MACHINE CONTRACT: a surface a program is invited to depend on, and
+deliberately a different contract from the rest of mux rather than a second
+spelling of it. Currently one verb,
+.BR "mux agent status" ,
+which answers what is going on as JSON \(em the same question
+.B mux agent-summary \-\-all \-\-attached
+answers, in the contract's shape.
+.B \-\-any
+widens it to every partition rather than only the ones somebody is watching.
+.IP
+THREE PROMISES, which is what makes it a contract rather than a convention.
+.IP
+JSON ON STDOUT, ALWAYS, INCLUDING ON FAILURE. Every other mux verb puts its
+reason on stderr, which is right for a human reading a terminal and wrong for
+a caller that parses; a reader here never has to decide whether today's answer
+is a document or a sentence.
+.IP
+A SYMBOLIC
+.B status
+alongside the numeric exit \(em
+.BR ok ,
+.BR refused ,
+.B usage
+and
+.BR no\-such\-name .
+mux uses exactly four exit codes and the ABSENCE of every other one is
+load-bearing (see EXIT STATUS), so richer outcomes go in the PAYLOAD where
+they cost nothing: the exit code stays for the shell, the enumeration is for
+the reader, and neither has to be widened to serve the other. Each status maps
+to exactly one exit code; several may share one.
+.IP
+THE SHAPE IS STABLE OR THE CAPABILITY NUMBER MOVES.
+.B mux capabilities
+declares
+.BR "agent contract 1" ,
+and a breaking change to any of these documents is a new number there \(em
+which is how a consumer finds out without sniffing a version string.
+.IP
+WHY A NAMESPACE AT ALL: without one, nothing declares which output is meant to
+be parsed. The tray polls
+.BR "mux agent-summary" , and
+improving
+.B mux ls
+for a human could silently break a consumer that had started reading it. A
+declared machine surface is what frees the human surface to keep changing. The
+hyphenated
+.B agent\-*
+verbs are mux's own plumbing \(em called by tmux hooks, the status bar and the
+tray \(em and mean "about agent state", which is a different thing from "for
+an agent to call".
 .SH EXIT STATUS
 mux uses exactly four codes, and the absence of every other one is part of the
 contract.
