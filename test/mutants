@@ -1502,3 +1502,45 @@ t mux-undo-pane
 - 	if [ -n "$_cwd" ]; then
 + 	if [ -z "$_cwd" ]; then
 m slot 0 did not come back the
+
+= json-backslash-not-escaped
+f libexec/mux-json.sh
+t mux-json
+- 			else if (c == "\\") o = o "\\\\"
++ 			else if (0) o = o ""
+m backslash:
+
+= json-control-chars-raw
+f libexec/mux-json.sh
+t mux-json
+- 			else if (c in ord)  o = o sprintf("\\u%04x", ord[c])
++ 			else if (0)         o = o ""
+m bell:
+
+= json-value-through-awk-v
+f libexec/mux-json.sh
+t mux-json
+- 	MUX_JSON_V="${1-}" LC_ALL=C awk '
++ 	LC_ALL=C awk -v MUX_JSON_V="${1-}" '
+m plain:
+
+= json-num-unvalidated
+f libexec/mux-json.sh
+t mux-json
+- 	''|-|*[!0-9-]*|?*-*) printf 'null' ;;
++ 	'') printf 'null' ;;
+m num-word
+
+= json-array-no-separator
+f libexec/mux-json.sh
+t mux-json
+- 		if [ -z "$_ja" ]; then _ja=$_jl; else _ja=$_ja,$_jl; fi
++ 		_ja=$_ja$_jl
+m arr-two
+
+= json-empty-array-is-nothing
+f libexec/mux-json.sh
+t mux-json
+- 	printf '[%s]' "$_ja"
++ 	printf '%s' "$_ja"
+m arr-two

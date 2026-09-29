@@ -1,0 +1,109 @@
+#!/bin/sh
+# mux-json.sh - JSON, correctly, from POSIX sh. Sourced (functions only);
+# source it, do not run it.
+#
+# WHY THIS EXISTS AT ALL. `mux agent ...` is the machine contract, and JSON is
+# a better interface for one than the tab-separated shape the rest of mux
+# emits: a consumer gets types and structure instead of a field order it has
+# to agree about out of band. What JSON needs that TSV does not is correct
+# ESCAPING, and hand-rolled quoting is the exact class of bug this codebase
+# keeps finding -- a comma that truncated a tmux format loop, a session name
+# that word-split in three places, a backslash that doubled a spinner.
+#
+# So the escaping is done ONCE, here, and proved against a real parser rather
+# than by reading. That was the explicit bargain for staying in shell instead
+# of porting: if this turns out to be fragile in practice rather than in
+# theory, that is evidence for the port, and it is cheap to find out.
+#
+# THREE FUNCTIONS, deliberately. Callers compose with printf, which keeps the
+# shape of each record visible at its own call site:
+#
+#     printf '{"partition":%s,"state":%s,"count":%s}\n' \
+#         "$(mux_json_str "$_p")" "$(mux_json_str "$_st")" \
+#         "$(mux_json_num "$_n")"
+#
+# An emitter that built objects from key/value pairs would hide that shape and
+# buy nothing: the keys here are always literals.
+
+# mux_json_str VALUE -> a quoted, escaped JSON string.
+#
+# LC_ALL=C SO AWK WORKS IN BYTES. Every byte of a UTF-8 sequence is >= 0x80,
+# which is above the control range, so a multibyte character passes through
+# untouched and arrives in the output as the same bytes it came in as -- which
+# is what JSON wants, since a JSON string is UTF-8 and needs no \u for
+# anything above 0x1F. Left to a UTF-8 locale, awk implementations disagree
+# about whether substr counts characters or bytes, and disagreeing is worse
+# than either answer.
+#
+# THE CONTROL RANGE IS THE PART THAT MUST NOT BE GUESSED. Raw control bytes
+# are illegal inside a JSON string, so 0x00-0x1F become \b \f \n \r \t where
+# JSON names them and \u00xx otherwise. The ordinal table is built with
+# sprintf("%c") rather than assumed, because POSIX awk has no ord().
+#
+# `/` is NOT escaped: it is legal raw, and escaping it is a JavaScript-embedding
+# habit that makes the output differ from every parser's idea of canonical.
+#
+# THE VALUE ARRIVES THROUGH THE ENVIRONMENT, NOT THROUGH `awk -v`, and that is
+# not a style choice: awk processes ESCAPE SEQUENCES in a -v assignment, so a
+# backslash in the input is consumed by awk before this code ever sees it.
+# Measured on the second hand-check ever run against this function: `a \ b`
+# came back as `a  b`, silently, with the backslash gone -- data loss in the
+# one function whose entire job is not losing characters. ENVIRON is bytes.
+mux_json_str() {
+	MUX_JSON_V="${1-}" LC_ALL=C awk '
+	BEGIN {
+		s = ENVIRON["MUX_JSON_V"]
+		for (i = 0; i < 32; i++) ord[sprintf("%c", i)] = i
+		n = length(s); o = ""
+		for (i = 1; i <= n; i++) {
+			c = substr(s, i, 1)
+			if (c == "\"")      o = o "\\\""
+			else if (c == "\\") o = o "\\\\"
+			else if (c == "\b") o = o "\\b"
+			else if (c == "\f") o = o "\\f"
+			else if (c == "\n") o = o "\\n"
+			else if (c == "\r") o = o "\\r"
+			else if (c == "\t") o = o "\\t"
+			else if (c in ord)  o = o sprintf("\\u%04x", ord[c])
+			else                o = o c
+		}
+		printf "\"%s\"", o
+	}'
+}
+
+# mux_json_num VALUE -> the number, or `null` when it is not one.
+#
+# NULL RATHER THAN A GUESS. A count mux could not determine is not 0 -- that
+# is the same conflation "empty is exit 0" exists to prevent one level up,
+# where a quiet host and an unreachable one must not draw the same tile. And
+# emitting an unvalidated value would let one bad field make the whole
+# document unparseable, which turns a missing number into total silence.
+#
+# Integers only, with an optional leading minus: every number mux has is a
+# count, an age or an epoch.
+mux_json_num() {
+	case "${1-}" in
+	''|-|*[!0-9-]*|?*-*) printf 'null' ;;
+	*) printf '%s' "$1" ;;
+	esac
+}
+
+# mux_json_array -- reads one JSON value per line on stdin, prints the array.
+#
+# THE SEPARATOR IS THE WHOLE POINT. Assembling `[a,b,c]` by hand is how a
+# trailing comma ships, and a trailing comma is a document no parser accepts:
+# one malformed element makes the entire answer unreadable rather than
+# degrading. Joining afterwards makes that impossible by construction.
+#
+# NEWLINE IS SAFE AS THE INPUT DELIMITER because mux_json_str escapes one to
+# \n, so no emitted value can contain a literal newline. That is the same
+# argument the session set already makes for its own format, and it is only
+# true while every value goes through the escaper.
+mux_json_array() {
+	_ja=
+	while IFS= read -r _jl; do
+		[ -n "$_jl" ] || continue
+		if [ -z "$_ja" ]; then _ja=$_jl; else _ja=$_ja,$_jl; fi
+	done
+	printf '[%s]' "$_ja"
+}
