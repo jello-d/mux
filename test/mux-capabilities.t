@@ -152,8 +152,12 @@ The scrape has stopped matching and would pass no matter what is missing"
 # be unaudited by the guard that exists to stop exactly that -- a verb added
 # and never declared. Read out of the sub-dispatcher's own case, the same way
 # the two above are read out of bin/mux rather than listed here.
+# ALTERNATION SPLIT, the same way the main scrape handles it: the dispatcher
+# writes `status|peers)` on one line, and a pattern anchored on a single word
+# silently matches NOTHING there -- which reads as "no sub-verbs" rather than
+# as a broken scrape, so the floor below is what catches it.
 _sub=$(awk '/^case \$_verb in$/,/^esac$/' "$HERE/libexec/mux-agent" \
-	| grep -oE '^[a-z][a-z-]*\)' | tr -d ')')
+	| grep -oE '^[a-z][a-z|-]*\)' | tr -d ')' | tr '|' '\n' | grep .)
 [ -n "$_sub" ] || fail "no sub-verbs discovered in libexec/mux-agent; the
 scrape has stopped matching and this guard is proving nothing"
 for _v in $_sub; do

@@ -3,7 +3,8 @@
 # (or any program) is invited to depend on, and it is deliberately a different
 # contract from the rest of mux rather than a second spelling of it.
 #
-#   mux agent status [--all]    what is going on, as JSON
+#   mux agent status [--any]              every partition's worst state
+#   mux agent peers  [--partition N|--all] every session and what it is doing
 #
 # THREE PROMISES, which is what makes it a contract rather than a convention:
 #
@@ -54,7 +55,7 @@ _out() {   # <status> <exit> <message>
 }
 
 _usage() {
-	_out usage 2 "usage: mux agent <status> [options]"
+	_out usage 2 "usage: mux agent <status|peers> [options]"
 }
 
 _verb=${1:-}
@@ -62,9 +63,100 @@ _verb=${1:-}
 shift
 
 case $_verb in
-status) ;;
+status|peers) ;;
 *) _out usage 2 "unknown agent verb: $_verb" ;;
 esac
+
+if [ "$_verb" = peers ]; then
+	# --- peers ---------------------------------------------------------
+	# Every session with a tracked agent, and what it is doing. The verb an
+	# agent reaches for first: "who else is here, and is anyone stuck".
+	#
+	# HEADLESS, like agent-list, and that is a property worth protecting
+	# rather than an accident. It derives sessions from the state FILES and
+	# roots from the session set, so it answers over a transport, at boot,
+	# with no tmux client and no server attached. The intended caller is as
+	# likely to be `ssh box mux agent peers` as a local one.
+	#
+	# NO PANE FIELD, deliberately. `read` and `send` resolve a target to a
+	# pane at the moment they act, which is more correct than a caller
+	# caching an id that can change under it -- and it keeps this verb from
+	# needing tmux at all.
+	_pa=0
+	_part=
+	while [ $# -gt 0 ]; do
+		case $1 in
+		--all) _pa=1; shift ;;
+		--partition)
+			shift
+			_part=${1:-}
+			[ -n "$_part" ] || _out usage 2 "--partition needs a name"
+			shift ;;
+		--) shift; break ;;
+		*) _out usage 2 "unknown option: $1" ;;
+		esac
+	done
+
+	# mux-paths.sh FIRST: mux-sessions.sh calls mux_state_path, and a lib
+	# that needs another does not say so by itself. Sourcing sessions alone
+	# gave six `mux_state_path: not found` lines on stderr and an empty
+	# root for every peer -- a plausible answer, silently wrong, which is
+	# the trap these notes already record for mux-scan and mux-sessions.t.
+	. "$_lib/mux-paths.sh"
+	. "$_lib/mux-agent-state.sh"
+	. "$_lib/mux-sessions.sh"
+	if [ -z "$_part" ] && [ -r "$_lib/mux-context.sh" ]; then
+		. "$_lib/mux-context.sh"
+		mux_ctx_resolve 2>/dev/null && _part=$MUX_CTX_PARTITION
+	fi
+
+	# AGE, NOT AN EPOCH, and it is resolved HERE against the clock that
+	# wrote it. The obvious design emits the epoch and works perfectly
+	# until the reader is on another machine, where a box a few seconds off
+	# shows "idle 4s" as "idle 2m" and one badly off shows a negative.
+	_now=$(date +%s 2>/dev/null || echo 0)
+
+	_which=$_part
+	[ "$_pa" -eq 0 ] || _which=$(
+		_root=$(dirname "$(mux_agent_dir "$_part")")
+		for _d in "$_root"/*; do
+			[ -d "$_d" ] || continue
+			printf '%s\n' "${_d##*/}"
+		done)
+
+	_items=$(
+		printf '%s\n' "$_which" | while IFS= read -r _p; do
+			[ -n "$_p" ] || continue
+			_dir=$(mux_agent_dir "$_p")
+			mux_agent_sessions "$_dir" | while IFS= read -r _s; do
+				[ -n "$_s" ] || continue
+				_se=$(mux_agent_state "$_dir" "$_s")
+				_st=${_se%% *}
+				_ep=${_se#* }
+				[ -n "$_st" ] || continue
+				# A record with no usable epoch still has a
+				# real STATE, so its age is null rather than a
+				# fabricated 0 -- which would assert it just
+				# changed, a claim there is no evidence for.
+				case ${_ep:-} in
+				''|*[!0-9]*) _ag= ;;
+				*)  _ag=$((_now - _ep))
+				    [ "$_ag" -lt 0 ] && _ag=0 ;;
+				esac
+				printf '{"partition":%s,"session":%s,' \
+					"$(mux_json_str "$_p")" \
+					"$(mux_json_str "$_s")"
+				printf '"state":%s,"age":%s,"root":%s}\n' \
+					"$(mux_json_str "$_st")" \
+					"$(mux_json_num "${_ag:-}")" \
+					"$(mux_json_str \
+						"$(mux_sess_root "$_s" "$_p")")"
+			done
+		done | mux_json_array
+	)
+	printf '{"status":"ok","peers":%s}\n' "$_items"
+	exit 0
+fi
 
 # --- status ---------------------------------------------------------------
 # The same question `mux agent-summary --all --attached` answers, in the
