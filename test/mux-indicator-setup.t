@@ -19,7 +19,7 @@
 # integration; `setup.sh check` is what reports on them afterwards.
 set -eu
 _name=mux-indicator-setup
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 SETUP=$HERE/indicator/setup.sh
 [ -x "$SETUP" ] || fail "indicator/setup.sh is missing or not executable"

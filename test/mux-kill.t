@@ -16,7 +16,7 @@
 # one way a confirmed kill could still surprise you.
 set -eu
 _name=mux-kill
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 mkdir -p "$T/bin" "$T/conf/partitions" "$T/proj"
 

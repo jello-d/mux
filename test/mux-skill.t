@@ -20,7 +20,7 @@
 # being single.
 set -eu
 _name=mux-skill
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 mux() { env -u MUX_SHARE "$HERE/bin/mux" "$@"; }
 

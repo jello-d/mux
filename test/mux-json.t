@@ -18,7 +18,7 @@
 # for JSON: the escaping is the risk, so it is the thing that gets proved.
 set -eu
 _name=mux-json
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 command -v python3 >/dev/null 2>&1 || {
 	printf 'skip %s (no python3 to parse with)\n' "$_name"; exit 0; }

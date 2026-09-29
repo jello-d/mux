@@ -20,7 +20,7 @@
 # a namespace.
 set -eu
 _name=mux-agent-rank
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 . "$HERE/libexec/mux-agent-state_lib"
 
 # --- the order itself, asserted as an ORDER and not as numbers -------------

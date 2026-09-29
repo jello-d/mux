@@ -18,7 +18,7 @@
 # an independent implementation rather than read off this one.
 set -eu
 _name=mux-host-color
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 mkdir -p "$T/conf"
 hc() {   # [host] -> stdout

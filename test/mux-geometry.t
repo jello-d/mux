@@ -20,7 +20,7 @@
 # size it was not built for.)
 set -eu
 _name=mux-geometry
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 mkdir -p "$T/bin" "$T/conf" "$T/proj"
 cat >"$T/bin/tmux" <<'EOF'

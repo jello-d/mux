@@ -15,7 +15,7 @@
 # _save_match_layout had it over layout stems.
 set -eu
 _name=mux-ls
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 mkdir -p "$T/bin" "$T/conf/partitions" "$T/proj" "$T/run/agent-state/global"
 XDG_RUNTIME_DIR=$T/run; export XDG_RUNTIME_DIR

@@ -18,7 +18,7 @@
 # than cosmetic and is asserted here and end-to-end at the bottom.
 set -eu
 _name=mux-attach-only
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 mkdir -p "$T/bin" "$T/conf" "$T/proj"
 TMUXLOG=$T/tmuxlog; export TMUXLOG

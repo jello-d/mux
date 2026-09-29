@@ -14,7 +14,7 @@
 # rather than pretending.
 set -eu
 _name=mux-agent
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 command -v python3 >/dev/null 2>&1 || {
 	printf 'skip %s (no python3 to parse with)\n' "$_name"; exit 0; }
@@ -179,7 +179,7 @@ eq empty-arr "$(jq 'len(d["partitions"])')" 0
 # The verb an agent reaches for first. HEADLESS by construction -- sessions
 # come from the state FILES and roots from the session set -- so it answers
 # over a transport, at boot, with no tmux client and no server attached.
-# $MUX_STATE, which lib.sh already pins and exports for exactly this. Two
+# $MUX_STATE, which harness_lib already pins and exports for exactly this. Two
 # wrong guesses first, and both failed the same silent way -- an empty root,
 # no error -- which is why the assertion below is on the root and not merely
 # on the peer being present: XDG_STATE_HOME (which `run` does not pass

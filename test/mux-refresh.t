@@ -14,7 +14,7 @@
 # calls are inspected directly: no server, no panes, no real geometry.
 set -eu
 _name=mux-refresh
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 mkdir -p "$T/bin"
 PANES=$T/panes           # "pane_id pane_height [@mux-bottom]" per line

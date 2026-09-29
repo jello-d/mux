@@ -7,7 +7,7 @@
 # the select-pane target identifies WHICH pane was chosen. No server is started.
 set -eu
 _name=mux-focus
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 mkdir -p "$T/bin" "$T/conf/layouts" "$T/conf/profiles.d" "$T/proj"
 cat >"$T/bin/tmux" <<'EOF'

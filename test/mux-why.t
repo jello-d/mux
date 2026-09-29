@@ -16,7 +16,7 @@
 # reported from what happened rather than re-derived.
 set -eu
 _name=mux-why
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 mkdir -p "$T/bin" "$T/conf/partitions" "$T/cache"
 cat >"$T/bin/tmux" <<'EOF'

@@ -16,7 +16,7 @@
 # tmux is stubbed, so no server starts.
 set -eu
 _name=mux-save
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 mkdir -p "$T/bin" "$T/conf" "$T/proj"
 # The stub models one session: three panes matching the shipped default, with

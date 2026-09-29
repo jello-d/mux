@@ -16,7 +16,7 @@
 # is where a rename can destroy work rather than merely misplace it.
 set -eu
 _name=mux-rename
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 mkdir -p "$T/bin" "$T/conf/partitions" "$T/proj" "$T/cache"
 LIVE=$T/live; export LIVE

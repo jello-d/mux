@@ -13,7 +13,7 @@
 # reach the real one.
 set -eu
 _name=mux-setup
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 command -v python3 >/dev/null 2>&1 || {
 	printf 'skip %s (no python3)\n' "$_name"; exit 0; }

@@ -18,7 +18,7 @@
 # can be asserted here: whether a stamp's socket still has a server behind it.
 set -eu
 _name=mux-stamp-prune
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 command -v tmux >/dev/null 2>&1 || {
 	printf 'skip %s (no tmux)\n' "$_name"; exit 0; }

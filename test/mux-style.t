@@ -23,7 +23,7 @@
 #   set-option would redraw the bar continuously.
 set -eu
 _name=mux-style
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 mkdir -p "$T/bin" "$T/conf/contexts"
 

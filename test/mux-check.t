@@ -15,7 +15,7 @@
 # the real install is never consulted and nothing outside T is touched.
 set -eu
 _name=mux-check
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 mkdir -p "$T/bin" "$T/share" "$T/conf/partitions" "$T/src"
 cp -R "$HERE/share/." "$T/share/"

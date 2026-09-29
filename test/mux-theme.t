@@ -21,7 +21,7 @@
 # assertions say what they mean instead of encoding today's theme names.
 set -eu
 _name=mux-theme
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 mkdir -p "$T/bin" "$T/conf/profiles.d" "$T/proj"
 BO=$T/conf/profiles.d/proj.profile

@@ -29,7 +29,7 @@
 # whole fix was then driven end to end against that real server.
 set -eu
 _name=mux-session-names
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 mkdir -p "$T/bin" "$T/run/mux-exclude" "$T/run/agent-state/global"
 SESSIONS=$T/sessions

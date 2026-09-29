@@ -17,7 +17,7 @@
 # Drives a REAL tmux: every assertion here is about geometry tmux computes.
 set -eu
 _name=mux-even
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 command -v tmux >/dev/null 2>&1 || {
 	printf 'skip %s (no tmux)\n' "$_name"; exit 0; }

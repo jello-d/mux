@@ -8,7 +8,7 @@
 # started; the agent-state dir is a scratch $XDG_RUNTIME_DIR. Nothing outside T.
 set -eu
 _name=mux-next-blocked
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 mkdir -p "$T/bin" "$T/rt/agent-state/default"
 cat >"$T/bin/tmux" <<'EOF'

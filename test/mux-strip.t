@@ -21,7 +21,7 @@
 # current arithmetic and survives a chip gaining a character.
 set -eu
 _name=mux-strip
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 . "$HERE/libexec/mux-agent-state_lib"      # the glyph constants
 
 mkdir -p "$T/bin" "$T/run/agent-state/global"

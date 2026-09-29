@@ -15,7 +15,7 @@
 # always evidence enough to build.
 set -eu
 _name=mux-default-layout
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 mkdir -p "$T/bin" "$T/emptyconf" "$T/proj"
 cat >"$T/bin/tmux" <<'EOF'

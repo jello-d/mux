@@ -25,7 +25,7 @@
 # one peer would pass with either option deleted.
 set -eu
 _name=mux-latch-stall
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 command -v ssh >/dev/null 2>&1 || {
 	printf 'skip %s (no ssh)\n' "$_name"; exit 0; }

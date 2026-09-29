@@ -15,7 +15,7 @@
 # exists to carry, inverted.
 set -eu
 _name=mux-agent-hook
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 XDG_RUNTIME_DIR=$T/run; TMUX=/tmp/fake/global,1,0; TMUX_PANE=%9
 export XDG_RUNTIME_DIR TMUX TMUX_PANE

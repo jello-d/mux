@@ -24,7 +24,7 @@
 # and a network this test must not touch.
 set -eu
 _name=mux-latch-hooks
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 AUTH=$HERE/share/latch/ssh-auth
 PROBE=$HERE/share/latch/ssh-probe

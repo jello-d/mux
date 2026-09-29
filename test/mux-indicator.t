@@ -19,7 +19,7 @@
 # tray must not have a red suite because of it.
 set -eu
 _name=mux-indicator
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 IND=$HERE/indicator
 [ -d "$IND/tests" ] || fail "indicator/tests is missing"
@@ -29,7 +29,7 @@ IND=$HERE/indicator
 # than by looking for a venv directory, since a half-built venv is exactly the
 # case that should skip rather than fail confusingly.
 _py=
-# $HOME_REAL, not $HOME: lib.sh pins HOME inside the scratch dir so no test
+# $HOME_REAL, not $HOME: harness_lib pins HOME inside the scratch dir so no test
 # can write outside it, and the venv lives in the user's actual home. This
 # only READS it, which is what HOME_REAL exists for.
 for _c in "${MUX_INDICATOR_VENV:-$HOME_REAL/.venvs/mux-indicator}/bin/python" \

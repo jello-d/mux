@@ -13,7 +13,7 @@
 # Pure file logic against a scratch cache; no tmux.
 set -eu
 _name=mux-sessions
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 # mux-sessions_lib derives its path through mux-paths_lib (mux_state_path), so
 # the dependency is sourced here exactly as bin/mux sources it.
 . "$HERE/libexec/mux-paths_lib"

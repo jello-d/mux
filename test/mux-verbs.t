@@ -5,7 +5,7 @@
 # that the help listings actually SEE the profile table.
 set -eu
 _name=mux-verbs
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 mkdir -p "$T/bin" "$T/conf/profiles.d" "$T/proj"
 cat >"$T/bin/tmux" <<'EOF'

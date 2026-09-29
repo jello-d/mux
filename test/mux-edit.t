@@ -15,7 +15,7 @@
 # No tmux at all: `mux edit` is pure file work.
 set -eu
 _name=mux-edit
-. "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/harness_lib"
 
 mkdir -p "$T/conf" "$T/ed"
 # ed NAME BODY : a scratch $EDITOR that rewrites the draft with BODY.
