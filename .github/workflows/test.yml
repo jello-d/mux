@@ -1,0 +1,100 @@
+# The suite, on Linux and on macOS.
+#
+# WHY macOS IS HERE AT ALL: mux is POSIX shell over tmux, and its only real
+# portability exposure is the GNU-vs-BSD userland. test/mux-portability.t
+# covers the part a stub can honestly reach (a readlink with no -f, a PATH with
+# no sha256sum) and found two live bugs doing it, but a stub only models the
+# differences somebody thought of. A macOS runner is the only way to be told
+# about the ones nobody thought of, and it needs no Mac to own: these runners
+# are free for a public repository.
+#
+# NO GNU COREUTILS ON THE macOS RUNNER, deliberately, with ONE exception.
+# Putting `coreutils` on PATH there would make every BSD tool behave like its
+# GNU counterpart, which is precisely the difference this job exists to detect:
+# the run would go green and prove nothing. The exception is `timeout`, which
+# several TESTS use as a hang guard and macOS does not ship at all -- mux itself
+# only ever calls it behind `command -v` (asserted in test/mux-portability.t),
+# so it is a harness dependency rather than a mux one. It is symlinked in ALONE,
+# by name, so nothing else on PATH stops being BSD.
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  suite:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # NOT fail-fast: a macOS failure must not cancel the Linux job. The whole
+      # point is comparing the two, and a cancelled run cannot be compared.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: dependencies
+        run: |
+          set -eu
+          case "${{ runner.os }}" in
+          Linux)
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends tmux shellcheck
+            ;;
+          macOS)
+            brew install tmux shellcheck coreutils
+            # `timeout` ONLY, under its GNU name, so the tests that bound a hang
+            # can run while every other tool stays BSD.
+            mkdir -p "$HOME/.local/bin"
+            ln -sf "$(brew --prefix coreutils)/libexec/gnubin/timeout" \
+              "$HOME/.local/bin/timeout"
+            echo "$HOME/.local/bin" >>"$GITHUB_PATH"
+            ;;
+          esac
+
+      - name: the userland this ran against
+        # Recorded because the NEXT failure is easier to read with it: which
+        # tmux, which sh, and whether the tools are BSD or GNU.
+        run: |
+          set -eu
+          uname -a
+          tmux -V
+          sh -c 'echo "sh: $0"'
+          command -v shellcheck python3 timeout || true
+          readlink -f / >/dev/null 2>&1 \
+            && echo "readlink: has -f" || echo "readlink: NO -f (BSD)"
+          command -v sha256sum >/dev/null 2>&1 \
+            && echo "hash: sha256sum" || echo "hash: no sha256sum (BSD)"
+
+      # The tray's Python tests need dbus-next and Pillow, and they SKIP cleanly
+      # without them. Installed on Linux only: the indicator is a freedesktop
+      # StatusNotifierItem, so macOS is not its platform yet, and a green macOS
+      # run that included them would be claiming coverage mux does not have.
+      - name: indicator deps (Linux only)
+        if: runner.os == 'Linux'
+        run: |
+          set -eu
+          python3 -m venv "$HOME/.venvs/mux-indicator"
+          "$HOME/.venvs/mux-indicator/bin/pip" install -q dbus-next Pillow
+
+      - name: suite
+        # `setup.sh test` is the one entry point a consumer uses, so CI runs
+        # what a person would run rather than poking at test/run directly.
+        run: ./setup.sh test
+
+      - name: check (against a real install)
+        # `mux check` asks FUNCTIONAL questions, so running it after installing
+        # is a second, independent verdict on the same tree. There is no tmux
+        # server here, which it reports and skips rather than failing.
+        run: |
+          set -eu
+          ./setup.sh install
+          PATH="$HOME/.local/bin:$PATH" mux check
+          PATH="$HOME/.local/bin:$PATH" mux -V
+          PATH="$HOME/.local/bin:$PATH" mux skill >/dev/null
