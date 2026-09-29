@@ -1727,3 +1727,17 @@ t mux-send-policy
 - 	( set -f
 + 	(
 m sealed-star
+
+= send-policy-class-token-ignored
+f libexec/mux-send-policy.sh
+t mux-send-policy
+- 			"control:$_spc") ;;
++ 			"control:zzz") ;;
+m class-agent
+
+= send-policy-class-matches-any
+f libexec/mux-send-policy.sh
+t mux-send-policy
+- 			"window:$_spwin") ;;
++ 			"window:$_spwin"|control:*) ;;
+m class-hybrid
