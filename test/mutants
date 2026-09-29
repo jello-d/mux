@@ -1811,3 +1811,24 @@ t mux-agent
 - 						| grep -q "^$_pn	" \
 + 						| true \
 m peers-stale-pane
+
+= skill-name-is-a-path
+f libexec/mux-skill
+t mux-skill
+- ''|*[!a-z0-9-]*|-*|*-) echo "mux: skill: not a skill name: $_name" >&2
++ '') echo
+m should be a usage error
+
+= skill-missing-lists-nothing
+f libexec/mux-skill
+t mux-skill
+- 			echo "mux: skill: have: ${_d##*/}" >&2
++ 			:
+m did not name what there IS
+
+= skill-missing-exits-zero
+f libexec/mux-skill
+t mux-skill
+- 	echo "mux: skill: no skill called $_name" >&2
++ 	echo "mux: skill: no skill called $_name" >&2; exit 0
+m should exit 1

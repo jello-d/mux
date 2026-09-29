@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.68" "User Commands"
+.TH MUX 1 "" "mux 0.69" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -979,7 +979,7 @@ It always exits 0: it is a pure report, and a non\-zero exit would be
 indistinguishable from the transport.
 .PP
 .EX
-mux 0.68
+mux 0.69
 capabilities 1
 agent\-list 1
 agent\-summary 1
@@ -1456,6 +1456,37 @@ transport failing says nothing whatever about the remote's version, so the
 question stays open and is asked again \(em the same rule as everywhere else
 here: cannot tell is not no.
 .SS The agent contract
+.TP
+.B mux skill " [" \fINAME\fR ]
+Print the agent skill that matches THIS mux, on stdout. An API agents do not
+know about does not get used, which is the whole reason it ships: the verbs,
+the JSON contract and \(em the part that matters \(em the rule about never
+answering another agent's permission prompt are no use living only in a man
+page an agent will not read.
+.IP
+RELEASE\-MATCHED, which is the point of printing it rather than linking it. A
+skill is installed once into a config directory and then nobody looks at it
+again, so a copy taken from a website teaches whatever the verbs were that
+day. This one comes out of the same tree as the binary answering the calls, so
+it cannot describe a flag this mux does not have \(em and the suite checks the
+skill's verbs, flags, states and statuses against the source, in both
+directions.
+.IP
+IT PRINTS AND DOES NOT INSTALL. Where a skill belongs is the agent harness's
+business, and mux does not learn the layout of somebody else's config
+directory \(em the same seam it holds by taking indicator sources as commands
+and never learning what ssh is. The integrator places it:
+.IP
+.EX
+mkdir -p ~/.claude/skills/mux-agent
+mux skill >~/.claude/skills/mux-agent/SKILL.md
+.EE
+.IP
+It is deliberately NOT
+.BR "mux agent skill" :
+everything under that verb promises one JSON object on stdout, and one
+printing markdown would make the promise a convention with an exception, which
+is not a contract.
 .TP
 .B mux agent " " \fIVERB\fR " [" \fIoptions\fR ]
 THE MACHINE CONTRACT: a surface a program is invited to depend on, and
