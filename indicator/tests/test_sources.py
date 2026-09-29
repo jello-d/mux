@@ -109,7 +109,8 @@ class Load(unittest.TestCase):
         that went empty when you detached would be a regression."""
         got = load(self.d)
         self.assertEqual(got,
-                         [(local_label(), ["mux", "agent", "status"])])
+                         [(local_label(),
+                           ["mux", "agent", "status", "--all"])])
 
     def test_local_comes_first(self):
         """So the left-hand item does not move as latches come and go."""
@@ -440,6 +441,21 @@ class ActivateCommand(unittest.TestCase):
         argv = sources.remote_argv("box", template="ssh %h %q")
         self.assertIn("mux agent status", " ".join(argv))
         self.assertNotIn("agent-summary", " ".join(argv))
+
+    def test_every_partition_is_asked_for_EXPLICITLY(self):
+        """`--all` was parsed and never read until 0.73, so this daemon got
+        every partition by accident and depended on it. Once the verb honours
+        its own documented scoping, omitting the flag reduces a remote host to
+        whichever partition its login shell resolves -- which is exactly the
+        blindness 0.56 existed to fix, and it would come back silently: the
+        tray would simply stop publishing an item, which reads as "that
+        partition is gone".
+
+        Asserted for BOTH forms, because they are built by different code and
+        a local host has partitions too."""
+        argv = sources.remote_argv("box", template="ssh %h %q")
+        self.assertIn("--all", " ".join(argv))
+        self.assertIn("--all", list(sources.LOCAL_CMD))
 
     def test_the_poll_is_not_the_CLICK(self):
         """The other direction, asserted separately: a default that leaked the

@@ -187,6 +187,24 @@ for _f in $(printf '%s\n' "$_skill" | grep -oE '(^|[ `])--[a-z][a-z-]*' \
 parse"
 done
 
+# THE SCOPE CLAIM IS CHECKED PER VERB, because the flag sweep above cannot.
+# It asserts a flag is parsed SOMEWHERE in the dispatcher, so `--partition`
+# passed while `mux agent status` rejected it outright -- and `--all` was parsed
+# by status and then never read, which no name-based check can see at all. The
+# skill says both verbs take both flags, in the same breath as calling a
+# partition an isolation boundary, so that sentence is asserted against the
+# verbs themselves.
+for _v in status peers; do
+	for _f in --all "--partition global"; do
+		# shellcheck disable=SC2086   # a flag and its value, split
+		_o=$(mux agent $_v $_f 2>&1) || true
+		case $_o in
+		*'"status":"usage"'*) fail "the skill says \`mux agent $_v\` takes
+$_f, and the verb answers a usage error: [$_o]" ;;
+		esac
+	done
+done
+
 # THE STATES IT NAMES ARE THE STATES MUX EMITS. This one has bitten the
 # project before at one remove: the doctor gave advice that could not come
 # true because a contract had moved under it.

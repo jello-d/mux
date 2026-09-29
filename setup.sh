@@ -56,6 +56,33 @@ do_install() {
   _man_pages | while IFS= read -r _m; do
     _ln "$_m" "$_man/$(basename "$(dirname "$_m")")/$(basename "$_m")"; done
   echo "$PKG: linked into $PREFIX (bin, libexec/$PKG, share/$PKG, man)"
+  _indicator_notice
+}
+
+# AN INSTALLED INDICATOR IS A SECOND PACKAGE THAT TALKS TO THIS ONE, and core
+# does not install, restart or own it. It is still worth SAYING when it has
+# fallen out of step, because the coupling is a CONTRACT (`mux agent status`,
+# JSON) and a skew there fails silently: a daemon built against an older
+# contract keeps polling and simply publishes fewer items, which reads as "that
+# partition is gone" rather than as a version problem.
+#
+# A NOTICE AND NOT A RESTART, deliberately. Restarting would not help -- what is
+# stale is the daemon's OWN code, not anything it caches from core, since it
+# re-execs `mux` on every poll. And not an install either: that is a pip
+# operation wanting a network, and keeping core free of that is the whole reason
+# the indicator is a separate package.
+#
+# CONTENT, NOT VERSION: it asks the indicator's own check, which compares the
+# package to what is installed and what is RUNNING. Never fatal, and silent
+# when no indicator is installed -- an optional sub-package must not make the
+# core install noisy for everyone who does not use it.
+_indicator_notice() {
+  [ -e "$_bin/mux-indicator" ] || return 0
+  sh "$_root/indicator/setup.sh" check >/dev/null 2>&1 && return 0
+  echo "$PKG: NOTE the installed tray indicator differs from this package" >&2
+  echo "$PKG:      (or its daemon is running older code). It polls a mux" >&2
+  echo "$PKG:      contract, so leaving it behind loses items silently." >&2
+  echo "$PKG:      Refresh it with: ./setup.sh indicator" >&2
 }
 
 do_uninstall() {

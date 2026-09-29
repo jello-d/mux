@@ -543,9 +543,13 @@ fi
 # is an implementation detail; the contracts are what differ.
 _all=0
 _att=1
+_spart=
 while [ $# -gt 0 ]; do
 	case $1 in
 	--all)      _all=1; shift ;;
+	--partition)
+		[ -n "${2:-}" ] || _out usage 2 "--partition needs a name"
+		_spart=$2; shift 2 ;;
 	# EVERY partition, not just the watched ones. The default is `attached`
 	# because a tray item means somebody is looking at it, and an agent
 	# asking what is going on wants the same answer a human would see.
@@ -554,6 +558,23 @@ while [ $# -gt 0 ]; do
 	*)  _out usage 2 "unknown option: $1" ;;
 	esac
 done
+
+# SCOPED TO THE CALLER'S PARTITION UNLESS ASKED OTHERWISE, the same rule
+# `peers` already follows. `_all` was parsed and never read, so every caller
+# got every partition -- and the shipped skill tells an agent the opposite,
+# one sentence after calling a partition an isolation boundary. A flag that
+# parses and does nothing is worse than a missing one: the caller believes it
+# asked for something.
+if [ "$_all" -eq 0 ]; then
+	if [ -z "$_spart" ] && [ -r "$_lib/mux-context.sh" ]; then
+		. "$_lib/mux-context.sh"
+		mux_ctx_resolve 2>/dev/null && _spart=$MUX_CTX_PARTITION
+	fi
+	# `global` is the namespace mux_agent_dir defaults to, so an
+	# unresolvable context scopes to the default rather than widening to
+	# everything: failing open is the one answer this must not give.
+	[ -n "$_spart" ] || _spart=global
+fi
 
 set -- --all
 [ "$_att" -eq 0 ] || set -- "$@" --attached
@@ -566,6 +587,7 @@ _items=$(
 	printf '%s\n' "$_rows" | while IFS=' ' read -r _p _st _n; do
 		[ -n "${_p:-}" ] || continue
 		[ -n "${_st:-}" ] || continue
+		[ -z "$_spart" ] || [ "$_p" = "$_spart" ] || continue
 		printf '{"partition":%s,"state":%s,"count":%s}\n' \
 			"$(mux_json_str "$_p")" "$(mux_json_str "$_st")" \
 			"$(mux_json_num "${_n:-}")"

@@ -82,8 +82,16 @@ DEFAULT_TRANSPORT = (
 # because there is nothing anyone is looking at. That supersedes the older
 # "the local host is always present" rule, which was written when a host had
 # exactly one partition and presence WAS the question.
-REMOTE_CMD = "sh -lc 'mux agent status'"
-LOCAL_CMD = ("agent", "status")
+#
+# `--all` IS EXPLICIT, AND WAS LOAD-BEARING BEFORE IT WORKED. Until 0.73 the
+# flag was parsed and never read, so every caller got every partition and this
+# daemon depended on that by accident; scoping the verb to the caller's
+# partition (which is what its own documentation promised) would have quietly
+# reduced a remote host to whichever partition its login shell resolves --
+# exactly the blindness 0.56 existed to fix. An older mux on the far side
+# ignores the flag and still answers for everything, so it is safe to send.
+REMOTE_CMD = "sh -lc 'mux agent status --all'"
+LOCAL_CMD = ("agent", "status", "--all")
 
 # A partition name is a DNS label (see mux_ctx_valid): lowercase alphanumerics
 # and hyphens. VALIDATED HERE because the names arrive from the far side and
