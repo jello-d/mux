@@ -440,7 +440,13 @@ tm send-keys -t t.1 'exit' Enter
 _until 10 _npanes 2 || fail "partial: the pane did not close"
 _until 10 _recorded || fail "partial: no undo record was written"
 _rec=$T/run/mux-undo/$(ls -A "$T/run/mux-undo" | head -1)
-printf 'slot\t1\n' >"$_rec"          # everything after `slot` is missing
+# THE SERVER LINE IS KEPT AND VALID, or the 0.74 attribution check refuses
+# this record first and the partial-record guard below becomes unreachable --
+# which is exactly what happened: the full corpus reported this record dying
+# for the wrong reason. Two guards in sequence means the FIXTURE has to get
+# past the first one to exercise the second.
+printf 'server\t%s\n' "$(tm display-message -p '#{pid}')" >"$_rec"
+printf 'slot\t1\n' >>"$_rec"         # everything after `slot` is missing
 # DIRECTLY, with $TMUX pointed at this server, because the MESSAGE is the
 # observable here and through run-shell tmux reports only "returned 1" -- the
 # stderr it swallows is the whole reason a partial record fails silently in

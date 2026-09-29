@@ -265,6 +265,14 @@ eq peers-headless-state \
 # is null rather than the default. `wsess` records pane %3, which the stub
 # does not list.
 CLASS2=agent run peers --partition work
+# STATUS BEFORE PAYLOAD, at the FIRST use of the flag. This is the rule the
+# contract gives a consumer, and it is what makes a failure legible: a mutation
+# that removed the `--partition` arm answers `{"status":"usage"}` -- valid JSON
+# with no `peers` key -- so every assertion below raises inside the helper and
+# the kill lands on "the answer did not parse: Traceback" rather than on
+# anything named. Guarding only the later use was not enough, because this one
+# runs first; the full corpus said so both times.
+eq peers-part-status "$(jq 'd["status"]')" ok
 eq peers-stale-pane \
   "$(jq '[p["control"] for p in d["peers"] if p["session"]=="wsess"][0]')" \
   None
@@ -274,8 +282,15 @@ run peers
 eq peers-n-after "$(jq 'len(d["peers"])')" 4
 eq peers-scoped "$(jq 'set(p["partition"] for p in d["peers"])')" "{'global'}"
 run peers --partition work
-eq peers-other "$(jq 'set(p["partition"] for p in d["peers"])')" "{'work'}"
+# STATUS FIRST, THEN THE PAYLOAD, which is the rule the contract itself gives a
+# consumer and the reason this assertion exists: a mutation that removed the
+# `--partition` arm answered `{"status":"usage"}` -- valid JSON with no `peers`
+# key -- so the helper raised and the kill landed on "the answer did not parse:
+# Traceback" rather than on anything named. The full corpus reported it as a
+# record dying for the wrong reason, which is the driver doing its job.
+eq peers-other-status "$(jq 'd["status"]')" ok
 eq peers-other-n "$(jq 'len(d["peers"])')" 1
+eq peers-other "$(jq 'set(p["partition"] for p in d["peers"])')" "{'work'}"
 run peers --all
 eq peers-all "$(jq 'sorted(set(p["partition"] for p in d["peers"]))')" \
   "['global', 'work']"
