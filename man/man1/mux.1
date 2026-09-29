@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.67" "User Commands"
+.TH MUX 1 "" "mux 0.68" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -979,7 +979,7 @@ It always exits 0: it is a pure report, and a non\-zero exit would be
 indistinguishable from the transport.
 .PP
 .EX
-mux 0.67
+mux 0.68
 capabilities 1
 agent\-list 1
 agent\-summary 1
@@ -1473,7 +1473,8 @@ session carrying its
 .BR partition ,
 .BR session ,
 .BR state ,
-.B age
+.BR age ,
+.B control
 and
 .BR root .
 .B \-\-partition
@@ -1558,6 +1559,20 @@ answers over a transport, at boot, with no tmux client and no server attached.
 It carries no pane id on purpose \(em a verb that acts on a pane resolves one
 at the moment it acts, which is more correct than a caller caching an id that
 can change under it.
+.IP
+.B control
+is the class
+.B mux agent send
+gates on, reported here so a caller can see it without attempting a send and
+reading the refusal. It costs ONE tmux query per PARTITION rather than one per
+peer, and it is
+.B null
+\(em never a guess \(em when the server cannot be reached or when the pane a
+record names is gone. That distinction is the point: a remote
+.B peers
+at boot would otherwise report every pane as human\-controlled, which is
+plausible and wrong. Everything else in the answer is unaffected, so it is a
+missing FIELD rather than a missing answer.
 .IP
 .B read
 RESOLVES THE PANE ITSELF, from the state record, rather than taking one from
