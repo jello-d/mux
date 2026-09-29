@@ -169,7 +169,7 @@ class TestSticky(unittest.TestCase):
 class TestLocation(unittest.TestCase):
     def test_it_lives_in_STATE_not_cache(self):
         """It cannot be rebuilt: the order that produced it is gone. That is
-        the same test mux-paths.sh applies to the session set, and getting it
+        the same test mux-paths_lib applies to the session set, and getting it
         wrong is one `rm -rf ~/.cache` from losing every assignment."""
         os.environ["XDG_STATE_HOME"] = "/x/state"
         try:

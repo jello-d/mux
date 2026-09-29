@@ -152,7 +152,7 @@ env XDG_RUNTIME_DIR="$T/run" TMUX=/tmp/fake/global,1,0 TMUX_PANE=%7 \
 	>/dev/null 2>&1 || fail "emit failed"
 _rec=$(cat "$T/run/agent-state/global/7")
 _found=$(env XDG_RUNTIME_DIR="$T/run" sh -c '
-	. "$1/libexec/mux-agent-state.sh"
+	. "$1/libexec/mux-agent-state_lib"
 	mux_agent_state "$(mux_agent_dir global)" "my project"' _ "$HERE")
 case ${_found%% *} in
 working) ;;
@@ -160,7 +160,7 @@ working) ;;
 esac
 # ... and a session named after its FIRST WORD must not inherit that state.
 _stolen=$(env XDG_RUNTIME_DIR="$T/run" sh -c '
-	. "$1/libexec/mux-agent-state.sh"
+	. "$1/libexec/mux-agent-state_lib"
 	mux_agent_state "$(mux_agent_dir global)" "my"' _ "$HERE")
 [ -z "${_stolen%% *}" ] \
 	|| fail "a session named 'my' inherited 'my project' state: [$_stolen]"
@@ -221,7 +221,7 @@ _got=$(printf '%s
 	|| fail "notification clobbered the session: [$_rec]"
 # ... and it must be reachable by name, which is what the strip does.
 _found=$(env XDG_RUNTIME_DIR="$T/run" sh -c '
-	. "$1/libexec/mux-agent-state.sh"
+	. "$1/libexec/mux-agent-state_lib"
 	mux_agent_state "$(mux_agent_dir global)" "my project"' _ "$HERE")
 [ -n "${_found%% *}" ] \
 	|| fail "no state after a notification: [$_rec]"

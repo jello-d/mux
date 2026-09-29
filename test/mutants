@@ -362,14 +362,14 @@ t mux-latch
 m must be reported, not replaced
 
 = sessions-back-in-the-cache
-f libexec/mux-paths.sh
+f libexec/mux-paths_lib
 t mux-sessions
 - 	printf '%s' "${MUX_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/mux}"
 + 	printf '%s' "${MUX_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/mux}"
 m must live under $MUX_STATE
 
 = sessions-migration-clobbers
-f libexec/mux-paths.sh
+f libexec/mux-paths_lib
 t mux-sessions
 - 	if [ ! -e "$_mpn" ] && [ -e "$_mpo" ]; then
 + 	if [ -e "$_mpo" ]; then
@@ -425,42 +425,42 @@ t mux-latch-hooks
 m took longer than a
 
 = scan-prune-empty-list
-f libexec/mux-scan.sh
+f libexec/mux-scan_lib
 t mux-discover
 - 	[ -n "$_spk" ] || return 0
 + 	:
 m prune deleted anyway
 
 = scan-prune-takes-live-map
-f libexec/mux-scan.sh
+f libexec/mux-scan_lib
 t mux-discover
 - 		*" $_spn "*) ;;
 + 		*" __never__ "*) ;;
 m LIVE partition's map was pruned
 
 = hostcolor-leading-zero-is-octal
-f libexec/mux-hosts.sh
+f libexec/mux-hosts_lib
 t mux-host-color
 - 		0?*) _hc=${_hc#0} ;;
 + 		000?*) _hc=${_hc#0} ;;
 m padded-vs-not
 
 = hostcolor-cube-level-shifted
-f libexec/mux-hosts.sh
+f libexec/mux-hosts_lib
 t mux-host-color
 - 	0) printf '0' ;;   1) printf '95' ;;  2) printf '135' ;;
 + 	0) printf '0' ;;   1) printf '96' ;;  2) printf '135' ;;
 m cube: got
 
 = hostcolor-greyscale-base
-f libexec/mux-hosts.sh
+f libexec/mux-hosts_lib
 t mux-host-color
 - 		_hv=$((8 + (_hc - 232) * 10))
 + 		_hv=$(((_hc - 232) * 10))
 m greyscale: got
 
 = hostcolor-half-a-pair
-f libexec/mux-hosts.sh
+f libexec/mux-hosts_lib
 t mux-host-color
 - 	[ -n "$_hfh" ] && [ -n "$_hbh" ] || return 0
 + 	:
@@ -545,21 +545,21 @@ t mux-agent-doctor
 m must exit 2
 
 = log-write-failure-propagates
-f libexec/mux-log.sh
+f libexec/mux-log_lib
 t mux-log
 - 		2>/dev/null >>"$_ml_f" || return 0
 + 		2>/dev/null >>"$_ml_f" || return 1
 m unwritable DIRECTORY made mux_log fail
 
 = log-never-truncates
-f libexec/mux-log.sh
+f libexec/mux-log_lib
 t mux-log
 - 	_ml_max=${MUX_LOG_MAX:-262144}
 + 	_ml_max=999999999
 m cap is not firing
 
 = log-none-still-writes
-f libexec/mux-log.sh
+f libexec/mux-log_lib
 t mux-log
 - 	none) return 0 ;;
 + 	none) : ;;
@@ -580,7 +580,7 @@ t mux-log
 m no log yet
 
 = log-mkdir-failure-propagates
-f libexec/mux-log.sh
+f libexec/mux-log_lib
 t mux-log
 - 	[ -d "$_ml_d" ] || mkdir -p "$_ml_d" 2>/dev/null || return 0
 + 	[ -d "$_ml_d" ] || mkdir -p "$_ml_d" 2>/dev/null || return 1
@@ -937,67 +937,67 @@ t mux-indicator
 m test_a_TILE_STILL_RENDERS_with_no_fonts_at_all
 
 = rank-blocked-demoted
-f libexec/mux-agent-state.sh
+f libexec/mux-agent-state_lib
 t mux-agent-rank
 - 	blocked) echo 3 ;;
 + 	blocked) echo 1 ;;
 m must outrank working
 = rank-working-not-above-idle
-f libexec/mux-agent-state.sh
+f libexec/mux-agent-state_lib
 t mux-agent-rank
 - 	working) echo 2 ;;
 + 	working) echo 0 ;;
 m must outrank idle
 = rank-unknown-outranks-everything
-f libexec/mux-agent-state.sh
+f libexec/mux-agent-state_lib
 t mux-agent-rank
 - 	*)       echo 0 ;;
 + 	*)       echo 9 ;;
 m must outrank an UNKNOWN word
 = worst-wins-comparison-inverted
-f libexec/mux-agent-state.sh
+f libexec/mux-agent-state_lib
 t mux-agent-rank
 - 		[ "$_r" -gt "$_br" ] && { _br=$_r; _best=$_st; _bestep=$_e; }
 + 		[ "$_r" -lt "$_br" ] && { _br=$_r; _best=$_st; _bestep=$_e; }
 m should beat
 = sessions-dedup-disabled
-f libexec/mux-agent-state.sh
+f libexec/mux-agent-state_lib
 t mux-agent-rank
 - 		*"$MUX_AGENT_NL$_ss$MUX_AGENT_NL"*) continue ;;
 + 		*"$MUX_AGENT_NL$_ss$MUX_AGENT_NL"*) ;;
 m distinct sessions
 = sess-add-not-idempotent
-f libexec/mux-sessions.sh
+f libexec/mux-sessions_lib
 t mux-sessions
 - 	mux_sess_has "$1" "${3:-}" && return 0
 + 	:
 
 = sess-has-is-root-not-membership
-f libexec/mux-sessions.sh
+f libexec/mux-sessions_lib
 t mux-sessions
 - 	cut -f1 "$_sf" 2>/dev/null | grep -qxF -- "$1"
 + 	awk -F'\t' -v n="$1" '$1==n && $2!=""' "$_sf" | grep -q .
 
 = sess-drop-takes-everything
-f libexec/mux-sessions.sh
+f libexec/mux-sessions_lib
 t mux-sessions
 - 	awk -F'\t' -v n="$1" '$1!=n' "$_sf" 2>/dev/null >"$_st"
 + 	awk -F'\t' -v n="$1" '0' "$_sf" 2>/dev/null >"$_st"
 
 = sess-add-drops-the-root
-f libexec/mux-sessions.sh
+f libexec/mux-sessions_lib
 t mux-sessions
 - 	printf '%s\t%s\n' "$1" "$2" 2>/dev/null >>"$_sf" || true
 + 	printf '%s\t%s\n' "$1" "" 2>/dev/null >>"$_sf" || true
 
 = sess-file-ignores-the-partition
-f libexec/mux-sessions.sh
+f libexec/mux-sessions_lib
 t mux-sessions
 - 	_sk=${1:-${MUX_CTX_PARTITION:-global}}
 + 	_sk=global
 
 = sess-has-dash-name-read-as-options
-f libexec/mux-sessions.sh
+f libexec/mux-sessions_lib
 t mux-sessions
 - 	cut -f1 "$_sf" 2>/dev/null | grep -qxF -- "$1"
 + 	cut -f1 "$_sf" 2>/dev/null | grep -qxF "$1"
@@ -1518,42 +1518,42 @@ t mux-undo-pane
 m slot 0 did not come back the
 
 = json-backslash-not-escaped
-f libexec/mux-json.sh
+f libexec/mux-json_lib
 t mux-json
 - 			else if (c == "\\") o = o "\\\\"
 + 			else if (0) o = o ""
 m backslash:
 
 = json-control-chars-raw
-f libexec/mux-json.sh
+f libexec/mux-json_lib
 t mux-json
 - 			else if (c in ord)  o = o sprintf("\\u%04x", ord[c])
 + 			else if (0)         o = o ""
 m bell:
 
 = json-value-through-awk-v
-f libexec/mux-json.sh
+f libexec/mux-json_lib
 t mux-json
 - 	MUX_JSON_V="${1-}" LC_ALL=C awk '
 + 	LC_ALL=C awk -v MUX_JSON_V="${1-}" '
 m plain:
 
 = json-num-unvalidated
-f libexec/mux-json.sh
+f libexec/mux-json_lib
 t mux-json
 - 	''|-|*[!0-9-]*|?*-*) printf 'null' ;;
 + 	'') printf 'null' ;;
 m num-word
 
 = json-array-no-separator
-f libexec/mux-json.sh
+f libexec/mux-json_lib
 t mux-json
 - 		if [ -z "$_ja" ]; then _ja=$_jl; else _ja=$_ja,$_jl; fi
 + 		_ja=$_ja$_jl
 m arr-two
 
 = json-empty-array-is-nothing
-f libexec/mux-json.sh
+f libexec/mux-json_lib
 t mux-json
 - 	printf '[%s]' "$_ja"
 + 	printf '%s' "$_ja"
@@ -1680,63 +1680,63 @@ t mux-agent
 m wait-to-state
 
 = send-policy-file-writability-unchecked
-f libexec/mux-send-policy.sh
+f libexec/mux-send-policy_lib
 t mux-send-policy
 - 	[ ! -w "$_spf" ] || return 1
 + 	:
 m writable-file
 
 = send-policy-dir-writability-unchecked
-f libexec/mux-send-policy.sh
+f libexec/mux-send-policy_lib
 t mux-send-policy
 - 	[ ! -w "$(dirname -- "$_spf")" ] || return 1
 + 	:
 m writable-dir
 
 = send-policy-missing-file-permits
-f libexec/mux-send-policy.sh
+f libexec/mux-send-policy_lib
 t mux-send-policy
 - 	[ -f "$_spf" ] || return 1
 + 	:
 m a missing policy wrote to stderr
 
 = send-policy-tokens-are-alternatives
-f libexec/mux-send-policy.sh
+f libexec/mux-send-policy_lib
 t mux-send-policy
 - 			*) _ok=0; break ;;
 + 			*) ;;
 m part-nomatch
 
 = send-policy-bare-directive-grants
-f libexec/mux-send-policy.sh
+f libexec/mux-send-policy_lib
 t mux-send-policy
 - 		[ $# -gt 0 ] || continue
 + 		true
 m bare-directive
 
 = send-policy-directives-interchangeable
-f libexec/mux-send-policy.sh
+f libexec/mux-send-policy_lib
 t mux-send-policy
 - 		[ "${1:-}" = "send-$_spw" ] || continue
 + 		[ "${1:-}" != zzz ] || continue
 m unknown-not-granted
 
 = send-policy-globs-the-scope
-f libexec/mux-send-policy.sh
+f libexec/mux-send-policy_lib
 t mux-send-policy
 - 	( set -f
 + 	(
 m sealed-star
 
 = send-policy-class-token-ignored
-f libexec/mux-send-policy.sh
+f libexec/mux-send-policy_lib
 t mux-send-policy
 - 			"control:$_spc") ;;
 + 			"control:zzz") ;;
 m class-agent
 
 = send-policy-class-matches-any
-f libexec/mux-send-policy.sh
+f libexec/mux-send-policy_lib
 t mux-send-policy
 - 			"window:$_spwin") ;;
 + 			"window:$_spwin"|control:*) ;;
@@ -1967,7 +1967,7 @@ t mux-strip
 m must draw the unwired glyph
 
 = strip-unwired-glyph-is-its-own
-f libexec/mux-agent-state.sh
+f libexec/mux-agent-state_lib
 t mux-strip
 - 	unwired) printf '%s' "$MUX_GLYPH_UNWIRED" ;;
 + 	unwired) printf '%s' "$MUX_GLYPH_NONE" ;;

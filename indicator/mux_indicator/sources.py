@@ -35,7 +35,8 @@ import socket
 
 # The comment rule is mux_conf_clean's, deliberately: a FULL-LINE comment goes,
 # and an INLINE comment is WHITESPACE then #. A hash INSIDE a token survives, so
-# a template containing one is safe. Kept identical to mux-conf.sh so a user who
+# a template containing one is safe. Kept identical to mux-conf_lib so a
+# user who
 # knows one config file knows this one.
 _FULL = re.compile(r"^\s*#")
 _INLINE = re.compile(r"\s#.*$")

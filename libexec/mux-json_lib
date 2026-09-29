@@ -1,5 +1,5 @@
 #!/bin/sh
-# mux-json.sh - JSON, correctly, from POSIX sh. Sourced (functions only);
+# mux-json_lib - JSON, correctly, from POSIX sh. Sourced (functions only);
 # source it, do not run it.
 #
 # WHY THIS EXISTS AT ALL. `mux agent ...` is the machine contract, and JSON is

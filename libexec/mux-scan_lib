@@ -1,12 +1,12 @@
 #!/bin/sh
-# mux-scan.sh - project DISCOVERY: a cached map from a session name to the
+# mux-scan_lib - project DISCOVERY: a cached map from a session name to the
 # repository it lives in, so `mux go <name>` reaches a project you have never
 # configured and never have to cd to first. Sourced (functions only).
 #
 # The map is a CACHE, not config. It holds only derived facts, it is rewritten
 # wholesale, and deleting it loses nothing -- which is what makes it safe to
 # regenerate without any merge against things you have edited. Everything you
-# decided lives in the profile table (see mux-profiles.sh); the two are never
+# decided lives in the profile table (see mux-profiles_lib); the two are never
 # the same file.
 #
 # Rebuilt on exactly three triggers, and never by a timer:
@@ -112,7 +112,7 @@ EOF
 # outside that set indexes a namespace that cannot be reached.
 #
 # ONE GUARD, AND AN EMPTY ANSWER IS NOT AN ANSWER. This lib is sourced by three
-# programs that each happen to source mux-context.sh too, but "happens to" is
+# programs that each happen to source mux-context_lib too, but "happens to" is
 # not a contract -- so an absent oracle, or one that answers nothing, must mean
 # DO NOTHING. The alternative is reading an empty list as "no partition exists"
 # and deleting every map on the box.

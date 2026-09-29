@@ -1,5 +1,5 @@
 #!/bin/sh
-# mux-profiles.sh - the profile TABLE: $MUX_DIR/profiles, one line per session
+# mux-profiles_lib - the profile TABLE: $MUX_DIR/profiles, one line per session
 # that deviates from what mux would derive. Sourced (functions only).
 #
 #   # NAME      key=value ...

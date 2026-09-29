@@ -15,11 +15,11 @@ set -eu
 MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
 MUX_SHARE=${MUX_SHARE:-$(dirname "$0")/../share}
 
-# The shared $MUX_DIR-over-$MUX_SHARE resolver (mux-data.sh), so the check
+# The shared $MUX_DIR-over-$MUX_SHARE resolver (mux-data_lib), so the check
 # audits the data mux would ACTUALLY read -- a default theme or layout supplied
 # by the overlay counts, and one shadowed by it is judged on the overlay copy.
-for _l in mux-paths.sh mux-data.sh mux-context.sh mux-scan.sh \
-		mux-profiles.sh mux-notify.sh mux-views.sh; do
+for _l in mux-paths_lib mux-data_lib mux-context_lib mux-scan_lib \
+		mux-profiles_lib mux-notify_lib mux-views_lib; do
 	_lp=$(dirname "$0")/$_l
 	[ -r "$_lp" ] || {
 		printf '  [FAIL] %s missing (broken install)\n' "$_lp" >&2
@@ -344,8 +344,8 @@ else
 	# A WARN, not a FAIL: the agent's own configuration is the user's, a
 	# provisioner's `apply` cannot repair it, and `--no-agent` sessions are
 	# a deliberate reason to have none. Advisory is the honest level.
-	if [ -r "$(dirname "$0")/mux-agent-state.sh" ]; then
-		. "$(dirname "$0")/mux-agent-state.sh"
+	if [ -r "$(dirname "$0")/mux-agent-state_lib" ]; then
+		. "$(dirname "$0")/mux-agent-state_lib"
 		_adir=$(mux_agent_dir 2>/dev/null || true)
 		# THE WHOLE PIPELINE IS THE SUBSTITUTION, so no temp file is
 		# needed to get a value out of a `while` that runs in a

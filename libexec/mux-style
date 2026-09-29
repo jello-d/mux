@@ -4,7 +4,8 @@
 # in a marked context, plus a colour theme.
 #
 # THE TEXT IS THE SIGNAL; THE COLOUR IS NOT. A context is reported by the
-# optional context hook (see mux-context.sh); mux only REFLECTS it in the UI and
+# optional context hook (see mux-context_lib); mux only REFLECTS it in the UI
+# and
 # enforces nothing -- whatever actually enforces a boundary, if anything, lives
 # in the integrator. The banner and the title prefix are the human reminder --
 # text, so it does not depend on registering a hue. The colour is cosmetic: a
@@ -38,21 +39,22 @@ pane_pid=${2:?usage: mux-style [-q] SESSION PANE_PID}
 MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
 # The shared comment/normalize rule (see bin/mux); a fallback strips only
 # whole-line comments so a missing lib never breaks the status line.
-_conf=$(dirname "$0")/mux-conf.sh
+_conf=$(dirname "$0")/mux-conf_lib
 if [ -r "$_conf" ]; then . "$_conf"
 else mux_conf_clean() { grep -vE '^[[:space:]]*(#|$)'; }
 fi
-# Which colour identifies a host (see mux-hosts.sh). AFTER mux-conf.sh, which it
+# Which colour identifies a host (see mux-hosts_lib). AFTER mux-conf_lib,
+# which it
 # uses to read $MUX_DIR/hosts. Required rather than stubbed: a fallback here
 # would be a second copy of the very rule that lib exists to hold, and the two
 # would disagree silently about which machine is which.
-_hostslib=$(dirname "$0")/mux-hosts.sh
+_hostslib=$(dirname "$0")/mux-hosts_lib
 [ -r "$_hostslib" ] || {
         echo "mux-style: $_hostslib missing (incomplete install)" >&2; exit 1; }
 . "$_hostslib"
-# The context seam (see mux-context.sh). A stub yields the global context if
+# The context seam (see mux-context_lib). A stub yields the global context if
 # the lib is somehow missing.
-_ctx=$(dirname "$0")/mux-context.sh
+_ctx=$(dirname "$0")/mux-context_lib
 if [ -r "$_ctx" ]; then . "$_ctx"
 else mux_ctx_resolve() { MUX_CTX_TOKEN=global; MUX_CTX_PARTITION=global
 	MUX_CFG_label=''; MUX_CFG_theme=''; MUX_CFG_host_chip=on; }
@@ -176,7 +178,7 @@ fi
 # every machine still gets a distinct, readable chip with zero config (an
 # integrator can pin specific hosts to hand-picked hues there).
 if [ "$quiet" = 0 ] && [ "${MUX_CFG_host_chip:-on}" != off ]; then
-        # The rule lives in mux-hosts.sh, because `mux host-color` answers the
+        # The rule lives in mux-hosts_lib, because `mux host-color` answers the
         # same question for the tray. Two copies would drift, and the drift is
         # silent: the bar and the tray would disagree about which machine is
         # which and neither would look broken.

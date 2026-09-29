@@ -3,7 +3,7 @@
 # tray indicator polls it from a desktop daemon with no tmux client, no $TMUX
 # and no cwd of consequence.
 #
-# That makes it the one consumer of mux-agent-state.sh whose namespace cannot
+# That makes it the one consumer of mux-agent-state_lib whose namespace cannot
 # come from $TMUX, and it is exactly where a stale default hid. It used to fall
 # back to the literal name `default` -- the old tmux socket basename. When the
 # personal partition became `global` that directory stopped existing, so the
@@ -11,7 +11,7 @@
 # clue, just a tray that never lit up.
 #
 # So the assertions worth having are about RESOLUTION, not about the ranking
-# (mux-agent-state.sh owns that and the strip shares it).
+# (mux-agent-state_lib owns that and the strip shares it).
 set -eu
 _name=mux-agent-summary
 . "$(dirname "$0")/lib.sh"

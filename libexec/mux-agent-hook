@@ -45,8 +45,8 @@ SessionStart)     set -- idle ;;
 	# says nothing; a NAMED event mux does not know is a wiring error, and
 	# the integrator is claiming a contract that does not exist. The hook
 	# ends in `|| true` on its side, so the agent is never harmed by this.
-	if [ -r "$_lib/mux-log.sh" ]; then
-		. "$_lib/mux-log.sh"
+	if [ -r "$_lib/mux-log_lib" ]; then
+		. "$_lib/mux-log_lib"
 		mux_log agent "unknown hook event: $_ev"
 	fi
 	echo "mux: agent-hook: unknown event: $_ev" >&2

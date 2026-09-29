@@ -1,5 +1,5 @@
 #!/bin/sh
-# mux-context.sh -- the mux CONTEXT seam. Sourced (functions only).
+# mux-context_lib -- the mux CONTEXT seam. Sourced (functions only).
 #
 # mux core knows nothing about any particular notion of "context" (a
 # work/personal split, a k8s namespace, a git host, ...). It asks an OPTIONAL

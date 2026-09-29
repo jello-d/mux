@@ -35,8 +35,8 @@
 set -eu
 
 _lib=$(dirname "$0")
-. "$_lib/mux-json.sh"
-. "$_lib/mux-send-policy.sh"
+. "$_lib/mux-json_lib"
+. "$_lib/mux-send-policy_lib"
 
 # THE STATUS ENUMERATION, and its one rule: each value maps to exactly one of
 # mux's four exit codes, never the reverse. Several statuses may share a code
@@ -76,8 +76,8 @@ esac
 # not here" must be the same answer and the same exit from both.
 _resolve() {   # <session> <partition-or-empty>
 	_rp=$2
-	if [ -z "$_rp" ] && [ -r "$_lib/mux-context.sh" ]; then
-		. "$_lib/mux-context.sh"
+	if [ -z "$_rp" ] && [ -r "$_lib/mux-context_lib" ]; then
+		. "$_lib/mux-context_lib"
 		mux_ctx_resolve 2>/dev/null && _rp=$MUX_CTX_PARTITION
 	fi
 	_rd=$(mux_agent_dir "$_rp")
@@ -103,8 +103,8 @@ _tx() {
 
 case $_verb in
 read|wait|send)
-	. "$_lib/mux-paths.sh"
-	. "$_lib/mux-agent-state.sh" ;;
+	. "$_lib/mux-paths_lib"
+	. "$_lib/mux-agent-state_lib" ;;
 esac
 
 if [ "$_verb" = read ]; then
@@ -382,8 +382,8 @@ if [ "$_verb" = send ]; then
 	# another agent's behalf. It is also the audit trail the layer above
 	# would otherwise have to build: who was typed at, in what state, and
 	# whether an override was taken.
-	if [ -r "$_lib/mux-log.sh" ]; then
-		. "$_lib/mux-log.sh"
+	if [ -r "$_lib/mux-log_lib" ]; then
+		. "$_lib/mux-log_lib"
 		_sov=
 		[ "$_sack_prompt" -eq 0 ] || _sov=" --answer-prompt"
 		[ "$_sack_blind" -eq 0 ]  || _sov="$_sov --blind"
@@ -430,16 +430,16 @@ if [ "$_verb" = peers ]; then
 		esac
 	done
 
-	# mux-paths.sh FIRST: mux-sessions.sh calls mux_state_path, and a lib
+	# mux-paths_lib FIRST: mux-sessions_lib calls mux_state_path, and a lib
 	# that needs another does not say so by itself. Sourcing sessions alone
 	# gave six `mux_state_path: not found` lines on stderr and an empty
 	# root for every peer -- a plausible answer, silently wrong, which is
 	# the trap these notes already record for mux-scan and mux-sessions.t.
-	. "$_lib/mux-paths.sh"
-	. "$_lib/mux-agent-state.sh"
-	. "$_lib/mux-sessions.sh"
-	if [ -z "$_part" ] && [ -r "$_lib/mux-context.sh" ]; then
-		. "$_lib/mux-context.sh"
+	. "$_lib/mux-paths_lib"
+	. "$_lib/mux-agent-state_lib"
+	. "$_lib/mux-sessions_lib"
+	if [ -z "$_part" ] && [ -r "$_lib/mux-context_lib" ]; then
+		. "$_lib/mux-context_lib"
 		mux_ctx_resolve 2>/dev/null && _part=$MUX_CTX_PARTITION
 	fi
 
@@ -538,7 +538,7 @@ fi
 # --- status ---------------------------------------------------------------
 # The same question `mux agent-summary --all --attached` answers, in the
 # contract's shape. It SHELLS OUT to that verb rather than re-deriving: the
-# ranking lives in mux-agent-state.sh and has been written twice before, which
+# ranking lives in mux-agent-state_lib and has been written twice before, which
 # is once more than it should have been. Whether a verb here is a thin wrapper
 # is an implementation detail; the contracts are what differ.
 _all=0
@@ -566,8 +566,8 @@ done
 # parses and does nothing is worse than a missing one: the caller believes it
 # asked for something.
 if [ "$_all" -eq 0 ]; then
-	if [ -z "$_spart" ] && [ -r "$_lib/mux-context.sh" ]; then
-		. "$_lib/mux-context.sh"
+	if [ -z "$_spart" ] && [ -r "$_lib/mux-context_lib" ]; then
+		. "$_lib/mux-context_lib"
 		mux_ctx_resolve 2>/dev/null && _spart=$MUX_CTX_PARTITION
 	fi
 	# `global` is the namespace mux_agent_dir defaults to, so an

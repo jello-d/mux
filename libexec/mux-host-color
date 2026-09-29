@@ -11,7 +11,7 @@
 # HEX, NOT A TMUX STYLE, because a style is tmux's dialect: `bg=colour236` is a
 # pixel value only if you know the xterm-256 layout, and handing that to a
 # drawing program makes it learn a standard nobody should own twice. The rule
-# (which colour) and the conversion (what pixel) both live in mux-hosts.sh.
+# (which colour) and the conversion (what pixel) both live in mux-hosts_lib.
 #
 # A PAIR, ALWAYS. The backgrounds are deliberately dark so light text sits on
 # them, so a bg alone is unusable as ink and an fg alone unusable as a fill.
@@ -27,7 +27,7 @@ set -eu
 _lib=$(dirname "$0")
 MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
 
-for _l in mux-conf.sh mux-hosts.sh; do
+for _l in mux-conf_lib mux-hosts_lib; do
 	[ -r "$_lib/$_l" ] || {
 		echo "mux: host-color: $_lib/$_l missing (broken install)" >&2
 		exit 1; }

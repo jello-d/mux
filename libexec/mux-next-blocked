@@ -108,10 +108,10 @@ if [ -z "$current" ]; then
 		2>/dev/null || true)
 fi
 
-. "$_lib/mux-agent-state.sh"
+. "$_lib/mux-agent-state_lib"
 excluded=
-if [ -r "$_lib/mux-exclude.sh" ]; then
-	. "$_lib/mux-exclude.sh"
+if [ -r "$_lib/mux-exclude_lib" ]; then
+	. "$_lib/mux-exclude_lib"
 	excluded=$(mux_excluded "$client")
 fi
 dir=$(mux_agent_dir "$_ns")

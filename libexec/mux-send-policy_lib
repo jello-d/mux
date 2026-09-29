@@ -1,5 +1,5 @@
 #!/bin/sh
-# mux-send-policy.sh - WHO MAY TYPE INTO A PANE MUX CANNOT VOUCH FOR.
+# mux-send-policy_lib - WHO MAY TYPE INTO A PANE MUX CANNOT VOUCH FOR.
 # Sourced (functions only); source it, do not run it.
 #
 # mux refuses to send text into an agent that is BLOCKED (sitting at a

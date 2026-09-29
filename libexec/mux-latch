@@ -74,11 +74,11 @@
 set -eu
 
 _lib=$(dirname "$0")
-. "$_lib/mux-conf.sh"
-# mux-log.sh for mux_log: latch is the reason the log exists. Every transition
+. "$_lib/mux-conf_lib"
+# mux-log_lib for mux_log: latch is the reason the log exists. Every transition
 # went to stderr and the state machine lived in shell variables, so a latch that
 # did NOT recover left nothing to read afterwards.
-. "$_lib/mux-log.sh"
+. "$_lib/mux-log_lib"
 
 MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
 [ -d "${MUX_SHARE:-}" ] || MUX_SHARE=$_lib/../share

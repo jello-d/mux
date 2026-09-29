@@ -12,7 +12,7 @@
 # genuinely intentional but rare is disabled INLINE at the site instead, so it
 # is visible where it matters and a second accidental instance still fails.
 
-# Every library is sourced through a runtime-resolved path ($_lib/<name>.sh),
+# Every library is sourced through a runtime-resolved path ($_lib/<name>_lib),
 # because mux self-locates rather than carrying an install prefix. shellcheck
 # cannot follow that and says so once per source site.
 disable=SC1090,SC1091

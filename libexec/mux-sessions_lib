@@ -1,5 +1,5 @@
 #!/bin/sh
-# mux-sessions.sh - the SESSION SET: which sessions this partition had, so a
+# mux-sessions_lib - the SESSION SET: which sessions this partition had, so a
 # reboot is followed by `mux resume` and not by rebuilding five sessions by
 # hand. Sourced (functions only).
 #

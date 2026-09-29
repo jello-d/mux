@@ -38,7 +38,7 @@ _SEED = zlib.crc32
 def state_dir():
     """mux's own state directory. STATE, not cache: an assignment cannot be
     rebuilt once the order that produced it is gone, which is the same test
-    mux-paths.sh applies to the session set."""
+    mux-paths_lib applies to the session set."""
     base = os.environ.get("XDG_STATE_HOME") or os.path.expanduser(
         "~/.local/state")
     return os.path.join(base, "mux")

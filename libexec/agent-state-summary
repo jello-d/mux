@@ -3,7 +3,7 @@
 # namespace, for an EXTERNAL presenter (the SNI tray indicator). Prints one
 # line "<state> <count>": STATE is the worst live state across the namespace's
 # sessions (blocked > working > idle), COUNT the number of sessions in that
-# state; with no tracked agent it prints "none 0". Reuses mux-agent-state.sh so
+# state; with no tracked agent it prints "none 0". Reuses mux-agent-state_lib so
 # the ranking and the state model never drift from the strip and the picker.
 #
 #   mux agent-summary [NS]
@@ -14,7 +14,7 @@
 # with none it resolves the caller's context, exactly as the front end does.
 #
 # That resolution matters precisely BECAUSE this is the headless caller. Every
-# other consumer of mux-agent-state.sh (the status strip, next-blocked) runs
+# other consumer of mux-agent-state_lib (the status strip, next-blocked) runs
 # inside tmux and gets its namespace from $TMUX. This one has no $TMUX, so it
 # used to fall back to a hardcoded 'default' -- the old tmux socket basename.
 # When the personal partition became `global` that name stopped existing, and
@@ -24,7 +24,7 @@ set -eu
 
 # Sibling libs in this script's own (colocated) libexec dir.
 _lib=$(dirname "$0")
-. "$_lib/mux-agent-state.sh"
+. "$_lib/mux-agent-state_lib"
 
 # ARGUMENTS: [--all] [--attached] [NS]
 #
@@ -65,8 +65,8 @@ while :; do
 	esac
 done
 _ns=${1:-}
-if [ -z "$_ns" ] && [ -r "$_lib/mux-context.sh" ]; then
-	. "$_lib/mux-context.sh"
+if [ -z "$_ns" ] && [ -r "$_lib/mux-context_lib" ]; then
+	. "$_lib/mux-context_lib"
 	mux_ctx_resolve 2>/dev/null && _ns=$MUX_CTX_PARTITION
 fi
 
@@ -84,7 +84,7 @@ _NL='
 #
 # ONE FUNCTION, because --all asks the same question of several directories
 # and a second copy of the ranking walk would be a second place for the
-# "worst wins" rule to drift from mux-agent-state.sh.
+# "worst wins" rule to drift from mux-agent-state_lib.
 _summarise() {   # <dir>
 	_sd=$1
 	_sessions=
