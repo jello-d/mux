@@ -1,5 +1,5 @@
 #!/bin/sh
-# test/mux-strip.t - agent-state-render, the status-right session strip.
+# test/mux-strip.t - mux-agent-state-render, the status-right session strip.
 #
 # The largest file in the tree and, until now, the only substantial one with no
 # test at all. Its interesting behaviour is GRACEFUL REDUCTION: the strip is
@@ -61,7 +61,7 @@ st %2 working delta
 render() {
 	env -u TMUX -u TMUX_PANE XDG_RUNTIME_DIR="$T/run" \
 		MUX_STRIP_WIDTH="$2" PATH="$T/bin:$PATH" \
-		"$HERE/libexec/agent-state-render" "$1" testclient 2>/dev/null
+		"$HERE/libexec/mux-agent-state-render" "$1" testclient 2>/dev/null
 }
 # The VISIBLE text: tmux #[...] directives carry no display width.
 vis() { printf '%s' "$1" | sed 's/#\[[^]]*\]//g'; }
@@ -213,7 +213,7 @@ no_has "$_o" charlie "hidden session still on the strip"
 has "$_o" bravo "hiding one session dropped another"
 # ... and another client is unaffected: the set is keyed per client.
 _o2=$(vis "$(env -u TMUX XDG_RUNTIME_DIR="$T/run" MUX_STRIP_WIDTH=400 \
-	PATH="$T/bin:$PATH" "$HERE/libexec/agent-state-render" delta other)")
+	PATH="$T/bin:$PATH" "$HERE/libexec/mux-agent-state-render" delta other)")
 has "$_o2" charlie "hiding leaked to another client"
 rm -f "$T/run/mux-exclude/testclient"
 

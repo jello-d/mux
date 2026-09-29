@@ -1,5 +1,6 @@
 #!/bin/sh
-# agent-state-render: the tmux status-right session strip. One token per session
+# mux-agent-state-render: the tmux status-right session strip. One token per
+# session
 # on this server, in tmux's OWN session order -- so the strip reads the same way
 # switch-client -n/-p walks it: prev is to the left, next is to the right. The
 # attached session wears a fixed "current" chip (constant on every theme),
@@ -7,7 +8,8 @@
 # non-current sessions colour their chip by state -- glyph carries state,
 # colour marks current.
 #
-# Agent state lives in per-pane files (see agent-state-emit), namespaced by tmux
+# Agent state lives in per-pane files (see mux-agent-state-emit), namespaced by
+# tmux
 # socket so a work bar never shows personal agents and vice versa. A killed
 # agent never fires Stop, so dead-pane files are pruned here. Meant for tmux
 # status-right via #().
@@ -40,7 +42,7 @@ _lib=$(dirname "$0")
 . "$_lib/mux-agent-state_lib"
 
 # Closing a notification whose pane has died (the prune below) is the same
-# operation agent-state-emit performs when a state changes, so both take it
+# operation mux-agent-state-emit performs when a state changes, so both take it
 # from one place rather than each knowing a daemon's CLI.
 . "$_lib/mux-notify_lib"
 
@@ -102,8 +104,8 @@ CUR_LB='[' ; CUR_RB=']'                  # frame glyphs
 
 SEP='│'                                  # drawn between tokens
 
-# The namespaced state dir for this tmux socket (see agent-state-emit); the
-# shared lib derives the namespace from $TMUX just as agent-state-emit does.
+# The namespaced state dir for this tmux socket (see mux-agent-state-emit); the
+# shared lib derives the namespace from $TMUX just as mux-agent-state-emit does.
 dir=$(mux_agent_dir)
 
 # Live pane ids across the server, space-padded so the membership test is a

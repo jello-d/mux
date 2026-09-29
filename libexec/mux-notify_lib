@@ -1,7 +1,9 @@
 #!/bin/sh
 # mux-notify_lib - raise and clear desktop notifications without binding mux to
-# one notification daemon. Sourced by agent-state-emit (which raises one when an
-# agent stops needing the CPU and starts needing YOU) and by agent-state-render
+# one notification daemon. Sourced by mux-agent-state-emit (which raises one
+# when an
+# agent stops needing the CPU and starts needing YOU) and by
+# mux-agent-state-render
 # (which clears one whose pane has since died). Functions only; source it, do
 # not run it.
 #

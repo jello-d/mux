@@ -126,7 +126,8 @@ fi
 #
 # IT FOUND TEN SHIPPED INSTANCES the moment it was added, four of them in
 # libexec: the session-set write and delete, mux-scan's log fallback, and
-# agent-state-render's session query -- which runs on every status TICK. Every
+# mux-agent-state-render's session query -- which runs on every status TICK.
+# Every
 # one was a path built to be silent that would have printed shell noise instead.
 _bad=$T/order
 # The second grep drops COMMENT lines -- including the ones just above,

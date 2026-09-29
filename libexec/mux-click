@@ -1,6 +1,7 @@
 #!/bin/sh
 # mux-click - switch a tmux client to the session encoded in a clicked status
-# range tag. agent-state-render wraps each session chip in #[range=user|s:NAME],
+# range tag. mux-agent-state-render wraps each session chip in
+# #[range=user|s:NAME],
 # so tmux's MouseDown1Status binding hands us that tag; strip the s: marker and
 # switch. A tag naming no live session (e.g. a name tmux truncated past its
 # 15-char range cap) is a silent no-op -- a mis-click never lands elsewhere. A

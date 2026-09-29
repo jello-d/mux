@@ -161,7 +161,8 @@ PATH=$_saved
 
 # --- the POLICY, at the one place that sets it -----------------------------
 # Everything above tests the mechanism. The urgency mux actually PASSES is
-# agent-state-emit's decision, so it is asserted against the real script: a lib
+# mux-agent-state-emit's decision, so it is asserted against the real script: a
+# lib
 # that merely accepts `normal` proves nothing if the caller still says
 # `critical`. Driven end to end with tmux stubbed, no server and no daemon.
 mkdir -p "$T/emitbin" "$T/run"
@@ -182,7 +183,7 @@ _sf=$T/run/agent-state/global/5
 emit() {
 	env XDG_RUNTIME_DIR="$T/run" TMUX=/tmp/fake/global,1,0 TMUX_PANE=%5 \
 		PATH="$T/emitbin:$_saved" LOG="$LOG" \
-		"$HERE/libexec/agent-state-emit" "$1"
+		"$HERE/libexec/mux-agent-state-emit" "$1"
 }
 # Record: state window pane epoch notif SESSION. The notif id is field 5 --
 # the session moved to the END so a name containing a space survives, and
@@ -234,7 +235,7 @@ _bc=$T/emit.log
 : >"$_bc"
 env XDG_RUNTIME_DIR="$T/run" TMUX=/tmp/fake/global,1,0 TMUX_PANE=%5 \
         PATH="$T/emitbin:$_saved" LOG="$LOG" MUX_EMIT_LOG="$_bc" \
-        "$HERE/libexec/agent-state-emit" idle >/dev/null 2>&1 || true
+        "$HERE/libexec/mux-agent-state-emit" idle >/dev/null 2>&1 || true
 case "$(cat "$_bc")" in
 *idle*was=working*) ;;
 *) fail "the breadcrumb did not record the transition: [$(cat "$_bc")]" ;;
@@ -281,7 +282,7 @@ ttlemit() {
 	: >"$CLOSELOG"
 	env XDG_RUNTIME_DIR="$T/run" TMUX=/tmp/fake/global,1,0 TMUX_PANE=%40 \
 	MUX_NOTIFY_CLOSE="$T/ttlbin/closer" PATH="$T/ttlbin:$PATH" \
-	"$HERE/libexec/agent-state-emit" "$@" >/dev/null 2>&1
+	"$HERE/libexec/mux-agent-state-emit" "$@" >/dev/null 2>&1
 }
 
 # A FRESH id is still closed on a real state change. This is the behaviour the

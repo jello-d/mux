@@ -1,5 +1,5 @@
 #!/bin/sh
-# agent-state-summary: machine-readable aggregate of agent state across a
+# mux-agent-state-summary: machine-readable aggregate of agent state across a
 # namespace, for an EXTERNAL presenter (the SNI tray indicator). Prints one
 # line "<state> <count>": STATE is the worst live state across the namespace's
 # sessions (blocked > working > idle), COUNT the number of sessions in that

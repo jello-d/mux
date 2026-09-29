@@ -49,27 +49,27 @@
 
 
 = beat-guard-removed
-f libexec/agent-state-emit
+f libexec/mux-agent-state-emit
 t mux-session-names
 - if [ -n "$_beat" ] && [ "$_pstate" = idle ]; then
 + if false; then
 m resurrected 'working'
 
 = notif-ttl-never-expires
-f libexec/agent-state-emit
+f libexec/mux-agent-state-emit
 t mux-notify
 - _ttl=${MUX_NOTIF_TTL:-3600}
 + _ttl=999999999
 m was closed
 
 = prune-guard-removed
-f libexec/agent-state-render
+f libexec/mux-agent-state-render
 t mux-strip
 - if [ -d "$dir" ] && [ -n "${live# }" ]; then
 + if [ -d "$dir" ]; then
 
 = agent-list-negative-age
-f libexec/agent-state-list
+f libexec/mux-agent-state-list
 t mux-agent-list
 - 		[ "$_age" -lt 0 ] && _age=0 ;;
 + 		;;
@@ -1019,28 +1019,28 @@ m stalling at [silent] was NOT bounded
 
 
 = beat-never-corroborates
-f libexec/agent-state-emit
+f libexec/mux-agent-state-emit
 t mux-session-names
 - 		rm -f "$_beatf" 2>/dev/null || true
 + 		exit 0
 m a SECOND beat did not corroborate
 
 = beat-mark-survives-a-transition
-f libexec/agent-state-emit
+f libexec/mux-agent-state-emit
 t mux-session-names
 - [ "$state" = "${_pstate:-}" ] || rm -f "$_beatf" 2>/dev/null || true
 + 	:
 m did not clear the beat mark
 
 = beat-never-marks-the-first
-f libexec/agent-state-emit
+f libexec/mux-agent-state-emit
 t mux-session-names
 - 	if [ -z "$_bfirst" ]; then
 + 	if true; then
 m a SECOND beat did not corroborate
 
 = beat-window-ignored
-f libexec/agent-state-emit
+f libexec/mux-agent-state-emit
 t mux-session-names
 - 	if [ "$((_bnow - _bfirst))" -le "$_BEAT_WINDOW" ] \
 + 	if true \
@@ -1105,8 +1105,8 @@ m PostToolUse is not being passed as a --beat
 = agent-hook-drops-the-source
 f libexec/mux-agent-hook
 t mux-agent-hook
-- exec "$_lib/agent-state-emit" "$@" --source "$_ev"
-+ exec "$_lib/agent-state-emit" "$@"
+- exec "$_lib/mux-agent-state-emit" "$@" --source "$_ev"
++ exec "$_lib/mux-agent-state-emit" "$@"
 m did not reach the log
 
 = agent-hook-unknown-event-silent
@@ -1167,14 +1167,14 @@ t mux-even
 m headless did not reach the partition's server
 
 = summary-all-reports-one-partition
-f libexec/agent-state-summary
+f libexec/mux-agent-state-summary
 t mux-agent-summary
 - for _d in "$_root"/*; do
 + 	for _d in "$(mux_agent_dir "$_ns")"; do
 m did not report the OTHER partition
 
 = summary-all-drops-the-empty-caller
-f libexec/agent-state-summary
+f libexec/mux-agent-state-summary
 t mux-agent-summary
 - *) printf '%s %s\n' "${_ns:-global}" "none 0" ;;
 + 	*) ;;
@@ -1463,14 +1463,14 @@ m the restart happened and was not reported
 
 
 = summary-attached-ignored
-f libexec/agent-state-summary
+f libexec/mux-agent-state-summary
 t mux-agent-summary
 - 	[ "$_att" -eq 0 ] || _watched "$_p" || continue
 + 	:
 m attached-only
 
 = summary-attached-keeps-the-empty-caller
-f libexec/agent-state-summary
+f libexec/mux-agent-state-summary
 t mux-agent-summary
 - [ "$_att" -eq 0 ] || exit 0
 + :
@@ -1478,7 +1478,7 @@ m attached-other
 
 
 = summary-watched-asks-the-wrong-server
-f libexec/agent-state-summary
+f libexec/mux-agent-state-summary
 t mux-agent-summary
 - 	tmux -L "$1" list-clients -F '#{client_name}' 2>/dev/null | grep -q .
 + 	tmux list-clients -F '#{client_name}' 2>/dev/null | grep -q .
@@ -1960,7 +1960,7 @@ t mux-undo-pane
 m undo restored no pane
 
 = strip-unwired-is-detected
-f libexec/agent-state-render
+f libexec/mux-agent-state-render
 t mux-strip
 -         if [ -z "$_st" ] && _has_agent_pane "$sess"; then
 +         if false; then

@@ -57,7 +57,8 @@ mux_log_path() {
 
 # mux_log SUBSYS MESSAGE... -> append one line. Always returns 0.
 #
-# CAPPED, NOT ROTATED. The same argument agent-state-emit's breadcrumb makes: an
+# CAPPED, NOT ROTATED. The same argument mux-agent-state-emit's breadcrumb
+# makes: an
 # unbounded file is its own bug. Truncation is safe here only BECAUSE of the
 # rule above -- at mutations-and-failures volume the default cap holds years of
 # incidents, so in practice it never fires. If it starts firing, something is

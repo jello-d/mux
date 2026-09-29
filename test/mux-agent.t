@@ -3,7 +3,8 @@
 #
 # What is asserted here is the contract itself, not the data: that every
 # answer is a JSON document on STDOUT, that it carries a symbolic status, and
-# that the status agrees with the exit code. The data is agent-state-summary's
+# that the status agrees with the exit code. The data is
+# mux-agent-state-summary's
 # and has its own file.
 #
 # THE OUTPUT IS PARSED, NEVER GREPPED. A contract checked with `grep status`
