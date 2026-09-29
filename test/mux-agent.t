@@ -33,14 +33,44 @@ agent_rec "$XDG_RUNTIME_DIR/agent-state/work/p1"   idle    %3 300 wsess x
 # client attached? $WATCHED is the set that does.
 cat >"$T/bin/tmux" <<'EOF'
 #!/bin/sh
+# ONE STUB, DEFINED ONCE. There were two definitions of this file for a while,
+# the fuller one written further down -- so every assertion ABOVE it silently
+# ran against a weaker tmux, and `peers` read a null class for a pane the test
+# had just classified. A second definition of a fixture is a second tool, and
+# which one a case gets depends on where it happens to sit.
+#
+# ONE ARM PER QUESTION. The client check used to run for EVERY call, and with
+# $WATCHED empty its pattern `*" "*` matched `"  "` -- so a capture-pane call
+# got `/dev/pts/1` prepended to the pane text. A stub looser than the tool
+# fails in the direction that wastes most time: the text was right and one
+# line off, which reads as a bug in the verb.
 _sock=
 [ "${1:-}" = -L ] && _sock=$2
-case " ${WATCHED:-} " in
-*" $_sock "*) printf '/dev/pts/1\n' ;;
+case "$*" in
+*list-clients*)
+	case " ${WATCHED:-} " in
+	*" $_sock "*) printf '/dev/pts/1\n' ;;
+	esac ;;
+*capture-pane*)
+	printf 'CAPTURED %s\n' "$*" >>"$CAPLOG"
+	printf 'line one\nhe said "hi" \\ there\n' ;;
+*list-panes*)
+	# One line per pane: id TAB class. $PANECLASS is "id=class,..." and
+	# $NOSERVER makes the query FAIL, which is a different answer from an
+	# empty one and the whole reason peers reports null rather than a
+	# default.
+	[ -z "${NOSERVER:-}" ] || exit 1
+	printf '%%1\t%s\n%%2\t%s\n' "${CLASS1:-}" "${CLASS2:-}" ;;
+*window_name*)   printf '%s\n' "${WINNAME:-main}" ;;
+*@mux-control*)  printf '%s\n' "${CLASS:-}" ;;
+*load-buffer*|*paste-buffer*|*send-keys*|*delete-buffer*)
+	printf 'TMUX %s\n' "$*" >>"$CAPLOG" ;;
 esac
 exit 0
 EOF
 chmod +x "$T/bin/tmux"
+CAPLOG=$T/caplog; export CAPLOG
+: >"$CAPLOG"
 
 RC=0
 run() {   # <args...> -> stdout in $OUT, exit in $RC
@@ -50,6 +80,8 @@ run() {   # <args...> -> stdout in $OUT, exit in $RC
 		PATH="$T/bin:$PATH" WATCHED="${WATCHED:-}" \
 		CAPLOG="${CAPLOG:-/dev/null}" CLASS="${CLASS:-}" \
 		WINNAME="${WINNAME:-main}" MUX_LOG="$T/log" \
+		CLASS1="${CLASS1:-}" CLASS2="${CLASS2:-}" \
+		NOSERVER="${NOSERVER:-}" \
 		MUX_SEND_POLICY_FILE="$T/etc/send-policy" \
 		"$HERE/bin/mux" agent "$@" 2>"$T/err") || RC=$?
 }
@@ -168,6 +200,40 @@ eq peers-age-is-age \
 	"$(jq '[p["age"] for p in d["peers"] if p["session"]=="fresh"][0] < 60')" \
 	True
 
+# --- peers reports WHO CONTROLS each pane ---------------------------------
+# So a caller can see the classification without attempting a send and reading
+# the refusal. One tmux query per PARTITION rather than per peer.
+CLASS2=agent run peers
+eq peers-class-default \
+	"$(jq '[p["control"] for p in d["peers"] if p["session"]=="alpha"][0]')" \
+	human
+eq peers-class-agent \
+	"$(jq '[p["control"] for p in d["peers"] if p["session"]=="bravo"][0]')" \
+	agent
+
+# NULL IS NOT `human`, and that distinction is the point. With no server
+# reachable -- a remote `peers` at boot, which this verb is designed for --
+# every pane would otherwise report as human-controlled: plausible, and wrong.
+# peers still ANSWERS, because it derives its sessions from the state files.
+NOSERVER=1 run peers
+eq peers-headless-rc "$RC" 0
+eq peers-headless-n "$(jq 'len(d["peers"])')" 4
+eq peers-headless-null "$(jq 'all(p["control"] is None for p in d["peers"])')" \
+	True
+# ... and the rest of the answer is unaffected, which is what makes it a
+# missing FIELD rather than a missing answer.
+eq peers-headless-state \
+	"$(jq '[p["state"] for p in d["peers"] if p["session"]=="alpha"][0]')" \
+	blocked
+
+# A PANE THAT IS GONE but whose record is not: the class is unknowable, which
+# is null rather than the default. `wsess` records pane %3, which the stub
+# does not list.
+CLASS2=agent run peers --partition work
+eq peers-stale-pane \
+	"$(jq '[p["control"] for p in d["peers"] if p["session"]=="wsess"][0]')" \
+	None
+
 # --- peers is scoped to ONE partition, and --all widens it ----------------
 run peers
 eq peers-n-after "$(jq 'len(d["peers"])')" 4
@@ -197,33 +263,6 @@ eq peers-bare-part "$(jq '"needs a name" in d["message"]')" True
 # THE PANE IS RESOLVED NOW, from the state record, rather than taken from a
 # caller. An id cached from an earlier `peers` can have died and been replaced,
 # and capturing the wrong pane is the plausible-wrong-answer shape.
-cat >"$T/bin/tmux" <<'EOF'
-#!/bin/sh
-# ONE ARM PER QUESTION. The client check used to run for EVERY call, and with
-# $WATCHED empty its pattern `*" "*` matched `"  "` -- so a capture-pane call
-# got `/dev/pts/1` prepended to the pane text. A stub looser than the tool
-# fails in the direction that wastes most time: the text was right and one
-# line off, which reads as a bug in the verb.
-_sock=
-[ "${1:-}" = -L ] && _sock=$2
-case "$*" in
-*list-clients*)
-	case " ${WATCHED:-} " in
-	*" $_sock "*) printf '/dev/pts/1\n' ;;
-	esac ;;
-*capture-pane*)
-	printf 'CAPTURED %s\n' "$*" >>"$CAPLOG"
-	printf 'line one\nhe said "hi" \\ there\n' ;;
-*window_name*)   printf '%s\n' "${WINNAME:-main}" ;;
-*@mux-control*)  printf '%s\n' "${CLASS:-}" ;;
-*load-buffer*|*paste-buffer*|*send-keys*|*delete-buffer*)
-	printf 'TMUX %s\n' "$*" >>"$CAPLOG" ;;
-esac
-exit 0
-EOF
-chmod +x "$T/bin/tmux"
-CAPLOG=$T/caplog; export CAPLOG
-: >"$CAPLOG"
 
 _read alpha
 eq read-rc "$RC" 0

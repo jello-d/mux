@@ -461,6 +461,23 @@ if [ "$_verb" = peers ]; then
 		printf '%s\n' "$_which" | while IFS= read -r _p; do
 			[ -n "$_p" ] || continue
 			_dir=$(mux_agent_dir "$_p")
+			# ONE tmux QUERY PER PARTITION, not per peer. "Could
+			# not ask" and "asked, and nothing is set" are
+			# different answers: unreachable reports null, while
+			# reached-with-no-option reports `human`, the default
+			# class. Collapsing them would make a remote `peers` at
+			# boot call every pane human-controlled -- plausible,
+			# and wrong.
+			#
+			# EMPTY IS UNREACHABLE, with no separate success flag.
+			# One was written first and proved unkillable, because
+			# a failed query leaves $_ctl empty anyway and a tmux
+			# server with zero panes does not exist -- it exits. An
+			# unkillable guard here is redundant code rather than a
+			# missing test, so it went.
+			_ctl=$(tmux -L "$_p" list-panes -a \
+				-F "#{pane_id}	#{@mux-control}" \
+				2>/dev/null) || _ctl=
 			mux_agent_sessions "$_dir" | while IFS= read -r _s; do
 				[ -n "$_s" ] || continue
 				_se=$(mux_agent_state "$_dir" "$_s")
@@ -476,12 +493,39 @@ if [ "$_verb" = peers ]; then
 				*)  _ag=$((_now - _ep))
 				    [ "$_ag" -lt 0 ] && _ag=0 ;;
 				esac
+				# THE CLASS, looked up by the pane the record
+				# speaks for. The pane is resolved INTERNALLY
+				# and still not emitted: a caller caching an id
+				# is the thing `read` and `send` avoid, and
+				# answering a different question with it is not
+				# the same as handing it over.
+				_cl=
+				if [ -n "$_ctl" ]; then
+					_pn=$(mux_agent_pane "$_dir" "$_s")
+					_cl=$(printf '%s\n' "$_ctl" | awk \
+						-F'\t' -v k="$_pn" \
+						'$1 == k { print $2; exit }')
+					case ${_cl:-} in
+					agent|hybrid) ;;
+					*) _cl=human ;;
+					esac
+					# The pane is gone but its record is
+					# not: the class is unknowable, which
+					# is null rather than the default.
+					printf '%s\n' "$_ctl" \
+						| grep -q "^$_pn	" \
+						|| _cl=
+				fi
 				printf '{"partition":%s,"session":%s,' \
 					"$(mux_json_str "$_p")" \
 					"$(mux_json_str "$_s")"
-				printf '"state":%s,"age":%s,"root":%s}\n' \
+				printf '"state":%s,"age":%s,"control":%s,' \
 					"$(mux_json_str "$_st")" \
 					"$(mux_json_num "${_ag:-}")" \
+					"$([ -n "$_cl" ] \
+						&& mux_json_str "$_cl" \
+						|| printf null)"
+				printf '"root":%s}\n' \
 					"$(mux_json_str \
 						"$(mux_sess_root "$_s" "$_p")")"
 			done

@@ -1797,3 +1797,17 @@ t mux-agent
 - 		mux_log send "$_ssess (${_rp:-global}/${_swin:-?}) $_sclass \
 + 		: "$_ssess \
 m was not logged
+
+= agent-peers-unset-class-is-null
+f libexec/mux-agent
+t mux-agent
+- 					*) _cl=human ;;
++ 					*) _cl= ;;
+m peers-class-default
+
+= agent-peers-stale-pane-gets-a-default
+f libexec/mux-agent
+t mux-agent
+- 						| grep -q "^$_pn	" \
++ 						| true \
+m peers-stale-pane
