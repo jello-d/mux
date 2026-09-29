@@ -1930,3 +1930,31 @@ t setup
 -   [ -e "$_bin/mux-indicator" ] || return 0
 +   :
 m fired with no
+
+= undo-foreign-record-is-refused
+f libexec/mux-undo-pane
+t mux-undo-pane
+- 	if [ "$_srv" != "${_now_srv:-}" ]; then
++ 	if false; then
+m another server was accepted
+
+= undo-unattributable-record-is-refused
+f libexec/mux-undo-pane
+t mux-undo-pane
+- 	if [ -z "$_srv" ]; then
++ 	if false; then
+m foreign-server
+
+= undo-foreign-record-is-discarded
+f libexec/mux-undo-pane
+t mux-undo-pane
+- 		rm -f "$_f"   # it can never become valid; do not repeat this
++ 		:
+m refused and KEPT
+
+= undo-writer-and-checker-are-wired-together
+f libexec/mux-undo-pane
+t mux-undo-pane
+- 		printf 'server\t%s\n' "$_sid"
++ 		printf 'notserver\\t%s\\n' "$_sid"
+m undo restored no pane

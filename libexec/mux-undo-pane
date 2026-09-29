@@ -147,9 +147,26 @@ EOF
 	# in isolation, which is the signature of a window that widens with fork
 	# latency. Rename is atomic within a directory, so the record becomes
 	# visible only when it is complete and "it exists" regains its meaning.
+	# COMPUTED BEFORE THE BLOCK BELOW, not inside it: every command
+	# substitution in there is a fork between the temp file appearing and
+	# the rename, which is the window the atomic write exists to close.
+	_sid=$(tmux display-message -p '#{pid}' 2>/dev/null || true)
 	_rf=$(_recfile "$_w")
 	_rt=$_rf.tmp.$$
 	{
+		# WHICH SERVER THIS BELONGS TO. The record is keyed by WINDOW ID
+		# and a window id is not unique across server lifetimes: every
+		# fresh tmux server calls its first window `@0` (measured), so a
+		# record outlives the server that wrote it and the next server's
+		# first window inherits it. Verified live -- a brand new server
+		# on a different socket, with one pane and nothing ever lost in
+		# it, restored a pane from a dead server's window, with that
+		# window's command, cwd and LAYOUT. Plausible, wrong, silent.
+		#
+		# THE PID, NOT THE SOCKET PATH: a server restarted on the same
+		# socket has the same path and is a different instance, which is
+		# exactly the case that bites.
+		printf 'server\t%s\n' "$_sid"
 		printf 'slot\t%s\n' "$_slot"
 		printf 'panes\t%s\n' "$_pos"
 		printf 'layout\t%s\n' "$_lay"
@@ -173,9 +190,10 @@ _restore() {
 	_f=$(_recfile "$_w")
 	[ -f "$_f" ] || _die "nothing to undo in this window"
 
-	_idx= _cwd= _lay= _cmd= _n= _ob= _oa=
+	_idx= _cwd= _lay= _cmd= _n= _ob= _oa= _srv=
 	while IFS="$_tab" read -r _k _v; do
 		case ${_k:-} in
+		server)  _srv=$_v ;;
 		slot)    _idx=$_v ;;
 		panes)   _n=$_v ;;
 		cwd)     _cwd=$_v ;;
@@ -186,6 +204,35 @@ _restore() {
 		esac
 	done 2>/dev/null <"$_f"
 	[ -n "$_lay" ] || _die "the undo record is unusable (no layout)"
+
+	# A RECORD BELONGS TO ONE SERVER. Window ids restart at `@0` on every
+	# new server, so without this a fresh window restores a pane from a
+	# window that died with a previous server -- measured, not theorised.
+	# REMOVED as well as refused, so the next press says the ordinary
+	# "nothing to undo" instead of repeating this.
+	#
+	# A RECORD THAT CANNOT SAY is refused too, on this codebase's own rule
+	# that an edge nobody can check must not report success. That costs one
+	# pending record across an upgrade from a mux that did not write the
+	# field, and the alternative is leaving exactly the hole this closes.
+	_now_srv=$(tmux display-message -p '#{pid}' 2>/dev/null || true)
+	# TWO CAUSES, TWO MESSAGES. They are one condition for the code and
+	# different news for a human: one says the record is someone else's, the
+	# other says it cannot be attributed at all. Sharing a sentence would
+	# make the second one a lie about the first.
+	if [ -z "$_srv" ]; then
+		rm -f "$_f"   # unattributable; it can never become valid
+		_die "the undo record does not say which server wrote it, so" \
+			"it cannot be told from another server's. Written by an" \
+			"older mux, or by a tmux that cannot report #{pid}." \
+			"Discarded."
+	fi
+	if [ "$_srv" != "${_now_srv:-}" ]; then
+		rm -f "$_f"   # it can never become valid; do not repeat this
+		_die "that undo record belongs to a tmux server that is gone" \
+			"(window ids restart at @0 on a new server, so it is" \
+			"not this window's). Discarded."
+	fi
 	case ${_idx:-} in
 	''|*[!0-9]*) _die "the undo record is unusable (bad slot)" ;;
 	esac
