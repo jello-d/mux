@@ -129,6 +129,42 @@ build() {
 		|| fail "the layout tracker never recorded anything"
 }
 
+# --- THE RECORD IS WRITTEN UNQUOTED -- asserted before anything is restored
+# tmux hands `pane_start_command` back QUOTED for display (wrapped, with inner
+# quotes and $ escaped). Replaying that verbatim does not fail loudly: the pane
+# is created and runs the wrong thing, which is exactly how it survived a first
+# live check.
+#
+# THIS COMES FIRST, AND ON THE FILE RATHER THAN ON A PANE, because it is the
+# only DETERMINISTIC observable of the unquote. A pane replaying a mangled
+# command is created and dies at once, so every assertion downstream of it is
+# a race between the restore and the death, and which one fires is decided by
+# machine load. That non-determinism is what made this file's own mutation
+# record report the wrong assertion under a busy run.
+stage "the record is written unquoted"
+build
+tm send-keys -t t.1 'exit' Enter
+_until 10 _npanes 2 || fail "unquote: the pane did not close"
+_until 10 _recorded || fail "unquote: no undo record was written"
+_cr=$(sed -n 's/^command	//p' "$T/run/mux-undo/$(ls -A "$T/run/mux-undo" \
+	| head -1)")
+# `[\\]`, a bracket expression, rather than a quoted backslash: `'\\'` inside
+# single quotes is TWO characters and shellcheck rightly calls it ambiguous
+# (SC1003) -- the same trap these notes record costing a doubled spinner.
+# A BACKSLASH is the discriminator, not a quote. The real command contains
+# double quotes of its own (`exec "${SHELL:-/bin/sh}"`); what the display form
+# adds is ESCAPES -- it wraps the whole thing and backslash-escapes the inner
+# `"` and `$`. Checking for a quote fails on correct code, which it did here.
+case $_cr in
+*[\\]*) fail "the recorded command is still tmux's DISPLAY form, quoted
+and escaped: [$_cr]. Replaying that does not fail loudly -- the pane comes
+back running the wrong thing, which is how it survived a first live check." ;;
+esac
+case $_cr in
+*MARK_A*) ;;
+*) fail "the recorded command lost the command itself: [$_cr]" ;;
+esac
+
 # --- the layout comes back exactly, wherever the hole was -----------------
 stage "the layout comes back exactly, wherever the hole was"
 # All three positions, because the placement logic differs at the ends and
@@ -182,6 +218,8 @@ build
 tm send-keys -t t.1 'exit' Enter
 _until 10 _npanes 2 || fail "the pane did not close"
 _until 10 _recorded || fail "no undo record was written"
+
+
 tm run-shell "mux undo-pane" >/dev/null 2>&1 || true
 _until 10 _npanes 3 || fail "undo restored no pane"
 _until 10 sh -c 'tmux -L '"$SOCK"' capture-pane -p -t t.1 | grep -q MARK_A'
@@ -272,6 +310,42 @@ _rc=0
 _o=$(env XDG_RUNTIME_DIR="$T/run" TMUX= "$HERE/libexec/mux-undo-pane" 2>&1) \
 	|| _rc=$?
 [ "$_rc" != 0 ] || fail "with no record and no tmux, undo-pane must fail"
+
+# --- A PARTIAL RECORD IS REFUSED, LOUDLY ---------------------------------
+# The other half of writing the record atomically, and the half that can be
+# asserted deterministically. `> file` creates and truncates before any bytes
+# land, and the writer forks four command substitutions in between, so a
+# reader could see the file empty or half-written -- suspected cause of this
+# file's own flake, which only ever appeared under a loaded suite run.
+#
+# THE FAILURE IS SILENT WITHOUT THIS, which is why it is worth a case: undo
+# runs from a key binding, tmux swallows its stderr, and a partial record just
+# means the pane does not come back. Asserted on the MESSAGE and on the pane
+# count, because "it refused" and "it refused without doing damage" are two
+# different promises.
+build
+stage "a partial record is refused"
+_before=$(state)
+tm send-keys -t t.1 'exit' Enter
+_until 10 _npanes 2 || fail "partial: the pane did not close"
+_until 10 _recorded || fail "partial: no undo record was written"
+_rec=$T/run/mux-undo/$(ls -A "$T/run/mux-undo" | head -1)
+printf 'slot\t1\n' >"$_rec"          # everything after `slot` is missing
+# DIRECTLY, with $TMUX pointed at this server, because the MESSAGE is the
+# observable here and through run-shell tmux reports only "returned 1" -- the
+# stderr it swallows is the whole reason a partial record fails silently in
+# real life. Same reason mux-even.t drives its refusal case this way.
+_sp=$(tm display-message -p '#{socket_path}')
+_rc=0
+_o=$(env TMUX="$_sp,0,0" "$HERE/libexec/mux-undo-pane" 2>&1) || _rc=$?
+[ "$_rc" != 0 ] || fail "a half-written record was accepted (exit 0): [$_o]"
+case $_o in
+*unusable*) ;;
+*) fail "a half-written record was not refused by name: [$_o]" ;;
+esac
+[ "$(tm list-panes -t t 2>/dev/null | wc -l)" = 2 ] \
+	|| fail "a half-written record still changed the window: it must refuse
+before touching anything, or a truncated file rearranges a live layout"
 
 # --- an unknown option is an error ----------------------------------------
 stage "an unknown option is an error"

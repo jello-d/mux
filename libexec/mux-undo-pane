@@ -130,6 +130,25 @@ EOF
 	[ -n "$_gone" ] || return 0
 
 	mkdir -p "$_run" 2>/dev/null || return 0
+	# ATOMIC: written to a temp name and RENAMED into place, because
+	# `> file` creates and TRUNCATES before a single byte is written. A
+	# reader that checks the file exists can therefore read it empty or
+	# half-written, and this block is not fast: four command substitutions
+	# fork between the file appearing and its contents landing, so the
+	# window is several process spawns wide and opens further under load.
+	#
+	# THE READER FAILS SILENTLY WHEN THAT HAPPENS, which is what makes it
+	# worth fixing rather than documenting: a partial record has no layout
+	# line, `_restore` dies with "unusable", and it runs from a key binding
+	# whose stderr tmux swallows. The pane simply does not come back.
+	#
+	# Suspected cause of the mux-undo-pane flake: three NO VERDICT / "undo
+	# restored no pane" failures under loaded full-suite runs and never once
+	# in isolation, which is the signature of a window that widens with fork
+	# latency. Rename is atomic within a directory, so the record becomes
+	# visible only when it is complete and "it exists" regains its meaning.
+	_rf=$(_recfile "$_w")
+	_rt=$_rf.tmp.$$
 	{
 		printf 'slot\t%s\n' "$_slot"
 		printf 'panes\t%s\n' "$_pos"
@@ -142,7 +161,8 @@ EOF
 		_go=$(_lookup "$_gone" "$_opts")
 		printf 'optbottom\t%s\n' "$(printf '%s' "$_go" | cut -f1)"
 		printf 'optagent\t%s\n' "$(printf '%s' "$_go" | cut -f2)"
-	} 2>/dev/null >"$(_recfile "$_w")" || return 0
+	} 2>/dev/null >"$_rt" || { rm -f "$_rt" 2>/dev/null; return 0; }
+	mv -f "$_rt" "$_rf" 2>/dev/null || rm -f "$_rt" 2>/dev/null
 	return 0
 }
 

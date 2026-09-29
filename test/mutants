@@ -703,7 +703,7 @@ f libexec/mux-undo-pane
 t mux-undo-pane
 - 		printf 'command\t%s\n' "$(_unquote "$(_lookup "$_gone" "$_cmds")")"
 + 		printf 'command\t%s\n' "$(_lookup "$_gone" "$_cmds")"
-m did not come back the
+m the recorded command is still tmux's DISPLAY form
 
 = undo-pane-not-idempotent
 f libexec/mux-undo-pane
@@ -1469,3 +1469,18 @@ t mux-agent-summary
 - 	tmux -L "$1" list-clients -F '#{client_name}' 2>/dev/null | grep -q .
 + 	tmux list-clients -F '#{client_name}' 2>/dev/null | grep -q .
 m attached-only
+
+
+= undo-pane-record-not-atomic
+f libexec/mux-undo-pane
+t mux-undo-pane
+- 	mv -f "$_rt" "$_rf" 2>/dev/null || rm -f "$_rt" 2>/dev/null
++ 	rm -f "$_rt" 2>/dev/null
+m no undo record was written
+
+= undo-pane-partial-record-accepted
+f libexec/mux-undo-pane
+t mux-undo-pane
+- 	[ -n "$_lay" ] || _die "the undo record is unusable (no layout)"
++ 	[ -n "$_lay" ] || _lay=$_lay
+m half-written record was accepted
