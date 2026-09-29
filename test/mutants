@@ -1974,14 +1974,14 @@ t mux-strip
 m must draw the unwired glyph
 
 = setup-preserves-foreign-hooks
-f libexec/mux-setup-claude.py
+f libexec/mux-setup-claude
 t mux-setup
 -         others = [e for e in (hooks.get(event) or []) if not is_ours(e)]
 +         others = []
 m was DESTROYED
 
 = setup-is-idempotent
-f libexec/mux-setup-claude.py
+f libexec/mux-setup-claude
 t mux-setup
 -         if mine == [{"hooks": [{"type": "command", "command": want}]}]:
 +         if False:
@@ -1995,7 +1995,7 @@ t mux-check
 m was not reported
 
 = setup-says-what-is-wrong-with-the-file
-f libexec/mux-setup-claude.py
+f libexec/mux-setup-claude
 t mux-setup
 -             sys.stderr.write("%s does not parse as JSON (%s); "
 +             sys.stderr.write("%s is no good (%s); "

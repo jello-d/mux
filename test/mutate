@@ -45,8 +45,22 @@ PASS=0; FAIL=0; ERR=0
 # corpus error for a record that was fine. A parse check that cannot parse the
 # file is worse than none: it turns every result into the same wrong one.
 _parses() {   # <file>
-	case "$1" in
-	*.py)
+	# BY SHEBANG FIRST, THEN BY SUFFIX, and that order is the fix rather than
+	# the belt-and-braces it looks like. Dropping `.py` from an EXECUTED
+	# Python file (the naming convention: executed takes a bare name) left
+	# this falling through to `dash -n` on Python and reporting a corpus
+	# error for three records that were fine. A selector keyed on a suffix
+	# goes stale the moment something is renamed; a shebang travels with the
+	# file. The suffix arm stays for `mux_indicator/*.py`, which are IMPORTED
+	# and so carry no shebang at all.
+	case "$(head -1 "$1")" in
+	*python*) _pl=py ;;
+	*bash)    _pl=bash ;;
+	*)        _pl=sh ;;
+	esac
+	case "$1" in *.py) _pl=py ;; esac
+	case "$_pl" in
+	py)
 		# compile(), not py_compile: it checks the syntax and writes
 		# NOTHING. py_compile always wants an output file, refuses
 		# /dev/null outright ("will be changed into a regular one"), and
@@ -56,10 +70,8 @@ _parses() {   # <file>
 src = open(sys.argv[1]).read()
 compile(src, sys.argv[1], "exec")' "$1" 2>/dev/null
 		return $? ;;
-	esac
-	case "$(head -1 "$1")" in
-	*bash) bash -n "$1" 2>/dev/null ;;
-	*)     dash -n "$1" 2>/dev/null ;;
+	bash) bash -n "$1" 2>/dev/null ;;
+	*)    dash -n "$1" 2>/dev/null ;;
 	esac
 }
 
