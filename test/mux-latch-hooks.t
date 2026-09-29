@@ -34,7 +34,7 @@ PROBE=$HERE/share/latch/ssh-probe
 mkdir -p "$T/bin"
 # The ordinary tools the hooks need, since PATH is replaced wholesale below.
 for _c in sed awk grep cat rm mktemp printf timeout; do
-	_p=$(command -v "$_c" 2>/dev/null) && ln -sf "$_p" "$T/bin/$_c"
+  _p=$(command -v "$_c" 2>/dev/null) && ln -sf "$_p" "$T/bin/$_c"
 done
 
 # ssh stub. OCHECK is `ssh -O check`'s exit; SSHRC and SSHERR are a real
@@ -57,14 +57,14 @@ chmod +x "$T/bin/ssh" "$T/bin/ssh-add"
 SSHLOG=$T/sshlog; export SSHLOG
 
 ask() {   # <hook> [args...] -> its exit code, with the env already set
-	: >"$SSHLOG"
-	_r=0
-	env PATH="$T/bin" SSHLOG="$SSHLOG" \
-		OCHECK="${OCHECK:-1}" ADDRC="${ADDRC:-0}" \
-		SSHRC="${SSHRC:-0}" SSHERR="${SSHERR:-}" \
-		MUX_SSH_PROBE_TIMEOUT="${MUX_SSH_PROBE_TIMEOUT:-10}" \
-		"$@" >/dev/null 2>&1 || _r=$?
-	echo "$_r"
+  : >"$SSHLOG"
+  _r=0
+  env PATH="$T/bin" SSHLOG="$SSHLOG" \
+    OCHECK="${OCHECK:-1}" ADDRC="${ADDRC:-0}" \
+    SSHRC="${SSHRC:-0}" SSHERR="${SSHERR:-}" \
+    MUX_SSH_PROBE_TIMEOUT="${MUX_SSH_PROBE_TIMEOUT:-10}" \
+    "$@" >/dev/null 2>&1 || _r=$?
+  echo "$_r"
 }
 tried() { grep -c . "$SSHLOG" 2>/dev/null || true; }
 
@@ -74,21 +74,21 @@ tried() { grep -c . "$SSHLOG" 2>/dev/null || true; }
 # ssh-add afterwards could answer 1 on an empty agent and turn a working
 # connection into `blocked`.
 [ "$(OCHECK=0 ADDRC=1 ask "$AUTH" box)" = 0 ] \
-	|| fail "a live control master must answer 0 even with an EMPTY agent:
+  || fail "a live control master must answer 0 even with an EMPTY agent:
 the connection is already authenticated, so there is nothing to prompt for"
 grep -q 'ssh-add' "$SSHLOG" \
-	&& fail "ssh-add was consulted after a live control master already
+  && fail "ssh-add was consulted after a live control master already
 answered. That is the ordering that turns a working connection into a wait."
 
 # --- ssh-add's three exits ARE the three answers ------------------------
 [ "$(OCHECK=1 ADDRC=0 ask "$AUTH" box)" = 0 ] \
-	|| fail "keys loaded (ssh-add 0) must answer 0: attempt it"
+  || fail "keys loaded (ssh-add 0) must answer 0: attempt it"
 [ "$(OCHECK=1 ADDRC=1 ask "$AUTH" box)" = 1 ] \
-	|| fail "an agent running but EMPTY (ssh-add 1) must answer 1. That is
+  || fail "an agent running but EMPTY (ssh-add 1) must answer 1. That is
 the whole prompt-storm guard: latch must not attempt, because every attempt is
 a prompt, and a human has to add a key before anything changes."
 [ "$(OCHECK=1 ADDRC=2 ask "$AUTH" box)" = 78 ] \
-	|| fail "NO AGENT AT ALL (ssh-add 2) must answer 78, not 1. It is not
+  || fail "NO AGENT AT ALL (ssh-add 2) must answer 78, not 1. It is not
 the same claim: mux cannot see whether a password, a certificate or a GSSAPI
 ticket would work, so 1 would park latch in blocked forever on a box that
 would have connected fine."
@@ -96,7 +96,7 @@ would have connected fine."
 # 78 for anything it genuinely cannot answer, rather than a guess either way.
 [ "$(ask "$AUTH")" = 78 ] || fail "asked about no host, it must answer 78"
 [ "$(OCHECK=1 ADDRC=9 ask "$AUTH" box)" = 78 ] \
-	|| fail "an unrecognised ssh-add exit must be 78 (cannot tell), since a
+  || fail "an unrecognised ssh-add exit must be 78 (cannot tell), since a
 tool failing in a way it did not anticipate has not answered"
 
 # --- it NEVER OPENS A CONNECTION ---------------------------------------
@@ -106,23 +106,23 @@ tool failing in a way it did not anticipate has not answered"
 : >"$SSHLOG"
 OCHECK=1 ADDRC=1 ask "$AUTH" box >/dev/null
 while IFS= read -r _l; do
-	case $_l in
-	*"-O check"*|"ssh-add "*) ;;
-	*) fail "ssh-auth ran something that can open a connection: [$_l].
+  case $_l in
+  *"-O check"*|"ssh-add "*) ;;
+  *) fail "ssh-auth ran something that can open a connection: [$_l].
 Polling this while blocked would then raise a prompt per poll, which is the
 storm it exists to prevent." ;;
-	esac
+  esac
 done <"$SSHLOG"
 
 # --- ssh-probe: 0 usable, 1 not reachable, 78 cannot tell --------------
 [ "$(SSHRC=0 ask "$PROBE" box)" = 0 ] || fail "a working connection is 0"
 [ "$(OCHECK=0 ask "$PROBE" box)" = 0 ] \
-	|| fail "a live control master answers 0 without connecting"
+  || fail "a live control master answers 0 without connecting"
 for _m in 'Connection refused' 'No route to host' 'Network is unreachable' \
-	'ssh: Could not resolve hostname box: Name or service not known' \
-	'Name or service not known' 'Connection timed out'; do
-	_g=$(SSHRC=255 SSHERR="$_m" ask "$PROBE" box)
-	[ "$_g" = 1 ] || fail "[$_m] is a plain connection failure and must
+  'ssh: Could not resolve hostname box: Name or service not known' \
+  'Name or service not known' 'Connection timed out'; do
+  _g=$(SSHRC=255 SSHERR="$_m" ask "$PROBE" box)
+  [ "$_g" = 1 ] || fail "[$_m] is a plain connection failure and must
 answer 1 (not reachable, retry), got $_g"
 done
 
@@ -130,8 +130,8 @@ done
 # in the retry loop for something only a human can fix, and auth has its own
 # hook for exactly that reason.
 for _m in 'Permission denied (publickey).' 'Host key verification failed.'; do
-	_g=$(SSHRC=255 SSHERR="$_m" ask "$PROBE" box)
-	[ "$_g" = 78 ] || fail "[$_m] is a refusal, not unreachability, so the
+  _g=$(SSHRC=255 SSHERR="$_m" ask "$PROBE" box)
+  [ "$_g" = 78 ] || fail "[$_m] is a refusal, not unreachability, so the
 probe must say 78 (cannot tell) and leave it to auth and classify. Got $_g"
 done
 [ "$(ask "$PROBE")" = 78 ] || fail "asked about no host, the probe answers 78"
@@ -142,13 +142,13 @@ done
 # because a probe is bounded BY CONTRACT and should not depend on which ssh
 # option happens to enforce it.
 grep -q 'ConnectTimeout' "$PROBE" \
-	|| fail "the probe no longer passes ConnectTimeout. Measured: with it a
+  || fail "the probe no longer passes ConnectTimeout. Measured: with it a
 silent peer gives up in 5s, without it ssh was still waiting after 40s, and
 ServerAliveInterval does not help because it only starts once a session exists."
 : >"$SSHLOG"
 SSHRC=124 ask "$PROBE" box >/dev/null
 [ "$(SSHRC=124 ask "$PROBE" box)" = 1 ] \
-	|| fail "timeout(1)'s own code (124) means the host took longer than a
+  || fail "timeout(1)'s own code (124) means the host took longer than a
 probe is allowed to take. That is a definite 'not usable right now', not a
 'cannot tell': if it will not talk within the bound, an attach will not fare
 better."

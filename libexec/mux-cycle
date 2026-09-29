@@ -25,9 +25,9 @@ excluded=$(mux_excluded "$client")
 # and the ring built with `set --` would be discarded at `done`.
 set --
 while IFS= read -r _s; do
-        [ -n "$_s" ] || continue
-        mux_excluded_has "$excluded" "$_s" && continue
-        set -- "$@" "$_s"
+  [ -n "$_s" ] || continue
+  mux_excluded_has "$excluded" "$_s" && continue
+  set -- "$@" "$_s"
 done <<EOF
 $(tmux list-sessions -F '#{session_name}' 2>/dev/null)
 EOF
@@ -37,23 +37,23 @@ n=$#
 # Index of the current session in the visible ring (0 if it is itself hidden).
 idx=0; i=0
 for _s in "$@"; do
-        i=$((i + 1))
-        if [ "$_s" = "$current" ]; then idx=$i; break; fi
+  i=$((i + 1))
+  if [ "$_s" = "$current" ]; then idx=$i; break; fi
 done
 
 # The neighbour, wrapping around; a hidden current falls to first (next) / last.
 if [ "$dir" = next ]; then
-        if [ "$idx" -eq 0 ]; then j=1; else j=$((idx % n + 1)); fi
+  if [ "$idx" -eq 0 ]; then j=1; else j=$((idx % n + 1)); fi
 else
-        if [ "$idx" -eq 0 ]; then j=$n; else j=$(((idx - 2 + n) % n + 1)); fi
+  if [ "$idx" -eq 0 ]; then j=$n; else j=$(((idx - 2 + n) % n + 1)); fi
 fi
 
 # Switch to the j-th visible session.
 i=0
 for _s in "$@"; do
-        i=$((i + 1))
-        if [ "$i" -eq "$j" ]; then
-                tmux switch-client -c "$client" -t "=$_s"
-                break
-        fi
+  i=$((i + 1))
+  if [ "$i" -eq "$j" ]; then
+    tmux switch-client -c "$client" -t "=$_s"
+    break
+  fi
 done

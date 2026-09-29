@@ -53,13 +53,13 @@ _lib=$(dirname "$0")
 # nothing can kill, which this corpus treats as a signal to delete rather than
 # to test harder. Belt-and-braces reads as safety and measures as untestable.
 _out() {   # <status> <exit> <message>
-	printf '{"status":%s,"message":%s}\n' \
-		"$(mux_json_str "$1")" "$(mux_json_str "$3")"
-	exit "$2"
+  printf '{"status":%s,"message":%s}\n' \
+    "$(mux_json_str "$1")" "$(mux_json_str "$3")"
+  exit "$2"
 }
 
 _usage() {
-	_out usage 2 "usage: mux agent <status|peers|read|wait|send> ..."
+  _out usage 2 "usage: mux agent <status|peers|read|wait|send> ..."
 }
 
 _verb=${1:-}
@@ -75,17 +75,17 @@ esac
 # session is one mux knows. Shared by read and wait, because "that session is
 # not here" must be the same answer and the same exit from both.
 _resolve() {   # <session> <partition-or-empty>
-	_rp=$2
-	if [ -z "$_rp" ] && [ -r "$_lib/mux-context_lib" ]; then
-		. "$_lib/mux-context_lib"
-		mux_ctx_resolve 2>/dev/null && _rp=$MUX_CTX_PARTITION
-	fi
-	_rd=$(mux_agent_dir "$_rp")
-	# EXIT 3, mux's cross-cutting "the name is not known here", rather than
-	# an empty answer. A caller that mistyped a session and a caller
-	# looking at one with nothing to say must not get the same document.
-	mux_agent_sessions "$_rd" | grep -qxF -- "$1" || _out no-such-name 3 \
-		"no session $1 with a tracked agent in partition ${_rp:-global}"
+  _rp=$2
+  if [ -z "$_rp" ] && [ -r "$_lib/mux-context_lib" ]; then
+    . "$_lib/mux-context_lib"
+    mux_ctx_resolve 2>/dev/null && _rp=$MUX_CTX_PARTITION
+  fi
+  _rd=$(mux_agent_dir "$_rp")
+  # EXIT 3, mux's cross-cutting "the name is not known here", rather than
+  # an empty answer. A caller that mistyped a session and a caller
+  # looking at one with nothing to say must not get the same document.
+  mux_agent_sessions "$_rd" | grep -qxF -- "$1" || _out no-such-name 3 \
+    "no session $1 with a tracked agent in partition ${_rp:-global}"
 }
 
 # EVERY tmux CALL GOES THROUGH THIS. A bare `tmux` asks the DEFAULT socket,
@@ -98,441 +98,441 @@ _resolve() {   # <session> <partition-or-empty>
 # case where a bare call is right. Same wrapper mux-even and next-blocked
 # already carry, for the same reason, which makes this the third time.
 _tx() {
-	tmux -L "${_rp:-global}" "$@"
+  tmux -L "${_rp:-global}" "$@"
 }
 
 case $_verb in
 read|wait|send)
-	. "$_lib/mux-paths_lib"
-	. "$_lib/mux-agent-state_lib" ;;
+  . "$_lib/mux-paths_lib"
+  . "$_lib/mux-agent-state_lib" ;;
 esac
 
 if [ "$_verb" = read ]; then
-	# --- read ----------------------------------------------------------
-	# What is on that agent's screen. THE PANE IS RESOLVED NOW, from the
-	# state record, rather than taken from a caller: an id cached from an
-	# earlier `peers` can have died and been replaced, and capturing the
-	# wrong pane is the plausible-wrong-answer shape this codebase keeps
-	# meeting. Resolving it here also means `peers` need not carry one.
-	# AN OPTION IS AN OPTION WHEREVER IT SITS. The front end stops parsing
-	# options at the first positional -- so `mux resume work --list` reads
-	# `--list` as a session name -- and that edge is tolerable for a human
-	# who can see the result. It is not for a caller composing argv
-	# programmatically, where argument ORDER becomes a rule nobody wrote
-	# down. `mux agent read mux -n 5` failed exactly that way once.
-	_rn=
-	_rpart=
-	_rsess=
-	while [ $# -gt 0 ]; do
-		case $1 in
-		-n) shift
-		    _rn=${1:-}
-		    case ${_rn:-} in
-		    ''|*[!0-9]*) _out usage 2 "-n needs a line count" ;;
-		    esac
-		    shift ;;
-		--partition) shift
-		    _rpart=${1:-}
-		    [ -n "$_rpart" ] || _out usage 2 "--partition needs a name"
-		    shift ;;
-		--) shift; break ;;
-		-*) _out usage 2 "unknown option: $1" ;;
-		*)  [ -z "$_rsess" ] || _out usage 2 "read takes one SESSION"
-		    _rsess=$1; shift ;;
-		esac
-	done
-	[ -n "$_rsess" ] || _out usage 2 "usage: mux agent read SESSION [-n N]"
+  # --- read ----------------------------------------------------------
+  # What is on that agent's screen. THE PANE IS RESOLVED NOW, from the
+  # state record, rather than taken from a caller: an id cached from an
+  # earlier `peers` can have died and been replaced, and capturing the
+  # wrong pane is the plausible-wrong-answer shape this codebase keeps
+  # meeting. Resolving it here also means `peers` need not carry one.
+  # AN OPTION IS AN OPTION WHEREVER IT SITS. The front end stops parsing
+  # options at the first positional -- so `mux resume work --list` reads
+  # `--list` as a session name -- and that edge is tolerable for a human
+  # who can see the result. It is not for a caller composing argv
+  # programmatically, where argument ORDER becomes a rule nobody wrote
+  # down. `mux agent read mux -n 5` failed exactly that way once.
+  _rn=
+  _rpart=
+  _rsess=
+  while [ $# -gt 0 ]; do
+    case $1 in
+    -n) shift
+        _rn=${1:-}
+        case ${_rn:-} in
+        ''|*[!0-9]*) _out usage 2 "-n needs a line count" ;;
+        esac
+        shift ;;
+    --partition) shift
+        _rpart=${1:-}
+        [ -n "$_rpart" ] || _out usage 2 "--partition needs a name"
+        shift ;;
+    --) shift; break ;;
+    -*) _out usage 2 "unknown option: $1" ;;
+    *)  [ -z "$_rsess" ] || _out usage 2 "read takes one SESSION"
+        _rsess=$1; shift ;;
+    esac
+  done
+  [ -n "$_rsess" ] || _out usage 2 "usage: mux agent read SESSION [-n N]"
 
-	_resolve "$_rsess" "$_rpart"
-	_pane=$(mux_agent_pane "$_rd" "$_rsess")
-	[ -n "$_pane" ] || _out refused 1 \
-		"no agent pane recorded for $_rsess"
+  _resolve "$_rsess" "$_rpart"
+  _pane=$(mux_agent_pane "$_rd" "$_rsess")
+  [ -n "$_pane" ] || _out refused 1 \
+    "no agent pane recorded for $_rsess"
 
-	# THE VISIBLE PANE BY DEFAULT, scrollback only when asked. An agent
-	# pane's scrollback can be enormous, and a verb whose default answer is
-	# unbounded is one a caller learns to be afraid of. -J joins wrapped
-	# lines, so a reader gets the logical line rather than the terminal's.
-	set -- capture-pane -p -J -t "$_pane"
-	[ -z "$_rn" ] || set -- "$@" -S "-$_rn"
-	_text=$(_tx "$@" 2>/dev/null) || _out refused 1 \
-		"could not capture pane $_pane (is that server running?)"
+  # THE VISIBLE PANE BY DEFAULT, scrollback only when asked. An agent
+  # pane's scrollback can be enormous, and a verb whose default answer is
+  # unbounded is one a caller learns to be afraid of. -J joins wrapped
+  # lines, so a reader gets the logical line rather than the terminal's.
+  set -- capture-pane -p -J -t "$_pane"
+  [ -z "$_rn" ] || set -- "$@" -S "-$_rn"
+  _text=$(_tx "$@" 2>/dev/null) || _out refused 1 \
+    "could not capture pane $_pane (is that server running?)"
 
-	printf '{"status":"ok","partition":%s,"session":%s,' \
-		"$(mux_json_str "${_rp:-global}")" "$(mux_json_str "$_rsess")"
-	printf '"pane":%s,"text":%s}\n' \
-		"$(mux_json_str "$_pane")" "$(mux_json_str "$_text")"
-	exit 0
+  printf '{"status":"ok","partition":%s,"session":%s,' \
+    "$(mux_json_str "${_rp:-global}")" "$(mux_json_str "$_rsess")"
+  printf '"pane":%s,"text":%s}\n' \
+    "$(mux_json_str "$_pane")" "$(mux_json_str "$_text")"
+  exit 0
 fi
 
 if [ "$_verb" = wait ]; then
-	# --- wait ----------------------------------------------------------
-	# Block until a session reaches a state. The verb that makes the other
-	# two composable: without it a caller polls `peers` in a loop and
-	# invents its own timeout, badly.
-	#
-	# ALWAYS BOUNDED. An unbounded wait from an agent is a hang with no
-	# operator, so -t has a default rather than meaning forever.
-	_wt=300
-	_wpart=
-	_wsess=
-	_want=
-	while [ $# -gt 0 ]; do
-		case $1 in
-		-t) shift
-		    _wt=${1:-}
-		    case ${_wt:-} in
-		    ''|*[!0-9]*) _out usage 2 "-t needs seconds" ;;
-		    esac
-		    shift ;;
-		--partition) shift
-		    _wpart=${1:-}
-		    [ -n "$_wpart" ] || _out usage 2 "--partition needs a name"
-		    shift ;;
-		--) shift; break ;;
-		-*) _out usage 2 "unknown option: $1" ;;
-		*)  if [ -z "$_wsess" ]; then _wsess=$1
-		    elif [ -z "$_want" ]; then _want=$1
-		    else _out usage 2 "wait takes a SESSION and a STATE"
-		    fi
-		    shift ;;
-		esac
-	done
-	[ -n "$_wsess" ] && [ -n "$_want" ] \
-		|| _out usage 2 "usage: mux agent wait SESSION STATE [-t N]"
-	case $_want in
-	blocked|working|idle) ;;
-	*) _out usage 2 "not a state mux emits: $_want" ;;
-	esac
+  # --- wait ----------------------------------------------------------
+  # Block until a session reaches a state. The verb that makes the other
+  # two composable: without it a caller polls `peers` in a loop and
+  # invents its own timeout, badly.
+  #
+  # ALWAYS BOUNDED. An unbounded wait from an agent is a hang with no
+  # operator, so -t has a default rather than meaning forever.
+  _wt=300
+  _wpart=
+  _wsess=
+  _want=
+  while [ $# -gt 0 ]; do
+    case $1 in
+    -t) shift
+        _wt=${1:-}
+        case ${_wt:-} in
+        ''|*[!0-9]*) _out usage 2 "-t needs seconds" ;;
+        esac
+        shift ;;
+    --partition) shift
+        _wpart=${1:-}
+        [ -n "$_wpart" ] || _out usage 2 "--partition needs a name"
+        shift ;;
+    --) shift; break ;;
+    -*) _out usage 2 "unknown option: $1" ;;
+    *)  if [ -z "$_wsess" ]; then _wsess=$1
+        elif [ -z "$_want" ]; then _want=$1
+        else _out usage 2 "wait takes a SESSION and a STATE"
+        fi
+        shift ;;
+    esac
+  done
+  [ -n "$_wsess" ] && [ -n "$_want" ] \
+    || _out usage 2 "usage: mux agent wait SESSION STATE [-t N]"
+  case $_want in
+  blocked|working|idle) ;;
+  *) _out usage 2 "not a state mux emits: $_want" ;;
+  esac
 
-	_resolve "$_wsess" "$_wpart"
+  _resolve "$_wsess" "$_wpart"
 
-	# CHECKED BEFORE SLEEPING, so a session already in the wanted state
-	# returns at once rather than after the first poll interval.
-	_t0=$(date +%s 2>/dev/null || echo 0)
-	while :; do
-		_se=$(mux_agent_state "$_rd" "$_wsess")
-		_now=$(date +%s 2>/dev/null || echo 0)
-		_el=$((_now - _t0))
-		[ "$_el" -ge 0 ] || _el=0
-		if [ "${_se%% *}" = "$_want" ]; then
-			printf '{"status":"ok","partition":%s,"session":%s,' \
-				"$(mux_json_str "${_rp:-global}")" \
-				"$(mux_json_str "$_wsess")"
-			printf '"state":%s,"waited":%s}\n' \
-				"$(mux_json_str "$_want")" \
-				"$(mux_json_num "$_el")"
-			exit 0
-		fi
-		[ "$_el" -lt "$_wt" ] || break
-		sleep 1
-	done
+  # CHECKED BEFORE SLEEPING, so a session already in the wanted state
+  # returns at once rather than after the first poll interval.
+  _t0=$(date +%s 2>/dev/null || echo 0)
+  while :; do
+    _se=$(mux_agent_state "$_rd" "$_wsess")
+    _now=$(date +%s 2>/dev/null || echo 0)
+    _el=$((_now - _t0))
+    [ "$_el" -ge 0 ] || _el=0
+    if [ "${_se%% *}" = "$_want" ]; then
+      printf '{"status":"ok","partition":%s,"session":%s,' \
+        "$(mux_json_str "${_rp:-global}")" \
+        "$(mux_json_str "$_wsess")"
+      printf '"state":%s,"waited":%s}\n' \
+        "$(mux_json_str "$_want")" \
+        "$(mux_json_num "$_el")"
+      exit 0
+    fi
+    [ "$_el" -lt "$_wt" ] || break
+    sleep 1
+  done
 
-	# TIMED-OUT IS ITS OWN STATUS AND NOT ITS OWN EXIT CODE, which is the
-	# whole argument for carrying both. "It did not happen in time" is a
-	# refusal as far as a shell is concerned (exit 1); a reader that wants
-	# to tell it from every other refusal reads the word. Widening mux's
-	# four exit codes to say this would cost latch the attribution it gets
-	# from 126, 127 and 255 never being mux's.
-	#
-	# AND IT REPORTS THE STATE IT IS ACTUALLY IN, because "not idle yet" is
-	# a different problem from "blocked and waiting for a human", and a
-	# caller that has just burned its timeout should not need a second
-	# round trip to find out which.
-	printf '{"status":"timed-out","partition":%s,"session":%s,' \
-		"$(mux_json_str "${_rp:-global}")" "$(mux_json_str "$_wsess")"
-	printf '"wanted":%s,"state":%s,"waited":%s,"message":%s}\n' \
-		"$(mux_json_str "$_want")" \
-		"$(mux_json_str "${_se%% *}")" \
-		"$(mux_json_num "$_el")" \
-		"$(mux_json_str "$_wsess is ${_se%% *}, not $_want, after ${_el}s")"
-	exit 1
+  # TIMED-OUT IS ITS OWN STATUS AND NOT ITS OWN EXIT CODE, which is the
+  # whole argument for carrying both. "It did not happen in time" is a
+  # refusal as far as a shell is concerned (exit 1); a reader that wants
+  # to tell it from every other refusal reads the word. Widening mux's
+  # four exit codes to say this would cost latch the attribution it gets
+  # from 126, 127 and 255 never being mux's.
+  #
+  # AND IT REPORTS THE STATE IT IS ACTUALLY IN, because "not idle yet" is
+  # a different problem from "blocked and waiting for a human", and a
+  # caller that has just burned its timeout should not need a second
+  # round trip to find out which.
+  printf '{"status":"timed-out","partition":%s,"session":%s,' \
+    "$(mux_json_str "${_rp:-global}")" "$(mux_json_str "$_wsess")"
+  printf '"wanted":%s,"state":%s,"waited":%s,"message":%s}\n' \
+    "$(mux_json_str "$_want")" \
+    "$(mux_json_str "${_se%% *}")" \
+    "$(mux_json_num "$_el")" \
+    "$(mux_json_str "$_wsess is ${_se%% *}, not $_want, after ${_el}s")"
+  exit 1
 fi
 
 if [ "$_verb" = send ]; then
-	# --- send ----------------------------------------------------------
-	# Type into an agent's pane. THE HOOK A HIGHER LAYER NEEDS, and the
-	# reason it belongs here rather than in that layer: mux already knows
-	# which pane is the agent's, which partition it is in, and -- the part
-	# only mux knows -- whether it is BLOCKED. Without this verb an
-	# orchestrator reaches around mux to `tmux send-keys`, re-derives pane
-	# resolution, and inherits none of the guards below.
-	#
-	# WHAT IT IS NOT: orchestration. `spawn` is `mux go` plus this, which
-	# the layer above composes in two lines, so mux does not grow a verb
-	# that decides when a worker starts.
-	_spart= _sack_prompt=0 _sack_blind=0 _senter=1
-	_ssess= _stext= _shave_text=0
-	while [ $# -gt 0 ]; do
-		case $1 in
-		--partition) shift
-		    _spart=${1:-}
-		    [ -n "$_spart" ] || _out usage 2 "--partition needs a name"
-		    shift ;;
-		# TWO ACKNOWLEDGEMENTS, NOT ONE, pairing with the two grants:
-		# being allowed to answer prompts must never imply being
-		# allowed to type into a pane mux cannot classify.
-		--answer-prompt) _sack_prompt=1; shift ;;
-		--blind)         _sack_blind=1; shift ;;
-		--no-enter)      _senter=0; shift ;;
-		--) shift; break ;;
-		-)  # stdin, so a long charge is not an argv-length problem
-		    [ "$_shave_text" -eq 0 ] || _out usage 2 "send takes one TEXT"
-		    _stext=$(cat); _shave_text=1; shift ;;
-		-*) _out usage 2 "unknown option: $1" ;;
-		*)  if [ -z "$_ssess" ]; then _ssess=$1
-		    elif [ "$_shave_text" -eq 0 ]; then _stext=$1; _shave_text=1
-		    else _out usage 2 "send takes one SESSION and one TEXT"
-		    fi
-		    shift ;;
-		esac
-	done
-	[ -n "$_ssess" ] && [ "$_shave_text" -eq 1 ] \
-		|| _out usage 2 "usage: mux agent send SESSION TEXT|-"
+  # --- send ----------------------------------------------------------
+  # Type into an agent's pane. THE HOOK A HIGHER LAYER NEEDS, and the
+  # reason it belongs here rather than in that layer: mux already knows
+  # which pane is the agent's, which partition it is in, and -- the part
+  # only mux knows -- whether it is BLOCKED. Without this verb an
+  # orchestrator reaches around mux to `tmux send-keys`, re-derives pane
+  # resolution, and inherits none of the guards below.
+  #
+  # WHAT IT IS NOT: orchestration. `spawn` is `mux go` plus this, which
+  # the layer above composes in two lines, so mux does not grow a verb
+  # that decides when a worker starts.
+  _spart= _sack_prompt=0 _sack_blind=0 _senter=1
+  _ssess= _stext= _shave_text=0
+  while [ $# -gt 0 ]; do
+    case $1 in
+    --partition) shift
+        _spart=${1:-}
+        [ -n "$_spart" ] || _out usage 2 "--partition needs a name"
+        shift ;;
+    # TWO ACKNOWLEDGEMENTS, NOT ONE, pairing with the two grants:
+    # being allowed to answer prompts must never imply being
+    # allowed to type into a pane mux cannot classify.
+    --answer-prompt) _sack_prompt=1; shift ;;
+    --blind)         _sack_blind=1; shift ;;
+    --no-enter)      _senter=0; shift ;;
+    --) shift; break ;;
+    -)  # stdin, so a long charge is not an argv-length problem
+        [ "$_shave_text" -eq 0 ] || _out usage 2 "send takes one TEXT"
+        _stext=$(cat); _shave_text=1; shift ;;
+    -*) _out usage 2 "unknown option: $1" ;;
+    *)  if [ -z "$_ssess" ]; then _ssess=$1
+        elif [ "$_shave_text" -eq 0 ]; then _stext=$1; _shave_text=1
+        else _out usage 2 "send takes one SESSION and one TEXT"
+        fi
+        shift ;;
+    esac
+  done
+  [ -n "$_ssess" ] && [ "$_shave_text" -eq 1 ] \
+    || _out usage 2 "usage: mux agent send SESSION TEXT|-"
 
-	_resolve "$_ssess" "$_spart"
-	_spane=$(mux_agent_pane "$_rd" "$_ssess")
-	[ -n "$_spane" ] || _out refused 1 "no agent pane recorded for $_ssess"
-	_sstate=$(mux_agent_state "$_rd" "$_ssess")
-	_sstate=${_sstate%% *}
+  _resolve "$_ssess" "$_spart"
+  _spane=$(mux_agent_pane "$_rd" "$_ssess")
+  [ -n "$_spane" ] || _out refused 1 "no agent pane recorded for $_ssess"
+  _sstate=$(mux_agent_state "$_rd" "$_ssess")
+  _sstate=${_sstate%% *}
 
-	# WHO CONTROLS THE PANE, and the default is the strict one. An
-	# unclassified pane is a human's: the safe answer is the one you get by
-	# saying nothing, and marking a village is a deliberate act by the
-	# layer that spawned it.
-	_swin=$(_tx display-message -p -t "$_spane" '#{window_name}' \
-		2>/dev/null || true)
-	_sclass=$(_tx display-message -p -t "$_spane" '#{@mux-control}' \
-		2>/dev/null || true)
-	case ${_sclass:-} in
-	agent|hybrid) ;;
-	*) _sclass=human ;;
-	esac
+  # WHO CONTROLS THE PANE, and the default is the strict one. An
+  # unclassified pane is a human's: the safe answer is the one you get by
+  # saying nothing, and marking a village is a deliberate act by the
+  # layer that spawned it.
+  _swin=$(_tx display-message -p -t "$_spane" '#{window_name}' \
+    2>/dev/null || true)
+  _sclass=$(_tx display-message -p -t "$_spane" '#{@mux-control}' \
+    2>/dev/null || true)
+  case ${_sclass:-} in
+  agent|hybrid) ;;
+  *) _sclass=human ;;
+  esac
 
-	# _refuse WHAT ACK -- the target needs an override. Reports whether one
-	# is AVAILABLE, which is the whole point of answering rather than just
-	# refusing: a caller that does not know discovers the capability in one
-	# round trip and decides; one that does know passes the flag up front
-	# and pays nothing.
-	_refuse() {   # <what> <ack-flag-name>
-		_rf_av=none
-		_rf_why=
-		if [ "$_sclass" = human ]; then
-			# NEVER, and the policy is not consulted. Structural
-			# rather than a token an operator has to remember: a
-			# grant naming only a window would otherwise reach a
-			# human's pane by omission.
-			_rf_why="it is human-controlled; mux does not"
-			_rf_why="$_rf_why answer a prompt on a human's behalf"
-		elif mux_send_allowed "$1" "${_rp:-global}" "$_ssess" \
-				"${_swin:-}" "$_sclass"; then
-			_rf_av=available
-			_rf_why="the policy permits an override here; pass $2"
-		else
-			_rf_why=$(mux_send_policy_why)
-			[ -n "$_rf_why" ] || _rf_why="no policy grants an override for this scope"
-		fi
-		printf '{"status":"refused","reason":%s,"override":%s,' \
-			"$(mux_json_str "$1")" "$(mux_json_str "$_rf_av")"
-		printf '"partition":%s,"session":%s,"window":%s,"class":%s,' \
-			"$(mux_json_str "${_rp:-global}")" \
-			"$(mux_json_str "$_ssess")" \
-			"$(mux_json_str "${_swin:-}")" \
-			"$(mux_json_str "$_sclass")"
-		printf '"state":%s,"message":%s}\n' \
-			"$(mux_json_str "$_sstate")" \
-			"$(mux_json_str "$_ssess: $_rf_why")"
-		exit 1
-	}
+  # _refuse WHAT ACK -- the target needs an override. Reports whether one
+  # is AVAILABLE, which is the whole point of answering rather than just
+  # refusing: a caller that does not know discovers the capability in one
+  # round trip and decides; one that does know passes the flag up front
+  # and pays nothing.
+  _refuse() {   # <what> <ack-flag-name>
+    _rf_av=none
+    _rf_why=
+    if [ "$_sclass" = human ]; then
+      # NEVER, and the policy is not consulted. Structural
+      # rather than a token an operator has to remember: a
+      # grant naming only a window would otherwise reach a
+      # human's pane by omission.
+      _rf_why="it is human-controlled; mux does not"
+      _rf_why="$_rf_why answer a prompt on a human's behalf"
+    elif mux_send_allowed "$1" "${_rp:-global}" "$_ssess" \
+        "${_swin:-}" "$_sclass"; then
+      _rf_av=available
+      _rf_why="the policy permits an override here; pass $2"
+    else
+      _rf_why=$(mux_send_policy_why)
+      [ -n "$_rf_why" ] || _rf_why="no policy grants an override for this scope"
+    fi
+    printf '{"status":"refused","reason":%s,"override":%s,' \
+      "$(mux_json_str "$1")" "$(mux_json_str "$_rf_av")"
+    printf '"partition":%s,"session":%s,"window":%s,"class":%s,' \
+      "$(mux_json_str "${_rp:-global}")" \
+      "$(mux_json_str "$_ssess")" \
+      "$(mux_json_str "${_swin:-}")" \
+      "$(mux_json_str "$_sclass")"
+    printf '"state":%s,"message":%s}\n' \
+      "$(mux_json_str "$_sstate")" \
+      "$(mux_json_str "$_ssess: $_rf_why")"
+    exit 1
+  }
 
-	# THE STATE DECIDES WHETHER AN OVERRIDE IS NEEDED AT ALL. idle and
-	# working are ordinary: a turn that is running buffers the text and
-	# picks it up when it ends, which is the natural "queue the next
-	# instruction" case and is why working is not refused.
-	case $_sstate in
-	idle|working) ;;
-	blocked)
-		[ "$_sack_prompt" -eq 1 ] || _refuse blocked --answer-prompt
-		mux_send_allowed blocked "${_rp:-global}" "$_ssess" \
-			"${_swin:-}" "$_sclass" || _refuse blocked --answer-prompt
-		[ "$_sclass" != human ] || _refuse blocked --answer-prompt ;;
-	*)
-		[ "$_sack_blind" -eq 1 ] || _refuse unknown --blind
-		mux_send_allowed unknown "${_rp:-global}" "$_ssess" \
-			"${_swin:-}" "$_sclass" || _refuse unknown --blind
-		[ "$_sclass" != human ] || _refuse unknown --blind ;;
-	esac
+  # THE STATE DECIDES WHETHER AN OVERRIDE IS NEEDED AT ALL. idle and
+  # working are ordinary: a turn that is running buffers the text and
+  # picks it up when it ends, which is the natural "queue the next
+  # instruction" case and is why working is not refused.
+  case $_sstate in
+  idle|working) ;;
+  blocked)
+    [ "$_sack_prompt" -eq 1 ] || _refuse blocked --answer-prompt
+    mux_send_allowed blocked "${_rp:-global}" "$_ssess" \
+      "${_swin:-}" "$_sclass" || _refuse blocked --answer-prompt
+    [ "$_sclass" != human ] || _refuse blocked --answer-prompt ;;
+  *)
+    [ "$_sack_blind" -eq 1 ] || _refuse unknown --blind
+    mux_send_allowed unknown "${_rp:-global}" "$_ssess" \
+      "${_swin:-}" "$_sclass" || _refuse unknown --blind
+    [ "$_sclass" != human ] || _refuse unknown --blind ;;
+  esac
 
-	# BRACKETED PASTE, so the agent's TUI sees PASTED TEXT rather than a
-	# stream of keystrokes. It matters for anything multi-line: a TUI that
-	# reads Enter as submit would send the first line on its own and leave
-	# the rest arriving as a new prompt.
-	#
-	# A buffer named for this process, deleted on paste, so a human's own
-	# tmux buffers are not clobbered by an agent talking to a peer.
-	_sbuf=mux-send-$$
-	printf '%s' "$_stext" | _tx load-buffer -b "$_sbuf" - 2>/dev/null \
-		|| _out refused 1 "could not stage the text for $_spane"
-	_tx paste-buffer -p -d -b "$_sbuf" -t "$_spane" 2>/dev/null || {
-		_tx delete-buffer -b "$_sbuf" 2>/dev/null || true
-		_out refused 1 "could not paste into $_spane"; }
-	[ "$_senter" -eq 0 ] || _tx send-keys -t "$_spane" Enter 2>/dev/null \
-		|| true
+  # BRACKETED PASTE, so the agent's TUI sees PASTED TEXT rather than a
+  # stream of keystrokes. It matters for anything multi-line: a TUI that
+  # reads Enter as submit would send the first line on its own and leave
+  # the rest arriving as a new prompt.
+  #
+  # A buffer named for this process, deleted on paste, so a human's own
+  # tmux buffers are not clobbered by an agent talking to a peer.
+  _sbuf=mux-send-$$
+  printf '%s' "$_stext" | _tx load-buffer -b "$_sbuf" - 2>/dev/null \
+    || _out refused 1 "could not stage the text for $_spane"
+  _tx paste-buffer -p -d -b "$_sbuf" -t "$_spane" 2>/dev/null || {
+    _tx delete-buffer -b "$_sbuf" 2>/dev/null || true
+    _out refused 1 "could not paste into $_spane"; }
+  [ "$_senter" -eq 0 ] || _tx send-keys -t "$_spane" Enter 2>/dev/null \
+    || true
 
-	# LOGGED, because a send is a MUTATION and this is the one mux makes on
-	# another agent's behalf. It is also the audit trail the layer above
-	# would otherwise have to build: who was typed at, in what state, and
-	# whether an override was taken.
-	if [ -r "$_lib/mux-log_lib" ]; then
-		. "$_lib/mux-log_lib"
-		_sov=
-		[ "$_sack_prompt" -eq 0 ] || _sov=" --answer-prompt"
-		[ "$_sack_blind" -eq 0 ]  || _sov="$_sov --blind"
-		mux_log send "$_ssess (${_rp:-global}/${_swin:-?}) $_sclass \
+  # LOGGED, because a send is a MUTATION and this is the one mux makes on
+  # another agent's behalf. It is also the audit trail the layer above
+  # would otherwise have to build: who was typed at, in what state, and
+  # whether an override was taken.
+  if [ -r "$_lib/mux-log_lib" ]; then
+    . "$_lib/mux-log_lib"
+    _sov=
+    [ "$_sack_prompt" -eq 0 ] || _sov=" --answer-prompt"
+    [ "$_sack_blind" -eq 0 ]  || _sov="$_sov --blind"
+    mux_log send "$_ssess (${_rp:-global}/${_swin:-?}) $_sclass \
 $_sstate$_sov ${#_stext} bytes"
-	fi
+  fi
 
-	printf '{"status":"ok","partition":%s,"session":%s,"window":%s,' \
-		"$(mux_json_str "${_rp:-global}")" "$(mux_json_str "$_ssess")" \
-		"$(mux_json_str "${_swin:-}")"
-	printf '"pane":%s,"class":%s,"state":%s,"bytes":%s}\n' \
-		"$(mux_json_str "$_spane")" "$(mux_json_str "$_sclass")" \
-		"$(mux_json_str "$_sstate")" "$(mux_json_num "${#_stext}")"
-	exit 0
+  printf '{"status":"ok","partition":%s,"session":%s,"window":%s,' \
+    "$(mux_json_str "${_rp:-global}")" "$(mux_json_str "$_ssess")" \
+    "$(mux_json_str "${_swin:-}")"
+  printf '"pane":%s,"class":%s,"state":%s,"bytes":%s}\n' \
+    "$(mux_json_str "$_spane")" "$(mux_json_str "$_sclass")" \
+    "$(mux_json_str "$_sstate")" "$(mux_json_num "${#_stext}")"
+  exit 0
 fi
 
 if [ "$_verb" = peers ]; then
-	# --- peers ---------------------------------------------------------
-	# Every session with a tracked agent, and what it is doing. The verb an
-	# agent reaches for first: "who else is here, and is anyone stuck".
-	#
-	# HEADLESS, like agent-list, and that is a property worth protecting
-	# rather than an accident. It derives sessions from the state FILES and
-	# roots from the session set, so it answers over a transport, at boot,
-	# with no tmux client and no server attached. The intended caller is as
-	# likely to be `ssh box mux agent peers` as a local one.
-	#
-	# NO PANE FIELD, deliberately. `read` and `send` resolve a target to a
-	# pane at the moment they act, which is more correct than a caller
-	# caching an id that can change under it -- and it keeps this verb from
-	# needing tmux at all.
-	_pa=0
-	_part=
-	while [ $# -gt 0 ]; do
-		case $1 in
-		--all) _pa=1; shift ;;
-		--partition)
-			shift
-			_part=${1:-}
-			[ -n "$_part" ] || _out usage 2 "--partition needs a name"
-			shift ;;
-		--) shift; break ;;
-		*) _out usage 2 "unknown option: $1" ;;
-		esac
-	done
+  # --- peers ---------------------------------------------------------
+  # Every session with a tracked agent, and what it is doing. The verb an
+  # agent reaches for first: "who else is here, and is anyone stuck".
+  #
+  # HEADLESS, like agent-list, and that is a property worth protecting
+  # rather than an accident. It derives sessions from the state FILES and
+  # roots from the session set, so it answers over a transport, at boot,
+  # with no tmux client and no server attached. The intended caller is as
+  # likely to be `ssh box mux agent peers` as a local one.
+  #
+  # NO PANE FIELD, deliberately. `read` and `send` resolve a target to a
+  # pane at the moment they act, which is more correct than a caller
+  # caching an id that can change under it -- and it keeps this verb from
+  # needing tmux at all.
+  _pa=0
+  _part=
+  while [ $# -gt 0 ]; do
+    case $1 in
+    --all) _pa=1; shift ;;
+    --partition)
+      shift
+      _part=${1:-}
+      [ -n "$_part" ] || _out usage 2 "--partition needs a name"
+      shift ;;
+    --) shift; break ;;
+    *) _out usage 2 "unknown option: $1" ;;
+    esac
+  done
 
-	# mux-paths_lib FIRST: mux-sessions_lib calls mux_state_path, and a lib
-	# that needs another does not say so by itself. Sourcing sessions alone
-	# gave six `mux_state_path: not found` lines on stderr and an empty
-	# root for every peer -- a plausible answer, silently wrong, which is
-	# the trap these notes already record for mux-scan and mux-sessions.t.
-	. "$_lib/mux-paths_lib"
-	. "$_lib/mux-agent-state_lib"
-	. "$_lib/mux-sessions_lib"
-	if [ -z "$_part" ] && [ -r "$_lib/mux-context_lib" ]; then
-		. "$_lib/mux-context_lib"
-		mux_ctx_resolve 2>/dev/null && _part=$MUX_CTX_PARTITION
-	fi
+  # mux-paths_lib FIRST: mux-sessions_lib calls mux_state_path, and a lib
+  # that needs another does not say so by itself. Sourcing sessions alone
+  # gave six `mux_state_path: not found` lines on stderr and an empty
+  # root for every peer -- a plausible answer, silently wrong, which is
+  # the trap these notes already record for mux-scan and mux-sessions.t.
+  . "$_lib/mux-paths_lib"
+  . "$_lib/mux-agent-state_lib"
+  . "$_lib/mux-sessions_lib"
+  if [ -z "$_part" ] && [ -r "$_lib/mux-context_lib" ]; then
+    . "$_lib/mux-context_lib"
+    mux_ctx_resolve 2>/dev/null && _part=$MUX_CTX_PARTITION
+  fi
 
-	# AGE, NOT AN EPOCH, and it is resolved HERE against the clock that
-	# wrote it. The obvious design emits the epoch and works perfectly
-	# until the reader is on another machine, where a box a few seconds off
-	# shows "idle 4s" as "idle 2m" and one badly off shows a negative.
-	_now=$(date +%s 2>/dev/null || echo 0)
+  # AGE, NOT AN EPOCH, and it is resolved HERE against the clock that
+  # wrote it. The obvious design emits the epoch and works perfectly
+  # until the reader is on another machine, where a box a few seconds off
+  # shows "idle 4s" as "idle 2m" and one badly off shows a negative.
+  _now=$(date +%s 2>/dev/null || echo 0)
 
-	_which=$_part
-	[ "$_pa" -eq 0 ] || _which=$(
-		_root=$(dirname "$(mux_agent_dir "$_part")")
-		for _d in "$_root"/*; do
-			[ -d "$_d" ] || continue
-			printf '%s\n' "${_d##*/}"
-		done)
+  _which=$_part
+  [ "$_pa" -eq 0 ] || _which=$(
+    _root=$(dirname "$(mux_agent_dir "$_part")")
+    for _d in "$_root"/*; do
+      [ -d "$_d" ] || continue
+      printf '%s\n' "${_d##*/}"
+    done)
 
-	_items=$(
-		printf '%s\n' "$_which" | while IFS= read -r _p; do
-			[ -n "$_p" ] || continue
-			_dir=$(mux_agent_dir "$_p")
-			# ONE tmux QUERY PER PARTITION, not per peer. "Could
-			# not ask" and "asked, and nothing is set" are
-			# different answers: unreachable reports null, while
-			# reached-with-no-option reports `human`, the default
-			# class. Collapsing them would make a remote `peers` at
-			# boot call every pane human-controlled -- plausible,
-			# and wrong.
-			#
-			# EMPTY IS UNREACHABLE, with no separate success flag.
-			# One was written first and proved unkillable, because
-			# a failed query leaves $_ctl empty anyway and a tmux
-			# server with zero panes does not exist -- it exits. An
-			# unkillable guard here is redundant code rather than a
-			# missing test, so it went.
-			_ctl=$(tmux -L "$_p" list-panes -a \
-				-F "#{pane_id}	#{@mux-control}" \
-				2>/dev/null) || _ctl=
-			mux_agent_sessions "$_dir" | while IFS= read -r _s; do
-				[ -n "$_s" ] || continue
-				_se=$(mux_agent_state "$_dir" "$_s")
-				_st=${_se%% *}
-				_ep=${_se#* }
-				[ -n "$_st" ] || continue
-				# A record with no usable epoch still has a
-				# real STATE, so its age is null rather than a
-				# fabricated 0 -- which would assert it just
-				# changed, a claim there is no evidence for.
-				case ${_ep:-} in
-				''|*[!0-9]*) _ag= ;;
-				*)  _ag=$((_now - _ep))
-				    [ "$_ag" -lt 0 ] && _ag=0 ;;
-				esac
-				# THE CLASS, looked up by the pane the record
-				# speaks for. The pane is resolved INTERNALLY
-				# and still not emitted: a caller caching an id
-				# is the thing `read` and `send` avoid, and
-				# answering a different question with it is not
-				# the same as handing it over.
-				_cl=
-				if [ -n "$_ctl" ]; then
-					_pn=$(mux_agent_pane "$_dir" "$_s")
-					_cl=$(printf '%s\n' "$_ctl" | awk \
-						-F'\t' -v k="$_pn" \
-						'$1 == k { print $2; exit }')
-					case ${_cl:-} in
-					agent|hybrid) ;;
-					*) _cl=human ;;
-					esac
-					# The pane is gone but its record is
-					# not: the class is unknowable, which
-					# is null rather than the default.
-					printf '%s\n' "$_ctl" \
-						| grep -q "^$_pn	" \
-						|| _cl=
-				fi
-				printf '{"partition":%s,"session":%s,' \
-					"$(mux_json_str "$_p")" \
-					"$(mux_json_str "$_s")"
-				printf '"state":%s,"age":%s,"control":%s,' \
-					"$(mux_json_str "$_st")" \
-					"$(mux_json_num "${_ag:-}")" \
-					"$([ -n "$_cl" ] \
-						&& mux_json_str "$_cl" \
-						|| printf null)"
-				printf '"root":%s}\n' \
-					"$(mux_json_str \
-						"$(mux_sess_root "$_s" "$_p")")"
-			done
-		done | mux_json_array
-	)
-	printf '{"status":"ok","peers":%s}\n' "$_items"
-	exit 0
+  _items=$(
+    printf '%s\n' "$_which" | while IFS= read -r _p; do
+      [ -n "$_p" ] || continue
+      _dir=$(mux_agent_dir "$_p")
+      # ONE tmux QUERY PER PARTITION, not per peer. "Could
+      # not ask" and "asked, and nothing is set" are
+      # different answers: unreachable reports null, while
+      # reached-with-no-option reports `human`, the default
+      # class. Collapsing them would make a remote `peers` at
+      # boot call every pane human-controlled -- plausible,
+      # and wrong.
+      #
+      # EMPTY IS UNREACHABLE, with no separate success flag.
+      # One was written first and proved unkillable, because
+      # a failed query leaves $_ctl empty anyway and a tmux
+      # server with zero panes does not exist -- it exits. An
+      # unkillable guard here is redundant code rather than a
+      # missing test, so it went.
+      _ctl=$(tmux -L "$_p" list-panes -a \
+        -F "#{pane_id}	#{@mux-control}" \
+        2>/dev/null) || _ctl=
+      mux_agent_sessions "$_dir" | while IFS= read -r _s; do
+        [ -n "$_s" ] || continue
+        _se=$(mux_agent_state "$_dir" "$_s")
+        _st=${_se%% *}
+        _ep=${_se#* }
+        [ -n "$_st" ] || continue
+        # A record with no usable epoch still has a
+        # real STATE, so its age is null rather than a
+        # fabricated 0 -- which would assert it just
+        # changed, a claim there is no evidence for.
+        case ${_ep:-} in
+        ''|*[!0-9]*) _ag= ;;
+        *)  _ag=$((_now - _ep))
+            [ "$_ag" -lt 0 ] && _ag=0 ;;
+        esac
+        # THE CLASS, looked up by the pane the record
+        # speaks for. The pane is resolved INTERNALLY
+        # and still not emitted: a caller caching an id
+        # is the thing `read` and `send` avoid, and
+        # answering a different question with it is not
+        # the same as handing it over.
+        _cl=
+        if [ -n "$_ctl" ]; then
+          _pn=$(mux_agent_pane "$_dir" "$_s")
+          _cl=$(printf '%s\n' "$_ctl" | awk \
+            -F'\t' -v k="$_pn" \
+            '$1 == k { print $2; exit }')
+          case ${_cl:-} in
+          agent|hybrid) ;;
+          *) _cl=human ;;
+          esac
+          # The pane is gone but its record is
+          # not: the class is unknowable, which
+          # is null rather than the default.
+          printf '%s\n' "$_ctl" \
+            | grep -q "^$_pn	" \
+            || _cl=
+        fi
+        printf '{"partition":%s,"session":%s,' \
+          "$(mux_json_str "$_p")" \
+          "$(mux_json_str "$_s")"
+        printf '"state":%s,"age":%s,"control":%s,' \
+          "$(mux_json_str "$_st")" \
+          "$(mux_json_num "${_ag:-}")" \
+          "$([ -n "$_cl" ] \
+            && mux_json_str "$_cl" \
+            || printf null)"
+        printf '"root":%s}\n' \
+          "$(mux_json_str \
+            "$(mux_sess_root "$_s" "$_p")")"
+      done
+    done | mux_json_array
+  )
+  printf '{"status":"ok","peers":%s}\n' "$_items"
+  exit 0
 fi
 
 # --- status ---------------------------------------------------------------
@@ -545,18 +545,18 @@ _all=0
 _att=1
 _spart=
 while [ $# -gt 0 ]; do
-	case $1 in
-	--all)      _all=1; shift ;;
-	--partition)
-		[ -n "${2:-}" ] || _out usage 2 "--partition needs a name"
-		_spart=$2; shift 2 ;;
-	# EVERY partition, not just the watched ones. The default is `attached`
-	# because a tray item means somebody is looking at it, and an agent
-	# asking what is going on wants the same answer a human would see.
-	--any)      _att=0; shift ;;
-	--) shift; break ;;
-	*)  _out usage 2 "unknown option: $1" ;;
-	esac
+  case $1 in
+  --all)      _all=1; shift ;;
+  --partition)
+    [ -n "${2:-}" ] || _out usage 2 "--partition needs a name"
+    _spart=$2; shift 2 ;;
+  # EVERY partition, not just the watched ones. The default is `attached`
+  # because a tray item means somebody is looking at it, and an agent
+  # asking what is going on wants the same answer a human would see.
+  --any)      _att=0; shift ;;
+  --) shift; break ;;
+  *)  _out usage 2 "unknown option: $1" ;;
+  esac
 done
 
 # SCOPED TO THE CALLER'S PARTITION UNLESS ASKED OTHERWISE, the same rule
@@ -566,14 +566,14 @@ done
 # parses and does nothing is worse than a missing one: the caller believes it
 # asked for something.
 if [ "$_all" -eq 0 ]; then
-	if [ -z "$_spart" ] && [ -r "$_lib/mux-context_lib" ]; then
-		. "$_lib/mux-context_lib"
-		mux_ctx_resolve 2>/dev/null && _spart=$MUX_CTX_PARTITION
-	fi
-	# `global` is the namespace mux_agent_dir defaults to, so an
-	# unresolvable context scopes to the default rather than widening to
-	# everything: failing open is the one answer this must not give.
-	[ -n "$_spart" ] || _spart=global
+  if [ -z "$_spart" ] && [ -r "$_lib/mux-context_lib" ]; then
+    . "$_lib/mux-context_lib"
+    mux_ctx_resolve 2>/dev/null && _spart=$MUX_CTX_PARTITION
+  fi
+  # `global` is the namespace mux_agent_dir defaults to, so an
+  # unresolvable context scopes to the default rather than widening to
+  # everything: failing open is the one answer this must not give.
+  [ -n "$_spart" ] || _spart=global
 fi
 
 set -- --all
@@ -584,14 +584,14 @@ _rows=$("$_lib/mux-agent-state-summary" "$@" 2>/dev/null) || _rows=
 # array. Read with a field split rather than `read -r a b c` so a malformed
 # line cannot silently shift the count into the state.
 _items=$(
-	printf '%s\n' "$_rows" | while IFS=' ' read -r _p _st _n; do
-		[ -n "${_p:-}" ] || continue
-		[ -n "${_st:-}" ] || continue
-		[ -z "$_spart" ] || [ "$_p" = "$_spart" ] || continue
-		printf '{"partition":%s,"state":%s,"count":%s}\n' \
-			"$(mux_json_str "$_p")" "$(mux_json_str "$_st")" \
-			"$(mux_json_num "${_n:-}")"
-	done | mux_json_array
+  printf '%s\n' "$_rows" | while IFS=' ' read -r _p _st _n; do
+    [ -n "${_p:-}" ] || continue
+    [ -n "${_st:-}" ] || continue
+    [ -z "$_spart" ] || [ "$_p" = "$_spart" ] || continue
+    printf '{"partition":%s,"state":%s,"count":%s}\n' \
+      "$(mux_json_str "$_p")" "$(mux_json_str "$_st")" \
+      "$(mux_json_num "${_n:-}")"
+  done | mux_json_array
 )
 
 printf '{"status":"ok","partitions":%s}\n' "$_items"

@@ -50,14 +50,14 @@ fi
 # would disagree silently about which machine is which.
 _hostslib=$(dirname "$0")/mux-hosts_lib
 [ -r "$_hostslib" ] || {
-        echo "mux-style: $_hostslib missing (incomplete install)" >&2; exit 1; }
+  echo "mux-style: $_hostslib missing (incomplete install)" >&2; exit 1; }
 . "$_hostslib"
 # The context seam (see mux-context_lib). A stub yields the global context if
 # the lib is somehow missing.
 _ctx=$(dirname "$0")/mux-context_lib
 if [ -r "$_ctx" ]; then . "$_ctx"
 else mux_ctx_resolve() { MUX_CTX_TOKEN=global; MUX_CTX_PARTITION=global
-	MUX_CFG_label=''; MUX_CFG_theme=''; MUX_CFG_host_chip=on; }
+  MUX_CFG_label=''; MUX_CFG_theme=''; MUX_CFG_host_chip=on; }
 fi
 
 # The pane's foreground process group is tpgid, field 8 of /proc/<pid>/stat.
@@ -71,14 +71,14 @@ fi
 _proc=${MUX_STYLE_PROC:-/proc}
 fg=$pane_pid
 if [ -r "$_proc/$pane_pid/stat" ]; then
-        # Word splitting is the POINT: these are /proc stat's space-separated
-        # fields, positioned onto $1..$n.
-        # shellcheck disable=SC2046
-        set -- $(sed 's/.*)//' "$_proc/$pane_pid/stat")
-        case ${6:-} in
-                ''|*[!0-9]*) ;;         # no foreground group: keep the shell
-                *) fg=$6 ;;
-        esac
+  # Word splitting is the POINT: these are /proc stat's space-separated
+  # fields, positioned onto $1..$n.
+  # shellcheck disable=SC2046
+  set -- $(sed 's/.*)//' "$_proc/$pane_pid/stat")
+  case ${6:-} in
+    ''|*[!0-9]*) ;;         # no foreground group: keep the shell
+    *) fg=$6 ;;
+  esac
 fi
 
 gopt() { tmux show-options -gqv "$1"; }   # a global option, empty if unset
@@ -103,12 +103,12 @@ bord=$(gopt "@theme-$theme-border")
 sel=$(gopt "@theme-$theme-select")
 prompt=$(gopt "@theme-$theme-prompt")
 if [ -z "$bar" ] || [ -z "$win" ]; then
-        # Theme not defined yet (e.g. tmux.conf not reloaded since these options
-        # were added). Fall back to the bootstrap bar rather than break the live
-        # status line; a bad `theme` NAME is already rejected at build by mux.
-        bar=$(gopt status-style)
-        win=$(gopt window-status-current-style)
-        [ -n "$acc" ] || acc=$(gopt pane-active-border-style)
+  # Theme not defined yet (e.g. tmux.conf not reloaded since these options
+  # were added). Fall back to the bootstrap bar rather than break the live
+  # status line; a bad `theme` NAME is already rejected at build by mux.
+  bar=$(gopt status-style)
+  win=$(gopt window-status-current-style)
+  [ -n "$acc" ] || acc=$(gopt pane-active-border-style)
 fi
 # Derive the optional elements when a theme leaves them unset: a dim grey for
 # inactive borders (so the accent active border pops), the current-window chip
@@ -122,8 +122,8 @@ prompt=${prompt:-$bar}
 # tick, and an unconditional set would redraw the bar each time. @mux-prefix is
 # deliberately settable to empty (to clear the marker on leaving a context).
 set_opt() {   # option value
-        _c=$(tmux show-options -qv -t "$session" "$1" || true)
-        [ "$_c" = "$2" ] || tmux set-option -t "$session" "$1" "$2"
+  _c=$(tmux show-options -qv -t "$session" "$1" || true)
+  [ "$_c" = "$2" ] || tmux set-option -t "$session" "$1" "$2"
 }
 set_opt status-style "$bar"
 set_opt window-status-current-style "$win"
@@ -154,15 +154,15 @@ set_opt message-style "$bar"
 # it is seen.
 MUX_BANNER_STYLE=${MUX_BANNER_STYLE:-bg=colour196,fg=colour231,bold}
 if [ -n "$MUX_CFG_label" ]; then
-        # Title prefix is terse ([LABEL] ) to leave room for #S:#W; the status
-        # banner double-brackets it ([[...]]) for emphasis.
-        set_opt @mux-prefix "[$MUX_CFG_label] "
-        if [ "$quiet" = 0 ]; then
-                printf '#[%s][[%s]]#[default]' \
-                        "$MUX_BANNER_STYLE" "$MUX_CFG_label"
-        fi
+  # Title prefix is terse ([LABEL] ) to leave room for #S:#W; the status
+  # banner double-brackets it ([[...]]) for emphasis.
+  set_opt @mux-prefix "[$MUX_CFG_label] "
+  if [ "$quiet" = 0 ]; then
+    printf '#[%s][[%s]]#[default]' \
+      "$MUX_BANNER_STYLE" "$MUX_CFG_label"
+  fi
 else
-        set_opt @mux-prefix ""
+  set_opt @mux-prefix ""
 fi
 
 # Host label (status-left only, both modes): the machine identity as a CHIP --
@@ -178,10 +178,10 @@ fi
 # every machine still gets a distinct, readable chip with zero config (an
 # integrator can pin specific hosts to hand-picked hues there).
 if [ "$quiet" = 0 ] && [ "${MUX_CFG_host_chip:-on}" != off ]; then
-        # The rule lives in mux-hosts_lib, because `mux host-color` answers the
-        # same question for the tray. Two copies would drift, and the drift is
-        # silent: the bar and the tray would disagree about which machine is
-        # which and neither would look broken.
-        _host=$(mux_host_name)
-        printf '#[%s,bold] %s #[default] ' "$(mux_host_style "$_host")" "$_host"
+  # The rule lives in mux-hosts_lib, because `mux host-color` answers the
+  # same question for the tray. Two copies would drift, and the drift is
+  # silent: the bar and the tray would disagree about which machine is
+  # which and neither would look broken.
+  _host=$(mux_host_name)
+  printf '#[%s,bold] %s #[default] ' "$(mux_host_style "$_host")" "$_host"
 fi

@@ -78,11 +78,11 @@ ssh -O check "$_host" >/dev/null 2>&1 && exit 0
 # answered in ten seconds has already answered.
 _PROBE_MAX=${MUX_SSH_PROBE_TIMEOUT:-10}
 _bound() {
-	if command -v timeout >/dev/null 2>&1; then
-		timeout "$_PROBE_MAX" "$@"
-	else
-		"$@"        # no timeout(1): unbounded rather than pretend-bounded
-	fi
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$_PROBE_MAX" "$@"
+  else
+    "$@"        # no timeout(1): unbounded rather than pretend-bounded
+  fi
 }
 
 _e=$(mktemp) || exit 78

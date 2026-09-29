@@ -17,10 +17,10 @@ case "$*" in
 *list-sessions*|*has-session*) exit 1 ;;
 *window_index*) printf '0\n' ;;
 *pane_id*)
-	# One fresh id per query, so each pane mux creates gets its own.
-	_n=$(cat "$PANESEQ" 2>/dev/null || echo 0)
-	_n=$((_n + 1)); printf '%s\n' "$_n" >"$PANESEQ"
-	printf '%%%s\n' "$_n" ;;
+  # One fresh id per query, so each pane mux creates gets its own.
+  _n=$(cat "$PANESEQ" 2>/dev/null || echo 0)
+  _n=$((_n + 1)); printf '%s\n' "$_n" >"$PANESEQ"
+  printf '%%%s\n' "$_n" ;;
 esac
 exit 0
 EOF
@@ -31,11 +31,11 @@ PATH=$T/bin:$PATH; export PATH
 
 # go ARGS... -> run mux, then echo the pane it selected.
 selected() {
-	: >"$TMUXLOG"; : >"$PANESEQ"
-	( cd "$T/proj" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
-		MUX_CACHE="$T/cache" "$HERE/bin/mux" "$@" ) >/dev/null 2>&1 \
-		|| fail "mux $* exited $?"
-	awk '/select-pane -t/{p=$NF} END{print p}' "$TMUXLOG"
+  : >"$TMUXLOG"; : >"$PANESEQ"
+  ( cd "$T/proj" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
+    MUX_CACHE="$T/cache" "$HERE/bin/mux" "$@" ) >/dev/null 2>&1 \
+    || fail "mux $* exited $?"
+  awk '/select-pane -t/{p=$NF} END{print p}' "$TMUXLOG"
 }
 
 # Ids follow the STUB's query order, not real tmux pane numbering: mux asks for
@@ -65,15 +65,15 @@ _got=$(selected go f4 noagent)
 # An agent in a LATER window takes the window selection with it, so the session
 # still opens looking at the agent.
 printf 'window one\npane\nwindow two\npane    agent\n' \
-	>"$T/conf/layouts/late.layout"
+  >"$T/conf/layouts/late.layout"
 printf 'layout  late\n' >"$T/conf/profiles.d/late.profile"
 : >"$TMUXLOG"; : >"$PANESEQ"
 ( cd "$T/proj" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
-	MUX_CACHE="$T/cache" "$HERE/bin/mux" go f5 late ) >/dev/null 2>&1 \
-	|| fail "late-agent layout exited $?"
+  MUX_CACHE="$T/cache" "$HERE/bin/mux" go f5 late ) >/dev/null 2>&1 \
+  || fail "late-agent layout exited $?"
 grep -q 'select-pane -t %3' "$TMUXLOG" \
-	|| fail "an agent in a later window should still be selected"
+  || fail "an agent in a later window should still be selected"
 grep -q 'select-window -t f5:0' "$TMUXLOG" \
-	|| fail "the agent's window should be selected too"
+  || fail "the agent's window should be selected too"
 
 pass

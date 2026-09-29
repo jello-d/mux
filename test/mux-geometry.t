@@ -45,22 +45,22 @@ PATH=$T/bin:$PATH; export PATH
 # in-tmux path -- otherwise the suite's own environment decides which branch is
 # under test, and running the tests inside tmux silently tests the wrong one.
 go() {
-	: >"$TMUXLOG"
-	( cd "$T/proj" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
-		MUX_CACHE="$T/cache" "$@" "$HERE/bin/mux" go --no-agent \
-		--no-attach ) >/dev/null 2>&1 || true
-	grep 'new-session' "$TMUXLOG" | head -1
+  : >"$TMUXLOG"
+  ( cd "$T/proj" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
+    MUX_CACHE="$T/cache" "$@" "$HERE/bin/mux" go --no-agent \
+    --no-attach ) >/dev/null 2>&1 || true
+  grep 'new-session' "$TMUXLOG" | head -1
 }
 # Same, with no CONTROLLING TERMINAL, so /dev/tty cannot be opened. setsid is
 # the only reliable way to get that: redirecting the three standard streams
 # does not detach /dev/tty, so a suite run from a real terminal would otherwise
 # find one and test the wrong branch.
 go_headless() {
-	: >"$TMUXLOG"
-	( cd "$T/proj" && setsid env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
-		MUX_CACHE="$T/cache" "$HERE/bin/mux" go --no-agent \
-		--no-attach ) >/dev/null 2>&1 || true
-	grep 'new-session' "$TMUXLOG" | head -1
+  : >"$TMUXLOG"
+  ( cd "$T/proj" && setsid env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
+    MUX_CACHE="$T/cache" "$HERE/bin/mux" go --no-agent \
+    --no-attach ) >/dev/null 2>&1 || true
+  grep 'new-session' "$TMUXLOG" | head -1
 }
 
 # --- inside tmux: the current window's size, used EXACTLY -----------------
@@ -85,14 +85,14 @@ esac
 # A hook, a cron job, a headless script. Passing a made-up geometry here would
 # be worse than passing none: mux would assert a size nothing asked for.
 if command -v setsid >/dev/null 2>&1; then
-	_o=$(go_headless)
-	case $_o in
-	*-x*|*-y*) fail "headless build invented a geometry: [$_o]" ;;
-	esac
-	case $_o in
-	*new-session*) ;;
-	*) fail "headless build created no session at all: [$_o]" ;;
-	esac
+  _o=$(go_headless)
+  case $_o in
+  *-x*|*-y*) fail "headless build invented a geometry: [$_o]" ;;
+  esac
+  case $_o in
+  *new-session*) ;;
+  *) fail "headless build created no session at all: [$_o]" ;;
+  esac
 fi
 
 # --- the session is still built correctly in every other respect ----------

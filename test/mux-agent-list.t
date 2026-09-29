@@ -34,14 +34,14 @@ mkdir -p "$G" "$MUX_DIR/partitions"
 # tray daemon or an ssh command on a box with no server attached.
 mkdir -p "$T/bin"
 for _c in sed awk grep cut tr head tail wc cat ls id date find sort \
-          basename dirname mktemp rm mkdir cp mv readlink; do
-	_p=$(command -v "$_c" 2>/dev/null) && ln -sf "$_p" "$T/bin/$_c"
+    basename dirname mktemp rm mkdir cp mv readlink; do
+  _p=$(command -v "$_c" 2>/dev/null) && ln -sf "$_p" "$T/bin/$_c"
 done
 
 lst() {
-	env -u TMUX -u MUX_SHARE PATH="$T/bin" \
-		XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" MUX_DIR="$MUX_DIR" \
-		MUX_CACHE="$MUX_CACHE" "$HERE/libexec/mux-agent-state-list" "$@" 2>&1
+  env -u TMUX -u MUX_SHARE PATH="$T/bin" \
+    XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" MUX_DIR="$MUX_DIR" \
+    MUX_CACHE="$MUX_CACHE" "$HERE/libexec/mux-agent-state-list" "$@" 2>&1
 }
 # `_rc=0; _o=$(lst) || _rc=$?`: under set -eu a bare assignment aborts the
 # moment the command exits non-zero, which is a case under test.
@@ -54,7 +54,7 @@ agent_rec "$G/1" working %1 "$((NOW - 60))" alpha
 agent_rec "$G/2" idle    %2 "$((NOW - 3600))" bravo
 _o=$(lst global)
 [ "$(printf '%s\n' "$_o" | grep -c .)" -eq 2 ] \
-	|| fail "want 2 lines, got: [$_o]"
+  || fail "want 2 lines, got: [$_o]"
 
 # --- AGE, not the epoch ----------------------------------------------------
 # The whole point of the remote case. An epoch here would make a reader on
@@ -79,10 +79,10 @@ esac
 agent_rec "$G/3" blocked %3 "$((NOW - 5))" 'my project'
 _o=$(lst global)
 printf '%s\n' "$_o" | grep -q ' my project$' \
-	|| fail "a spaced session name did not survive: [$_o]"
+  || fail "a spaced session name did not survive: [$_o]"
 # ... and it must not appear as its own first word.
 printf '%s\n' "$_o" | awk '$3 == "my" && NF == 3' | grep -q . \
-	&& fail "a phantom session 'my' was emitted"
+  && fail "a phantom session 'my' was emitted"
 
 # --- the WORST state wins for a session with several agent panes ----------
 # Same rule as the strip and the summary, and it comes from the same function,
@@ -91,7 +91,7 @@ agent_rec "$G/4" idle    %4 "$NOW" multi
 agent_rec "$G/5" blocked %5 "$NOW" multi
 _o=$(lst global)
 [ "$(printf '%s\n' "$_o" | awk '$3 == "multi"' | grep -c .)" -eq 1 ] \
-	|| fail "a multi-pane session was emitted more than once: [$_o]"
+  || fail "a multi-pane session was emitted more than once: [$_o]"
 case $(field "$_o" multi) in
 blocked*) ;;
 *) fail "the worst pane state did not win: [$(field "$_o" multi)]" ;;
@@ -114,7 +114,7 @@ rm -f "$G/9"
 agent_rec "$G/8" idle %8 "$((NOW + 9999))" future
 _o=$(lst global)
 [ "$(field "$_o" future)" = "idle 0" ] \
-	|| fail "a future epoch should clamp to 0, got [$(field "$_o" future)]"
+  || fail "a future epoch should clamp to 0, got [$(field "$_o" future)]"
 rm -f "$G/8"
 
 # --- EMPTY but reachable is exit 0, and prints nothing -------------------
@@ -138,9 +138,9 @@ lst global >/dev/null 2>&1 || true
 lst >/dev/null 2>&1 || true
 _after=$(ls "$G" | LC_ALL=C sort | tr '\n' ' ')
 [ "$_before" = "$_after" ] \
-	|| fail "state files changed: [$_before] -> [$_after]"
+  || fail "state files changed: [$_before] -> [$_after]"
 [ "$_sum" = "$(cat "$G"/* | md5sum)" ] \
-	|| fail "a state file's CONTENT was altered"
+  || fail "a state file's CONTENT was altered"
 
 # --- headless: it must never call tmux -----------------------------------
 # PATH above has no tmux at all, so any attempt would surface as an error in
@@ -149,6 +149,6 @@ case $(lst global) in
 *"not found"*|*tmux*) fail "agent-list reached for tmux: [$(lst global)]" ;;
 esac
 printf '%s\n' "$(lst global)" | grep -q ' alpha$' \
-	|| fail "headless run lost a session"
+  || fail "headless run lost a session"
 
 pass

@@ -51,22 +51,22 @@
 # set lost at the one moment it mattered. The move is a rename, idempotent, and
 # silent when there is nothing to move.
 mux_sess_file() {       # [partition]
-	_sk=${1:-${MUX_CTX_PARTITION:-global}}
-	mux_state_path "sessions.$_sk"
+  _sk=${1:-${MUX_CTX_PARTITION:-global}}
+  mux_state_path "sessions.$_sk"
 }
 
 # mux_sess_list [key] -> every recorded name, one per line, insertion order.
 mux_sess_list() {       # [key]
-	_sf=$(mux_sess_file "${1:-}")
-	[ -f "$_sf" ] || return 0
-	cut -f1 "$_sf" 2>/dev/null | grep . || true
+  _sf=$(mux_sess_file "${1:-}")
+  [ -f "$_sf" ] || return 0
+  cut -f1 "$_sf" 2>/dev/null | grep . || true
 }
 
 # mux_sess_root NAME [key] -> where that session lived, or empty.
 mux_sess_root() {       # <name> [key]
-	_sf=$(mux_sess_file "${2:-}")
-	[ -f "$_sf" ] || return 0
-	awk -F'\t' -v n="$1" '$1==n{print $2; exit}' "$_sf"
+  _sf=$(mux_sess_file "${2:-}")
+  [ -f "$_sf" ] || return 0
+  awk -F'\t' -v n="$1" '$1==n{print $2; exit}' "$_sf"
 }
 
 # mux_sess_has NAME [key] -> is NAME recorded? MEMBERSHIP, which is not the
@@ -74,38 +74,38 @@ mux_sess_root() {       # <name> [key]
 # (tmux could not report session_path when it was added), so a non-empty root
 # is not a membership test and using one silently misses those entries.
 mux_sess_has() {        # <name> [key]
-	[ -n "${1:-}" ] || return 1
-	_sf=$(mux_sess_file "${2:-}")
-	[ -f "$_sf" ] || return 1
-	cut -f1 "$_sf" 2>/dev/null | grep -qxF -- "$1"
+  [ -n "${1:-}" ] || return 1
+  _sf=$(mux_sess_file "${2:-}")
+  [ -f "$_sf" ] || return 1
+  cut -f1 "$_sf" 2>/dev/null | grep -qxF -- "$1"
 }
 
 # mux_sess_add NAME ROOT [key] -> record NAME if it is not already there.
 # Idempotent, so recording on every attach (not just on build) heals a set that
 # predates this feature or a session someone made with raw tmux.
 mux_sess_add() {        # <name> <root> [key]
-	[ -n "$1" ] || return 0
-	_sf=$(mux_sess_file "${3:-}")
-	mkdir -p "$(dirname "$_sf")" 2>/dev/null || return 0
-	mux_sess_has "$1" "${3:-}" && return 0
-	printf '%s\t%s\n' "$1" "$2" 2>/dev/null >>"$_sf" || true
-	return 0
+  [ -n "$1" ] || return 0
+  _sf=$(mux_sess_file "${3:-}")
+  mkdir -p "$(dirname "$_sf")" 2>/dev/null || return 0
+  mux_sess_has "$1" "${3:-}" && return 0
+  printf '%s\t%s\n' "$1" "$2" 2>/dev/null >>"$_sf" || true
+  return 0
 }
 
 # mux_sess_drop NAME [key] -> forget NAME. Via a temp and a move, so an
 # interrupted write cannot truncate the set.
 mux_sess_drop() {       # <name> [key]
-	[ -n "$1" ] || return 0
-	_sf=$(mux_sess_file "${2:-}")
-	[ -f "$_sf" ] || return 0
-	_st=$_sf.tmp.$$
-	awk -F'\t' -v n="$1" '$1!=n' "$_sf" 2>/dev/null >"$_st"
-	mv -f "$_st" "$_sf" 2>/dev/null || rm -f "$_st"
-	return 0
+  [ -n "$1" ] || return 0
+  _sf=$(mux_sess_file "${2:-}")
+  [ -f "$_sf" ] || return 0
+  _st=$_sf.tmp.$$
+  awk -F'\t' -v n="$1" '$1!=n' "$_sf" 2>/dev/null >"$_st"
+  mv -f "$_st" "$_sf" 2>/dev/null || rm -f "$_st"
+  return 0
 }
 
 # mux_sess_clear [key] -> forget the whole set (kill --all).
 mux_sess_clear() {      # [key]
-	rm -f "$(mux_sess_file "${1:-}")" 2>/dev/null || true
-	return 0
+  rm -f "$(mux_sess_file "${1:-}")" 2>/dev/null || true
+  return 0
 }

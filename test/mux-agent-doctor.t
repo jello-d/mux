@@ -55,17 +55,17 @@ chmod +x "$T/bin/ps" "$T/bin/tmux"
 # /proc/<pid>/stat: fields 14 and 15 are utime and stime. Only their sum is
 # read, so the rest is padding.
 setcpu() {   # <pid> <jiffies>
-	mkdir -p "$T/proc/$1"
-	_pad=$(awk 'BEGIN{for(i=1;i<=13;i++) printf "0 "}')
-	printf '%s%s 0\n' "$_pad" "$2" >"$T/proc/$1/stat"
+  mkdir -p "$T/proc/$1"
+  _pad=$(awk 'BEGIN{for(i=1;i<=13;i++) printf "0 "}')
+  printf '%s%s 0\n' "$_pad" "$2" >"$T/proc/$1/stat"
 }
 
 doc() {
-	env -u TMUX -u MUX_SHARE PATH="$T/bin:$PATH" \
-		XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" \
-		MUX_SHARE="$T/share" MUX_DOCTOR_PROC="$T/proc" \
-		MUX_DOCTOR_WINDOW="${WIN:-1}" \
-		"$HERE/libexec/mux-agent-doctor" "$@" global 2>&1
+  env -u TMUX -u MUX_SHARE PATH="$T/bin:$PATH" \
+    XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" \
+    MUX_SHARE="$T/share" MUX_DOCTOR_PROC="$T/proc" \
+    MUX_DOCTOR_WINDOW="${WIN:-1}" \
+    "$HERE/libexec/mux-agent-doctor" "$@" global 2>&1
 }
 # `_rc=0; _o=$(doc) || _rc=$?` throughout: under set -eu a bare `_o=$(doc)`
 # aborts the moment doc exits non-zero, which is exactly the case under test.
@@ -121,9 +121,9 @@ _sum=$(cat "$T/run/agent-state/global"/* | md5sum)
 doc >/dev/null 2>&1 || true
 _after=$(ls "$T/run/agent-state/global" | LC_ALL=C sort | tr '\n' ' ')
 [ "$_before" = "$_after" ] \
-	|| fail "state files changed: [$_before] -> [$_after]"
+  || fail "state files changed: [$_before] -> [$_after]"
 [ "$_sum" = "$(cat "$T/run/agent-state/global"/* | md5sum)" ] \
-	|| fail "a state file's CONTENT was altered"
+  || fail "a state file's CONTENT was altered"
 
 # --- `working` with no CPU: stale record vs genuinely mid-turn -----------
 # The one case CPU cannot settle, and the bug it hid. An agent waiting on the
@@ -146,7 +146,7 @@ burn 101 0                                   # no CPU at all
 
 # Marker PRESENT -> a turn is running. Must stay "quiet", never stale.
 printf 'some output\n  auto mode on . esc to interrupt . for agents\n' \
-	>"$PANE_TXT"
+  >"$PANE_TXT"
 _rc=0; _o=$(doc) || _rc=$?
 has "$_o" "quiet" "a genuinely mid-turn agent was not reported quiet"
 no_has "$_o" "STALE" "a mid-turn agent was wrongly called stale"
@@ -165,7 +165,7 @@ has "$_o" "alpha" "the stale session was not named"
 has "$_o" "after the turn ENDED" "the stale summary did not name its cause"
 has "$_o" "--beat" "the stale summary did not name the fix"
 no_has "$_o" "self-heals on the agent's next tool call" \
-	"the stale summary promised a recovery that cannot happen"
+  "the stale summary promised a recovery that cannot happen"
 
 # An agent that declares NO marker leaves the verdict exactly where it was.
 # Guessing one would make the doctor confidently wrong about a working agent.
@@ -182,7 +182,7 @@ _rc=0; _o=$(doc) || _rc=$?
 no_has "$_o" "STALE" "an uncapturable pane produced a stale verdict"
 [ "$_rc" -eq 0 ] || fail "a failed capture must not fail the run"
 printf 'some output\n  auto mode on . esc to interrupt . for agents\n' \
-	>"$PANE_TXT"
+  >"$PANE_TXT"
 : >"$T/share/agents/claude.agent"
 
 # --- --repair: the ONE finding that cannot heal itself -------------------
@@ -219,7 +219,7 @@ _rc=0; _o=$(doc) || _rc=$?
 # asserting the verdict first reports "no stale record" -- which reads as a
 # broken fixture and sends you to the wrong end of the file.
 [ "$_sum" = "$(md5sum <"$SFILE")" ] \
-	|| fail "a plain run rewrote a stale record. Read-only is the DEFAULT:
+  || fail "a plain run rewrote a stale record. Read-only is the DEFAULT:
 looking must never write, which is the whole reason --repair is opt-in."
 has "$_o" "STALE" "the setup did not produce a stale record"
 has "$_o" "mux agent-doctor --repair" "the stale summary did not offer the cure"
@@ -245,7 +245,7 @@ read -r _gs _gw _gp _ge _gn _gsess <"$SFILE"
 # `read` hands the last variable the rest of the line.
 _got=$(cat "$SFILE")
 [ "$_got" = "idle 0 %1 1234 777 my project" ] \
-	|| fail "the repaired record is not the original with one word changed:
+  || fail "the repaired record is not the original with one word changed:
   got  [$_got]
   want [idle 0 %1 1234 777 my project]"
 
@@ -304,7 +304,7 @@ burn 101 0
 WIN=1 _rc=0; _o=$(doc --repair) || _rc=$?
 _got=$(cat "$SFILE")
 [ "$_got" = "working 0 %1 9999 777 alpha" ] \
-	|| fail "a record that moved during the window was clobbered: [$_got]"
+  || fail "a record that moved during the window was clobbered: [$_got]"
 no_has "$_o" "REPAIRED" "a refused swap was reported as a repair"
 has "$_o" "moved during the window" "a refused swap must say why"
 
@@ -319,7 +319,7 @@ has "$_o" "usage" "an unknown option did not print the usage"
 
 rm -f "$T/run/agent-state/global"/*
 printf 'some output\n  auto mode on . esc to interrupt . for agents\n' \
-	>"$PANE_TXT"
+  >"$PANE_TXT"
 : >"$T/share/agents/claude.agent"
 
 # --- an agent with NO record at all --------------------------------------
@@ -352,16 +352,16 @@ has "$_o" "gamma" "the orphaned session was not named"
 # `*alpha*ORPHAN*` matches alpha's row followed by gamma's, which is a test
 # that fails on correct behaviour.
 if printf '%s\n' "$_o" | grep -q '^alpha .*ORPHAN'; then
-	fail "a recorded session was called an orphan"
+  fail "a recorded session was called an orphan"
 fi
 if printf '%s\n' "$_o" | grep -q '^beta .*ORPHAN'; then
-	fail "a pane with no agent was called an orphan"
+  fail "a pane with no agent was called an orphan"
 fi
 # READ-ONLY still holds on this path.
 _bf=$(ls "$T/run/agent-state/global" | LC_ALL=C sort | tr '\n' ' ')
 doc >/dev/null 2>&1 || true
 [ "$_bf" = "$(ls "$T/run/agent-state/global" | LC_ALL=C sort | tr '\n' ' ')" ] \
-	|| fail "the orphan pass changed state files"
+  || fail "the orphan pass changed state files"
 
 # ... and --repair REFUSES this one, which is why it is asserted HERE rather
 # than beside the other repair cases. An orphan has no record to amend, so a
@@ -373,7 +373,7 @@ doc >/dev/null 2>&1 || true
 _rc=0; _o=$(doc --repair) || _rc=$?
 has "$_o" "ORPHAN" "--repair hid an orphan finding"
 [ ! -e "$T/run/agent-state/global/3" ] \
-	|| fail "--repair CREATED a record for an orphan. It has no state to
+  || fail "--repair CREATED a record for an orphan. It has no state to
 copy, so any value it wrote would be a guess dressed up as a reading."
 [ "$_rc" -ne 0 ] || fail "an unrepaired orphan must still exit non-zero"
 

@@ -41,28 +41,28 @@ MUX_AGENT_NL='
 # the current tmux socket basename (from $TMUX), else 'default'. Callers outside
 # tmux (the picker on a bare shell) pass the socket they resolved.
 mux_agent_dir() {
-	_rt=${XDG_RUNTIME_DIR:-/tmp/user-$(id -u)}
-	_ns=${1:-}
-	if [ -z "$_ns" ]; then
-		# `global` is the baseline PARTITION. It used to be `default`,
-		# the old tmux socket basename, which stopped existing when the
-		# personal partition took a name -- a stale default that made
-		# every headless reader silently see nothing. Callers inside
-		# tmux still get theirs from $TMUX.
-		_ns=global
-		[ -n "${TMUX:-}" ] && { _ns=${TMUX%%,*}; _ns=${_ns##*/}; }
-	fi
-	printf '%s/agent-state/%s' "$_rt" "$_ns"
+  _rt=${XDG_RUNTIME_DIR:-/tmp/user-$(id -u)}
+  _ns=${1:-}
+  if [ -z "$_ns" ]; then
+    # `global` is the baseline PARTITION. It used to be `default`,
+    # the old tmux socket basename, which stopped existing when the
+    # personal partition took a name -- a stale default that made
+    # every headless reader silently see nothing. Callers inside
+    # tmux still get theirs from $TMUX.
+    _ns=global
+    [ -n "${TMUX:-}" ] && { _ns=${TMUX%%,*}; _ns=${_ns##*/}; }
+  fi
+  printf '%s/agent-state/%s' "$_rt" "$_ns"
 }
 
 # Numeric urgency of a state, so the worst live agent in a session wins.
 mux_agent_rank() {
-	case $1 in
-	blocked) echo 3 ;;
-	working) echo 2 ;;
-	idle)    echo 1 ;;
-	*)       echo 0 ;;
-	esac
+  case $1 in
+  blocked) echo 3 ;;
+  working) echo 2 ;;
+  idle)    echo 1 ;;
+  *)       echo 0 ;;
+  esac
 }
 
 # mux_agent_state DIR SESSION -> "STATE EPOCH": the most-urgent live agent state
@@ -70,18 +70,18 @@ mux_agent_rank() {
 # lone space when the session has no tracked agent. A session may hold several
 # agent panes; the worst one wins (and carries its epoch), so nothing is hidden.
 mux_agent_state() {
-	_asdir=$1 _assess=$2
-	_best= _bestep= _br=-1
-	[ -d "$_asdir" ] || { printf ' '; return; }
-	for _f in "$_asdir"/*; do
-		[ -e "$_f" ] || continue
-		# session LAST: it may contain spaces, so it takes the rest.
-		read -r _st _w _p _e _nid _ss <"$_f" || continue
-		[ "$_ss" = "$_assess" ] || continue
-		_r=$(mux_agent_rank "$_st")
-		[ "$_r" -gt "$_br" ] && { _br=$_r; _best=$_st; _bestep=$_e; }
-	done
-	printf '%s %s' "$_best" "$_bestep"
+  _asdir=$1 _assess=$2
+  _best= _bestep= _br=-1
+  [ -d "$_asdir" ] || { printf ' '; return; }
+  for _f in "$_asdir"/*; do
+    [ -e "$_f" ] || continue
+    # session LAST: it may contain spaces, so it takes the rest.
+    read -r _st _w _p _e _nid _ss <"$_f" || continue
+    [ "$_ss" = "$_assess" ] || continue
+    _r=$(mux_agent_rank "$_st")
+    [ "$_r" -gt "$_br" ] && { _br=$_r; _best=$_st; _bestep=$_e; }
+  done
+  printf '%s %s' "$_best" "$_bestep"
 }
 # mux_agent_pane DIR SESSION -> the pane id of the record that SPEAKS for that
 # session, or empty. The same walk and the same ranking as mux_agent_state: a
@@ -94,17 +94,17 @@ mux_agent_state() {
 # epoch into "EPOCH PANE" in every one of them. The walk is duplicated; the
 # RANKING is not, which is the part that must never drift.
 mux_agent_pane() {      # <dir> <session>
-	_apdir=$1 _apsess=$2
-	_appane= _apr=-1
-	[ -d "$_apdir" ] || return 0
-	for _f in "$_apdir"/*; do
-		[ -e "$_f" ] || continue
-		read -r _st _w _p _e _nid _ss <"$_f" || continue
-		[ "$_ss" = "$_apsess" ] || continue
-		_r=$(mux_agent_rank "$_st")
-		[ "$_r" -gt "$_apr" ] && { _apr=$_r; _appane=$_p; }
-	done
-	printf '%s' "$_appane"
+  _apdir=$1 _apsess=$2
+  _appane= _apr=-1
+  [ -d "$_apdir" ] || return 0
+  for _f in "$_apdir"/*; do
+    [ -e "$_f" ] || continue
+    read -r _st _w _p _e _nid _ss <"$_f" || continue
+    [ "$_ss" = "$_apsess" ] || continue
+    _r=$(mux_agent_rank "$_st")
+    [ "$_r" -gt "$_apr" ] && { _apr=$_r; _appane=$_p; }
+  done
+  printf '%s' "$_appane"
 }
 
 
@@ -121,38 +121,38 @@ mux_agent_pane() {      # <dir> <session>
 # session is
 # the LAST field.
 mux_agent_sessions() {  # DIR
-	_asd=$1
-	[ -d "$_asd" ] || return 0
-	_seen=
-	for _f in "$_asd"/*; do
-		[ -e "$_f" ] || continue
-		# 2>/dev/null BEFORE the redirect: a file pruned between the glob
-		# and the read fails the OPEN while stderr is still the terminal.
-		read -r _st _w _p _e _nid _ss 2>/dev/null <"$_f" || continue
-		[ -n "${_ss:-}" ] || continue
-		case "$MUX_AGENT_NL$_seen$MUX_AGENT_NL" in
-		*"$MUX_AGENT_NL$_ss$MUX_AGENT_NL"*) continue ;;
-		esac
-		_seen="$_seen$MUX_AGENT_NL$_ss"
-		printf '%s\n' "$_ss"
-	done
+  _asd=$1
+  [ -d "$_asd" ] || return 0
+  _seen=
+  for _f in "$_asd"/*; do
+    [ -e "$_f" ] || continue
+    # 2>/dev/null BEFORE the redirect: a file pruned between the glob
+    # and the read fails the OPEN while stderr is still the terminal.
+    read -r _st _w _p _e _nid _ss 2>/dev/null <"$_f" || continue
+    [ -n "${_ss:-}" ] || continue
+    case "$MUX_AGENT_NL$_seen$MUX_AGENT_NL" in
+    *"$MUX_AGENT_NL$_ss$MUX_AGENT_NL"*) continue ;;
+    esac
+    _seen="$_seen$MUX_AGENT_NL$_ss"
+    printf '%s\n' "$_ss"
+  done
 }
 
 # mux_agent_glyph STATE -> the width-2 glyph for a state word ('' -> none).
 mux_agent_glyph() {
-	case $1 in
-	blocked) printf '%s' "$MUX_GLYPH_BLOCKED" ;;
-	working) printf '%s' "$MUX_GLYPH_WORKING" ;;
-	idle)    printf '%s' "$MUX_GLYPH_IDLE" ;;
-	'')      printf '%s' "$MUX_GLYPH_NONE" ;;
-	unwired) printf '%s' "$MUX_GLYPH_UNWIRED" ;;
-	*)       printf '%s' "$MUX_GLYPH_UNKNOWN" ;;
-	esac
+  case $1 in
+  blocked) printf '%s' "$MUX_GLYPH_BLOCKED" ;;
+  working) printf '%s' "$MUX_GLYPH_WORKING" ;;
+  idle)    printf '%s' "$MUX_GLYPH_IDLE" ;;
+  '')      printf '%s' "$MUX_GLYPH_NONE" ;;
+  unwired) printf '%s' "$MUX_GLYPH_UNWIRED" ;;
+  *)       printf '%s' "$MUX_GLYPH_UNKNOWN" ;;
+  esac
 }
 
 # mux_agent_state_glyph DIR SESSION -> just the state glyph for SESSION, for
 # callers that want the glyph and not the epoch (the picker and `mux ls`).
 mux_agent_state_glyph() {
-	_sg=$(mux_agent_state "$1" "$2")
-	mux_agent_glyph "${_sg%% *}"
+  _sg=$(mux_agent_state "$1" "$2")
+  mux_agent_glyph "${_sg%% *}"
 }

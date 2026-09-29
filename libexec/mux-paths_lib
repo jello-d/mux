@@ -31,14 +31,14 @@
 
 # Regenerable state. $MUX_CACHE overrides it so an integrator can relocate it.
 mux_cache_dir() {
-	printf '%s' "${MUX_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/mux}"
+  printf '%s' "${MUX_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/mux}"
 }
 
 # Durable, unreconstructible state. $XDG_STATE_HOME is the standard home for
 # exactly this category: keep it across restarts, but it is not precious enough
 # to be user DATA.
 mux_state_dir() {
-	printf '%s' "${MUX_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/mux}"
+  printf '%s' "${MUX_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/mux}"
 }
 
 # mux_state_path REL -> the state path for REL, ADOPTING a pre-0.38 copy left in
@@ -58,13 +58,13 @@ mux_state_dir() {
 # nothing rather than an error, and the old copy is left intact so a later run
 # can still adopt it.
 mux_state_path() {      # <relative path>
-	_mpd=$(mux_state_dir)
-	_mpn=$_mpd/$1
-	_mpo=$(mux_cache_dir)/$1
-	if [ ! -e "$_mpn" ] && [ -e "$_mpo" ]; then
-		if mkdir -p "$(dirname "$_mpn")" 2>/dev/null; then
-			mv -f "$_mpo" "$_mpn" 2>/dev/null || true
-		fi
-	fi
-	printf '%s' "$_mpn"
+  _mpd=$(mux_state_dir)
+  _mpn=$_mpd/$1
+  _mpo=$(mux_cache_dir)/$1
+  if [ ! -e "$_mpn" ] && [ -e "$_mpo" ]; then
+    if mkdir -p "$(dirname "$_mpn")" 2>/dev/null; then
+      mv -f "$_mpo" "$_mpn" 2>/dev/null || true
+    fi
+  fi
+  printf '%s' "$_mpn"
 }

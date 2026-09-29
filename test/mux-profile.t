@@ -28,17 +28,17 @@ PATH=$T/bin:$PATH; export PATH
 
 # go NAME... -> run `mux go`, echoing combined output; log reset each time.
 go() {
-	: >"$TMUXLOG"
-	( cd "$T/proj" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
-		MUX_CACHE="$T/cache" "$HERE/bin/mux" go "$@" ) 2>&1
+  : >"$TMUXLOG"
+  ( cd "$T/proj" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
+    MUX_CACHE="$T/cache" "$HERE/bin/mux" go "$@" ) 2>&1
 }
 has() {  # LABEL PATTERN
-	grep -q "$2" "$TMUXLOG" || fail "$1: no [$2] in the tmux log"
+  grep -q "$2" "$TMUXLOG" || fail "$1: no [$2] in the tmux log"
 }
 fails() { # LABEL WANT ARGS...
-	_l=$1 _w=$2; shift 2
-	_o=$(go "$@") && fail "$_l: expected a non-zero exit"
-	case $_o in *"$_w"*) ;; *) fail "$_l: want [$_w], got [$_o]" ;; esac
+  _l=$1 _w=$2; shift 2
+  _o=$(go "$@") && fail "$_l: expected a non-zero exit"
+  case $_o in *"$_w"*) ;; *) fail "$_l: want [$_w], got [$_o]" ;; esac
 }
 
 # --- a profile may be nothing but a theme ----------------------------------
@@ -53,11 +53,11 @@ has themeonly-theme  '@mux-theme cyan'
 # --- a profile names a layout ----------------------------------------------
 printf 'window solo\npane    agent\n' >"$T/conf/layouts/solo.layout"
 printf 'layout  solo\nroot    %s\n' "$T/proj" \
-	>"$T/conf/profiles.d/named.profile"
+  >"$T/conf/profiles.d/named.profile"
 go named >/dev/null || fail "a profile naming a layout should build"
 has named-window 'new-session -d -s named -n solo'
 grep -q 'split-window -v -f' "$TMUXLOG" \
-	&& fail "named: the solo layout has no bottom, one was built anyway"
+  && fail "named: the solo layout has no bottom, one was built anyway"
 
 # --- the split is enforced BOTH ways ---------------------------------------
 printf 'window nope\npane\n' >"$T/conf/profiles.d/inprofile.profile"
@@ -87,10 +87,10 @@ has ctx-layout 'new-window -a -t ctxdefault: -n logs'
 has ctx-agent 'gemini'
 # ... and a profile still overrides the context.
 printf 'theme cyan\nagent claude\nlayout default\n' \
-	>"$T/conf/profiles.d/ctxdefault.profile"
+  >"$T/conf/profiles.d/ctxdefault.profile"
 go ctxdefault >/dev/null || fail "a profile override should build"
 grep -q 'new-window .* -n logs' "$TMUXLOG" \
-	&& fail "the profile's layout did not override the context's"
+  && fail "the profile's layout did not override the context's"
 rm -f "$T/conf/partitions/global.partition"
 
 # --- a pre-rename .profile-less <name>.layout is still READ, with a warning -

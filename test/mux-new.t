@@ -14,7 +14,7 @@ _name=mux-new
 . "$(dirname "$0")/harness_lib"
 
 command -v git >/dev/null 2>&1 || { printf 'skip %s (no git)\n' "$_name"
-	exit 0; }
+  exit 0; }
 
 mkdir -p "$T/bin" "$T/conf" "$T/myrepo/deep/sub" "$T/plaindir/sub"
 git init -q "$T/myrepo" 2>/dev/null || fail "could not make a scratch repo"
@@ -35,19 +35,19 @@ PATH=$T/bin:$PATH; export PATH
 # mux DIR ARGS... : GIT_CEILING_DIRECTORIES stops the toplevel search at T, so
 # a repo ABOVE the scratch tree cannot leak in.
 mux() {
-	_d=$1; shift
-	( cd "$_d" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
-		MUX_CACHE="$T/cache" GIT_CEILING_DIRECTORIES="$T" \
-		"$HERE/bin/mux" "$@" ) 2>&1
+  _d=$1; shift
+  ( cd "$_d" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
+    MUX_CACHE="$T/cache" GIT_CEILING_DIRECTORIES="$T" \
+    "$HERE/bin/mux" "$@" ) 2>&1
 }
 # built -> the session name of the last new-session call.
 built() {
-	awk '/new-session /{for(i=1;i<=NF;i++) if($i=="-s") print $(i+1)}' \
-		"$TMUXLOG" | head -1
+  awk '/new-session /{for(i=1;i<=NF;i++) if($i=="-s") print $(i+1)}' \
+    "$TMUXLOG" | head -1
 }
 rooted() {
-	awk '/new-session /{for(i=1;i<=NF;i++) if($i=="-c") print $(i+1)}' \
-		"$TMUXLOG" | head -1
+  awk '/new-session /{for(i=1;i<=NF;i++) if($i=="-c") print $(i+1)}' \
+    "$TMUXLOG" | head -1
 }
 
 # --- a NAME is required: `new` exists to name something ---------------------
@@ -60,9 +60,9 @@ mux "$T/myrepo" new >/dev/null 2>&1 && fail 'bare `mux new` should be refused'
 : >"$TMUXLOG"
 mux "$T/myrepo/deep/sub" new alias1 >/dev/null || fail "mux new alias1 failed"
 [ "$(rooted)" = "$T/myrepo/deep/sub" ] \
-	|| fail "new rooted at [$(rooted)], want $T/myrepo/deep/sub"
+  || fail "new rooted at [$(rooted)], want $T/myrepo/deep/sub"
 grep -q "^alias1 .*root=$T/myrepo/deep/sub" "$T/conf/profiles" \
-	|| fail "new bound alias1 wrongly: $(cat "$T/conf/profiles")"
+  || fail "new bound alias1 wrongly: $(cat "$T/conf/profiles")"
 
 # --- bare `mux go` still derives the REPO, from any subdirectory ------------
 # The subdirectory binding above must not hijack the enclosing project: the
@@ -79,7 +79,7 @@ mux "$T/myrepo" go >/dev/null || fail "bare go at the repo top failed"
 : >"$TMUXLOG"
 mux "$T/myrepo" new myrepo >/dev/null || fail "mux new myrepo failed"
 grep -q '^myrepo ' "$T/conf/profiles" 2>/dev/null \
-	&& fail "new wrote a row for a name the directory already derives"
+  && fail "new wrote a row for a name the directory already derives"
 
 # --- outside a repo, the project is the cwd ---------------------------------
 : >"$TMUXLOG"

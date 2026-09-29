@@ -33,30 +33,30 @@ _py=
 # can write outside it, and the venv lives in the user's actual home. This
 # only READS it, which is what HOME_REAL exists for.
 for _c in "${MUX_INDICATOR_VENV:-$HOME_REAL/.venvs/mux-indicator}/bin/python" \
-          python3 python; do
-	command -v "$_c" >/dev/null 2>&1 || [ -x "$_c" ] || continue
-	if "$_c" -c 'import dbus_next, PIL' >/dev/null 2>&1; then
-		_py=$_c
-		break
-	fi
+    python3 python; do
+  command -v "$_c" >/dev/null 2>&1 || [ -x "$_c" ] || continue
+  if "$_c" -c 'import dbus_next, PIL' >/dev/null 2>&1; then
+    _py=$_c
+    break
+  fi
 done
 [ -n "$_py" ] || {
-	printf 'skip %s (no python with dbus-next + Pillow)\n' "$_name"
-	exit 0; }
+  printf 'skip %s (no python with dbus-next + Pillow)\n' "$_name"
+  exit 0; }
 
 # -t . so `from mux_indicator...` resolves against the package, not the tests.
 _out=$T/out
 if ( cd "$IND" && "$_py" -m unittest discover -s tests -t . ) \
-	>"$_out" 2>&1; then
-	_n=$(sed -n 's/^Ran \([0-9]*\) test.*/\1/p' "$_out" | tail -1)
-	# A run that asserted NOTHING is a failure, the same rule the rest of the
-	# suite applies to itself: an empty discover exits 0 and looks like a pass.
-	[ -n "$_n" ] && [ "$_n" -ge 45 ] || fail "only ${_n:-0} python test(s)
+  >"$_out" 2>&1; then
+  _n=$(sed -n 's/^Ran \([0-9]*\) test.*/\1/p' "$_out" | tail -1)
+  # A run that asserted NOTHING is a failure, the same rule the rest of the
+  # suite applies to itself: an empty discover exits 0 and looks like a pass.
+  [ -n "$_n" ] && [ "$_n" -ge 45 ] || fail "only ${_n:-0} python test(s)
 ran, and there were 52 when this was last raised. A discover that matches
 nothing exits 0, so a rename or a broken import reads exactly like a clean run."
-	printf 'ok   %s (%s python tests, %s)\n' "$_name" "$_n" \
-		"$(basename "$(dirname "$(dirname "$_py")")")"
-	exit 0
+  printf 'ok   %s (%s python tests, %s)\n' "$_name" "$_n" \
+    "$(basename "$(dirname "$(dirname "$_py")")")"
+  exit 0
 fi
 
 printf 'FAIL %s: the indicator python tests failed\n' "$_name" >&2

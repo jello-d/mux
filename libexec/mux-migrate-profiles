@@ -36,9 +36,9 @@ MUX_SHARE=${MUX_SHARE:-$(dirname "$0")/../share}
 # up exactly as mux would have looked it up) and the shared comment/whitespace
 # rule (so a spliced layout arrives normalized, as the parser would see it).
 for _l in mux-data_lib mux-conf_lib mux-profiles_lib; do
-	[ -r "$(dirname "$0")/$_l" ] || {
-		echo "mux: $_l missing (incomplete install)" >&2; exit 1; }
-	. "$(dirname "$0")/$_l"
+  [ -r "$(dirname "$0")/$_l" ] || {
+    echo "mux: $_l missing (incomplete install)" >&2; exit 1; }
+  . "$(dirname "$0")/$_l"
 done
 
 APPLY=0
@@ -53,110 +53,110 @@ esac
 _n=0
 _commented=
 for _f in "$MUX_DIR"/*.layout; do
-	[ -e "$_f" ] || continue
-	_n=$((_n + 1))
-	_base=${_f##*/}; _base=${_base%.layout}
-	_lay=$MUX_DIR/layouts/$_base.layout
+  [ -e "$_f" ] || continue
+  _n=$((_n + 1))
+  _base=${_f##*/}; _base=${_base%.layout}
+  _lay=$MUX_DIR/layouts/$_base.layout
 
-	if mux_prof_has "$_base" || [ -e "$MUX_DIR/profiles.d/$_base.profile" ]
-	then
-		echo "skip  $_base: already migrated"
-		continue
-	fi
-	if [ "$_base" = default ]; then
-		echo "note  default: superseded by the shipped defaults;" \
-			"nothing to carry over"
-		[ "$APPLY" -eq 1 ] && mv "$_f" "$_f.bak"
-		continue
-	fi
+  if mux_prof_has "$_base" || [ -e "$MUX_DIR/profiles.d/$_base.profile" ]
+  then
+    echo "skip  $_base: already migrated"
+    continue
+  fi
+  if [ "$_base" = default ]; then
+    echo "note  default: superseded by the shipped defaults;" \
+      "nothing to carry over"
+    [ "$APPLY" -eq 1 ] && mv "$_f" "$_f.bak"
+    continue
+  fi
 
-	_clean=$(mux_conf_clean <"$_f")
-	_has_shape=$(printf '%s\n' "$_clean" \
-		| awk '$1=="window"||$1=="pane"||$1=="bottom"{print "y";exit}')
-	_named=$(printf '%s\n' "$_clean" \
-		| awk '$1=="include"{n=$2; sub(/^shapes\//,"",n); print n; exit}')
-	[ -n "$_named" ] || _named=default
-	[ "$_named" = code ] && _named=default
+  _clean=$(mux_conf_clean <"$_f")
+  _has_shape=$(printf '%s\n' "$_clean" \
+    | awk '$1=="window"||$1=="pane"||$1=="bottom"{print "y";exit}')
+  _named=$(printf '%s\n' "$_clean" \
+    | awk '$1=="include"{n=$2; sub(/^shapes\//,"",n); print n; exit}')
+  [ -n "$_named" ] || _named=default
+  [ "$_named" = code ] && _named=default
 
-	# The root, dropped only when mux would genuinely derive this name from
-	# it. That needs more than a matching basename: the root must also BE a
-	# project base, i.e. a git toplevel or a directory in no repo at all. A
-	# subdirectory of a repo derives the REPO's name (~/src/tackup/build/
-	# overlays/waybar derives `tackup`, not `waybar`), so dropping its root
-	# would quietly repoint the session at the whole repo. Anything we cannot
-	# positively confirm keeps its root.
-	_root=$(printf '%s\n' "$_clean" | awk '$1=="root"{print $2; exit}')
-	_rootx=$(mux_expand_tilde "${_root:-}")
-	_drop_root=0
-	if [ -n "$_rootx" ] && [ -d "$_rootx" ] \
-	   && [ "$(basename "$_rootx")" = "$_base" ]; then
-		_top=$(git -C "$_rootx" rev-parse --show-toplevel 2>/dev/null || true)
-		[ -z "$_top" ] || [ "$_top" = "$_rootx" ] && _drop_root=1
-	fi
+  # The root, dropped only when mux would genuinely derive this name from
+  # it. That needs more than a matching basename: the root must also BE a
+  # project base, i.e. a git toplevel or a directory in no repo at all. A
+  # subdirectory of a repo derives the REPO's name (~/src/tackup/build/
+  # overlays/waybar derives `tackup`, not `waybar`), so dropping its root
+  # would quietly repoint the session at the whole repo. Anything we cannot
+  # positively confirm keeps its root.
+  _root=$(printf '%s\n' "$_clean" | awk '$1=="root"{print $2; exit}')
+  _rootx=$(mux_expand_tilde "${_root:-}")
+  _drop_root=0
+  if [ -n "$_rootx" ] && [ -d "$_rootx" ] \
+     && [ "$(basename "$_rootx")" = "$_base" ]; then
+    _top=$(git -C "$_rootx" rev-parse --show-toplevel 2>/dev/null || true)
+    [ -z "$_top" ] || [ "$_top" = "$_rootx" ] && _drop_root=1
+  fi
 
-	_pairs=
-	[ "$_drop_root" -eq 0 ] && [ -n "$_root" ] && _pairs="root=$_root"
-	for _k in theme agent notify; do
-		_v=$(printf '%s\n' "$_clean" | awk -v k="$_k" '$1==k{print $2;exit}')
-		[ -n "$_v" ] && _pairs="$_pairs $_k=$_v"
-	done
-	if [ -n "$_has_shape" ]; then _pairs="$_pairs layout=$_base"
-	elif [ "$_named" != default ]; then _pairs="$_pairs layout=$_named"
-	fi
-	_pairs=${_pairs# }
+  _pairs=
+  [ "$_drop_root" -eq 0 ] && [ -n "$_root" ] && _pairs="root=$_root"
+  for _k in theme agent notify; do
+    _v=$(printf '%s\n' "$_clean" | awk -v k="$_k" '$1==k{print $2;exit}')
+    [ -n "$_v" ] && _pairs="$_pairs $_k=$_v"
+  done
+  if [ -n "$_has_shape" ]; then _pairs="$_pairs layout=$_base"
+  elif [ "$_named" != default ]; then _pairs="$_pairs layout=$_named"
+  fi
+  _pairs=${_pairs# }
 
-	if grep -qE '^[[:space:]]*#' "$_f"; then
-		_commented="$_commented $_base"
-	fi
-	if [ -n "$_has_shape" ]; then
-		echo "split $_base -> row + layouts/$_base.layout"
-	elif [ -z "$_pairs" ]; then
-		echo "drop  $_base: everything about it is derivable now"
-	else
-		echo "conv  $_base -> $_pairs"
-	fi
-	[ "$APPLY" -eq 1 ] || continue
+  if grep -qE '^[[:space:]]*#' "$_f"; then
+    _commented="$_commented $_base"
+  fi
+  if [ -n "$_has_shape" ]; then
+    echo "split $_base -> row + layouts/$_base.layout"
+  elif [ -z "$_pairs" ]; then
+    echo "drop  $_base: everything about it is derivable now"
+  else
+    echo "conv  $_base -> $_pairs"
+  fi
+  [ "$APPLY" -eq 1 ] || continue
 
-	mkdir -p "$MUX_DIR/layouts"
-	for _p in $_pairs; do
-		mux_prof_set "$_base" "${_p%%=*}" "${_p#*=}"
-	done
-	if [ -n "$_has_shape" ]; then
-		# COMPOSED: the file both included an arrangement and added to it.
-		# Splice the included one in first so the result builds what the
-		# original did, rather than leaving a note to do it by hand.
-		_inc=$(mux_data_find layouts "$_named" .layout)
-		{
-			printf '# %s: arrangement split out of the' "$_base"
-			printf ' pre-rename %s.layout.\n' "$_base"
-			if [ -n "$_inc" ]; then
-				printf '# The first window came from `include'
-				printf ' %s`, spliced in here so this\n' "$_named"
-				printf '# layout builds what the original did.'
-				printf ' Trim it if you only wanted the rest.\n'
-				mux_conf_clean <"$_inc"
-			fi
-			printf '%s\n' "$_clean" \
-				| awk '$1=="window"||$1=="pane"||$1=="bottom"'
-		} >"$_lay"
-	fi
-	mv "$_f" "$_f.bak"
+  mkdir -p "$MUX_DIR/layouts"
+  for _p in $_pairs; do
+    mux_prof_set "$_base" "${_p%%=*}" "${_p#*=}"
+  done
+  if [ -n "$_has_shape" ]; then
+    # COMPOSED: the file both included an arrangement and added to it.
+    # Splice the included one in first so the result builds what the
+    # original did, rather than leaving a note to do it by hand.
+    _inc=$(mux_data_find layouts "$_named" .layout)
+    {
+      printf '# %s: arrangement split out of the' "$_base"
+      printf ' pre-rename %s.layout.\n' "$_base"
+      if [ -n "$_inc" ]; then
+        printf '# The first window came from `include'
+        printf ' %s`, spliced in here so this\n' "$_named"
+        printf '# layout builds what the original did.'
+        printf ' Trim it if you only wanted the rest.\n'
+        mux_conf_clean <"$_inc"
+      fi
+      printf '%s\n' "$_clean" \
+        | awk '$1=="window"||$1=="pane"||$1=="bottom"'
+    } >"$_lay"
+  fi
+  mv "$_f" "$_f.bak"
 done
 
 if [ "$_n" -eq 0 ]; then
-	echo "mux: nothing to migrate in $MUX_DIR"
+  echo "mux: nothing to migrate in $MUX_DIR"
 elif [ "$APPLY" -eq 1 ]; then
-	echo "mux: migrated $_n file(s); originals kept as *.layout.bak"
-	if [ -n "$_commented" ]; then
-		echo "mux: these carried COMMENTS, which a row cannot hold:"
-		for _c in $_commented; do
-			printf '  %-12s prose kept in %s.layout.bak\n' \
-				"$_c" "$MUX_DIR/$_c"
-		done
-		echo "mux: promote any worth keeping into" \
-			"$MUX_DIR/profiles.d/<name>.profile"
-	fi
-	echo "mux: check with  mux check  and  mux help profiles"
+  echo "mux: migrated $_n file(s); originals kept as *.layout.bak"
+  if [ -n "$_commented" ]; then
+    echo "mux: these carried COMMENTS, which a row cannot hold:"
+    for _c in $_commented; do
+      printf '  %-12s prose kept in %s.layout.bak\n' \
+        "$_c" "$MUX_DIR/$_c"
+    done
+    echo "mux: promote any worth keeping into" \
+      "$MUX_DIR/profiles.d/<name>.profile"
+  fi
+  echo "mux: check with  mux check  and  mux help profiles"
 else
-	echo "mux: $_n file(s) to migrate; re-run with --apply to do it"
+  echo "mux: $_n file(s) to migrate; re-run with --apply to do it"
 fi

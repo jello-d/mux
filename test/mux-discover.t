@@ -12,10 +12,10 @@ _name=mux-discover
 . "$(dirname "$0")/harness_lib"
 
 command -v git >/dev/null 2>&1 || { printf 'skip %s (no git)\n' "$_name"
-	exit 0; }
+  exit 0; }
 
 mkdir -p "$T/bin" "$T/conf" "$T/tree/alpha" "$T/tree/nested/alpha" \
-	"$T/tree/solo" "$T/elsewhere"
+  "$T/tree/solo" "$T/elsewhere"
 for _d in alpha nested/alpha solo; do git init -q "$T/tree/$_d"; done
 cat >"$T/bin/tmux" <<'EOF'
 #!/bin/sh
@@ -38,24 +38,24 @@ printf 'scan %s 3\n' "$T/tree" >"$T/conf/partitions/global.partition"
 
 # mux DIR ARGS... -> run from DIR, echoing combined output.
 mux() {
-	_d=$1; shift
-	( cd "$_d" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
-		MUX_CACHE="$T/cache" GIT_CEILING_DIRECTORIES="$T" \
-		"$HERE/bin/mux" "$@" ) 2>&1
+  _d=$1; shift
+  ( cd "$_d" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
+    MUX_CACHE="$T/cache" GIT_CEILING_DIRECTORIES="$T" \
+    "$HERE/bin/mux" "$@" ) 2>&1
 }
 # rooted / built -> the -c directory and -s name of the last new-session call.
 rooted() {
-	awk '/new-session /{for(i=1;i<=NF;i++) if($i=="-c") print $(i+1)}' \
-		"$TMUXLOG" | head -1
+  awk '/new-session /{for(i=1;i<=NF;i++) if($i=="-c") print $(i+1)}' \
+    "$TMUXLOG" | head -1
 }
 built() {
-	awk '/new-session /{for(i=1;i<=NF;i++) if($i=="-s") print $(i+1)}' \
-		"$TMUXLOG" | head -1
+  awk '/new-session /{for(i=1;i<=NF;i++) if($i=="-s") print $(i+1)}' \
+    "$TMUXLOG" | head -1
 }
 fails() {  # LABEL WANT DIR ARGS...
-	_l=$1 _w=$2; shift 2
-	_o=$(mux "$@") && fail "$_l: expected a non-zero exit, got [$_o]"
-	case $_o in *"$_w"*) ;; *) fail "$_l: want [$_w], got [$_o]" ;; esac
+  _l=$1 _w=$2; shift 2
+  _o=$(mux "$@") && fail "$_l: expected a non-zero exit, got [$_o]"
+  case $_o in *"$_w"*) ;; *) fail "$_l: want [$_w], got [$_o]" ;; esac
 }
 
 mux "$T/tree" scan >/dev/null || fail "mux scan failed"
@@ -64,7 +64,7 @@ mux "$T/tree" scan >/dev/null || fail "mux scan failed"
 : >"$TMUXLOG"
 mux "$T/elsewhere" go solo >/dev/null || fail "go solo (via the map) failed"
 [ "$(rooted)" = "$T/tree/solo" ] \
-	|| fail "map lookup: rooted at [$(rooted)], want $T/tree/solo"
+  || fail "map lookup: rooted at [$(rooted)], want $T/tree/solo"
 
 # --- step 5: an unknown name is refused, with both fixes offered ------------
 fails unknown       "nothing known as 'sola'"   "$T/elsewhere" go sola
@@ -79,7 +79,7 @@ fails unknown-near2 "solo"                      "$T/elsewhere" go sola
 : >"$TMUXLOG"
 mux "$T/elsewhere" go >/dev/null || fail "bare go in an unknown dir was refused"
 [ "$(rooted)" = "$T/elsewhere" ] \
-	|| fail "bare go: rooted at [$(rooted)], want $T/elsewhere"
+  || fail "bare go: rooted at [$(rooted)], want $T/elsewhere"
 
 # --- an ambiguous name lists the candidates rather than guessing ------------
 fails ambiguous "is ambiguous" "$T/elsewhere" go alpha
@@ -89,15 +89,15 @@ fails ambiguous-lists "nested/alpha" "$T/elsewhere" go alpha
 : >"$TMUXLOG"
 mux "$T/tree/nested/alpha" new alpha2 >/dev/null || fail "mux new failed"
 grep -q '^alpha2 ' "$T/conf/profiles" \
-	|| fail "new: no row written for a non-derivable name"
+  || fail "new: no row written for a non-derivable name"
 grep -q "root=$T/tree/nested/alpha" "$T/conf/profiles" \
-	|| fail "new: the row does not carry the root"
+  || fail "new: the row does not carry the root"
 # A name this directory already derives needs NO row: config never restates
 # what mux can derive.
 : >"$TMUXLOG"
 mux "$T/tree/solo" new solo >/dev/null || fail "mux new solo (derivable) failed"
 grep -q '^solo ' "$T/conf/profiles" 2>/dev/null \
-	&& fail "new: wrote a row for a name the directory already derives"
+  && fail "new: wrote a row for a name the directory already derives"
 # ... but binding a name that already means a DIFFERENT project is refused,
 # since that would silently change what `mux go <name>` means everywhere else.
 fails new-rebind "already means" "$T/tree/nested/alpha" new solo
@@ -106,14 +106,14 @@ fails new-rebind "already means" "$T/tree/nested/alpha" new solo
 : >"$TMUXLOG"
 mux "$T/elsewhere" go alpha2 >/dev/null || fail "go alpha2 (via the row) failed"
 [ "$(rooted)" = "$T/tree/nested/alpha" ] \
-	|| fail "row lookup: rooted at [$(rooted)]"
+  || fail "row lookup: rooted at [$(rooted)]"
 # Bare `mux go` in that directory must resolve to the ALIAS, not to the name
 # the directory would otherwise derive -- else you get two sessions on one dir.
 : >"$TMUXLOG"
 mux "$T/tree/nested/alpha" go >/dev/null \
-	|| fail "bare go in the alias dir failed"
+  || fail "bare go in the alias dir failed"
 grep -q 'new-session -d -s alpha2 ' "$TMUXLOG" \
-	|| fail "bare go in an aliased directory did not resolve to the alias"
+  || fail "bare go in an aliased directory did not resolve to the alias"
 
 # --- new refuses a name that is already known -------------------------------
 fails new-dup "already has a profile" "$T/tree/solo" new alpha2
@@ -154,14 +154,14 @@ mux "$T/elsewhere" go "$T/tree/solo" >/dev/null || fail "go <path> failed"
 : >"$TMUXLOG"
 mkdir -p "$T/nameless"
 mux "$T/elsewhere" go "$T/nameless" >/dev/null \
-	|| fail "go <path> to an unknown directory was refused"
+  || fail "go <path> to an unknown directory was refused"
 [ "$(built)" = nameless ] || fail "unknown path built [$(built)]"
 
 # An exact-root claim wins over climbing to the git toplevel: a subdirectory
 # session must resolve to ITSELF, not to its enclosing repo.
 : >"$TMUXLOG"
 mux "$T/elsewhere" go "$T/tree/nested/alpha" >/dev/null \
-	|| fail "go <path> to a claimed subdir failed"
+  || fail "go <path> to a claimed subdir failed"
 [ "$(built)" = alpha2 ] || fail "claimed subdir built [$(built)], want alpha2"
 [ "$(rooted)" = "$T/tree/nested/alpha" ] || fail "claimed subdir rooted wrongly"
 
@@ -169,7 +169,7 @@ mux "$T/elsewhere" go "$T/tree/nested/alpha" >/dev/null \
 : >"$TMUXLOG"
 mkdir -p "$T/tree/solo/inner"
 mux "$T/elsewhere" go "$T/tree/solo/inner" >/dev/null \
-	|| fail "go <path> to an unclaimed subdir failed"
+  || fail "go <path> to an unclaimed subdir failed"
 [ "$(built)" = solo ] || fail "unclaimed subdir built [$(built)], want solo"
 
 # A path that is not a directory fails loud rather than becoming a name.
@@ -190,27 +190,27 @@ printf 'x\t/tmp\n' >"$MAPD/projects.gonepartition"
 printf 'y\n' >"$MAPD/mux-themes.global.sha"
 printf 'z\n' >"$MAPD/sessions.global"
 (
-	. "$HERE/libexec/mux-paths_lib"
-	. "$HERE/libexec/mux-scan_lib"
-	mux_ctx_partitions() { printf 'global\n'; }
-	# The subshell is the POINT: it scopes the stubbed oracle and MUX_CACHE to
-	# this one call, so the three cases here cannot leak into each other.
-	# shellcheck disable=SC2030
-	MUX_CACHE=$MAPD; export MUX_CACHE
-	mux_scan_prune
+  . "$HERE/libexec/mux-paths_lib"
+  . "$HERE/libexec/mux-scan_lib"
+  mux_ctx_partitions() { printf 'global\n'; }
+  # The subshell is the POINT: it scopes the stubbed oracle and MUX_CACHE to
+  # this one call, so the three cases here cannot leak into each other.
+  # shellcheck disable=SC2030
+  MUX_CACHE=$MAPD; export MUX_CACHE
+  mux_scan_prune
 )
 [ -f "$MAPD/projects.global" ] \
-	|| fail "the LIVE partition's map was pruned. A prune that deletes
+  || fail "the LIVE partition's map was pruned. A prune that deletes
 everything passes any count-based assertion, and this one would delete the map
 the call that triggered it is about to rebuild."
 [ -e "$MAPD/projects.gonepartition" ] \
-	&& fail "a map for a partition mux does not know of survived the prune"
+  && fail "a map for a partition mux does not know of survived the prune"
 # It must touch nothing else in that directory.
 [ -f "$MAPD/mux-themes.global.sha" ] \
-	|| fail "the prune took a palette stamp; those are pruned by their own
+  || fail "the prune took a palette stamp; those are pruned by their own
 rule (a live tmux server), not by this one"
 [ -f "$MAPD/sessions.global" ] \
-	|| fail "the prune took a session set left in the cache by a pre-0.38
+  || fail "the prune took a session set left in the cache by a pre-0.38
 mux, before it could be adopted. That is unreconstructible."
 
 # TWO SEPARATE REFUSALS, asserted separately. They looked like one belt-and-
@@ -223,16 +223,16 @@ mux, before it could be adopted. That is unreconstructible."
 #    to source mux-context_lib too, but "happens to" is not a contract.
 printf 'x\t/tmp\n' >"$MAPD/projects.gonepartition"
 (
-	. "$HERE/libexec/mux-paths_lib"
-	. "$HERE/libexec/mux-scan_lib"
-	# The subshell is the POINT: it scopes the stubbed oracle and MUX_CACHE to
-	# this one call, so the three cases here cannot leak into each other.
-	# shellcheck disable=SC2030
-	MUX_CACHE=$MAPD; export MUX_CACHE
-	mux_scan_prune
+  . "$HERE/libexec/mux-paths_lib"
+  . "$HERE/libexec/mux-scan_lib"
+  # The subshell is the POINT: it scopes the stubbed oracle and MUX_CACHE to
+  # this one call, so the three cases here cannot leak into each other.
+  # shellcheck disable=SC2030
+  MUX_CACHE=$MAPD; export MUX_CACHE
+  mux_scan_prune
 ) 2>/dev/null
 [ -e "$MAPD/projects.gonepartition" ] \
-	|| fail "with NO way to enumerate partitions the prune deleted anyway.
+  || fail "with NO way to enumerate partitions the prune deleted anyway.
 The alternative to skipping is deleting files based on an empty list."
 
 # 2. AN ORACLE THAT ANSWERS NOTHING. A different failure: the function is there
@@ -241,19 +241,19 @@ The alternative to skipping is deleting files based on an empty list."
 #    to be. An empty list means "no partition exists", and acting on it deletes
 #    every map on the box.
 (
-	. "$HERE/libexec/mux-paths_lib"
-	. "$HERE/libexec/mux-scan_lib"
-	mux_ctx_partitions() { return 0; }
-	# The subshell is the POINT: it scopes the stubbed oracle and MUX_CACHE to
-	# this one call, so the three cases here cannot leak into each other.
-	# shellcheck disable=SC2030
-	MUX_CACHE=$MAPD; export MUX_CACHE
-	mux_scan_prune
+  . "$HERE/libexec/mux-paths_lib"
+  . "$HERE/libexec/mux-scan_lib"
+  mux_ctx_partitions() { return 0; }
+  # The subshell is the POINT: it scopes the stubbed oracle and MUX_CACHE to
+  # this one call, so the three cases here cannot leak into each other.
+  # shellcheck disable=SC2030
+  MUX_CACHE=$MAPD; export MUX_CACHE
+  mux_scan_prune
 )
 [ -e "$MAPD/projects.gonepartition" ] \
-	|| fail "an oracle that answered NOTHING was read as 'no partition
+  || fail "an oracle that answered NOTHING was read as 'no partition
 exists' and every map was deleted. An empty answer is not an answer."
 [ -f "$MAPD/projects.global" ] \
-	|| fail "the live map went with it"
+  || fail "the live map went with it"
 
 pass

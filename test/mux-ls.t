@@ -30,10 +30,10 @@ _sock=default
 case "$1" in -L) _sock=$2; shift 2 ;; esac
 case "$*" in
 list-sessions*)
-	[ -s "$LIVE" ] || exit 1
-	while IFS= read -r _n; do
-		printf '%s: 1 windows (created Mon Jan  1 00:00:00 2026)\n' "$_n"
-	done <"$LIVE" ;;
+  [ -s "$LIVE" ] || exit 1
+  while IFS= read -r _n; do
+    printf '%s: 1 windows (created Mon Jan  1 00:00:00 2026)\n' "$_n"
+  done <"$LIVE" ;;
 source-file*) printf 'source %s\n' "$_sock" >>"$SRC" ;;
 *window_index*) printf '0\n' ;;
 *pane_id*)      printf '%%1\n' ;;
@@ -44,9 +44,9 @@ chmod +x "$T/bin/tmux"
 printf 'scan %s 1\n' "$T" >"$T/conf/partitions/global.partition"
 
 mux() {
-	( cd "$T/proj" && env -u MUX_SHARE -u TMUX PATH="$T/bin:$PATH" \
-		XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" \
-		MUX_CACHE="$T/cache" "$HERE/bin/mux" "$@" ) 2>&1
+  ( cd "$T/proj" && env -u MUX_SHARE -u TMUX PATH="$T/bin:$PATH" \
+    XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" \
+    MUX_CACHE="$T/cache" "$HERE/bin/mux" "$@" ) 2>&1
 }
 
 # --- an empty context says so, and exits 0 ------------------------------
@@ -68,16 +68,16 @@ agent_rec "$T/run/agent-state/global/3" idle    %3 100 idle
 _o=$(mux ls)
 glyph_of() { printf '%s\n' "$_o" | awk -v s="$1:" '$2==s{print $1; exit}'; }
 [ "$(glyph_of blocked)" = '⚠️' ] \
-	|| fail "blocked glyph is [$(glyph_of blocked)]"
+  || fail "blocked glyph is [$(glyph_of blocked)]"
 [ "$(glyph_of working)" = '🧠' ] \
-	|| fail "working glyph is [$(glyph_of working)]"
+  || fail "working glyph is [$(glyph_of working)]"
 [ "$(glyph_of idle)" = '✅' ] || fail "idle glyph is [$(glyph_of idle)]"
 [ "$(glyph_of bare)" = '⚫' ] \
-	|| fail "a session with no agent should get the none glyph, got
+  || fail "a session with no agent should get the none glyph, got
 [$(glyph_of bare)]"
 # Every live session is listed exactly once.
 [ "$(printf '%s\n' "$_o" | grep -c .)" -eq 4 ] \
-	|| fail "ls listed $(printf '%s\n' "$_o" | grep -c .) lines, want 4"
+  || fail "ls listed $(printf '%s\n' "$_o" | grep -c .) lines, want 4"
 
 # --- a session name containing a SPACE survives ls ---------------------
 printf 'my project\n' >"$LIVE"
@@ -88,7 +88,7 @@ case $_o in
 *) fail "a spaced session name did not survive ls: [$_o]" ;;
 esac
 printf '%s\n' "$_o" | grep -q '🧠' \
-	|| fail "the spaced session lost its glyph: [$_o]"
+  || fail "the spaced session lost its glyph: [$_o]"
 
 # --- reload reaches EVERY partition, including one with a space --------
 # The bug: `for _s in $(mux_ctx_partitions)` split `my work` into two servers
@@ -100,14 +100,14 @@ printf 'scan %s 1\n' "$T" >"$T/conf/partitions/other.partition"
 printf 'alpha\n' >"$LIVE"
 : >"$SRC"
 _o=$( cd "$T/proj" && env -u MUX_SHARE -u TMUX PATH="$T/bin:$PATH" \
-	XDG_CONFIG_HOME="$T/conf" XDG_RUNTIME_DIR="$T/run" \
-	MUX_DIR="$T/conf" MUX_CACHE="$T/cache" "$HERE/bin/mux" reload 2>&1 )
+  XDG_CONFIG_HOME="$T/conf" XDG_RUNTIME_DIR="$T/run" \
+  MUX_DIR="$T/conf" MUX_CACHE="$T/cache" "$HERE/bin/mux" reload 2>&1 )
 grep -qx 'source my work' "$SRC" \
-	|| fail "reload never reached the spaced partition: [$(cat "$SRC")]"
+  || fail "reload never reached the spaced partition: [$(cat "$SRC")]"
 grep -qx 'source my' "$SRC" \
-	&& fail "reload split the partition name into a phantom server 'my'"
+  && fail "reload split the partition name into a phantom server 'my'"
 grep -qx 'source other' "$SRC" \
-	|| fail "reload skipped a plain partition: [$(cat "$SRC")]"
+  || fail "reload skipped a plain partition: [$(cat "$SRC")]"
 case $_o in
 *reloaded*) ;;
 *) fail "reload did not report what it did: [$_o]" ;;
@@ -116,9 +116,9 @@ esac
 # --- reload with no tmux.conf refuses, loudly --------------------------
 rm -f "$T/conf/tmux/tmux.conf"
 _rc=0; _o=$( cd "$T/proj" && env -u MUX_SHARE -u TMUX PATH="$T/bin:$PATH" \
-	XDG_CONFIG_HOME="$T/conf" XDG_RUNTIME_DIR="$T/run" \
-	MUX_DIR="$T/conf" MUX_CACHE="$T/cache" "$HERE/bin/mux" reload 2>&1 ) \
-	|| _rc=$?
+  XDG_CONFIG_HOME="$T/conf" XDG_RUNTIME_DIR="$T/run" \
+  MUX_DIR="$T/conf" MUX_CACHE="$T/cache" "$HERE/bin/mux" reload 2>&1 ) \
+  || _rc=$?
 [ "$_rc" -ne 0 ] || fail "reload with no tmux.conf exited 0"
 case $_o in
 *"no tmux.conf"*) ;;

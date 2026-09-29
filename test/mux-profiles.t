@@ -19,7 +19,7 @@ waybar      root=$T/waybar theme=slate layout=logs
 EOF
 
 eq() {  # LABEL GOT WANT
-	[ "$2" = "$3" ] || fail "$1: got [$2] want [$3]"
+  [ "$2" = "$3" ] || fail "$1: got [$2] want [$3]"
 }
 
 # --- reading ----------------------------------------------------------------
@@ -34,7 +34,7 @@ mux_prof_has nosuch && fail "has: nosuch should be absent"
 # A row converts to the SAME `key value` lines a breakout profile holds, so
 # there is one parse path downstream whichever form was used.
 eq directives "$(mux_prof_directives waybar | tr '\n' ';')" \
-	"root $T/waybar;theme slate;layout logs;"
+  "root $T/waybar;theme slate;layout logs;"
 
 # --- root -> name, the alias binding ---------------------------------------
 # Exact match, so an alias is authoritative for its own directory.
@@ -85,6 +85,6 @@ mux_prof_has api && fail "has: nothing should be present with no table"
 mux_prof_set solo theme cyan
 eq create "$(mux_prof_get solo theme)" "cyan"
 grep -q '^# mux profiles' "$MUX_DIR/profiles" \
-	|| fail "create: no header written"
+  || fail "create: no header written"
 
 pass

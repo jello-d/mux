@@ -27,33 +27,33 @@ mkdir -p "$T/bin" "$T/conf"
 # No notify-send on PATH, so the `notify` capability has a contextual answer to
 # give. The ordinary tools still have to be put back explicitly.
 for _c in sed awk grep cut tr head tail wc cat ls id date find sort basename \
-          dirname mktemp rm mkdir cp mv readlink; do
-	_p=$(command -v "$_c" 2>/dev/null) && ln -sf "$_p" "$T/bin/$_c"
+    dirname mktemp rm mkdir cp mv readlink; do
+  _p=$(command -v "$_c" 2>/dev/null) && ln -sf "$_p" "$T/bin/$_c"
 done
 printf '#!/bin/sh\nexit 0\n' >"$T/bin/tmux"; chmod +x "$T/bin/tmux"
 
 caps() {
-	env -u MUX_SHARE -u TMUX -u MUX_NOTIFY_SEND -u MUX_NOTIFY_CLOSE \
-		PATH="$T/bin" MUX_DIR="$T/conf" MUX_CACHE="$T/cache" \
-		"$HERE/bin/mux" capabilities "$@" 2>&1
+  env -u MUX_SHARE -u TMUX -u MUX_NOTIFY_SEND -u MUX_NOTIFY_CLOSE \
+    PATH="$T/bin" MUX_DIR="$T/conf" MUX_CACHE="$T/cache" \
+    "$HERE/bin/mux" capabilities "$@" 2>&1
 }
 val() { printf '%s\n' "$1" | awk -v k="$2" '$1==k{print $2, $3; exit}'; }
 
 # --- the shape: a version line, then NAME VALUE pairs -------------------
 _o=$(caps)
 [ "$(printf '%s\n' "$_o" | head -1)" = "mux $(grep '^MUX_VERSION=' \
-	"$HERE/bin/mux" | cut -d= -f2)" ] \
-	|| fail "the first line must be 'mux <version>', got:
+  "$HERE/bin/mux" | cut -d= -f2)" ] \
+  || fail "the first line must be 'mux <version>', got:
 $(printf '%s\n' "$_o" | head -1)"
 # Every remaining line is exactly NAME plus one or two fields. A consumer parses
 # this with `read -r name value note`, so a stray third shape breaks it.
 printf '%s\n' "$_o" | tail -n +2 | while IFS= read -r _l; do
-	[ -n "$_l" ] || continue
-	_nf=$(printf '%s\n' "$_l" | awk '{print NF}')
-	case $_nf in
-	2|3) ;;
-	*) fail "capability line has $_nf fields, want 2 or 3: [$_l]" ;;
-	esac
+  [ -n "$_l" ] || continue
+  _nf=$(printf '%s\n' "$_l" | awk '{print NF}')
+  case $_nf in
+  2|3) ;;
+  *) fail "capability line has $_nf fields, want 2 or 3: [$_l]" ;;
+  esac
 done
 
 # --- it exits 0 even when a capability is unavailable ------------------
@@ -66,20 +66,20 @@ _rc=0; caps >/dev/null 2>&1 || _rc=$?
 # A version means usable. `unavailable` means implemented but not here.
 # `no` means this build does not have it at all. All three are ANSWERS.
 [ "$(val "$_o" agent-list)" = "1 " ] \
-	|| fail "agent-list should be usable: [$(val "$_o" agent-list)]"
+  || fail "agent-list should be usable: [$(val "$_o" agent-list)]"
 case $(val "$_o" notify) in
 *unavailable*) ;;
 *) fail "with no notify-send, notify should read unavailable, got
 [$(val "$_o" notify)]" ;;
 esac
 [ "$(val "$_o" latch-fallback)" = "no " ] \
-	|| fail "an ordered fallback list is not implemented, so latch-fallback
+  || fail "an ordered fallback list is not implemented, so latch-fallback
 must read 'no': got [$(val "$_o" latch-fallback)]"
 # attach-only went the other way, and that lifecycle is the point: it was the
 # `no` example one release ago and is a contract now. A consumer that had asked
 # gets a different answer without anyone sniffing a version.
 [ "$(val "$_o" attach-only)" = "1 " ] \
-	|| fail "attach-only is implemented, so it must read '1': got
+  || fail "attach-only is implemented, so it must read '1': got
 [$(val "$_o" attach-only)]"
 # latch IS implemented, but there is no ssh on this stub PATH, so it is the
 # other contextual one. `1 unavailable` and `no` must not collapse together:
@@ -104,7 +104,7 @@ rm -f "$T/bin/notify-send"
 # the template is checked, so the rest being nonsense must not matter.
 printf '#!/bin/sh\nexit 0\n' >"$T/bin/myhop"; chmod +x "$T/bin/myhop"
 case $(MUX_LATCH_TRANSPORT='myhop -x %h mux go %s' caps | \
-	awk '$1=="latch"{print $2, $3}') in
+  awk '$1=="latch"{print $2, $3}') in
 "1 ") ;;
 *) fail "with its transport present, latch should be usable: got
 [$(MUX_LATCH_TRANSPORT='myhop %h' caps | grep '^latch')]" ;;
@@ -132,13 +132,13 @@ _declared=$(caps --all | tail -n +2 | awk '{print $1}' | LC_ALL=C sort -u)
 # The two dispatch mechanisms, read from the source rather than from a list kept
 # here: an early exec table for the helper verbs, and the main whitelist.
 _early=$(awk '/^case \$\{1:-\} in$/,/^esac$/' "$HERE/bin/mux" \
-	| grep -oE '^[a-z][a-z-]*\)' | tr -d ')')
+  | grep -oE '^[a-z][a-z-]*\)' | tr -d ')')
 # The main block is SPACE indented and the early one is not, so the pattern
 # allows either. Getting this wrong found only 18 of 33 verbs, and the count
 # floor below is what caught it rather than a silent pass.
 _main=$(awk '/^case \$cmd in$/,/^esac$/' "$HERE/bin/mux" \
-	| grep -oE '^[[:space:]]+[a-z|-]+\)' \
-	| tr -d ' \t)' | tr '|' '\n')
+  | grep -oE '^[[:space:]]+[a-z|-]+\)' \
+  | tr -d ' \t)' | tr '|' '\n')
 _dispatched=$(printf '%s\n%s\n' "$_early" "$_main" | grep . | LC_ALL=C sort -u)
 
 [ -n "$_dispatched" ] || fail "no verbs were discovered from bin/mux; the
@@ -157,26 +157,26 @@ The scrape has stopped matching and would pass no matter what is missing"
 # silently matches NOTHING there -- which reads as "no sub-verbs" rather than
 # as a broken scrape, so the floor below is what catches it.
 _sub=$(awk '/^case \$_verb in$/,/^esac$/' "$HERE/libexec/mux-agent" \
-	| grep -oE '^[a-z][a-z|-]*\)' | tr -d ')' | tr '|' '\n' | grep .)
+  | grep -oE '^[a-z][a-z|-]*\)' | tr -d ')' | tr '|' '\n' | grep .)
 [ -n "$_sub" ] || fail "no sub-verbs discovered in libexec/mux-agent; the
 scrape has stopped matching and this guard is proving nothing"
 for _v in $_sub; do
-	# NOT "it exits 0": `read` and `wait` REQUIRE arguments, so a bare call
-	# answering usage is correct for them. The question is whether the verb
-	# EXISTS, and the dispatcher has exactly one answer for one that does
-	# not -- so that is what this looks for.
-	_o=$("$HERE/bin/mux" agent "$_v" 2>&1 || true)
-	case $_o in
-	*"unknown agent verb"*) fail "capabilities declares the agent contract
+  # NOT "it exits 0": `read` and `wait` REQUIRE arguments, so a bare call
+  # answering usage is correct for them. The question is whether the verb
+  # EXISTS, and the dispatcher has exactly one answer for one that does
+  # not -- so that is what this looks for.
+  _o=$("$HERE/bin/mux" agent "$_v" 2>&1 || true)
+  case $_o in
+  *"unknown agent verb"*) fail "capabilities declares the agent contract
 and \`mux agent $_v\` is scraped from its dispatch, but invoking it says
 unknown -- which is the gap a nested dispatch hides from the guard below:
 [$_o]" ;;
-	esac
+  esac
 done
 
 _missing=$(printf '%s\n' "$_dispatched" | while IFS= read -r _v; do
-	[ -n "$_v" ] || continue
-	printf '%s\n' "$_declared" | grep -qxF "$_v" || printf '%s\n' "$_v"
+  [ -n "$_v" ] || continue
+  printf '%s\n' "$_declared" | grep -qxF "$_v" || printf '%s\n' "$_v"
 done)
 [ -z "$_missing" ] || fail "these dispatchable verbs are NOT in the capability
 manifest, so nothing declares whether they are a contract or internal:
@@ -190,21 +190,21 @@ Add each to _cap_manifest in bin/mux as 'contract <n>' or 'internal'."
 # CONTRACT that is also a verb must actually dispatch, or the handshake
 # advertises something a caller cannot invoke.
 printf '%s\n' "$_o" | tail -n +2 | while IFS= read -r _l; do
-	_cn=${_l%% *}
-	case $_cn in
-	notify|context) continue ;;            # seams, not verbs
-	unknown-name)   continue ;;            # an exit CODE, not a verb
-	attach-only)    continue ;;            # a FLAG on go, not a verb
-	esac
-	# A forward declaration has no verb by definition, and skipping it by
-	# VALUE rather than by name means the next one needs no edit here.
-	case $_l in
-	*' no') continue ;;
-	esac
-	case " $(printf '%s\n' "$_dispatched" | tr '\n' ' ') " in
-	*" $_cn "*) ;;
-	*) fail "capabilities advertises '$_cn', which no verb dispatches" ;;
-	esac
+  _cn=${_l%% *}
+  case $_cn in
+  notify|context) continue ;;            # seams, not verbs
+  unknown-name)   continue ;;            # an exit CODE, not a verb
+  attach-only)    continue ;;            # a FLAG on go, not a verb
+  esac
+  # A forward declaration has no verb by definition, and skipping it by
+  # VALUE rather than by name means the next one needs no edit here.
+  case $_l in
+  *' no') continue ;;
+  esac
+  case " $(printf '%s\n' "$_dispatched" | tr '\n' ' ') " in
+  *" $_cn "*) ;;
+  *) fail "capabilities advertises '$_cn', which no verb dispatches" ;;
+  esac
 done
 
 pass

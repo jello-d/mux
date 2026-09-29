@@ -10,35 +10,35 @@ set -eu
 # hook can pass them in either order.
 state= _beat= _src=
 while [ $# -gt 0 ]; do
-	case $1 in
-	--beat) _beat=1 ;;
-	# --source NAME: which hook is speaking. OPTIONAL, and mux never
-	# requires it -- an integrator that does not pass one is not broken,
-	# it is just quieter. THE CONTRACT IS MUX'S TO OWN: this defines the
-	# shape of the answer now, so wiring it later is a plugin edit and not
-	# a negotiation.
-	#
-	# WHY IT IS NEEDED. `Stop` and `SessionStart` BOTH send plain `idle`,
-	# so a record that went idle mid-turn cannot be blamed on either. That
-	# exact ambiguity is live: on 2026-09-27 a vigilance session on
-	# manifold went idle 9 minutes into a 34-minute auto-mode turn and the
-	# two candidates were indistinguishable from the record alone.
-	--source) shift
-		[ $# -gt 0 ] || {
-			echo "mux-agent-state-emit: --source wants a name" >&2
-			exit 2; }
-		_src=$1 ;;
-	-*) echo "mux-agent-state-emit: unknown option: $1" >&2; exit 2 ;;
-	*)
-		[ -z "$state" ] || {
-			echo "mux-agent-state-emit: one STATE only" >&2; exit 2; }
-		state=$1 ;;
-	esac
-	shift
+  case $1 in
+  --beat) _beat=1 ;;
+  # --source NAME: which hook is speaking. OPTIONAL, and mux never
+  # requires it -- an integrator that does not pass one is not broken,
+  # it is just quieter. THE CONTRACT IS MUX'S TO OWN: this defines the
+  # shape of the answer now, so wiring it later is a plugin edit and not
+  # a negotiation.
+  #
+  # WHY IT IS NEEDED. `Stop` and `SessionStart` BOTH send plain `idle`,
+  # so a record that went idle mid-turn cannot be blamed on either. That
+  # exact ambiguity is live: on 2026-09-27 a vigilance session on
+  # manifold went idle 9 minutes into a 34-minute auto-mode turn and the
+  # two candidates were indistinguishable from the record alone.
+  --source) shift
+    [ $# -gt 0 ] || {
+      echo "mux-agent-state-emit: --source wants a name" >&2
+      exit 2; }
+    _src=$1 ;;
+  -*) echo "mux-agent-state-emit: unknown option: $1" >&2; exit 2 ;;
+  *)
+    [ -z "$state" ] || {
+      echo "mux-agent-state-emit: one STATE only" >&2; exit 2; }
+    state=$1 ;;
+  esac
+  shift
 done
 [ -n "$state" ] || {
-	echo "usage: mux-agent-state-emit STATE [--beat] [--source NAME]" >&2
-	exit 2; }
+  echo "usage: mux-agent-state-emit STATE [--beat] [--source NAME]" >&2
+  exit 2; }
 
 # No tmux pane means nothing to track. Exit clean so the hook never fails.
 [ -n "${TMUX_PANE:-}" ] || exit 0
@@ -72,11 +72,11 @@ file=$dir/$key
 # state keep its start time.
 _pstate= _pepoch= _pnotif=
 if [ -f "$file" ]; then
-        # Same field order as the write below: session LAST. Read in the
-        # old order, _pnotif became the SESSION NAME -- so the next
-        # transition tried to close a notification whose id was `alpha`.
-        read -r _pstate _pw _pp _pepoch _pnotif _ps \
-                < "$file" 2>/dev/null || _pstate=
+  # Same field order as the write below: session LAST. Read in the
+  # old order, _pnotif became the SESSION NAME -- so the next
+  # transition tried to close a notification whose id was `alpha`.
+  read -r _pstate _pw _pp _pepoch _pnotif _ps \
+    < "$file" 2>/dev/null || _pstate=
 fi
 
 # --beat: this caller is a HEARTBEAT, not a turn start. A beat says "still
@@ -125,35 +125,35 @@ fi
 _beatf=$file.beat
 _BEAT_WINDOW=${MUX_AGENT_BEAT_WINDOW:-300}
 if [ -n "$_beat" ] && [ "$_pstate" = idle ]; then
-	_bnow=$(date +%s 2>/dev/null || echo 0)
-	_bfirst=
-	[ -f "$_beatf" ] && read -r _bfirst 2>/dev/null <"$_beatf"
-	case ${_bfirst:-} in
-	''|*[!0-9]*) _bfirst= ;;
-	esac
-	# The no-mark case is handled FIRST and on its own, rather than folded
-	# into the window test below. Folded, it was redundant: an absent mark
-	# reads as 0 in the arithmetic, so the age comes out enormous and the
-	# window test already rejects it -- which made the guard impossible to
-	# kill, the corpus said so, and belt-and-braces that measures as
-	# untestable is the shape this codebase deletes rather than defends.
-	if [ -z "$_bfirst" ]; then
-		printf '%s\n' "$_bnow" 2>/dev/null >"$_beatf" || true
-		exit 0
-	fi
-	if [ "$((_bnow - _bfirst))" -le "$_BEAT_WINDOW" ] \
-	   && [ "$_bnow" -ge "$_bfirst" ]; then
-		# Corroborated: fall through and write `working`.
-		rm -f "$_beatf" 2>/dev/null || true
-		mux_log agent \
-			"beat corroborated: ${_ps:-?} back to working" \
-			"${_src:+(}${_src:-}${_src:+)}"
-	else
-		# The window lapsed. Two beats this far apart are two
-		# stragglers, not sustained work: restart the clock.
-		printf '%s\n' "$_bnow" 2>/dev/null >"$_beatf" || true
-		exit 0
-	fi
+  _bnow=$(date +%s 2>/dev/null || echo 0)
+  _bfirst=
+  [ -f "$_beatf" ] && read -r _bfirst 2>/dev/null <"$_beatf"
+  case ${_bfirst:-} in
+  ''|*[!0-9]*) _bfirst= ;;
+  esac
+  # The no-mark case is handled FIRST and on its own, rather than folded
+  # into the window test below. Folded, it was redundant: an absent mark
+  # reads as 0 in the arithmetic, so the age comes out enormous and the
+  # window test already rejects it -- which made the guard impossible to
+  # kill, the corpus said so, and belt-and-braces that measures as
+  # untestable is the shape this codebase deletes rather than defends.
+  if [ -z "$_bfirst" ]; then
+    printf '%s\n' "$_bnow" 2>/dev/null >"$_beatf" || true
+    exit 0
+  fi
+  if [ "$((_bnow - _bfirst))" -le "$_BEAT_WINDOW" ] \
+     && [ "$_bnow" -ge "$_bfirst" ]; then
+    # Corroborated: fall through and write `working`.
+    rm -f "$_beatf" 2>/dev/null || true
+    mux_log agent \
+      "beat corroborated: ${_ps:-?} back to working" \
+      "${_src:+(}${_src:-}${_src:+)}"
+  else
+    # The window lapsed. Two beats this far apart are two
+    # stragglers, not sustained work: restart the clock.
+    printf '%s\n' "$_bnow" 2>/dev/null >"$_beatf" || true
+    exit 0
+  fi
 fi
 
 # Claude Code fires Notification for TWO things: a permission prompt (mid-work),
@@ -162,16 +162,16 @@ fi
 # `blocked` that lands while the agent is already idle is the waiting nudge --
 # keep it idle, so a finished turn stays a check (done), not a bell (needs you).
 if [ "$state" = blocked ] && [ "$_pstate" = idle ]; then
-        state=idle
+  state=idle
 fi
 
 # The epoch marks when the CURRENT state BEGAN. Keep it across same-state
 # re-emits (one turn can fire `working` repeatedly) and stamp fresh only on a
 # real change, so a duration reads "time in THIS state", not "since last hook".
 if [ "$state" = "$_pstate" ] && [ -n "$_pepoch" ]; then
-        epoch=$_pepoch
+  epoch=$_pepoch
 else
-        epoch=$(date +%s)
+  epoch=$(date +%s)
 fi
 
 # Resolve session and window once, at emit time, so the renderer never has
@@ -181,7 +181,7 @@ fi
 # made `#{session_name} #{window_index}` unsplittable for a session called
 # `my project`, and every field after it shifted.
 loc=$(tmux display-message -p -t "$TMUX_PANE" \
-        '#{window_index} #{session_name}' 2>/dev/null || true)
+  '#{window_index} #{session_name}' 2>/dev/null || true)
 [ -n "$loc" ] || loc="? ?"
 _win=${loc%% *}
 _sess=${loc#* }
@@ -211,18 +211,18 @@ notif=$_pnotif
 # instead, which is worth knowing if that urgency is ever reconsidered.
 _ttl=${MUX_NOTIF_TTL:-3600}
 if [ -n "$_pnotif" ] && [ -n "${_pepoch:-}" ]; then
-        case $_pepoch in
-        ''|*[!0-9]*) ;;
-        *)
-                if [ "$(( $(date +%s) - _pepoch ))" -gt "$_ttl" ]; then
-                        _pnotif= notif=
-                fi ;;
-        esac
+  case $_pepoch in
+  ''|*[!0-9]*) ;;
+  *)
+    if [ "$(( $(date +%s) - _pepoch ))" -gt "$_ttl" ]; then
+      _pnotif= notif=
+    fi ;;
+  esac
 fi
 
 if [ -n "$_pnotif" ] && [ "$state" != "$_pstate" ]; then
-        mux_notify_close "$_pnotif"
-        notif=
+  mux_notify_close "$_pnotif"
+  notif=
 fi
 
 # Push notification when the agent stops needing the CPU and starts needing YOU:
@@ -234,37 +234,37 @@ fi
 # (@mux-notify-always). mux_notify_send keeps the id so the block above can
 # clear it later, and no-ops on a box with no daemon.
 if [ "$_pstate" = working ] && [ "$state" != working ]; then
-        _vf='#{&&:#{pane_active},#{&&:#{window_active},#{session_attached}}}'
-        _vis=$(tmux display-message -p -t "$TMUX_PANE" "$_vf" \
-                2>/dev/null || true)
-        _always=$(tmux display-message -p -t "$TMUX_PANE" \
-                '#{@mux-notify-always}' 2>/dev/null || true)
-        if [ "$_always" = 1 ] || [ "$_vis" != 1 ]; then
-                # Both at NORMAL urgency. `blocked` used to be critical, which
-                # in mako and dunst alike means "never expire": the banner
-                # outlived the prompt it announced and had to be dismissed by
-                # hand, every time. Urgency is not how mux says which state
-                # this is -- the summary line says it, and the strip and the
-                # tray hold it persistently. See mux-notify_lib.
-                #
-                # $_sess is the one computed at the top, deliberately NOT
-                # recomputed here. This block used to re-derive it as
-                # ${loc%% *}, correct back when the probe asked for
-                # `#{session_name} #{window_index}`. Flipping that order
-                # fixed the top copy and left this one reading the WINDOW
-                # INDEX -- so raising a notification overwrote $_sess with
-                # `0` and the record written below named a session `0`.
-                # The session then had NO state on the strip (it looked
-                # idle while the agent worked) and the banner said
-                # "Claude finished: 0". One value, one place.
-                case $state in
-                blocked) notif=$(mux_notify_send normal \
-                                "Claude needs you: $_sess" \
-                                "permission or input") ;;
-                idle)    notif=$(mux_notify_send normal \
-                                "Claude finished: $_sess" "your turn") ;;
-                esac
-        fi
+  _vf='#{&&:#{pane_active},#{&&:#{window_active},#{session_attached}}}'
+  _vis=$(tmux display-message -p -t "$TMUX_PANE" "$_vf" \
+    2>/dev/null || true)
+  _always=$(tmux display-message -p -t "$TMUX_PANE" \
+    '#{@mux-notify-always}' 2>/dev/null || true)
+  if [ "$_always" = 1 ] || [ "$_vis" != 1 ]; then
+    # Both at NORMAL urgency. `blocked` used to be critical, which
+    # in mako and dunst alike means "never expire": the banner
+    # outlived the prompt it announced and had to be dismissed by
+    # hand, every time. Urgency is not how mux says which state
+    # this is -- the summary line says it, and the strip and the
+    # tray hold it persistently. See mux-notify_lib.
+    #
+    # $_sess is the one computed at the top, deliberately NOT
+    # recomputed here. This block used to re-derive it as
+    # ${loc%% *}, correct back when the probe asked for
+    # `#{session_name} #{window_index}`. Flipping that order
+    # fixed the top copy and left this one reading the WINDOW
+    # INDEX -- so raising a notification overwrote $_sess with
+    # `0` and the record written below named a session `0`.
+    # The session then had NO state on the strip (it looked
+    # idle while the agent worked) and the banner said
+    # "Claude finished: 0". One value, one place.
+    case $state in
+    blocked) notif=$(mux_notify_send normal \
+        "Claude needs you: $_sess" \
+        "permission or input") ;;
+    idle)    notif=$(mux_notify_send normal \
+        "Claude finished: $_sess" "your turn") ;;
+    esac
+  fi
 fi
 
 # Fields: state session window pane epoch notif-id. Space separated, one line.
@@ -299,15 +299,15 @@ fi
 # itself, which is the whole point of accepting it: `Stop` and `SessionStart`
 # both write plain `idle`, and only the caller can say which one did.
 if [ "$state" != "${_pstate:-}" ]; then
-	mux_log agent \
-		"${_sess:-?} ${_pstate:--} -> $state" \
-		"${_src:+via }${_src:-}"
+  mux_log agent \
+    "${_sess:-?} ${_pstate:--} -> $state" \
+    "${_src:+via }${_src:-}"
 fi
 
 _tmp=$file.$$
 printf '%s %s %s %s %s %s\n' \
-        "$state" "$_win" "$TMUX_PANE" "$epoch" "${notif:--}" "$_sess" \
-        >"$_tmp" && mv -f "$_tmp" "$file" || rm -f "$_tmp"
+  "$state" "$_win" "$TMUX_PANE" "$epoch" "${notif:--}" "$_sess" \
+  >"$_tmp" && mv -f "$_tmp" "$file" || rm -f "$_tmp"
 
 # An opt-in breadcrumb: with MUX_EMIT_LOG set, every transition is appended, so
 # a state that gets stuck can be traced to the hook that last wrote it -- or to
@@ -318,16 +318,16 @@ printf '%s %s %s %s %s %s\n' \
 # Capped rather than rotated: this is switched on deliberately to catch
 # something, and an unbounded file left on by accident is its own bug.
 if [ -n "${MUX_EMIT_LOG:-}" ]; then
-        {
-                if [ -f "$MUX_EMIT_LOG" ] \
-                   && [ "$(wc -c 2>/dev/null <"$MUX_EMIT_LOG" || echo 0)" \
-                        -gt 262144 ]; then
-                        : >"$MUX_EMIT_LOG"
-                fi
-                printf '%s %s %s %s was=%s\n' \
-                        "$(date +%s)" "$state" "$_sess" "$TMUX_PANE" \
-                        "${_pstate:-none}" >>"$MUX_EMIT_LOG"
-        } 2>/dev/null || true
+  {
+    if [ -f "$MUX_EMIT_LOG" ] \
+       && [ "$(wc -c 2>/dev/null <"$MUX_EMIT_LOG" || echo 0)" \
+      -gt 262144 ]; then
+      : >"$MUX_EMIT_LOG"
+    fi
+    printf '%s %s %s %s was=%s\n' \
+      "$(date +%s)" "$state" "$_sess" "$TMUX_PANE" \
+      "${_pstate:-none}" >>"$MUX_EMIT_LOG"
+  } 2>/dev/null || true
 fi
 
 # Instant redraw for clients on this server. Interval polling is the

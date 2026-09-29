@@ -42,8 +42,8 @@ $(cat -v "$_out")"
 
 # --- WITH A PTY IT EMITS THE RESETS -------------------------------------
 if ! command -v script >/dev/null 2>&1; then
-	printf 'skip %s (no script(1), cannot supply a pty)\n' "$_name"
-	exit 0
+  printf 'skip %s (no script(1), cannot supply a pty)\n' "$_name"
+  exit 0
 fi
 _raw=$T/raw
 script -qc "sh $HOOK" "$_raw" >/dev/null 2>&1 || true
@@ -54,27 +54,27 @@ _seen=$(cat -v "$_raw")
 # one of them still set is a terminal that stays broken in a specific way, so
 # they are named individually rather than checked as one blob.
 for _m in \
-	'1049l:the alternate screen, so your own scrollback comes back' \
-	'25h:the cursor, which is invisible until this is sent' \
-	'1000l:mouse reporting (X10) -- the control characters' \
-	'1002l:mouse reporting (button-event)' \
-	'1003l:mouse reporting (any-event)' \
-	'1006l:mouse reporting (SGR), the protocol tmux actually uses' \
-	'2004l:bracketed paste, or every paste arrives wrapped in ESC[200~' \
-	'1004l:focus reporting, which emits ESC[I and ESC[O on focus change'
+  '1049l:the alternate screen, so your own scrollback comes back' \
+  '25h:the cursor, which is invisible until this is sent' \
+  '1000l:mouse reporting (X10) -- the control characters' \
+  '1002l:mouse reporting (button-event)' \
+  '1003l:mouse reporting (any-event)' \
+  '1006l:mouse reporting (SGR), the protocol tmux actually uses' \
+  '2004l:bracketed paste, or every paste arrives wrapped in ESC[200~' \
+  '1004l:focus reporting, which emits ESC[I and ESC[O on focus change'
 do
-	_code=${_m%%:*}; _why=${_m#*:}
-	case $_seen in
-	*"^[[?$_code"*) ;;
-	*) fail "mux sane never reset ?$_code -- $_why
+  _code=${_m%%:*}; _why=${_m#*:}
+  case $_seen in
+  *"^[[?$_code"*) ;;
+  *) fail "mux sane never reset ?$_code -- $_why
 What it emitted:
 $_seen" ;;
-	esac
+  esac
 done
 
 # The kernel half is not optional either.
 grep -q 'stty sane' "$HOOK" \
-	|| fail "mux sane no longer runs stty sane, so the tty line
+  || fail "mux sane no longer runs stty sane, so the tty line
 discipline (echo, canonical mode, signal characters) is left as tmux set it"
 
 # --- AND IT MUST NOT CLEAR THE SCREEN -----------------------------------

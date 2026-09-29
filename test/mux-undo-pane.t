@@ -19,7 +19,7 @@ _name=mux-undo-pane
 . "$(dirname "$0")/harness_lib"
 
 command -v tmux >/dev/null 2>&1 || {
-	printf 'skip %s (no tmux)\n' "$_name"; exit 0; }
+  printf 'skip %s (no tmux)\n' "$_name"; exit 0; }
 
 SOCK=$(tmux_fresh_socket muxundo)
 XDG_RUNTIME_DIR=$T/run; export XDG_RUNTIME_DIR
@@ -43,13 +43,13 @@ cleanup() { tmux_drop_socket "$SOCK"; }
 STAGE=startup
 stage() { STAGE=$*; }
 _bail() {
-	_rc=$?
-	cleanup
-	[ "$_rc" = 0 ] && return 0
-	[ -n "${MUX_T_SAID:-}" ] && return 0
-	printf 'FAIL %s: died at stage [%s] with status %s and said nothing.\n' \
-		"$_name" "$STAGE" "$_rc"
-	printf '  This is the contention flake; capture the state above.\n'
+  _rc=$?
+  cleanup
+  [ "$_rc" = 0 ] && return 0
+  [ -n "${MUX_T_SAID:-}" ] && return 0
+  printf 'FAIL %s: died at stage [%s] with status %s and said nothing.\n' \
+    "$_name" "$STAGE" "$_rc"
+  printf '  This is the contention flake; capture the state above.\n'
 }
 trap '_bail' EXIT
 trap 'cleanup' INT TERM
@@ -61,22 +61,22 @@ trap 'cleanup' INT TERM
 # suite and never in isolation. The old server is killed and NOT waited for,
 # because there is nothing reliable to wait on.
 rotate() {
-	cleanup
-	SOCK=$(tmux_fresh_socket muxundo)
-	# AND THE RECORDS GO WITH THE SERVER. This is the whole undo-pane flake,
-	# finally caught: a record is keyed by WINDOW ID, every fresh tmux server
-	# calls its first window `@0`, and $XDG_RUNTIME_DIR is shared across
-	# cycles -- so the previous cycle's record sits at the path this cycle
-	# will write. `_recorded` only asks whether the DIRECTORY is non-empty,
-	# so it returned true instantly from the stale file and the undo then
-	# raced the new recorder. When it lost, the slot-0 cycle restored the
-	# SLOT-1 record: cwd /etc, slot 1, which is exactly the observed
-	# `before [30:/tmp 9:/etc 19:/usr] / after [30:/etc 9:/etc 19:/usr]`.
-	#
-	# Measured at roughly 1 in 6 isolated runs before this line existed.
-	# The product half of the same root cause is fixed separately, and is
-	# asserted below: a record now names its server and is refused elsewhere.
-	rm -rf "$T/run/mux-undo"
+  cleanup
+  SOCK=$(tmux_fresh_socket muxundo)
+  # AND THE RECORDS GO WITH THE SERVER. This is the whole undo-pane flake,
+  # finally caught: a record is keyed by WINDOW ID, every fresh tmux server
+  # calls its first window `@0`, and $XDG_RUNTIME_DIR is shared across
+  # cycles -- so the previous cycle's record sits at the path this cycle
+  # will write. `_recorded` only asks whether the DIRECTORY is non-empty,
+  # so it returned true instantly from the stale file and the undo then
+  # raced the new recorder. When it lost, the slot-0 cycle restored the
+  # SLOT-1 record: cwd /etc, slot 1, which is exactly the observed
+  # `before [30:/tmp 9:/etc 19:/usr] / after [30:/etc 9:/etc 19:/usr]`.
+  #
+  # Measured at roughly 1 in 6 isolated runs before this line existed.
+  # The product half of the same root cause is fixed separately, and is
+  # asserted below: a record now names its server and is refused elsewhere.
+  rm -rf "$T/run/mux-undo"
 }
 
 # POLLED, NOT SLEPT. Every wait here is for a condition that is observable, so
@@ -85,14 +85,14 @@ rotate() {
 # every other run, and a sleep tuned to a fast machine is a test that fails for
 # someone else. This turned a 43s file into a few seconds.
 _until() {   # <seconds> <command...> -- true as soon as it succeeds
-	_lim=$(( ${1} * 20 )); shift
-	_n=0
-	while [ "$_n" -lt "$_lim" ]; do
-		if "$@" >/dev/null 2>&1; then return 0; fi
-		sleep 0.05
-		_n=$((_n + 1))
-	done
-	return 1
+  _lim=$(( ${1} * 20 )); shift
+  _n=0
+  while [ "$_n" -lt "$_lim" ]; do
+    if "$@" >/dev/null 2>&1; then return 0; fi
+    sleep 0.05
+    _n=$((_n + 1))
+  done
+  return 1
 }
 _npanes() { [ "$(tm list-panes -t t 2>/dev/null | wc -l)" = "$1" ]; }
 # THE RECORD IS THE REAL PRECONDITION FOR AN UNDO, not the pane count. The pane
@@ -110,17 +110,17 @@ _recorded() { [ -n "$(ls -A "$T/run/mux-undo" 2>/dev/null)" ]; }
 # carried the SERVER's directory and the restore came back in the wrong place.
 # Intermittent -- it survived five clean runs before showing up.
 _cwds_ready() {
-	_cr=$(state)
-	case $_cr in *:/tmp*) ;; *) return 1 ;; esac
-	case $_cr in *:/etc*) ;; *) return 1 ;; esac
-	case $_cr in *:/usr*) ;; *) return 1 ;; esac
-	return 0
+  _cr=$(state)
+  case $_cr in *:/tmp*) ;; *) return 1 ;; esac
+  case $_cr in *:/etc*) ;; *) return 1 ;; esac
+  case $_cr in *:/usr*) ;; *) return 1 ;; esac
+  return 0
 }
 
 # state: "height:cwd height:cwd ..." top to bottom -- the two things a restore
 # has to get right, in the one order that makes a mismatch readable.
 state() { tm list-panes -t t -F '#{pane_height}:#{pane_current_path}' \
-	2>/dev/null | tr '\n' ' '; }
+  2>/dev/null | tr '\n' ' '; }
 
 # build: a three-pane window with a DELIBERATE manual resize, so the saved
 # geometry differs from anything `select-layout even-vertical` would produce.
@@ -128,28 +128,28 @@ state() { tm list-panes -t t -F '#{pane_height}:#{pane_current_path}' \
 # the restore quietly re-evened the window, every assertion on a declared
 # layout would still pass while the user's arrangement was lost.
 build() {
-	stage "building the window (a fresh socket each time)"
-	rotate
-	tm new-session -d -s t -x 120 -y 60 -c /tmp
-	tm source-file "$HERE/share/mux.tmux"
-	tm split-window -t t -c /etc "echo MARK_A; exec \"\${SHELL:-/bin/sh}\""
-	tm split-window -t t -c /usr "echo MARK_B; exec \"\${SHELL:-/bin/sh}\""
-	tm select-layout -t t even-vertical
-	# ORDER IS LOAD-BEARING: wait for the shells to report their real cwd,
-	# and only THEN make a layout event, so the tracker's snapshot is taken
-	# after they have settled rather than before.
-	_until 10 _cwds_ready || fail "the panes never reported their cwd"
-	tm resize-pane -t t.0 -y 30
-	# THE LAST TRACKER, NOT THE FIRST. The three snapshots are three
-	# SEPARATE hook commands appended to window-layout-changed -- @mux-ul,
-	# then @mux-up, then @mux-uc -- so waiting on @mux-ul proves only that
-	# the first has landed. Under load the gap widens, the pane dies inside
-	# it, and the record is written from a cwd snapshot that does not list
-	# the pane: the restore then puts it back in its NEIGHBOUR's directory.
-	# That is what a full-suite run actually caught, once in twelve, with
-	# every height correct and slot 0 at /etc instead of /tmp.
-	_until 5 test -n "$(tm show-options -wqv -t t @mux-uc)" \
-		|| fail "the cwd tracker never recorded anything"
+  stage "building the window (a fresh socket each time)"
+  rotate
+  tm new-session -d -s t -x 120 -y 60 -c /tmp
+  tm source-file "$HERE/share/mux.tmux"
+  tm split-window -t t -c /etc "echo MARK_A; exec \"\${SHELL:-/bin/sh}\""
+  tm split-window -t t -c /usr "echo MARK_B; exec \"\${SHELL:-/bin/sh}\""
+  tm select-layout -t t even-vertical
+  # ORDER IS LOAD-BEARING: wait for the shells to report their real cwd,
+  # and only THEN make a layout event, so the tracker's snapshot is taken
+  # after they have settled rather than before.
+  _until 10 _cwds_ready || fail "the panes never reported their cwd"
+  tm resize-pane -t t.0 -y 30
+  # THE LAST TRACKER, NOT THE FIRST. The three snapshots are three
+  # SEPARATE hook commands appended to window-layout-changed -- @mux-ul,
+  # then @mux-up, then @mux-uc -- so waiting on @mux-ul proves only that
+  # the first has landed. Under load the gap widens, the pane dies inside
+  # it, and the record is written from a cwd snapshot that does not list
+  # the pane: the restore then puts it back in its NEIGHBOUR's directory.
+  # That is what a full-suite run actually caught, once in twelve, with
+  # every height correct and slot 0 at /etc instead of /tmp.
+  _until 5 test -n "$(tm show-options -wqv -t t @mux-uc)" \
+    || fail "the cwd tracker never recorded anything"
 }
 
 # --- THE RECORD IS WRITTEN UNQUOTED -- asserted before anything is restored
@@ -170,7 +170,7 @@ tm send-keys -t t.1 'exit' Enter
 _until 10 _npanes 2 || fail "unquote: the pane did not close"
 _until 10 _recorded || fail "unquote: no undo record was written"
 _cr=$(sed -n 's/^command	//p' "$T/run/mux-undo/$(ls -A "$T/run/mux-undo" \
-	| head -1)")
+  | head -1)")
 # `[\\]`, a bracket expression, rather than a quoted backslash: `'\\'` inside
 # single quotes is TWO characters and shellcheck rightly calls it ambiguous
 # (SC1003) -- the same trap these notes record costing a doubled spinner.
@@ -196,17 +196,17 @@ stage "the layout comes back exactly, wherever the hole was"
 # window restored this way had its panes swapped, which is a mismatch a
 # count-based assertion sails straight past.
 for _slot in 0 1 2; do
-	build
-	_before=$(state)
-	tm send-keys -t "t.$_slot" 'exit' Enter
-	_until 10 _npanes 2 \
-		|| fail "slot $_slot: the pane did not actually close"
-	_until 10 _recorded || fail "slot $_slot: no undo record was written"
-	tm run-shell "mux undo-pane" >/dev/null 2>&1 || true
-	_until 10 _npanes 3 || fail "slot $_slot: undo restored no pane"
-	_until 10 _cwds_ready || true
-	_after=$(state)
-	[ "$_before" = "$_after" ] || fail "slot $_slot did not come back the
+  build
+  _before=$(state)
+  tm send-keys -t "t.$_slot" 'exit' Enter
+  _until 10 _npanes 2 \
+    || fail "slot $_slot: the pane did not actually close"
+  _until 10 _recorded || fail "slot $_slot: no undo record was written"
+  tm run-shell "mux undo-pane" >/dev/null 2>&1 || true
+  _until 10 _npanes 3 || fail "slot $_slot: undo restored no pane"
+  _until 10 _cwds_ready || true
+  _after=$(state)
+  [ "$_before" = "$_after" ] || fail "slot $_slot did not come back the
 same. The saved layout is applied POSITIONALLY, so a pane created in the wrong
 place does not merely sit wrong -- it takes another pane's size.
   before [$_before]
@@ -221,14 +221,14 @@ stage "the SURVIVING panes are never touched"
 build
 tm send-keys -t t.0 'echo SURVIVOR_SCROLLBACK' Enter
 _until 10 sh -c 'tmux -L '"$SOCK"' capture-pane -p -t t.0 |
-	grep -q SURVIVOR_SCROLLBACK'
+  grep -q SURVIVOR_SCROLLBACK'
 tm send-keys -t t.1 'exit' Enter
 _until 10 _npanes 2 || fail "the pane did not close"
 _until 10 _recorded || fail "no undo record was written"
 tm run-shell "mux undo-pane" >/dev/null 2>&1 || true
 _until 10 _npanes 3 || fail "undo restored no pane"
 tm capture-pane -p -t t.0 | grep -q SURVIVOR_SCROLLBACK \
-	|| fail "a surviving pane lost its scrollback. Nothing may be killed or
+  || fail "a surviving pane lost its scrollback. Nothing may be killed or
 respawned but the one pane that died."
 
 # --- what it was RUNNING comes back --------------------------------------
@@ -247,7 +247,7 @@ tm run-shell "mux undo-pane" >/dev/null 2>&1 || true
 _until 10 _npanes 3 || fail "undo restored no pane"
 _until 10 sh -c 'tmux -L '"$SOCK"' capture-pane -p -t t.1 | grep -q MARK_A'
 tm capture-pane -p -t t.1 | grep -q MARK_A \
-	|| fail "the restored pane did not re-run its command. An agent pane that
+  || fail "the restored pane did not re-run its command. An agent pane that
 comes back as a bare shell has lost the conversation, which is the case this
 feature exists for."
 
@@ -264,7 +264,7 @@ stage "twice is once"
 # The record is consumed, so a second undo cannot bolt on a pane nobody lost.
 _o=$(tm run-shell "mux undo-pane" 2>&1 || true)
 [ "$(tm list-panes -t t | wc -l)" = 3 ] \
-	|| fail "a second undo added a pane nobody closed"
+  || fail "a second undo added a pane nobody closed"
 
 # --- ... and so is filling the hole YOURSELF ------------------------------
 stage "... and so is filling the hole YOURSELF"
@@ -284,7 +284,7 @@ _until 10 _npanes 3 || fail "the manual split did not happen"
 _o=$(tm run-shell "mux undo-pane" 2>&1 || true)
 sleep 0.3
 [ "$(tm list-panes -t t | wc -l)" = 3 ] \
-	|| fail "undo added a pane to a window that was already whole. The
+  || fail "undo added a pane to a window that was already whole. The
 record alone does not mean something is missing -- the hole may have been
 filled by hand since."
 
@@ -309,7 +309,7 @@ tm set-option -p -t "$_bot" @mux-agent 1
 # the test asserts the restore rather than the hook's timing.
 tm resize-pane -t t.0 -y 29
 _until 5 sh -c 'tmux -L '"$SOCK"' show-options -wqv -t t @mux-uo \
-	| grep -q 5-10' || fail "the option tracker never saw @mux-bottom"
+  | grep -q 5-10' || fail "the option tracker never saw @mux-bottom"
 
 tm send-keys -t "$_bot" 'exit' Enter
 _until 10 _npanes 2 || fail "the bottom pane did not close"
@@ -319,11 +319,11 @@ _until 10 _npanes 3 || fail "undo restored no pane"
 
 _new=$(tm list-panes -t t -F '#{pane_id}' | tail -1)
 [ "$(tm show-options -pqv -t "$_new" @mux-bottom)" = 5-10 ] \
-	|| fail "@mux-bottom did not come back on the restored pane, so
+  || fail "@mux-bottom did not come back on the restored pane, so
 mux pin will skip it and the width balance will refuse -- that window's
 geometry is frozen and nothing says so"
 [ "$(tm show-options -pqv -t "$_new" @mux-agent)" = 1 ] \
-	|| fail "@mux-agent did not come back, so 'mux save' would read the
+  || fail "@mux-agent did not come back, so 'mux save' would read the
 running command and record an exited agent as a plain shell"
 
 # --- with nothing closed, it says so --------------------------------------
@@ -331,7 +331,7 @@ stage "with nothing closed, it says so"
 build
 _rc=0
 _o=$(env XDG_RUNTIME_DIR="$T/run" TMUX= "$HERE/libexec/mux-undo-pane" 2>&1) \
-	|| _rc=$?
+  || _rc=$?
 [ "$_rc" != 0 ] || fail "with no record and no tmux, undo-pane must fail"
 
 # --- AN UNKNOWN DIRECTORY IS SAID, NOT INHERITED -------------------------
@@ -393,7 +393,7 @@ _npanes 2 || fail "a record from another server RESTORED A PANE: $(state)"
 # AND IT IS DISCARDED, or every press repeats the refusal for a record that can
 # never become valid.
 [ -n "$(ls -A "$T/run/mux-undo" 2>/dev/null)" ] \
-	&& fail "the foreign record was refused and KEPT, so the window is stuck
+  && fail "the foreign record was refused and KEPT, so the window is stuck
 answering this instead of the ordinary 'nothing to undo'"
 
 # A RECORD THAT CANNOT SAY is refused too, on the same rule the latch hooks
@@ -454,14 +454,14 @@ case $_o in
 *) fail "a half-written record was not refused by name: [$_o]" ;;
 esac
 [ "$(tm list-panes -t t 2>/dev/null | wc -l)" = 2 ] \
-	|| fail "a half-written record still changed the window: it must refuse
+  || fail "a half-written record still changed the window: it must refuse
 before touching anything, or a truncated file rearranges a live layout"
 
 # --- an unknown option is an error ----------------------------------------
 stage "an unknown option is an error"
 _rc=0
 _o=$(env XDG_RUNTIME_DIR="$T/run" "$HERE/libexec/mux-undo-pane" --nope 2>&1) \
-	|| _rc=$?
+  || _rc=$?
 [ "$_rc" = 2 ] || fail "an unknown option must exit 2, got $_rc"
 case $_o in
 *"unknown option"*) ;;

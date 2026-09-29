@@ -47,8 +47,8 @@ printf '#!/bin/sh\nexit 0\n' >"$T/bin/mux";  chmod +x "$T/bin/mux"
 # notification checks below turn backends on and off by their PRESENCE -- so
 # the ordinary tools have to be put back explicitly.
 for _c in sed awk grep cut tr head tail wc cat ls id date find sort \
-          basename dirname mktemp rm mkdir cp mv readlink; do
-	_p=$(command -v "$_c" 2>/dev/null) && ln -sf "$_p" "$T/bin/$_c"
+    basename dirname mktemp rm mkdir cp mv readlink; do
+  _p=$(command -v "$_c" 2>/dev/null) && ln -sf "$_p" "$T/bin/$_c"
 done
 # Partition `probe`, NOT `global`: mux resolves MUX_DIR over MUX_SHARE, so
 # deleting an overlay global.partition falls back to the SHIPPED one and the
@@ -60,11 +60,11 @@ printf 'scan %s/src 2\n' "$T" >"$T/conf/partitions/probe.partition"
 
 # check [ENV=VAL ...] -> the audit's output; RC holds its exit status.
 check() {
-	OUT=$(env -u MUX_NOTIFY_SEND -u MUX_NOTIFY_CLOSE \
-		PATH="$T/bin" NO_COLOR=1 MUX_DIR="$T/conf" \
-		MUX_SHARE="$T/share" MUX_CACHE="$T/cache" \
-		"$@" "$HERE/libexec/mux-check" 2>&1) && RC=0 || RC=$?
-	printf '%s' "$OUT"
+  OUT=$(env -u MUX_NOTIFY_SEND -u MUX_NOTIFY_CLOSE \
+    PATH="$T/bin" NO_COLOR=1 MUX_DIR="$T/conf" \
+    MUX_SHARE="$T/share" MUX_CACHE="$T/cache" \
+    "$@" "$HERE/libexec/mux-check" 2>&1) && RC=0 || RC=$?
+  printf '%s' "$OUT"
 }
 has() { case "$OUT" in *"$1"*) ;; *) fail "$2: want [$1] in:
 $OUT" ;; esac; }
@@ -113,7 +113,7 @@ check >/dev/null
 has "scan root missing" "no report of the missing root"
 # ... and it is still reported per-root, not collapsed to the first.
 printf 'scan %s/src 2\nscan %s/other 2\n' "$T" "$T" \
-	>"$T/conf/partitions/probe.partition"
+  >"$T/conf/partitions/probe.partition"
 check >/dev/null
 [ "$RC" -ne 0 ] || fail "two missing roots exited 0"
 has "$T/src" "first missing root unreported"
@@ -235,23 +235,23 @@ has "status-right is not mux's renderer" "a foreign status-right passed"
 # a server missing both -- asserting a green check against a stale idea of
 # what green means.
 _healthy_keys() {
-	: >"$KEYS"
-	sed -n 's/^bind \([^ -][^ ]*\) run-shell "\(mux .*\)"$/\1 \2/p' \
-		"$HERE/share/mux.tmux" | while read -r _k _cmd; do
-		printf 'bind-key    -T prefix %s       run-shell "%s"\n' \
-			"$_k" "$_cmd"
-	done >>"$KEYS"
+  : >"$KEYS"
+  sed -n 's/^bind \([^ -][^ ]*\) run-shell "\(mux .*\)"$/\1 \2/p' \
+    "$HERE/share/mux.tmux" | while read -r _k _cmd; do
+    printf 'bind-key    -T prefix %s       run-shell "%s"\n' \
+      "$_k" "$_cmd"
+  done >>"$KEYS"
 }
 _healthy_keys
 # Every hook the fragment installs, as tmux would report it. A FUNCTION, so
 # the cases below can put the server back: this file's own rule is that one
 # case must never leave a broken server for the next to inherit.
 _healthy_hooks() {
-	: >"$HOOKS"
-	sed -n 's/^set-hook -[ag]* \([a-z-]*\) .*/\1/p' \
-		"$HERE/share/mux.tmux" | sort -u | while read -r _h; do
-		printf '%s[0] run-shell -b "mux pin"\n' "$_h"
-	done >>"$HOOKS"
+  : >"$HOOKS"
+  sed -n 's/^set-hook -[ag]* \([a-z-]*\) .*/\1/p' \
+    "$HERE/share/mux.tmux" | sort -u | while read -r _h; do
+    printf '%s[0] run-shell -b "mux pin"\n' "$_h"
+  done >>"$HOOKS"
 }
 _healthy_hooks
 printf '#(mux agent-render #S #{client_name})\n' >"$SROPT"
@@ -350,9 +350,9 @@ has "tmux state unchecked" "a skipped tmux-state check was silent"
 mkdir -p "$T/bin2"
 printf '#!/bin/sh\nexit 0\n' >"$T/bin2/mux"; chmod +x "$T/bin2/mux"
 OUT=$(env -u MUX_NOTIFY_SEND -u MUX_NOTIFY_CLOSE \
-	PATH="$T/bin2:$T/bin" NO_COLOR=1 MUX_DIR="$T/conf" \
-	MUX_SHARE="$T/share" MUX_CACHE="$T/cache" \
-	"$HERE/libexec/mux-check" 2>&1) && RC=0 || RC=$?
+  PATH="$T/bin2:$T/bin" NO_COLOR=1 MUX_DIR="$T/conf" \
+  MUX_SHARE="$T/share" MUX_CACHE="$T/cache" \
+  "$HERE/libexec/mux-check" 2>&1) && RC=0 || RC=$?
 has "2 mux commands on PATH" "a shadowing second mux was not reported"
 has "$T/bin2/mux" "the shadowing copy was not named"
 has "$T/bin/mux" "the shadowed copy was not named"

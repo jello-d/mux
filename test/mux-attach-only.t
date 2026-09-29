@@ -29,11 +29,11 @@ cat >"$T/bin/tmux" <<'EOF'
 printf '%s\n' "$*" >>"$TMUXLOG"
 case "$*" in
 *has-session*)
-	[ -f "$LIVEFLAG" ] && exit 0
-	exit 1 ;;
+  [ -f "$LIVEFLAG" ] && exit 0
+  exit 1 ;;
 *list-sessions*)
-	[ -f "$LIVEFLAG" ] || exit 1
-	printf 'proj %s\n' "$T/proj" ;;
+  [ -f "$LIVEFLAG" ] || exit 1
+  printf 'proj %s\n' "$T/proj" ;;
 *window_index*) printf '0\n' ;;
 *pane_id*)      printf '%%1\n' ;;
 esac
@@ -44,16 +44,16 @@ LIVEFLAG=$T/live; export LIVEFLAG
 PATH=$T/bin:$PATH; export PATH
 
 mux() {
-	( cd "$T/proj" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
-		MUX_CACHE="$T/cache" EDITOR=/bin/true \
-		"$HERE/bin/mux" "$@" </dev/null ) 2>&1
+  ( cd "$T/proj" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
+    MUX_CACHE="$T/cache" EDITOR=/bin/true \
+    "$HERE/bin/mux" "$@" </dev/null ) 2>&1
 }
 rc() {   # run, print the exit code
-	_r=0
-	( cd "$T/proj" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
-		MUX_CACHE="$T/cache" EDITOR=/bin/true \
-		"$HERE/bin/mux" "$@" </dev/null ) >/dev/null 2>&1 || _r=$?
-	echo "$_r"
+  _r=0
+  ( cd "$T/proj" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
+    MUX_CACHE="$T/cache" EDITOR=/bin/true \
+    "$HERE/bin/mux" "$@" </dev/null ) >/dev/null 2>&1 || _r=$?
+  echo "$_r"
 }
 
 # --- THE LOAD-BEARING CASE: not live, so REFUSE --------------------------
@@ -68,14 +68,14 @@ esac
 # Exit 3 is mux's standard "the name is not known here", which is what lets
 # latch's classifier key on a CODE instead of grepping stderr for a phrase.
 [ "$(rc go --attach-only proj)" = 3 ] \
-	|| fail "--attach-only on a dead session must exit 3 (the standard
+  || fail "--attach-only on a dead session must exit 3 (the standard
 unknown-name code), got $(rc go --attach-only proj)"
 
 # It must not have tried to BUILD anything. A refusal that still created the
 # session would satisfy the message assertion above and defeat the entire point,
 # so this checks the tmux calls rather than the words.
 grep -q 'new-session' "$TMUXLOG" \
-	&& fail "--attach-only created a session. That is the exact failure this
+  && fail "--attach-only created a session. That is the exact failure this
 flag exists to prevent: after a reboot it hands you an empty session where your
 work was, and nothing about it looks wrong."
 
@@ -83,12 +83,12 @@ work was, and nothing about it looks wrong."
 : >"$LIVEFLAG"
 : >"$TMUXLOG"
 [ "$(rc go --attach-only proj)" = 0 ] \
-	|| fail "--attach-only on a LIVE session must attach and exit 0"
+  || fail "--attach-only on a LIVE session must attach and exit 0"
 grep -q 'attach-session\|switch-client' "$TMUXLOG" \
-	|| fail "--attach-only did not attach a live session; tmux saw:
+  || fail "--attach-only did not attach a live session; tmux saw:
 $(cat "$TMUXLOG")"
 grep -q 'new-session' "$TMUXLOG" \
-	&& fail "--attach-only rebuilt a session that was already live"
+  && fail "--attach-only rebuilt a session that was already live"
 rm -f "$LIVEFLAG"
 
 # --- without the flag, the same call CREATES ----------------------------
@@ -100,7 +100,7 @@ rm -f "$LIVEFLAG"
 : >"$TMUXLOG"
 mux go >/dev/null 2>&1 || true
 grep -q 'new-session' "$TMUXLOG" \
-	|| fail "plain 'mux go' no longer creates, so the --attach-only assertion
+  || fail "plain 'mux go' no longer creates, so the --attach-only assertion
 above proves nothing. tmux saw:
 $(cat "$TMUXLOG")"
 
@@ -110,7 +110,7 @@ $(cat "$TMUXLOG")"
 : >"$TMUXLOG"
 mux go --attach-only >/dev/null 2>&1 || true
 grep -q 'new-session' "$TMUXLOG" \
-	&& fail "--attach-only created a session when the name was DERIVED rather
+  && fail "--attach-only created a session when the name was DERIVED rather
 than typed. The guard must not depend on how the name was arrived at."
 
 # --- it is declared, so a remote caller can ASK -------------------------
@@ -118,7 +118,7 @@ than typed. The guard must not depend on how the name was arrived at."
 # consumer that asked then gets a different answer now, with no version sniffing
 # anywhere. A flag that works but is not declared is one latch cannot use.
 _caps=$(env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" MUX_CACHE="$T/cache" \
-	"$HERE/bin/mux" capabilities 2>&1)
+  "$HERE/bin/mux" capabilities 2>&1)
 case $_caps in
 *"attach-only 1"*) ;;
 *) fail "attach-only is implemented but not advertised as a contract, so
@@ -139,11 +139,11 @@ _e=$T/stderr
 rm -f "$LIVEFLAG"
 _arc=0
 ( cd "$T/proj" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
-	MUX_CACHE="$T/cache" "$HERE/bin/mux" go --attach-only proj \
-	</dev/null ) >/dev/null 2>"$_e" || _arc=$?
+  MUX_CACHE="$T/cache" "$HERE/bin/mux" go --attach-only proj \
+  </dev/null ) >/dev/null 2>"$_e" || _arc=$?
 _state=$("$HERE/share/latch/ssh-classify" "$_arc" "$_e")
 [ "$_state" = gone ] \
-	|| fail "--attach-only exited $_arc, and share/latch/ssh-classify reads
+  || fail "--attach-only exited $_arc, and share/latch/ssh-classify reads
 that as '$_state' rather than 'gone'. The two sides of the unknown-name
 contract have drifted: latch would report a rebooted host as a plain refusal.
 Its stderr was:

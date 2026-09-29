@@ -54,26 +54,26 @@ D=$T/state
 mkdir -p "$D"
 
 worst() {   # <state for pane 1> <state for pane 2> -> the winning state
-	rm -f "$D"/*
-	agent_rec "$D/1" "$1" %1 100 sess
-	agent_rec "$D/2" "$2" %2 200 sess
-	# Word splitting is the POINT: the function returns "STATE EPOCH" as one
-	# string and the two fields are what is being asserted.
-	# shellcheck disable=SC2046
-	set -- $(mux_agent_state "$D" sess)
-	printf '%s' "${1:-}"
+  rm -f "$D"/*
+  agent_rec "$D/1" "$1" %1 100 sess
+  agent_rec "$D/2" "$2" %2 200 sess
+  # Word splitting is the POINT: the function returns "STATE EPOCH" as one
+  # string and the two fields are what is being asserted.
+  # shellcheck disable=SC2046
+  set -- $(mux_agent_state "$D" sess)
+  printf '%s' "${1:-}"
 }
 
 for _pair in 'blocked idle' 'blocked working' 'working idle' \
-             'blocked frobnicating' 'idle frobnicating'; do
-	# Deliberate: the loop carries two words per entry.
-	# shellcheck disable=SC2086
-	set -- $_pair
-	_hi=$1 _lo=$2
-	[ "$(worst "$_hi" "$_lo")" = "$_hi" ] \
-		|| fail "$_hi should beat $_lo (worse state second in the dir)"
-	[ "$(worst "$_lo" "$_hi")" = "$_hi" ] \
-		|| fail "$_hi should beat $_lo (worse state first in the dir)"
+       'blocked frobnicating' 'idle frobnicating'; do
+  # Deliberate: the loop carries two words per entry.
+  # shellcheck disable=SC2086
+  set -- $_pair
+  _hi=$1 _lo=$2
+  [ "$(worst "$_hi" "$_lo")" = "$_hi" ] \
+    || fail "$_hi should beat $_lo (worse state second in the dir)"
+  [ "$(worst "$_lo" "$_hi")" = "$_hi" ] \
+    || fail "$_hi should beat $_lo (worse state first in the dir)"
 done
 
 # --- the EPOCH travels with the winning state ------------------------------
@@ -106,13 +106,13 @@ esac
 # them, which is precisely what the bar exists to do.
 _g=
 for _s in blocked working idle '' frobnicating; do
-	_this=$(mux_agent_glyph "$_s")
-	[ -n "$_this" ] || fail "state [$_s] has no glyph"
-	case "$MUX_AGENT_NL$_g$MUX_AGENT_NL" in
-	*"$MUX_AGENT_NL$_this$MUX_AGENT_NL"*)
-		fail "state [$_s] reuses the glyph [$_this]" ;;
-	esac
-	_g="$_g$MUX_AGENT_NL$_this"
+  _this=$(mux_agent_glyph "$_s")
+  [ -n "$_this" ] || fail "state [$_s] has no glyph"
+  case "$MUX_AGENT_NL$_g$MUX_AGENT_NL" in
+  *"$MUX_AGENT_NL$_this$MUX_AGENT_NL"*)
+    fail "state [$_s] reuses the glyph [$_this]" ;;
+  esac
+  _g="$_g$MUX_AGENT_NL$_this"
 done
 
 # --- the session enumerator: distinct, and whole names ---------------------
@@ -123,6 +123,6 @@ agent_rec "$D/3" idle    %3 300 zulu
 _n=$(mux_agent_sessions "$D" | grep -c .)
 [ "$_n" = 2 ] || fail "expected 2 distinct sessions, got $_n"
 mux_agent_sessions "$D" | grep -qx 'my project' \
-	|| fail "a session name with a space did not survive enumeration"
+  || fail "a session name with a space did not survive enumeration"
 
 pass

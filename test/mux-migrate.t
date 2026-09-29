@@ -8,7 +8,7 @@ _name=mux-migrate
 . "$(dirname "$0")/harness_lib"
 
 command -v git >/dev/null 2>&1 || { printf 'skip %s (no git)\n' "$_name"
-	exit 0; }
+  exit 0; }
 
 mkdir -p "$T/conf" "$T/src/proj/sub/deep" "$T/src/other"
 git init -q "$T/src/proj"
@@ -16,22 +16,22 @@ git init -q "$T/src/other"
 
 # A plain conversion: theme kept, root dropped (the repo's own basename).
 printf '# rationale\ntheme purple\nroot %s\ninclude shapes/code\n' \
-	"$T/src/proj" >"$T/conf/proj.layout"
+  "$T/src/proj" >"$T/conf/proj.layout"
 # A SUBDIRECTORY root whose basename matches the name. mux would derive `proj`
 # there (the git toplevel), NOT `sub`, so this root must be KEPT.
 printf 'theme slate\nroot %s\ninclude shapes/code\n' \
-	"$T/src/proj/sub" >"$T/conf/sub.layout"
+  "$T/src/proj/sub" >"$T/conf/sub.layout"
 # Nothing but the shared shape: wholly derivable, so nothing survives.
 printf 'root %s\ninclude shapes/code\n' "$T/src/other" \
-	>"$T/conf/other.layout"
+  >"$T/conf/other.layout"
 # Composed: an include PLUS its own window.
 printf 'theme cyan\nroot %s\ninclude shapes/code\n' "$T/src/proj" \
-	>"$T/conf/composed.layout"
+  >"$T/conf/composed.layout"
 printf 'window logs\npane tail\n' >>"$T/conf/composed.layout"
 
 mig() {
-	env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" "$HERE/bin/mux" \
-		migrate-profiles "$@" 2>&1
+  env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" "$HERE/bin/mux" \
+    migrate-profiles "$@" 2>&1
 }
 row() { grep "^$1 " "$T/conf/profiles" 2>/dev/null || true; }
 
@@ -65,20 +65,20 @@ esac
 
 # other: wholly derivable, so it gets no row at all.
 [ -z "$(row other)" ] \
-	|| fail "other got a row it need not have: [$(row other)]"
+  || fail "other got a row it need not have: [$(row other)]"
 
 # composed: a layout file, and a row pointing at it.
 [ -f "$T/conf/layouts/composed.layout" ] \
-	|| fail "no layout for the composed one"
+  || fail "no layout for the composed one"
 case "$(row composed)" in
 *layout=composed*) ;; *) fail "composed row does not name its layout" ;;
 esac
 # The included arrangement is spliced in, so it builds what the original did
 # rather than leaving the reader a note.
 grep -qE '^pane[[:space:]]+agent' "$T/conf/layouts/composed.layout" \
-	|| fail "the included arrangement was not spliced in"
+  || fail "the included arrangement was not spliced in"
 grep -qE '^window[[:space:]]+logs' "$T/conf/layouts/composed.layout" \
-	|| fail "the file's own window was not carried over"
+  || fail "the file's own window was not carried over"
 
 # Comments cannot live in a row, so the ones that had them are reported.
 case $_out in

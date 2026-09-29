@@ -33,7 +33,7 @@ mkdir -p "$T/share/themes"
 # `status-style` at first, which mux-themes rejects as a bad key, so the apply
 # path was erroring while the test still passed.
 for _t in aaa bbb ccc; do
-	cat >"$T/share/themes/$_t.theme" <<'THEME'
+  cat >"$T/share/themes/$_t.theme" <<'THEME'
 bar     bg=#0a2a44 fg=#b8d8f0
 window  fg=#08202e bg=#ffc020 bold
 accent  fg=#ffc020
@@ -66,15 +66,15 @@ chmod +x "$T/bin/tmux"
 
 # Inside a session (the normal case for theme).
 mux() {
-	( cd "$T/proj" && env TMUX=/tmp/fake/global,1,0 PATH="$T/bin:$PATH" \
-		MUX_DIR="$T/conf" MUX_SHARE="$T/share" MUX_CACHE="$T/cache" \
-		"$HERE/bin/mux" "$@" ) 2>&1
+  ( cd "$T/proj" && env TMUX=/tmp/fake/global,1,0 PATH="$T/bin:$PATH" \
+    MUX_DIR="$T/conf" MUX_SHARE="$T/share" MUX_CACHE="$T/cache" \
+    "$HERE/bin/mux" "$@" ) 2>&1
 }
 # Outside any session.
 mux_out() {
-	( cd "$T/proj" && env -u TMUX PATH="$T/bin:$PATH" \
-		MUX_DIR="$T/conf" MUX_SHARE="$T/share" MUX_CACHE="$T/cache" \
-		"$HERE/bin/mux" "$@" ) 2>&1
+  ( cd "$T/proj" && env -u TMUX PATH="$T/bin:$PATH" \
+    MUX_DIR="$T/conf" MUX_SHARE="$T/share" MUX_CACHE="$T/cache" \
+    "$HERE/bin/mux" "$@" ) 2>&1
 }
 applied() { cat "$OPT" 2>/dev/null; }
 reset() { : >"$OPT"; rm -f "$T/conf/profiles" "$T/conf/profiles.d"/*.profile; }
@@ -114,12 +114,12 @@ _o=$(mux theme bbb)
 [ "$(applied)" = bbb ] || fail "the theme was not applied: [$(applied)]"
 case $_o in *remembered*) ;; *) fail "the theme was not remembered: $_o" ;; esac
 grep -q 'bbb' "$T/conf/profiles" \
-	|| fail "the choice did not reach the profile table"
+  || fail "the choice did not reach the profile table"
 
 # --- the CYCLE arithmetic, in both directions and across both edges -----
 # From a known current, next/prev are the neighbours in the sorted list.
 cyc() { : >"$OPT"; printf '%s\n' "$1" >"$OPT"; mux theme "$2" >/dev/null
-	applied; }
+  applied; }
 [ "$(cyc aaa next)" = bbb ] || fail "next from aaa should be bbb"
 [ "$(cyc bbb next)" = ccc ] || fail "next from bbb should be ccc"
 [ "$(cyc ccc next)" = aaa ] || fail "next from ccc should WRAP to aaa"
@@ -131,7 +131,7 @@ cyc() { : >"$OPT"; printf '%s\n' "$1" >"$OPT"; mux theme "$2" >/dev/null
 # chosen) must still land somewhere sensible rather than sticking or failing.
 [ "$(cyc zzz next)" = aaa ] || fail "next from an unknown current should be 1st"
 [ "$(cyc zzz prev)" = ccc ] \
-	|| fail "prev from an unknown current should be the last"
+  || fail "prev from an unknown current should be the last"
 
 # Cycling the whole list returns to where it started: nothing skipped, nothing
 # visited twice. This is the property an off-by-one actually breaks.
@@ -147,28 +147,28 @@ reset
 printf 'window code\ntheme   aaa\npane agent\n' >"$BO"
 mux theme ccc >/dev/null
 [ "$(grep -c '^theme' "$BO")" -eq 1 ] \
-	|| fail "the profile gained a second theme line:
+  || fail "the profile gained a second theme line:
 $(cat "$BO")"
 grep -q '^theme[[:space:]]*ccc' "$BO" \
-	|| fail "the theme line was not updated:
+  || fail "the theme line was not updated:
 $(cat "$BO")"
 # ... and the surrounding lines survive the rewrite untouched.
 grep -qx 'window code' "$BO" \
-	|| fail "the rewrite ate a preceding line"
+  || fail "the rewrite ate a preceding line"
 grep -qx 'pane agent' "$BO" \
-	|| fail "the rewrite ate a following line"
+  || fail "the rewrite ate a following line"
 
 # --- ... and APPENDED when the profile has none ------------------------
 reset
 printf 'window code\npane agent\n' >"$BO"
 mux theme bbb >/dev/null
 [ "$(grep -c '^theme' "$BO")" -eq 1 ] \
-	|| fail "appending did not produce exactly one theme line"
+  || fail "appending did not produce exactly one theme line"
 grep -q 'bbb' "$BO" || fail "the appended theme is wrong"
 
 # --- setting the same theme twice is idempotent ------------------------
 mux theme bbb >/dev/null
 [ "$(grep -c '^theme' "$BO")" -eq 1 ] \
-	|| fail "re-setting the same theme duplicated the line"
+  || fail "re-setting the same theme duplicated the line"
 
 pass

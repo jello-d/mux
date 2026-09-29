@@ -9,9 +9,9 @@ _name=mux-conf
 
 # ck LABEL RAW EXPECT : clean RAW (with \n \r \t escapes) and compare to EXPECT.
 ck() {
-	_got=$(printf '%b' "$2" | mux_conf_clean)
-	_exp=$(printf '%b' "$3")
-	[ "$_got" = "$_exp" ] || fail "$1: got [$_got] want [$_exp]"
+  _got=$(printf '%b' "$2" | mux_conf_clean)
+  _exp=$(printf '%b' "$3")
+  [ "$_got" = "$_exp" ] || fail "$1: got [$_got] want [$_exp]"
 }
 
 # hex colours -- a # NOT preceded by whitespace -- MUST survive (the trap).

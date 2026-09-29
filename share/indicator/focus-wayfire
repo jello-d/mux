@@ -15,11 +15,11 @@ set -eu
 _label=${1:-}
 [ -n "$_label" ] || { echo "usage: focus-wayfire LABEL" >&2; exit 78; }
 [ -n "${WAYFIRE_SOCKET:-}" ] || {
-	echo "focus-wayfire: WAYFIRE_SOCKET unset (enable the ipc plugin)" >&2
-	exit 78; }
+  echo "focus-wayfire: WAYFIRE_SOCKET unset (enable the ipc plugin)" >&2
+  exit 78; }
 command -v wf-msg >/dev/null 2>&1 || {
-	echo "focus-wayfire: wf-msg is not on PATH" >&2; exit 78; }
+  echo "focus-wayfire: wf-msg is not on PATH" >&2; exit 78; }
 
 wf-msg focus-window "title:\\[$_label\\]" 2>/dev/null || {
-	echo "focus-wayfire: could not focus a window titled '$_label'" >&2
-	exit 78; }
+  echo "focus-wayfire: could not focus a window titled '$_label'" >&2
+  exit 78; }

@@ -21,7 +21,7 @@ MUX_DIR=$T/conf
 MUX_CACHE=$T/cache
 export XDG_RUNTIME_DIR MUX_DIR MUX_CACHE
 mkdir -p "$XDG_RUNTIME_DIR/agent-state/global" \
-	"$XDG_RUNTIME_DIR/agent-state/work" "$MUX_DIR/partitions"
+  "$XDG_RUNTIME_DIR/agent-state/work" "$MUX_DIR/partitions"
 
 # agent_rec writes the record; test/harness_lib owns the field order, so a
 # format
@@ -47,10 +47,10 @@ EOF
 chmod +x "$T/bin/tmux"
 
 sum() {
-	env -u TMUX -u MUX_SHARE MUX_DIR="$MUX_DIR" MUX_CACHE="$MUX_CACHE" \
-		XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" PATH="$T/bin:$PATH" \
-		WATCHED="${WATCHED:-}" \
-		"$HERE/bin/mux" agent-summary "$@" 2>&1
+  env -u TMUX -u MUX_SHARE MUX_DIR="$MUX_DIR" MUX_CACHE="$MUX_CACHE" \
+    XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" PATH="$T/bin:$PATH" \
+    WATCHED="${WATCHED:-}" \
+    "$HERE/bin/mux" agent-summary "$@" 2>&1
 }
 eq() { [ "$2" = "$3" ] || fail "$1: got [$2] want [$3]"; }
 
@@ -91,11 +91,11 @@ eq worst-wins "$(sum global)" "blocked 2"
 # that quietly answered for one would pass any single-line assertion.
 _o=$(sum --all)
 printf '%s\n' "$_o" | grep -q '^global blocked 2$' \
-	|| fail "--all did not report the caller partition correctly: [$_o]"
+  || fail "--all did not report the caller partition correctly: [$_o]"
 printf '%s\n' "$_o" | grep -q '^work idle 1$' \
-	|| fail "--all did not report the OTHER partition: [$_o]"
+  || fail "--all did not report the OTHER partition: [$_o]"
 [ "$(printf '%s\n' "$_o" | grep -c .)" = 2 ] \
-	|| fail "--all reported $(printf '%s\n' "$_o" | grep -c .) lines, want 2"
+  || fail "--all reported $(printf '%s\n' "$_o" | grep -c .) lines, want 2"
 
 # --- --attached: only what somebody is LOOKING at -------------------------
 # A TRAY ITEM MEANS A HUMAN IS LOOKING AT THIS. Remotely that is exactly what
@@ -146,7 +146,7 @@ eq all-unfiltered "$_o" "2"
 rm -rf "$XDG_RUNTIME_DIR/agent-state"
 _o=$(sum --all)
 [ "$(printf '%s\n' "$_o" | grep -c .)" = 1 ] \
-	|| fail "with no state at all, --all should still answer once: [$_o]"
+  || fail "with no state at all, --all should still answer once: [$_o]"
 case $_o in
 *" none 0") ;;
 *) fail "with no state at all, --all said [$_o]" ;;

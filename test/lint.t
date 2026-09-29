@@ -41,7 +41,7 @@ _name=lint
 . "$(dirname "$0")/harness_lib"
 
 command -v shellcheck >/dev/null 2>&1 || {
-	printf 'skip %s (no shellcheck)\n' "$_name"; exit 0; }
+  printf 'skip %s (no shellcheck)\n' "$_name"; exit 0; }
 
 # Every shell file, found by EXTENSION or by SHEBANG -- most of mux's programs
 # are extensionless (bin/mux, libexec/mux-check), so a glob alone would miss
@@ -49,22 +49,22 @@ command -v shellcheck >/dev/null 2>&1 || {
 _list=$T/files
 : >"$_list"
 find "$HERE/bin" "$HERE/libexec" "$HERE/test" "$HERE/share" "$HERE/indicator" \
-	-type f 2>/dev/null | LC_ALL=C sort | while IFS= read -r _f; do
-	case $_f in
-	# NOT SELECTED BY `.sh`, deliberately. A suffix-keyed selector SILENTLY
-	# SHRINKS the moment something is renamed -- the corpus gets smaller, the
-	# test still passes, and nothing says so. Measured before removing it:
-	# every sourced lib in this tree carries `#!/bin/sh`, and so does every
-	# `.t`, so the shebang arm below already covers them and the suffix was
-	# never what made them visible. Now the selector cannot go stale when a
-	# name changes, which is the property the count assertion below wants.
-	*.py|*.tmux|*.md|*.toml|*.json|*.yaml|*/.git/*) ;;
-	*)	# A shebang naming sh/dash/bash, and nothing else.
-		case "$(head -c 64 -- "$_f" 2>/dev/null | head -1)" in
-		'#!'*/sh|'#!'*/dash|'#!'*/bash|'#!'*env\ sh|'#!'*env\ dash)
-			printf '%s\n' "$_f" ;;
-		esac ;;
-	esac
+  -type f 2>/dev/null | LC_ALL=C sort | while IFS= read -r _f; do
+  case $_f in
+  # NOT SELECTED BY `.sh`, deliberately. A suffix-keyed selector SILENTLY
+  # SHRINKS the moment something is renamed -- the corpus gets smaller, the
+  # test still passes, and nothing says so. Measured before removing it:
+  # every sourced lib in this tree carries `#!/bin/sh`, and so does every
+  # `.t`, so the shebang arm below already covers them and the suffix was
+  # never what made them visible. Now the selector cannot go stale when a
+  # name changes, which is the property the count assertion below wants.
+  *.py|*.tmux|*.md|*.toml|*.json|*.yaml|*/.git/*) ;;
+  *)	# A shebang naming sh/dash/bash, and nothing else.
+    case "$(head -c 64 -- "$_f" 2>/dev/null | head -1)" in
+    '#!'*/sh|'#!'*/dash|'#!'*/bash|'#!'*env\ sh|'#!'*env\ dash)
+      printf '%s\n' "$_f" ;;
+    esac ;;
+  esac
 done >>"$_list"
 printf '%s\n' "$HERE/setup.sh" "$HERE/indicator/setup.sh" >>"$_list"
 LC_ALL=C sort -u "$_list" -o "$_list"
@@ -93,14 +93,14 @@ _out=$T/out
 # to stop making). -0 rather than GNU's -d '\n': BSD xargs has the former and
 # not the latter, and shellcheck runs on machines that are not Linux.
 ( cd "$HERE" && tr '\n' '\0' <"$_list" \
-	| xargs -0 shellcheck -s sh -f gcc -- ) >"$_out" 2>&1 || true
+  | xargs -0 shellcheck -s sh -f gcc -- ) >"$_out" 2>&1 || true
 if [ -s "$_out" ]; then
-	printf 'FAIL %s: shellcheck found %s issue(s) across %s files:\n' \
-		"$_name" "$(wc -l <"$_out")" "$_n" >&2
-	sed 's|^'"$HERE"'/||' "$_out" >&2
-	printf '\nFix it, or -- if it is intentional -- add an inline\n' >&2
-	printf '# shellcheck disable=SCxxxx with the reason at the site.\n' >&2
-	exit 1
+  printf 'FAIL %s: shellcheck found %s issue(s) across %s files:\n' \
+    "$_name" "$(wc -l <"$_out")" "$_n" >&2
+  sed 's|^'"$HERE"'/||' "$_out" >&2
+  printf '\nFix it, or -- if it is intentional -- add an inline\n' >&2
+  printf '# shellcheck disable=SCxxxx with the reason at the site.\n' >&2
+  exit 1
 fi
 
 # --- a rule shellcheck does not have: redirection ORDER --------------------
@@ -134,14 +134,14 @@ _bad=$T/order
 # which describe the bad shape and would otherwise report this file. A line
 # with a TRAILING comment is still checked; only a comment-only line is not.
 ( cd "$HERE" && grep -rnE \
-	'<[^ <]+ +2>/dev/null|>>?["'"'"'$][^ ]* +2>/dev/null' \
-	bin libexec test share setup.sh 2>/dev/null \
-	| grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' ) >"$_bad" || true
+  '<[^ <]+ +2>/dev/null|>>?["'"'"'$][^ ]* +2>/dev/null' \
+  bin libexec test share setup.sh 2>/dev/null \
+  | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' ) >"$_bad" || true
 if [ -s "$_bad" ]; then
-	printf 'FAIL %s: redirect BEFORE its 2>/dev/null:\n' "$_name" >&2
-	sed 's/^/  /' "$_bad" >&2
-	printf 'Put 2>/dev/null first; it does not silence a failing open.\n' >&2
-	exit 1
+  printf 'FAIL %s: redirect BEFORE its 2>/dev/null:\n' "$_name" >&2
+  sed 's/^/  /' "$_bad" >&2
+  printf 'Put 2>/dev/null first; it does not silence a failing open.\n' >&2
+  exit 1
 fi
 
 # --- a grep PATTERN that came from a name needs `--` ---------------------
@@ -160,16 +160,16 @@ fi
 # before it. A literal pattern is fine, and so is one already guarded.
 _dash=$T/dashgrep
 ( cd "$HERE" && grep -rnE \
-	'grep( +-[a-zA-Z]+)* +"\$' \
-	bin libexec share setup.sh 2>/dev/null \
-	| grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' \
-	| grep -vE 'grep( +-[a-zA-Z]+)* +-- ' ) >"$_dash" || true
+  'grep( +-[a-zA-Z]+)* +"\$' \
+  bin libexec share setup.sh 2>/dev/null \
+  | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' \
+  | grep -vE 'grep( +-[a-zA-Z]+)* +-- ' ) >"$_dash" || true
 if [ -s "$_dash" ]; then
-	printf 'FAIL %s: grep pattern from a variable, with no `--`:\n' "$_name" >&2
-	sed 's/^/  /' "$_dash" >&2
-	printf 'A name starting with `-` is read as OPTIONS.\n' >&2
-	printf 'Write it as: grep -qxF -- "$x"\n' >&2
-	exit 1
+  printf 'FAIL %s: grep pattern from a variable, with no `--`:\n' "$_name" >&2
+  sed 's/^/  /' "$_dash" >&2
+  printf 'A name starting with `-` is read as OPTIONS.\n' >&2
+  printf 'Write it as: grep -qxF -- "$x"\n' >&2
+  exit 1
 fi
 
 # --- the exit-code contract, mechanically -------------------------------
@@ -207,41 +207,41 @@ fi
 # invent a fourth code; a rule of its own does not.
 _ec=$T/exitcodes
 ( cd "$HERE" && grep -rnE '\bexit [0-9]+' bin libexec share setup.sh \
-	2>/dev/null | grep -vE '\bexit [0123]\b' \
-	| grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' \
-	| grep -vE '^share/(latch|indicator)/' ) >"$_ec" || true
+  2>/dev/null | grep -vE '\bexit [0123]\b' \
+  | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' \
+  | grep -vE '^share/(latch|indicator)/' ) >"$_ec" || true
 if [ -s "$_ec" ]; then
-	printf 'FAIL %s: an exit code outside the 0/1/2 contract:\n' "$_name" >&2
-	sed 's/^/  /' "$_ec" >&2
-	printf 'mux exits 0 (answered), 1 (refused, reason on stderr),\n' >&2
-	printf '2 (usage/unknown verb) or 3 (the name is not known here).\n' >&2
-	printf 'Anything else makes 255 and 127 ambiguous for a remote\n' >&2
-	printf 'caller. See test/mux-exit.t.\n' >&2
-	exit 1
+  printf 'FAIL %s: an exit code outside the 0/1/2 contract:\n' "$_name" >&2
+  sed 's/^/  /' "$_ec" >&2
+  printf 'mux exits 0 (answered), 1 (refused, reason on stderr),\n' >&2
+  printf '2 (usage/unknown verb) or 3 (the name is not known here).\n' >&2
+  printf 'Anything else makes 255 and 127 ambiguous for a remote\n' >&2
+  printf 'caller. See test/mux-exit.t.\n' >&2
+  exit 1
 fi
 
 # --- the HOOK contract: a latch hook answers 0, 1 or 78, and nothing else ---
 _hc=$T/hookcodes
 ( cd "$HERE" && grep -rnE '\bexit [0-9]+' share/latch share/indicator \
-	2>/dev/null \
-	| grep -vE '\bexit (0|1|78)\b' \
-	| grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' ) >"$_hc" || true
+  2>/dev/null \
+  | grep -vE '\bexit (0|1|78)\b' \
+  | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' ) >"$_hc" || true
 if [ -s "$_hc" ]; then
-	printf 'FAIL %s: a hook used an exit code outside 0/1/78:\n' \
-		"$_name" >&2
-	sed 's/^/  /' "$_hc" >&2
-	printf 'A hook answers 0 (yes), 1 (no) or 78 (cannot tell). A fourth\n' >&2
-	printf 'code is read as "cannot tell" by latch, so it is silently\n' >&2
-	printf 'indistinguishable from 78 and says something it does not mean.\n' >&2
-	exit 1
+  printf 'FAIL %s: a hook used an exit code outside 0/1/78:\n' \
+    "$_name" >&2
+  sed 's/^/  /' "$_hc" >&2
+  printf 'A hook answers 0 (yes), 1 (no) or 78 (cannot tell). A fourth\n' >&2
+  printf 'code is read as "cannot tell" by latch, so it is silently\n' >&2
+  printf 'indistinguishable from 78 and says something it does not mean.\n' >&2
+  exit 1
 fi
 
 # Every shipped hook must be EXECUTABLE. A hook that is present and unrunnable
 # resolves by name, then fails to run, and latch reports the state it could not
 # determine rather than the install that is broken.
 for _h in "$HERE"/share/latch/* "$HERE"/share/indicator/*; do
-	[ -e "$_h" ] || continue
-	[ -x "$_h" ] || fail "$(basename "$_h") is not executable;
+  [ -e "$_h" ] || continue
+  [ -x "$_h" ] || fail "$(basename "$_h") is not executable;
 a hook that cannot run is a hook latch resolves and then cannot use"
 done
 
@@ -261,19 +261,19 @@ done
 # A COMMAND THAT IS NOT EXECUTABLE is the failure that actually happens: it
 # resolves by name through the dispatcher, then cannot run.
 for _f in "$HERE"/libexec/*; do
-	[ -f "$_f" ] || continue
-	case $_f in
-	*_lib)
-		[ ! -x "$_f" ] || fail "$(basename "$_f") is a sourced library and
+  [ -f "$_f" ] || continue
+  case $_f in
+  *_lib)
+    [ ! -x "$_f" ] || fail "$(basename "$_f") is a sourced library and
 is EXECUTABLE. The bit is a lie: running it does nothing useful, and mux asserts
 the opposite everywhere else in this directory."
-		;;
-	*)
-		[ -x "$_f" ] || fail "$(basename "$_f") is a command and is NOT
+    ;;
+  *)
+    [ -x "$_f" ] || fail "$(basename "$_f") is a command and is NOT
 executable. It resolves by name through the dispatcher and then fails to run,
 which reads as a missing feature rather than a broken install."
-		;;
-	esac
+    ;;
+  esac
 done
 
 printf 'ok   %s (%s files clean)\n' "$_name" "$_n"

@@ -20,8 +20,8 @@ _name=mux-edit
 mkdir -p "$T/conf" "$T/ed"
 # ed NAME BODY : a scratch $EDITOR that rewrites the draft with BODY.
 ed() {
-	printf '#!/bin/sh\n%s\n' "$2" >"$T/ed/$1"
-	chmod +x "$T/ed/$1"
+  printf '#!/bin/sh\n%s\n' "$2" >"$T/ed/$1"
+  chmod +x "$T/ed/$1"
 }
 ed show    'cat "$1"'
 ed green   'printf "theme green\n" > "$1"'
@@ -33,8 +33,8 @@ ed empty   ': > "$1"'
 ed fail    'exit 1'
 
 edit() {  # EDITOR NAME
-	env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" MUX_CACHE="$T/cache" \
-		EDITOR="$T/ed/$1" "$HERE/bin/mux" edit "$2" 2>&1
+  env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" MUX_CACHE="$T/cache" \
+    EDITOR="$T/ed/$1" "$HERE/bin/mux" edit "$2" 2>&1
 }
 row() { grep "^$1 " "$T/conf/profiles" 2>/dev/null || true; }
 # STATE, not cache: a draft is work you typed and nothing rebuilds it, so a
@@ -42,7 +42,7 @@ row() { grep "^$1 " "$T/conf/profiles" 2>/dev/null || true; }
 draft() { printf '%s/state/edit/%s.profile' "$T" "$1"; }
 
 printf 'api         theme=cyan root=/tmp/api\nweb         theme=red\n' \
-	>"$T/conf/profiles"
+  >"$T/conf/profiles"
 
 # --- the draft is the row, in breakout syntax -------------------------------
 _seen=$(edit show api)
@@ -64,25 +64,25 @@ esac
 [ ! -f "$(draft api)" ] || fail "a successful save left its draft behind"
 # The row keeps its POSITION, so an edit does not churn the file.
 [ "$(awk 'NR==1{print $1}' "$T/conf/profiles")" = api ] \
-	|| fail "the edited row moved in the file"
+  || fail "the edited row moved in the file"
 
 # --- a comment promotes to a breakout, and the row goes ---------------------
 _o=$(edit comment web) || fail "promoting failed"
 case $_o in *profiles.d/web.profile*) ;; *) fail "no promotion reported" ;; esac
 [ -f "$T/conf/profiles.d/web.profile" ] || fail "no breakout file written"
 grep -q '^# why this one is special' "$T/conf/profiles.d/web.profile" \
-	|| fail "promotion dropped the comment it was triggered by"
+  || fail "promotion dropped the comment it was triggered by"
 [ -z "$(row web)" ] || fail "the row survived promotion; a name is in both"
 
 # --- a value with a space promotes too, being the other thing a row can't do -
 edit spacey api >/dev/null || fail "promoting a spaced value failed"
 grep -q '^root /tmp/has space' "$T/conf/profiles.d/api.profile" \
-	|| fail "the spaced value was not preserved"
+  || fail "the spaced value was not preserved"
 
 # --- an already-promoted name is edited in place, with no draft -------------
 edit green web >/dev/null || fail "editing a breakout failed"
 grep -q '^theme green' "$T/conf/profiles.d/web.profile" \
-	|| fail "editing a breakout did not write through"
+  || fail "editing a breakout did not write through"
 [ ! -f "$(draft web)" ] || fail "editing a breakout created a draft"
 
 # --- an unparseable draft is kept, named, and non-zero ----------------------

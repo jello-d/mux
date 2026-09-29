@@ -29,12 +29,12 @@ _o=$(mux skill) || fail "mux skill failed: $_o"
 case $_o in
 '---'*) ;;
 *) fail "the skill must open with YAML frontmatter, got: $(printf '%s' "$_o" \
-	| head -1)" ;;
+  | head -1)" ;;
 esac
 printf '%s\n' "$_o" | grep -q '^name: mux-agent$' \
-	|| fail "the frontmatter has no name:"
+  || fail "the frontmatter has no name:"
 printf '%s\n' "$_o" | grep -q '^description:' \
-	|| fail "the frontmatter has no description: -- which is what an agent
+  || fail "the frontmatter has no description: -- which is what an agent
 harness matches on to decide the skill is relevant, so without it the file is
 installed and never triggers"
 
@@ -44,9 +44,9 @@ installed and never triggers"
 # installs, nothing errors, and the skill never triggers. Skipped where pyyaml
 # is absent rather than assumed present.
 if python3 -c 'import yaml' 2>/dev/null; then
-	printf '%s\n' "$_o" >"$T/skill.md"
-	MUX_T_SKILL=$T/skill.md "$HERE/test/frontmatter" \
-		|| fail "the frontmatter did not parse as a harness would read it"
+  printf '%s\n' "$_o" >"$T/skill.md"
+  MUX_T_SKILL=$T/skill.md "$HERE/test/frontmatter" \
+    || fail "the frontmatter did not parse as a harness would read it"
 fi
 
 # --- THE TWO FORMS ARE ONE DOCUMENT ---------------------------------------
@@ -69,7 +69,7 @@ conventions will come to disagree about what mux refuses."
 # ... and BEGINS with the frontmatter file, between markers. Asserted from the
 # shipped file rather than a copy typed here, for the same reason.
 { echo '---'; cat "$HERE/share/skills/mux-agent/frontmatter.yaml"
-	echo '---'; } >"$T/want-front"
+  echo '---'; } >"$T/want-front"
 printf '%s\n' "$_o" | head -n "$(wc -l <"$T/want-front")" >"$T/got-front"
 cmp -s "$T/got-front" "$T/want-front" || fail "the composed skill does not
 open with the shipped frontmatter"
@@ -86,7 +86,7 @@ being injected between them"
 # read; an AGENTS.md is in context for every turn in that repository, including
 # turns with no tmux anywhere. An unconditional premise is a false one.
 printf '%s\n' "$_plain" | grep -q 'TMUX' \
-	|| fail "the AGENTS.md form never says how to tell whether it applies,
+  || fail "the AGENTS.md form never says how to tell whether it applies,
 so an agent in a repo with no tmux reads it as instructions anyway"
 
 # --- A MISSING FRONTMATTER IS FATAL, NOT AN OMISSION ----------------------
@@ -130,11 +130,11 @@ esac
 # A NAME BECOMES A PATH, so it is checked before it is one. Without this the
 # argument is a traversal and the verb happily prints any readable file.
 for _bad in ../../etc/passwd /etc/passwd 'mux agent' UPPER -dash; do
-	_rc=0; _o=$(mux skill "$_bad" 2>&1) || _rc=$?
-	[ "$_rc" = 2 ] || fail "[$_bad] should be a usage error (2), got $_rc"
-	case $_o in
-	*root:*|*bin/sh*) fail "a traversal READ A FILE: [$_o]" ;;
-	esac
+  _rc=0; _o=$(mux skill "$_bad" 2>&1) || _rc=$?
+  [ "$_rc" = 2 ] || fail "[$_bad] should be a usage error (2), got $_rc"
+  case $_o in
+  *root:*|*bin/sh*) fail "a traversal READ A FILE: [$_o]" ;;
+  esac
 done
 
 _rc=0; mux skill --help >/dev/null 2>&1 || _rc=$?
@@ -157,33 +157,33 @@ esac
 # for.
 _skill=$(mux skill)
 _sub=$(awk '/^case \$_verb in$/,/^esac$/' "$HERE/libexec/mux-agent" \
-	| grep -oE '^[a-z][a-z|-]*\)' | tr -d ')' | tr '|' '\n' | grep .)
+  | grep -oE '^[a-z][a-z|-]*\)' | tr -d ')' | tr '|' '\n' | grep .)
 [ -n "$_sub" ] || fail "no sub-verbs discovered; the scrape is broken and this
 guard proves nothing"
 for _v in $_sub; do
-	printf '%s\n' "$_skill" | grep -q "mux agent $_v" \
-		|| fail "the skill never mentions \`mux agent $_v\`, so an agent
+  printf '%s\n' "$_skill" | grep -q "mux agent $_v" \
+    || fail "the skill never mentions \`mux agent $_v\`, so an agent
 reading it does not know the verb exists. Teach it, or take the verb out."
 done
 
 # ... and every verb it CLAIMS must exist, which is the direction that breaks a
 # call rather than merely hiding one.
 for _v in $(printf '%s\n' "$_skill" | grep -oE 'mux agent [a-z-]+' \
-		| awk '{print $3}' | sort -u); do
-	case " $(printf '%s\n' "$_sub" | tr '\n' ' ') " in
-	*" $_v "*) ;;
-	*) fail "the skill teaches \`mux agent $_v\`, which this mux does not
+    | awk '{print $3}' | sort -u); do
+  case " $(printf '%s\n' "$_sub" | tr '\n' ' ') " in
+  *" $_v "*) ;;
+  *) fail "the skill teaches \`mux agent $_v\`, which this mux does not
 have. An agent following it would make a call that fails." ;;
-	esac
+  esac
 done
 
 # THE FLAGS IT NAMES MUST PARSE. A skill that teaches a flag the verb rejects
 # is worse than one that omits it: the agent composes the call, gets exit 2,
 # and has no way to tell a typo from a version skew.
 for _f in $(printf '%s\n' "$_skill" | grep -oE '(^|[ `])--[a-z][a-z-]*' \
-		| tr -d ' `' | sort -u); do
-	grep -q -- "$_f)" "$HERE/libexec/mux-agent" \
-		|| fail "the skill names $_f, which libexec/mux-agent does not
+    | tr -d ' `' | sort -u); do
+  grep -q -- "$_f)" "$HERE/libexec/mux-agent" \
+    || fail "the skill names $_f, which libexec/mux-agent does not
 parse"
 done
 
@@ -195,22 +195,22 @@ done
 # partition an isolation boundary, so that sentence is asserted against the
 # verbs themselves.
 for _v in status peers; do
-	for _f in --all "--partition global"; do
-		# shellcheck disable=SC2086   # a flag and its value, split
-		_o=$(mux agent $_v $_f 2>&1) || true
-		case $_o in
-		*'"status":"usage"'*) fail "the skill says \`mux agent $_v\` takes
+  for _f in --all "--partition global"; do
+    # shellcheck disable=SC2086   # a flag and its value, split
+    _o=$(mux agent $_v $_f 2>&1) || true
+    case $_o in
+    *'"status":"usage"'*) fail "the skill says \`mux agent $_v\` takes
 $_f, and the verb answers a usage error: [$_o]" ;;
-		esac
-	done
+    esac
+  done
 done
 
 # THE STATES IT NAMES ARE THE STATES MUX EMITS. This one has bitten the
 # project before at one remove: the doctor gave advice that could not come
 # true because a contract had moved under it.
 for _st in blocked working idle; do
-	printf '%s\n' "$_skill" | grep -q "$_st" \
-		|| fail "the skill never mentions the state $_st"
+  printf '%s\n' "$_skill" | grep -q "$_st" \
+    || fail "the skill never mentions the state $_st"
 done
 
 # THE EXIT CODES IT DOCUMENTS ARE MUX'S FOUR. The absence of every other one
@@ -218,20 +218,20 @@ done
 # precisely because mux never emits them -- so a skill teaching a fifth would
 # be teaching a caller to mis-attribute a transport failure.
 for _s in ok refused timed-out usage no-such-name; do
-	printf '%s\n' "$_skill" | grep -q "$_s" \
-		|| fail "the skill does not document the status \`$_s\`"
+  printf '%s\n' "$_skill" | grep -q "$_s" \
+    || fail "the skill does not document the status \`$_s\`"
 done
 
 # AND THE RULE THAT MATTERS IS IN IT. Everything else here is upkeep; this is
 # the reason the file ships at all.
 printf '%s\n' "$_skill" | grep -qi 'never answer' \
-	|| fail "the skill does not tell an agent never to answer another
+  || fail "the skill does not tell an agent never to answer another
 agent's permission prompt, which is the one thing it exists to say"
 printf '%s\n' "$_skill" | grep -q -- '--answer-prompt' \
-	|| fail "the skill does not explain the override it must not take
+  || fail "the skill does not explain the override it must not take
 without one"
 printf '%s\n' "$_skill" | grep -qi 'tell the human' \
-	|| fail "the skill does not say what to do INSTEAD, and a rule with no
+  || fail "the skill does not say what to do INSTEAD, and a rule with no
 alternative is one an agent works around"
 
 pass

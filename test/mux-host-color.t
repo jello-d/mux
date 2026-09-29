@@ -22,14 +22,14 @@ _name=mux-host-color
 
 mkdir -p "$T/conf"
 hc() {   # [host] -> stdout
-	env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" MUX_CACHE="$T/cache" \
-		"$HERE/bin/mux" host-color "$@" 2>/dev/null
+  env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" MUX_CACHE="$T/cache" \
+    "$HERE/bin/mux" host-color "$@" 2>/dev/null
 }
 rc() {   # [host] -> exit code
-	_r=0
-	env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" MUX_CACHE="$T/cache" \
-		"$HERE/bin/mux" host-color "$@" >/dev/null 2>&1 || _r=$?
-	echo "$_r"
+  _r=0
+  env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" MUX_CACHE="$T/cache" \
+    "$HERE/bin/mux" host-color "$@" >/dev/null 2>&1 || _r=$?
+  echo "$_r"
 }
 eq() { [ "$2" = "$3" ] || fail "$1: got [$2] want [$3]"; }
 
@@ -71,7 +71,7 @@ case $_u in
 esac
 eq stable "$(hc some-unlisted-host)" "$_u"
 [ "$(hc other-unlisted-host)" != "$_u" ] \
-	|| fail "two different names landed on the same pair. Not fatal (there are
+  || fail "two different names landed on the same pair. Not fatal (there are
 only eight), but if EVERY name collided the derivation would be broken, and
 this is the cheapest way to notice."
 
@@ -79,10 +79,10 @@ this is the cheapest way to notice."
 # The pair exists so text is legible on its own background. A pair whose fg
 # equals its bg is invisible, and the tray would draw a blank tile.
 for _h in greybox creambox cubebox zerobox some-unlisted-host a b c d e f g; do
-	_p=$(hc "$_h") || continue
-	_f=${_p%% *}; _b=${_p##* }
-	[ "$_f" != "$_b" ] \
-		|| fail "$_h resolved to fg == bg ($_f): a tile drawn with that
+  _p=$(hc "$_h") || continue
+  _f=${_p%% *}; _b=${_p##* }
+  [ "$_f" != "$_b" ] \
+    || fail "$_h resolved to fg == bg ($_f): a tile drawn with that
 pair has invisible ink"
 done
 
@@ -97,7 +97,7 @@ eq refuses-quietly "$(hc ansibox)" ""
 
 # ... and the refusal SAYS why and what to do, since the fix is a config edit.
 _err=$(env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" MUX_CACHE="$T/cache" \
-	"$HERE/bin/mux" host-color ansibox 2>&1 >/dev/null || true)
+  "$HERE/bin/mux" host-color ansibox 2>&1 >/dev/null || true)
 case $_err in
 *"0-15"*) ;;
 *) fail "the refusal must explain that 0-15 has no fixed value, got:
@@ -114,12 +114,12 @@ esac
 # carries no tmux at all here: if the verb reaches for one, it fails.
 mkdir -p "$T/bin"
 for _c in sed awk grep cut tr cksum hostname printf cat dirname \
-		readlink basename command; do
-	_p=$(command -v "$_c" 2>/dev/null) && ln -sf "$_p" "$T/bin/$_c"
+    readlink basename command; do
+  _p=$(command -v "$_c" 2>/dev/null) && ln -sf "$_p" "$T/bin/$_c"
 done
 _o=$(env -i PATH="$T/bin" HOME="$HOME" MUX_DIR="$T/conf" \
-	MUX_CACHE="$T/cache" "$HERE/bin/mux" host-color greybox 2>&1) \
-	|| fail "host-color needs something PATH did not have: $_o"
+  MUX_CACHE="$T/cache" "$HERE/bin/mux" host-color greybox 2>&1) \
+  || fail "host-color needs something PATH did not have: $_o"
 eq no-tmux "$_o" "#d0d0d0 #303030"
 
 pass
