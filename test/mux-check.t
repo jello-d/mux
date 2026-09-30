@@ -181,9 +181,9 @@ printf '#!/bin/sh\nexit 0\n' >"$T/bin/notify-send"
 chmod +x "$T/bin/notify-send"
 
 # Both overrides set is a supported path; half an override is a mistake.
-check MUX_NOTIFY_SEND=/bin/true MUX_NOTIFY_CLOSE=/bin/true >/dev/null
+check MUX_NOTIFY_SEND=true MUX_NOTIFY_CLOSE=true >/dev/null
 has "notifications overridden" "the override pair was not recognised"
-check MUX_NOTIFY_SEND=/bin/true >/dev/null
+check MUX_NOTIFY_SEND=true >/dev/null
 has "together, or neither" "half an override was not called out"
 
 # --- the product WORKING, not merely installed ----------------------------

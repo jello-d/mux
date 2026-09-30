@@ -45,13 +45,13 @@ PATH=$T/bin:$PATH; export PATH
 
 mux() {
   ( cd "$T/proj" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
-    MUX_CACHE="$T/cache" EDITOR=/bin/true \
+    MUX_CACHE="$T/cache" EDITOR=true \
     "$HERE/bin/mux" "$@" </dev/null ) 2>&1
 }
 rc() {   # run, print the exit code
   _r=0
   ( cd "$T/proj" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" \
-    MUX_CACHE="$T/cache" EDITOR=/bin/true \
+    MUX_CACHE="$T/cache" EDITOR=true \
     "$HERE/bin/mux" "$@" </dev/null ) >/dev/null 2>&1 || _r=$?
   echo "$_r"
 }

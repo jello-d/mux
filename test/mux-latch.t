@@ -363,7 +363,7 @@ _lo=$(env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" \
   MUX_SHARE="$HERE/share" \
   STATES="$STATES" TRIES="$TRIES" SCRIPT="$SCRIPT" \
   MUX_LATCH_TRANSPORT="$T/bin/transport %h %s" \
-  MUX_LATCH_AUTH=/bin/true \
+  MUX_LATCH_AUTH=true \
   MUX_LATCH_STATUS="$T/bin/status" \
   MUX_LATCH_SLEEP="$T/bin/nosleep" \
   MUX_LATCH_BACKOFF=1 MUX_LATCH_MAX_TRIES=3 \
@@ -474,7 +474,7 @@ amb() {   # -> stderr of a run with the given env
     ASKED="$ASKED" ALIVE="${A_ALIVE:-}" ALIVERC="${A_ALIVERC:-0}" \
     MSG="${A_MSG:-}" XRC="${A_XRC:-1}" \
     MUX_LATCH_TRANSPORT="$T/bin/ambig %h sh -lc %c" \
-    MUX_LATCH_AUTH=/bin/true MUX_LATCH_RESTORE=/bin/true \
+    MUX_LATCH_AUTH=true MUX_LATCH_RESTORE=true \
     MUX_LATCH_SLEEP="$T/bin/nosleep" MUX_LATCH_MAX_TRIES=1 \
     "$HERE/libexec/mux-latch" box k 2>&1 >/dev/null
 }
@@ -625,7 +625,7 @@ chmod +x "$T/bin/argv"
 env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
   TRIES="$TRIES" \
   MUX_LATCH_TRANSPORT="$T/bin/argv -t %h sh -lc %c" \
-  MUX_LATCH_AUTH=/bin/true MUX_LATCH_SLEEP="$T/bin/nosleep" \
+  MUX_LATCH_AUTH=true MUX_LATCH_SLEEP="$T/bin/nosleep" \
   MUX_LATCH_MAX_TRIES=1 \
   "$HERE/libexec/mux-latch" box proj >/dev/null 2>&1 || true
 _got=$(cat "$TRIES.argv" 2>/dev/null || true)
@@ -643,7 +643,7 @@ different command from the one latch composed."
 env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
   TRIES="$TRIES" \
   MUX_LATCH_TRANSPORT="$T/bin/argv -t %h sh -lc %q" \
-  MUX_LATCH_AUTH=/bin/true MUX_LATCH_SLEEP="$T/bin/nosleep" \
+  MUX_LATCH_AUTH=true MUX_LATCH_SLEEP="$T/bin/nosleep" \
   MUX_LATCH_MAX_TRIES=1 \
   "$HERE/libexec/mux-latch" box proj >/dev/null 2>&1 || true
 _got=$(cat "$TRIES.argv" 2>/dev/null || true)
@@ -727,7 +727,7 @@ printf '%s\n0\n' "$_drop" >"$SCRIPT"
 env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
   ORDER="$ORDER" SCRIPT="$SCRIPT" TRIES="$TRIES" \
   MUX_LATCH_TRANSPORT="$T/bin/transport %h %s" \
-  MUX_LATCH_AUTH=/bin/true \
+  MUX_LATCH_AUTH=true \
   MUX_LATCH_RESTORE="$T/bin/restore" \
   MUX_LATCH_STATUS="$T/bin/orderstatus" \
   MUX_LATCH_SLEEP="$T/bin/nosleep" \
@@ -758,7 +758,7 @@ printf '0\n' >"$SCRIPT"
 env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
   ORDER="$ORDER" SCRIPT="$SCRIPT" TRIES="$TRIES" \
   MUX_LATCH_TRANSPORT="$T/bin/transport %h %s" \
-  MUX_LATCH_AUTH=/bin/true \
+  MUX_LATCH_AUTH=true \
   MUX_LATCH_RESTORE="$T/bin/restore" \
   MUX_LATCH_SLEEP="$T/bin/nosleep" MUX_LATCH_MAX_TRIES=1 \
   "$HERE/libexec/mux-latch" box proj >/dev/null 2>&1 || true
@@ -789,7 +789,7 @@ sent() {   # <target> [session] -> the remote command latch composed
   env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
     CMDS="$CMDS" \
     MUX_LATCH_TRANSPORT="$T/bin/echocmd %h sh -lc %c" \
-    MUX_LATCH_AUTH=/bin/true MUX_LATCH_SLEEP="$T/bin/nosleep" \
+    MUX_LATCH_AUTH=true MUX_LATCH_SLEEP="$T/bin/nosleep" \
     MUX_LATCH_MAX_TRIES=1 \
     "$HERE/libexec/mux-latch" "$@" >/dev/null 2>&1 || true
   head -1 "$CMDS"
@@ -849,7 +849,7 @@ the same as a bare session, got [$(sent box :api)]"
 # with muscle memory.
 _orc=0
 env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
-  MUX_LATCH_TRANSPORT="$T/bin/echocmd %h sh -lc %c" MUX_LATCH_AUTH=/bin/true \
+  MUX_LATCH_TRANSPORT="$T/bin/echocmd %h sh -lc %c" MUX_LATCH_AUTH=true \
   MUX_LATCH_MAX_TRIES=1 "$HERE/libexec/mux-latch" box:work \
   >"$T/oldout" 2>&1 || _orc=$?
 [ "$_orc" = 2 ] || fail "the pre-0.84 target form must exit 2, got $_orc"
@@ -869,7 +869,7 @@ argv() {   # <template> <target> [session] -> the argv the transport got
   : >"$CMDS"
   _tpl=$1; shift
   env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
-    CMDS="$CMDS" MUX_LATCH_TRANSPORT="$_tpl" MUX_LATCH_AUTH=/bin/true \
+    CMDS="$CMDS" MUX_LATCH_TRANSPORT="$_tpl" MUX_LATCH_AUTH=true \
     MUX_LATCH_SLEEP="$T/bin/nosleep" MUX_LATCH_MAX_TRIES=1 \
     "$HERE/libexec/mux-latch" "$@" >/dev/null 2>&1 || true
   head -1 "$CMDS"
@@ -958,7 +958,7 @@ neg() {   # CAPRC CAPOUT -> the command used on the SECOND attempt
   env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
     CMDLOG="$CMDLOG" ONCE="$ONCE" CAPRC="$1" CAPOUT="$2" \
     MUX_LATCH_TRANSPORT="$T/bin/negotiate %h sh -lc %c" \
-    MUX_LATCH_AUTH=/bin/true \
+    MUX_LATCH_AUTH=true \
     MUX_LATCH_SLEEP="$T/bin/nosleep" \
     MUX_LATCH_BACKOFF=1 MUX_LATCH_MAX_TRIES=3 \
     "$HERE/libexec/mux-latch" box proj >/dev/null 2>&1 || true
@@ -992,7 +992,7 @@ creating form, not break. Wanted [mux go proj], got [$_got]"
 env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
   CMDLOG="$CMDLOG" ONCE="$ONCE" CAPRC=0 CAPOUT='attach-only 1' \
   MUX_LATCH_TRANSPORT="$T/bin/negotiate %h sh -lc %c" \
-  MUX_LATCH_AUTH=/bin/true MUX_LATCH_SLEEP="$T/bin/nosleep" \
+  MUX_LATCH_AUTH=true MUX_LATCH_SLEEP="$T/bin/nosleep" \
   MUX_LATCH_BACKOFF=1 MUX_LATCH_MAX_TRIES=1 \
   "$HERE/libexec/mux-latch" box proj >/dev/null 2>&1 || true
 _first=$(grep -v capabilities "$CMDLOG" | head -1)
@@ -1007,7 +1007,7 @@ attach-only. Wanted [mux go proj], got [$_first]"
 env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
   CMDLOG="$CMDLOG" ONCE="$ONCE" CAPRC=255 CAPOUT= DROPS=3 \
   MUX_LATCH_TRANSPORT="$T/bin/negotiate %h sh -lc %c" \
-  MUX_LATCH_AUTH=/bin/true MUX_LATCH_SLEEP="$T/bin/nosleep" \
+  MUX_LATCH_AUTH=true MUX_LATCH_SLEEP="$T/bin/nosleep" \
   MUX_LATCH_BACKOFF=1 MUX_LATCH_MAX_TRIES=4 \
   "$HERE/libexec/mux-latch" box proj >/dev/null 2>&1 || true
 [ "$(grep -c capabilities "$CMDLOG")" -ge 2 ] \
@@ -1024,7 +1024,7 @@ $(grep -c capabilities "$CMDLOG") time(s)."
 env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
   CMDLOG="$CMDLOG" ONCE="$ONCE" CAPRC=0 CAPOUT='attach-only 1' DROPS=3 \
   MUX_LATCH_TRANSPORT="$T/bin/negotiate %h sh -lc %c" \
-  MUX_LATCH_AUTH=/bin/true MUX_LATCH_SLEEP="$T/bin/nosleep" \
+  MUX_LATCH_AUTH=true MUX_LATCH_SLEEP="$T/bin/nosleep" \
   MUX_LATCH_BACKOFF=1 MUX_LATCH_MAX_TRIES=4 \
   "$HERE/libexec/mux-latch" box proj >/dev/null 2>&1 || true
 [ "$(grep -c capabilities "$CMDLOG")" = 1 ] \

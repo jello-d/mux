@@ -69,7 +69,7 @@ rc() {
   ( cd "$T/proj" && env -u MUX_SHARE -u TMUX PATH="$T/bin:$PATH" \
     XDG_CONFIG_HOME="$T/conf" XDG_RUNTIME_DIR="$T/run" \
     MUX_DIR="$T/conf" MUX_CACHE="$T/cache" \
-    EDITOR=/bin/true VISUAL=/bin/true \
+    EDITOR=true VISUAL=true \
     "$HERE/bin/mux" "$@" </dev/null ) >/dev/null 2>&1 \
     || _r=$?
   echo "$_r"
@@ -86,7 +86,7 @@ err() {
   ( cd "$T/proj" && env -u MUX_SHARE -u TMUX PATH="$T/bin:$PATH" \
     XDG_CONFIG_HOME="$T/conf" XDG_RUNTIME_DIR="$T/run" \
     MUX_DIR="$T/conf" MUX_CACHE="$T/cache" \
-    EDITOR=/bin/true VISUAL=/bin/true \
+    EDITOR=true VISUAL=true \
     "$HERE/bin/mux" "$@" </dev/null ) 2>&1 >/dev/null || true
 }
 # The same, but STDOUT. `mux why` reports there rather than on stderr, since a
@@ -95,7 +95,7 @@ out() {
   ( cd "$T/proj" && env -u MUX_SHARE -u TMUX PATH="$T/bin:$PATH" \
     XDG_CONFIG_HOME="$T/conf" XDG_RUNTIME_DIR="$T/run" \
     MUX_DIR="$T/conf" MUX_CACHE="$T/cache" \
-    EDITOR=/bin/true VISUAL=/bin/true \
+    EDITOR=true VISUAL=true \
     "$HERE/bin/mux" "$@" </dev/null ) 2>/dev/null || true
 }
 is() {   # <want> <got> <what>
