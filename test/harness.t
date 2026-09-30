@@ -19,39 +19,53 @@ set -eu
 _name=harness
 . "$(dirname "$0")/harness_lib"
 
-# --- AN UNUSABLE TMPDIR IS A REFUSAL, NEVER A GUESS -----------------------
-# Driven as a separate process from a scratch cwd, because the property under
-# test is about the CALLER'S directory and this test's own cwd is the repo.
-_c=$T/canary; mkdir -p "$_c"
-: >"$_c/DO_NOT_DELETE"
-cat >"$_c/probe.t" <<'EOF'
+# --- A SCRATCH DIR IT CANNOT VERIFY IS A REFUSAL, NEVER A GUESS -----------
+# DRIVEN BY A STUB `mktemp`, NOT BY A BOGUS TMPDIR, and the difference matters:
+# the first version pointed TMPDIR at a path that does not exist and asserted a
+# refusal, which asserts a fact about the PLATFORM'S mktemp rather than about
+# this guard. GNU mktemp fails there; BSD mktemp succeeds anyway, so the case
+# was green here and red on macOS for a reason that had nothing to do with the
+# code under test. Stub the tool and the test is about the guard.
+#
+# BOTH FAILURE SHAPES, because they are caught by different halves of it and the
+# second is the one that destroyed a working tree: an empty answer with a ZERO
+# exit slips straight past `||`.
+_c=$T/canary
+cat >"$T/probe.t" <<'EOF'
 #!/bin/sh
 set -eu
 _name=probe
 . "$HL"
 pass
 EOF
+for _shape in 'exit 1' 'exit 0'; do
+  rm -rf "$_c"; mkdir -p "$_c/bin"
+  : >"$_c/DO_NOT_DELETE"
+  # prints NOTHING, which is the shape that matters; the exit code varies.
+  { echo '#!/bin/sh'; echo "$_shape"; } >"$_c/bin/mktemp"
+  chmod +x "$_c/bin/mktemp"
+  _rc=0
+  _o=$(cd "$_c" && PATH=$_c/bin:$PATH HL=$HERE/test/harness_lib \
+    sh "$T/probe.t" 2>&1) || _rc=$?
 
-_rc=0
-_o=$(cd "$_c" && HL=$HERE/test/harness_lib TMPDIR=$T/nope sh probe.t 2>&1) \
-  || _rc=$?
+  # THE LOAD-BEARING ASSERTION, deliberately first: everything below is about
+  # how politely it declined.
+  [ -f "$_c/DO_NOT_DELETE" ] || fail "THE HARNESS DELETED ITS CALLER'S
+DIRECTORY (mktemp shape: $_shape). An unverifiable scratch dir resolves to the
+CURRENT directory and the EXIT trap removes it. That is how this repository was
+lost once."
 
-# THE LOAD-BEARING ASSERTION, and it is deliberately first: everything else
-# here is about how politely it declined.
-[ -f "$_c/DO_NOT_DELETE" ] || fail "THE HARNESS DELETED ITS CALLER'S DIRECTORY.
-With an unusable TMPDIR the scratch dir resolves to the CURRENT directory, and
-the EXIT trap removes it. That is how this repository was lost once."
-
-[ "$_rc" != 0 ] || fail "the harness accepted an unusable TMPDIR and reported
-success. It must refuse: everything it does afterwards assumes a private
-directory it is allowed to delete.
+  [ "$_rc" != 0 ] || fail "mktemp shape [$_shape]: the harness accepted a
+scratch dir it could not verify and reported success. Everything it does
+afterwards assumes a private directory it is allowed to delete.
 output: $_o"
 
-case $_o in
-*refusing*|*"mktemp -d failed"*) ;;
-*) fail "the refusal did not say why, so the next person sees a test that
-simply will not run: $_o" ;;
-esac
+  case $_o in
+  *refusing*|*"mktemp -d failed"*) ;;
+  *) fail "mktemp shape [$_shape]: the refusal did not say why, so the next
+person meets a test that simply will not run: $_o" ;;
+  esac
+done
 
 # --- THE SOCKET PATH FITS ON macOS ----------------------------------------
 # `sun_path` caps a unix socket path at 104 bytes there (108 on Linux), and
