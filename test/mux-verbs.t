@@ -176,8 +176,8 @@ esac
 #
 # script(1) supplies the pty. Skipped rather than failed where it is absent: the
 # package's stated floor is a shell and a checkout.
-if command -v script >/dev/null 2>&1; then
-  _pal=$(script -qc "env -u TMUX $HERE/bin/mux help palette" /dev/null \
+if [ -n "$T_PTY" ]; then
+  _pal=$(t_pty /dev/null "env -u TMUX $HERE/bin/mux help palette" \
     </dev/null 2>&1 || true)
   case $_pal in
   *"needs a terminal"*) fail "script(1) did not provide a pty" ;;
@@ -211,8 +211,8 @@ if command -v script >/dev/null 2>&1; then
 
   # An explicit FG applies to every cell, rather than the per-cell black
   # and white contrast the bare form picks.
-  _pf=$(script -qc "env -u TMUX $HERE/bin/mux help palette 226" \
-    /dev/null </dev/null 2>&1 || true)
+  _pf=$(t_pty /dev/null "env -u TMUX $HERE/bin/mux help palette 226" \
+    </dev/null 2>&1 || true)
   case $_pf in
   *"fg 226 over every bg"*) ;;
   *) fail "an explicit palette fg was not honoured: [$_pf]" ;;
@@ -225,9 +225,9 @@ if command -v script >/dev/null 2>&1; then
   # The status-bar PREVIEW form, which renders four chosen colours as the
   # bar would actually draw them. Reachable only through `test`, so it was
   # the last unexercised path in the file.
-  _pt=$(script -qc \
+  _pt=$(t_pty /dev/null \
     "env -u TMUX $HERE/bin/mux help palette test 231 54 16 214" \
-    /dev/null </dev/null 2>&1 || true)
+    </dev/null 2>&1 || true)
   case $_pt in
   *"bar fg=231 bg=54"*) ;;
   *) fail "the preview did not echo the bar colours: [$_pt]" ;;
@@ -246,9 +246,10 @@ fi
 # An unusable fg spec is refused with the accepted forms named, and exit 2,
 # not silently ignored, which would render a grid that answers a question you
 # did not ask.
-if command -v script >/dev/null 2>&1; then
-  _bad=$(script -qec "env -u TMUX $HERE/bin/mux help palette notacolour" \
-    /dev/null </dev/null 2>&1 || true)
+if [ -n "$T_PTY" ]; then
+  _bad=$(t_pty /dev/null \
+    "env -u TMUX $HERE/bin/mux help palette notacolour" \
+    </dev/null 2>&1 || true)
   case $_bad in
   *"0-255, colourN, #rrggbb"*) ;;
   *) fail "a bad palette fg was not explained: [$_bad]" ;;

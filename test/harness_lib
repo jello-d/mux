@@ -176,3 +176,47 @@ tmux_drop_socket() {   # [name]
   tmux -L "$_ds" kill-server 2>/dev/null || true
   rm -f "${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)/$_ds" 2>/dev/null || true
 }
+
+# --- a real PTY, on either userland ------------------------------------------
+# T_PTY says which `script(1)` this box has, and is EMPTY when there is none or
+# it is unusable. t_pty runs a command under a real pty, writing the typescript
+# to $1 and passing the child's output through on stdout, so a caller can read
+# either.
+#
+# WHY THIS IS A HELPER AND NOT SEVEN CALL SITES: `script -qc CMD FILE` is the
+# GNU util-linux spelling, and BSD script has NO `-c` at all: its form is
+# `script -q FILE command args...`, with the file FIRST and no shell. Seven
+# sites across three files used the GNU form, so `mux help palette`, `mux sane`
+# and latch's wait spinner ALL reported a false failure on macOS: "nothing was
+# captured from the pty run" and "the palette is missing the system 0-15 band"
+# are both this, not a product defect. Fix the class, not the instances.
+#
+# FEATURE-DETECTED, NOT KEYED ON `uname`: the question is whether this script
+# takes `-c`, and asking it directly cannot be wrong about a third userland.
+#
+# A FUNCTION, AND CALLED ONCE AT SOURCE TIME, so a test can re-run it against a
+# curated PATH. Without that the bsd arm below would be DARK on every box that
+# has GNU script, which is every box here: a seam stubbed at its caller leaves
+# the seam itself untested, and this suite has paid for that three times.
+t_pty_detect() {
+  T_PTY=
+  command -v script >/dev/null 2>&1 || return 0
+  if script -q -c true /dev/null >/dev/null 2>&1; then
+    T_PTY=gnu
+  elif script -q /dev/null true >/dev/null 2>&1; then
+    T_PTY=bsd
+  fi
+}
+t_pty_detect
+
+t_pty() {   # <typescript-file> <command string>
+  _tp_f=$1; _tp_c=$2
+  case $T_PTY in
+  gnu) script -q -c "$_tp_c" "$_tp_f" ;;
+  # A SHELL IS EXPLICIT HERE, because BSD script execs the command directly
+  # rather than handing it to a shell, so a command STRING (which every caller
+  # passes, some with a `;` in it) needs one.
+  bsd) script -q "$_tp_f" /bin/sh -c "$_tp_c" ;;
+  *)   return 127 ;;
+  esac
+}
