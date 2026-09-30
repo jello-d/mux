@@ -107,8 +107,14 @@ PY
 # surface is that a refusal is a DOCUMENT: `{"status":"usage",...}` names the
 # cause outright, so printing the exit code alone throws the answer away. macOS
 # CI reported `status-rc: got [2] want [0]` for days with it sitting in hand.
+# BOTH STREAMS, because they answer different questions here and `run` already
+# captures each: stdout is the CONTRACT (JSON, even on failure) and stderr is
+# where a failure BEFORE the JSON machinery lands. macOS reported `got [2]` with
+# an empty stdout, which says only "it never reached the document", and the
+# reason was sitting in $T/err unread.
 eq() { [ "$2" = "$3" ] || fail "$1: got [$2] want [$3]
-mux said: ${OUT:-<nothing>}"; }
+mux stdout: ${OUT:-<nothing>}
+mux stderr: $(cat "$T/err" 2>/dev/null || true)"; }
 
 # `read` is a mux VERB here, not the shell builtin, but shellcheck sees the
 # word after a wrapper function and assumes the builtin, at every call site.

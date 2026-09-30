@@ -145,6 +145,37 @@ if [ -s "$_bad" ]; then
   exit 1
 fi
 
+# --- A HARDCODED /bin/<tool> THAT macOS DOES NOT HAVE ----------------------
+# macOS `/bin` is a much smaller set than Linux's: no `true`, `false`, `grep`,
+# `sed`, `awk`, `tr`, `wc`, `head`, `tail`, `sort` or `cut`. Those live in
+# /usr/bin there.
+#
+# IT COST TWO macOS FAILURES. `MUX_LATCH_AUTH=/bin/true` in the latch tests made
+# latch refuse a named hook it could not resolve, which is mux behaving exactly
+# as designed (0.31: a NAMED hook that does not resolve exits 2 loudly), and the
+# tests reported it as latch refusing to attempt. Twenty-odd sites across five
+# files, all of them meaning "a command that succeeds and does nothing".
+#
+# THE BARE NAME IS THE FIX, and it is also the only portable one: `command -v
+# true` answers `true` in both dash and bash (the BUILTIN), so there is no
+# absolute path to compute. Every consumer here runs the value through a shell
+# or through latch's own resolver, both of which search PATH.
+#
+# /usr/bin/env IS NOT MATCHED, which the pattern has to be careful about: a
+# substring match on `/bin/env` hits every `#!/usr/bin/env` shebang in the tree.
+_hcb=$T/hardcoded
+( cd "$HERE" && grep -rnE \
+  '(^|[^rn])/bin/(true|false|grep|sed|awk|tr|wc|head|tail|sort|cut)\b' \
+  bin libexec test share setup.sh indicator 2>/dev/null \
+  | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' \
+  | grep -v '^test/lint\.t:' ) >"$_hcb" || true
+if [ -s "$_hcb" ]; then
+  printf 'FAIL %s: hardcoded /bin path macOS does not have:\n' "$_name" >&2
+  sed 's/^/  /' "$_hcb" >&2
+  printf 'Use the bare name; those tools are in /usr/bin on macOS.\n' >&2
+  exit 1
+fi
+
 # --- `wc -l` IN A STRING COMPARISON ----------------------------------------
 # BSD `wc` PADS ITS COUNT WITH SPACES, so `[ "$(... | wc -l)" = 2 ]` compares
 # `"       2"` with `"2"` as STRINGS: false on macOS, true here. Three of the
