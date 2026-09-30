@@ -119,8 +119,17 @@ touch "$FILES.sh" "$FILES.bash" "$FILES.py"
 d_cols() {   # <file> -> line numbers over 80 columns
   awk 'length > 80 { printf "%d ", FNR }' "$1"
 }
+# awk, NOT `grep -P`, AND THAT IS A PORTABILITY FIX WITH A HISTORY: BSD grep
+# has no -P at all, so on macOS this printed a usage block to the /dev/null
+# below, returned nothing, and the count read as 0 tabs. That is the exact
+# degradation the self-test section predicts in its own comment, and it took a
+# macOS CI runner to meet it. The tab is built with sprintf rather than written
+# as a backslash-t, because an escape inside a regex is the implementation's
+# business and a literal tab in a source line is an editor's.
 d_tabs() {   # <file> -> count of TAB-indented lines (0 when clean)
-  grep -cP '^[ ]*\t' "$1" 2>/dev/null || true
+  awk 'BEGIN { t = sprintf("%c", 9) }
+       $0 ~ "^ *" t { n++ }
+       END { print n + 0 }' "$1" 2>/dev/null || true
 }
 # The banned set is every dash a writer reaches for INSTEAD of punctuation, not
 # only the two that turned up first: figure dash, en, em, horizontal bar, the
@@ -129,10 +138,34 @@ d_tabs() {   # <file> -> count of TAB-indented lines (0 when clean)
 # invisible and so the worst of them. Measured across all 15 repos: no text file
 # holds any of these beyond U+2014/U+2013, so widening costs nothing today and
 # closes the hole before someone pastes one in.
-DASHES='\x{00AD}|\x{2010}|\x{2011}|\x{2012}|\x{2013}|\x{2014}'
-DASHES="$DASHES|\x{2015}|\x{2212}|\x{2E3A}|\x{2E3B}|\x{FF0D}"
+# python3, NOT `grep -P`, for the same reason d_tabs moved to awk: no BSD grep
+# has PCRE, so rule 7 reported EVERY file clean on macOS. python3 is not a new
+# dependency (rule 3 and the prose scan below already need it) and it is the
+# only tool here that can name a codepoint without the pattern depending on
+# the locale. An undecodable byte is REPLACED rather than raising: a file this
+# cannot decode is not a file with an em-dash in it, and the self-test is what
+# catches this going silent in either direction.
 d_dash() {   # <file> -> non-empty when a banned dash character is present
-  grep -oP "$DASHES" "$1" 2>/dev/null | head -1
+  python3 - "$1" <<'PYDASH'
+import sys
+BANNED = (
+    "\u00ad"                                    # SOFT HYPHEN: invisible,
+                                                # so the worst of them
+    "\u2010\u2011\u2012\u2013\u2014\u2015"  # hyphen .. horizontal bar
+    "\u2212"                                    # MINUS SIGN: identical to an
+                                                # em-dash in a comment
+    "\u2e3a\u2e3b"                             # two- and three-em dashes
+    "\uff0d"                                    # FULLWIDTH HYPHEN-MINUS
+)
+try:
+    text = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+except OSError:
+    sys.exit(0)
+for ch in text:
+    if ch in BANNED:
+        sys.stdout.write(ch)
+        break
+PYDASH
 }
 # ROFF SPELLS AN EM-DASH IN ASCII, so d_dash above can never see it: a
 # backslash then (em. It renders as a real em-dash in the man page a user
@@ -323,13 +356,20 @@ PY
 # --- the detectors are PROVEN TO FIRE, every run -----------------------------
 # Every rule above can only report what its detector detects, and four of them
 # lean on an external tool that may be missing or built without a feature:
-# grep -P needs PCRE, rule 3 needs python3, rule 8 needs dash and bash. EVERY
+# rules 2, 3 and 7 need python3 or awk, and rule 8 needs dash and bash. EVERY
 # ONE OF THOSE DEGRADED TO SILENCE. Measured, before this section existed:
 #
 #   python3 hidden      a planted 2-space Python indent -> rc=0, "10 python"
 #   grep without -P     a tabbed line -> count empty -> read as 0 tabs
 #   grep without -P     a real em-dash -> rule 7 never fires
 #   dash absent         a file that does not parse -> reported clean
+#
+# AND THE MIDDLE TWO WERE NOT HYPOTHETICAL. They shipped, and a macOS CI runner
+# met them on 2026-09-30: BSD grep has no -P, so rules 2 and 7 were enforcing
+# NOTHING on every Mac while this file reported its usual pass everywhere else.
+# THIS SECTION IS THE ONLY REASON ANYONE FOUND OUT, which is the argument for
+# proving a detector rather than trusting it. Both moved off PCRE (awk and
+# python3); the rows above are kept as the record of what was measured.
 #
 # A missing tool is therefore NOT tiptoed around, and not announced and skipped
 # either: each detector is run here against a sample that MUST trip it and a
@@ -445,8 +485,8 @@ if [ -n "$bad" ]; then
   echo >&2
   echo 'A detector above is not working, so NOTHING ELSE RAN: every rule' >&2
   echo 'below would report clean whether the tree is clean or not. Fix the' >&2
-  echo 'tool (grep needs -P/PCRE, rule 3 needs python3, rule 8 needs dash' >&2
-  echo 'and bash) rather than reading the result.' >&2
+  echo 'tool (rules 2/3/7 need python3 or awk, rule 8 needs dash and' >&2
+  echo 'bash) rather than reading the result.' >&2
   exit 1
 fi
 
