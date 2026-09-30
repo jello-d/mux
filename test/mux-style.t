@@ -47,7 +47,7 @@ case "$1 $2" in
 esac
 case "$*" in
 "show-options -qv -t "*)
-  _o=${*##* }
+  _o=$*; _o=${_o##* }
   awk -F'\t' -v k="$_o" '$1==k{print $2; exit}' "$OPTS" 2>/dev/null ;;
 "set-option -t "*)
   # set-option -t SESSION NAME VALUE

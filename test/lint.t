@@ -145,6 +145,37 @@ if [ -s "$_bad" ]; then
   exit 1
 fi
 
+# --- `${*##pat}` IS PER-ELEMENT IN bash AND JOINED IN dash -----------------
+# The single biggest macOS cluster this suite has had: SEVEN failing tests from
+# one idiom. Measured, `set -- has-session -t =api` in three shells:
+#
+#     dash           ${*##*=}  ->  [api]
+#     bash --posix   ${*##*=}  ->  [has-session -t api]
+#     bash           ${*##*=}  ->  [has-session -t api]
+#
+# POSIX says pattern removal on `$*`/`$@` applies to EACH parameter, so bash is
+# the conformant one and dash's join-first is the lenient reading. Every stub in
+# this suite wanted the joined reading, so all of them rested on an ambiguity
+# that only a second shell could expose: macOS `/bin/sh` IS bash, so a stub
+# answering `tmux has-session -t =api` returned the WHOLE ARGV as the session
+# name, grep found nothing, and mux correctly said `no such session: api`. Two
+# tests died silently and five failed, all of them reading as mux defects.
+#
+# `_j=$*` FIRST, THEN STRIP, is identical in all three. The rule rather than the
+# vigilance: a stub cannot call a harness helper (it is a separate script,
+# executed under its own shebang), so the only thing that stops this coming back
+# is a check.
+_star=$T/star
+( cd "$HERE" && grep -rn '\${\*[#%]' bin libexec test share setup.sh \
+  2>/dev/null | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' ) >"$_star" || true
+if [ -s "$_star" ]; then
+  printf 'FAIL %s: pattern removal directly on $*:\n' "$_name" >&2
+  sed 's/^/  /' "$_star" >&2
+  printf 'bash applies it PER PARAMETER and dash to the joined string.\n' >&2
+  printf 'Assign first: `_j=$*; _j=${_j##pat}`.\n' >&2
+  exit 1
+fi
+
 # --- a test may not REPLACE the harness's EXIT trap ------------------------
 # POSIX sh has no trap stack, so `trap '...' EXIT` in a test file silently
 # discards harness_lib's `rm -rf "$T"` and that run's whole scratch directory
