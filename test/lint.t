@@ -158,13 +158,26 @@ fi
 #
 # `t_trap 'CMD'` composes instead of replacing. This rule is what stops the
 # next test reintroducing it, since the failure is invisible by construction.
-# SCOPED TO THE `.t` FILES, which is the actual rule: only a file that SOURCES
-# the harness can discard its trap. `test/mutate` and `test/run` are drivers
-# with scratch dirs and traps of their own, and the first version of this check
-# reported the driver -- a rule wider than its reason.
+# SCOPED TO FILES THAT SOURCE THE HARNESS, which is the actual rule: only such
+# a file has a trap to discard. `test/mutate` and `test/run` are drivers with
+# scratch dirs and traps of their own, and the first version of this check
+# reported the driver, a rule wider than its reason.
+#
+# SCOPING BY THE `.t` SUFFIX WAS STILL TOO WIDE, for the same reason, and the
+# house conventions test is the case that proved it: test/conventions.t is
+# vendored byte-identical from ~/src/shared-notes/_conventions.t into thirteen
+# repos, so it is deliberately SELF-CONTAINED and sources no harness at all
+# (the thirteen expose four different harness APIs). Its own `trap ... EXIT`
+# cleans up its own mktemp files and can discard nothing, because it inherited
+# nothing. Reported by the suffix version the moment it was vendored here.
+#
+# So the predicate is the SOURCE LINE, not the name: 67 of 68 `.t` files here
+# source the harness and are checked; the one that does not is out of scope by
+# construction rather than by an exception anyone has to maintain.
 _bt=$T/traps
 : >"$_bt"
 for _f in "$HERE"/test/*.t; do
+  grep -qE '^[[:space:]]*\.[[:space:]].*harness' "$_f" 2>/dev/null || continue
   grep -nE "^[[:space:]]*trap[[:space:]].*EXIT" "$_f" 2>/dev/null \
     | sed "s|^|${_f#"$HERE"/}:|" >>"$_bt" || true
 done
