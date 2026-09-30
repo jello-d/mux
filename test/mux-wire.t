@@ -1,0 +1,184 @@
+#!/bin/sh
+# test/mux-wire.t - mux guarantees its own wiring on a server it acts on.
+#
+# WHY THIS EXISTS: until R10, a mux install was NOT complete on its own. The
+# fragment loaded only because the user's ~/.config/tmux/tmux.conf carried a
+# `source-file` line for it, and on the fleet mux was extracted from, that file
+# belongs to the PROVISIONER. Remove that project and mux's bindings, status
+# strip and hooks stop loading, while `mux reload` refused outright because it
+# required the same foreign file.
+#
+# THIS DRIVES A REAL TMUX, and that is not a preference. Every property here is
+# a property of tmux itself: whether sourcing into a RUNNING server is
+# equivalent to booting with it, whether a probe SPAWNS a server, and whether
+# re-sourcing an idempotent fragment is free. A stub would be a second model of
+# all three, and the stub is what would be wrong.
+#
+# It SKIPS where tmux is absent, the same as test/lint.t without shellcheck.
+set -eu
+_name=mux-wire
+. "$(dirname "$0")/harness_lib"
+
+command -v tmux >/dev/null 2>&1 || {
+  printf 'skip %s (no tmux)\n' "$_name"; exit 0; }
+
+MUX_SHARE=$HERE/share
+MUX_VERSION=$(sed -n 's/^MUX_VERSION=//p' "$HERE/bin/mux")
+[ -n "$MUX_VERSION" ] || fail "could not read MUX_VERSION out of bin/mux"
+PATH=$HERE/bin:$PATH; export PATH
+
+# THE FUNCTIONS ARE LIFTED OUT OF THE SOURCE rather than reimplemented, for the
+# reason mux-undo-pane.t gives about `_unquote`: a second copy in the test is a
+# second thing to drift. bin/mux is a command, so sourcing it would run it.
+eval "$(sed -n '/^mux_wire() {/,/^}/p' "$HERE/bin/mux")"
+eval "$(sed -n '/^_reload_one() {/,/^}/p' "$HERE/bin/mux")"
+
+SOCK=
+cleanup() { [ -z "$SOCK" ] || tmux_drop_socket "$SOCK"; }
+t_trap 'cleanup'
+
+# A server with NO config of any kind, which is the whole point: `-f /dev/null`
+# is the post-provisioner world, where nothing else sources mux.tmux.
+fresh() {
+  [ -z "$SOCK" ] || tmux_drop_socket "$SOCK"
+  SOCK=$(tmux_fresh_socket muxwire)
+  sock=$SOCK
+  env -u TMUX -u TMUX_PANE tmux -L "$SOCK" -f /dev/null \
+    new-session -d -s bare -x 120 -y 40
+}
+tm() { tmux -L "$sock" "$@"; }
+
+wired() {   # is mux's fragment in force on this server?
+  tmux -L "$SOCK" list-keys -T prefix u >/dev/null 2>&1
+}
+marker() { tmux -L "$SOCK" show-options -gqv @mux-wired 2>/dev/null || true; }
+
+# --- a server with no mux config at all gets fully wired ------------------
+# FOUR SEPARATE PROPERTIES, not one "it worked", because the fragment reaches
+# the server through four independent mechanisms and a single assertion would
+# be killed by none of them individually. This is the two-guards rule that
+# this package has now met seven times.
+fresh
+wired && fail "the bare server already had mux's bindings, so every
+assertion below would pass whatever mux_wire did"
+[ -z "$(marker)" ] \
+  || fail "a bare server already carries @mux-wired [$(marker)]"
+
+mux_wire || fail "mux_wire failed on a bare server"
+
+wired || fail "mux_wire did not install mux's key bindings"
+case $(tmux -L "$SOCK" show-options -gv status-right) in
+*mux*) ;;
+*) fail "mux_wire did not take over status-right, so the agent strip would
+never draw: [$(tmux -L "$SOCK" show-options -gv status-right)]" ;;
+esac
+_lh=$(tmux -L "$SOCK" show-hooks -g window-layout-changed 2>/dev/null | wc -l)
+[ "$_lh" -ge 4 ] || fail "mux_wire installed $_lh window-layout-changed hooks,
+so mux pin and the undo-pane trackers are absent"
+[ "$(marker)" = "$MUX_VERSION" ] \
+  || fail "the marker says [$(marker)], want [$MUX_VERSION]"
+
+# --- ALREADY WIRED AT THIS VERSION IS A SKIP -----------------------------
+# Asserted by REMOVING a binding and checking it stays removed, which is the
+# only observable difference between skipping and re-sourcing: the fragment is
+# idempotent, so a needless re-source is invisible to any other check.
+tmux -L "$SOCK" unbind -T prefix u
+mux_wire || fail "mux_wire failed on an already-wired server"
+wired && fail "mux_wire re-sourced a server already at $MUX_VERSION: the
+version marker is not being consulted, so every session-affecting verb pays a
+source-file it does not need"
+
+# --- A MARKER FROM AN OLDER MUX RE-SOURCES -------------------------------
+# THE STALENESS CASE, and it closes a bug this package shipped: `mux check`
+# once told a live server to source a fragment it had already sourced, because
+# the server predated a newly added binding and nothing could tell. A literal
+# marker would have the same hole; the version is what makes it detectable.
+tmux -L "$SOCK" set -g @mux-wired 0.01
+mux_wire || fail "mux_wire failed over a stale marker"
+wired || fail "mux_wire did not re-source a server whose marker (0.01) is
+older than this mux, so an upgrade leaves a live server on the old fragment"
+[ "$(marker)" = "$MUX_VERSION" ] \
+  || fail "the stale marker was not advanced: [$(marker)]"
+
+# --- THE PROBE MUST NOT CREATE A SERVER ----------------------------------
+# `mux check` had to stop using `list-keys` for exactly this: it SPAWNS a
+# server when none is running and then answers out of tmux's defaults. This
+# runs on paths where no server may exist yet, so a probe that creates one
+# would make mux the cause of the thing it is inspecting.
+_gone=$(tmux_fresh_socket muxwiregone)
+sock=$_gone
+mux_wire || fail "mux_wire must succeed (nothing to do) with no server"
+if tmux -L "$_gone" list-sessions >/dev/null 2>&1; then
+  tmux_drop_socket "$_gone"
+  fail "mux_wire SPAWNED a server just by probing it"
+fi
+tmux_drop_socket "$_gone"
+sock=$SOCK
+
+# --- A FAILED SOURCE IS LOUD, never a silent inert install ---------------
+# The worst outcome available here is mux installed and INERT: no strip, no
+# bindings, no hooks, and nothing on screen saying why. That is the state this
+# package's whole marker contract exists to make impossible.
+#
+# INDUCED WITH AN UNREADABLE FRAGMENT, which is the one shape that gets past
+# `[ -f ]` and still fails. Measured, because the obvious choice does not
+# work: tmux `source-file` over a file full of unknown commands prints its
+# complaints and exits ZERO, so a syntactically broken fragment would prove
+# nothing at all.
+fresh
+mkdir -p "$T/badshare"
+printf 'set -g @x 1\n' >"$T/badshare/mux.tmux"
+chmod 000 "$T/badshare/mux.tmux"
+_saved=$MUX_SHARE; MUX_SHARE=$T/badshare
+_werr=$(mux_wire 2>&1) && fail "mux_wire reported SUCCESS over a fragment it
+could not source, so this server has no mux wiring and nothing said so"
+MUX_SHARE=$_saved
+chmod 644 "$T/badshare/mux.tmux"
+case $_werr in
+mux:*) ;;
+*) fail "mux_wire failed SILENTLY, which leaves mux installed and inert with
+no explanation: [$_werr]" ;;
+esac
+
+# --- reload: the user's config is OPTIONAL, and mux still wins -----------
+# The two halves of R10 in one case. `mux reload` used to exit 1 when
+# ~/.config/tmux/tmux.conf was absent, so mux's own verb depended on a file it
+# neither ships nor owns.
+fresh
+TMUX_CONF=$T/nosuchdir/tmux.conf
+_reload_one "$SOCK" || fail "reload failed with no user tmux.conf, which is
+the dependency R10 removes"
+wired || fail "reload exited 0 without sourcing mux's fragment"
+
+# ... and WITH a user config, BOTH load and mux is last.
+# ORDER IS THE ASSERTION, not merely presence: the user's prefix key and
+# bindings must survive, and a mux binding must win where they collide,
+# because that is what lets mux stop claiming the config file at all.
+fresh
+TMUX_CONF=$T/user-tmux.conf
+{ echo 'set -g @from-user-conf yes'
+  echo 'bind -T prefix u display "USER WINS"'; } >"$TMUX_CONF"
+_reload_one "$SOCK" || fail "reload failed with a user tmux.conf present"
+[ "$(tmux -L "$SOCK" show-options -gqv @from-user-conf)" = yes ] \
+  || fail "reload did not source the user's own tmux.conf, so their prefix key
+and bindings would be lost the moment mux stops relying on that file"
+case $(tmux -L "$SOCK" list-keys -T prefix u) in
+*mux*) ;;
+*) fail "the USER's binding won prefix-u, so mux's fragment is not sourced
+last and a stale binding in their config would shadow a mux verb:
+[$(tmux -L "$SOCK" list-keys -T prefix u)]" ;;
+esac
+
+# --- reload must not start a server that was down ------------------------
+_down=$(tmux_fresh_socket muxwiredown)
+if _reload_one "$_down"; then
+  tmux_drop_socket "$_down"
+  fail "reload reported success against a socket with no server"
+fi
+if tmux -L "$_down" list-sessions >/dev/null 2>&1; then
+  tmux_drop_socket "$_down"
+  fail "reload SPAWNED a server that was not running"
+fi
+tmux_drop_socket "$_down"
+
+pass

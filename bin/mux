@@ -1264,6 +1264,74 @@ tm() {
   fi
 }
 
+# --- mux's own wiring, guaranteed on every server mux acts on --------------
+# WHY THIS EXISTS: a mux install was NOT complete on its own. The fragment
+# loaded only because the user's ~/.config/tmux/tmux.conf carried a
+# `source-file` line for it, and on the fleet this was written for that file
+# belongs to the PROVISIONER. Remove that project and mux's bindings, status
+# strip and hooks all stop loading, while `mux check` reports the remedy as
+# "add a line to a file you do not own". Two projects owning one install is
+# also how an option drifts, and `update-environment`, which mux needs to own,
+# was set in that same foreign file.
+#
+# IT DOES NOT TAKE THE CONFIG FILE, and that is the design rather than a
+# compromise. tmux reads the user's tmux.conf when the server starts, exactly
+# as before, so their prefix key and bindings keep working with no migration;
+# mux sources its own fragment AFTERWARDS, so a mux binding wins, which is the
+# order tmux already gives the last file sourced.
+#
+# `-f` WAS THE OBVIOUS SHAPE AND IS WORSE, measured both ways. A `-f` server
+# reads ONLY that file, so mux would have to re-source the user's config
+# itself and a plain `tmux` would then behave differently from a mux one.
+# Sourcing afterwards is equivalent: into a RUNNING server the fragment
+# delivers status-right, every binding and every hook.
+#
+# THE OVERLAP IS FREE, which is what lets this ship before the provisioner
+# drops its line, with no flag day. mux.tmux is IDEMPOTENT, proven rather than
+# assumed: the whole `show-options -g` hash, all 271 bindings, and even the
+# APPENDED `window-layout-changed` array are byte-identical after one, two and
+# three sourcings, because that hook is reset with `set-hook -g` before its
+# three `-ag` appends. Note the reverse is NOT free and is not claimed: if the
+# provisioner dropped its line while this was not yet live, a server would get
+# NO sourcing at all. Two different windows; idempotence only frees one.
+#
+# THE MARKER CARRIES THE VERSION AND MUX WRITES IT, not the fragment, because
+# `set -gF @x '#(mux -V)'` does NOT expand at set time (measured: it reads back
+# empty). Writing it here is better anyway: a fragment left by an OLDER mux
+# compares unequal and is re-sourced, which closes the staleness that once had
+# `mux check` telling a live server to source a file it had already sourced.
+#
+# THE PROBE CANNOT CREATE A SERVER, which matters because this runs on paths
+# where none may exist yet. `show-options -gqv` exits non-zero and spawns
+# nothing (measured), unlike the `list-keys` that had to be taken out of
+# `mux check` for exactly that reason. No server means nothing to wire.
+#
+# ONLY mux.tmux. `mux-opinions.tmux` says in its own header that it is optional
+# taste to source or skip, so forcing it would make mux impose a mouse mode
+# nobody asked for.
+#
+# AND A SERVER MUX NEVER TOUCHES IS NOT WIRED, which is the honest limit. A
+# plain `tmux new-session` gives mux no hook. This is called from the
+# SESSION-AFFECTING paths (the build, the attach, reload) and deliberately NOT
+# from the hot read-only ones: `mux agent-render` runs per client every
+# status-interval, and a round trip there is paid forever. So such a server is
+# wired the first time a mux verb acts on it, which is the first moment mux is
+# entitled to an opinion about it.
+mux_wire() {
+  [ -n "${MUX_SHARE:-}" ] && [ -f "$MUX_SHARE/mux.tmux" ] || return 0
+  # No server yet is not a failure: there is simply nothing to wire.
+  _wv=$(tm show-options -gqv @mux-wired 2>/dev/null) || return 0
+  [ "$_wv" = "$MUX_VERSION" ] && return 0
+  if ! tm source-file "$MUX_SHARE/mux.tmux" 2>/dev/null; then
+    # LOUD, because the alternative is mux installed and inert: no status
+    # strip, no bindings, no hooks, and nothing on screen saying why.
+    echo "mux: could not source $MUX_SHARE/mux.tmux into this server," >&2
+    echo "mux: so it has no mux bindings, strip or hooks." >&2
+    return 1
+  fi
+  tm set -g @mux-wired "$MUX_VERSION" 2>/dev/null || true
+}
+
 # True when a pane's current command is just a shell (so it maps to a bare
 # directive, no command). tmux re-quotes pane_start_command, so the clean signal
 # is pane_current_command: a single word.
@@ -1360,13 +1428,43 @@ fi
 # the default socket, plus every non-default context socket the hook names, if
 # their servers are up. All the same uid, so one can source another's server.
 # Guard on list-sessions so source-file never STARTS a server that was not up.
-cmd_reload() {
-  [ -f "$TMUX_CONF" ] || {
-    echo "mux: no tmux.conf at $TMUX_CONF" >&2; exit 1; }
-  did=
-  if tmux list-sessions >/dev/null 2>&1; then
-    tmux source-file "$TMUX_CONF" && did="$did default"
+# Re-source ONE server, in the order that makes mux win: the user's own config
+# first (their prefix key, their bindings), then mux's fragment.
+#
+# IT BYPASSES tm() like the rest of this verb, because reload deliberately
+# reaches every server rather than the caller's, so the socket is a parameter
+# instead of $sock. Read into a local FIRST, because `set --` below replaces
+# this function's own arguments.
+_reload_one() {   # <socket, or empty for the default server>
+  _r_sock=$1
+  if [ -n "$_r_sock" ]; then set -- -L "$_r_sock"; else set --; fi
+  # Guard on list-sessions so a reload never STARTS a server that was down,
+  # and note it is list-sessions rather than list-keys for the reason
+  # `mux check` had to learn: list-keys SPAWNS one and answers from defaults.
+  tmux "$@" list-sessions >/dev/null 2>&1 || return 1
+  if [ -f "$TMUX_CONF" ]; then
+    tmux "$@" source-file "$TMUX_CONF" 2>/dev/null || return 1
   fi
+  if [ -n "${MUX_SHARE:-}" ] && [ -f "$MUX_SHARE/mux.tmux" ]; then
+    tmux "$@" source-file "$MUX_SHARE/mux.tmux" 2>/dev/null || return 1
+    tmux "$@" set -g @mux-wired "$MUX_VERSION" 2>/dev/null || true
+  fi
+  return 0
+}
+
+cmd_reload() {
+  # THE USER'S CONFIG IS OPTIONAL, which is the whole of R10 in one line. This
+  # used to `exit 1` with "no tmux.conf at ..." when that file was absent, so
+  # mux's own reload verb DEPENDED on a file mux does not ship and does not
+  # own: on the fleet this was written for, that file belongs to the
+  # provisioner, and removing that project broke `mux reload` outright.
+  #
+  # Now the file is sourced IF PRESENT and mux's fragment always is, in that
+  # order, so a mux binding wins and a box with no tmux.conf at all reloads
+  # correctly. Nothing is required of whoever ships that file, including its
+  # existence.
+  did=
+  if _reload_one ""; then did="$did default"; fi
   # Plus every non-default context server the hook knows, so a reload
   # reaches them regardless of the caller's side.
   # A here-doc, not `for _x in $(...)`: this producer emits one entry per
@@ -1375,9 +1473,7 @@ cmd_reload() {
   # four were session names.
   while IFS= read -r _s; do
     [ -n "$_s" ] || continue
-    if tmux -L "$_s" list-sessions >/dev/null 2>&1; then
-      tmux -L "$_s" source-file "$TMUX_CONF" && did="$did $_s"
-    fi
+    if _reload_one "$_s"; then did="$did $_s"; fi
   done <<EOF
 $(mux_ctx_partitions)
 EOF
@@ -2173,6 +2269,10 @@ _attach_in_pane() {
 mux_attach() {
   _attach_record
   if [ "$noattach" -eq 1 ]; then return 0; fi
+  # WIRED BEFORE THE exec, since every branch below replaces this process and
+  # nothing after them runs. An attach is one of the two moments mux is
+  # entitled to an opinion about a server it may not have created.
+  mux_wire || true
   cur=${TMUX:-}                   # our client, if any: socket,pid,session
   cur=${cur%%,*}                  # -> just the socket path
   if _attach_in_pane; then
@@ -3007,6 +3107,11 @@ while read -r verb rest; do
       tm new-session -d $_geom -s "$name" -n "$rest" \
         -c "$root"
       have_session=1
+      # AFTER the create, not before: this is the call that brings the
+      # server into existence, and the wiring probe deliberately does
+      # not. Everything built below (the layout, the theme, the agent
+      # panes) then runs against a server that has mux's hooks.
+      mux_wire || true
       win=$(tm display-message -p -t "$name:" \
         '#{window_index}')
       firstwin=$win

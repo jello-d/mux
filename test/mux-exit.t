@@ -178,13 +178,24 @@ do
   esac
 done
 
-# reload with no tmux.conf: the refusal path, reached only because
-# XDG_CONFIG_HOME points into the scratch dir.
+# reload with NO tmux.conf SUCCEEDS, and this assertion is inverted on
+# purpose. It used to require exit 1 with "no tmux.conf", and that refusal was
+# itself the defect: mux's own reload verb depended on
+# ~/.config/tmux/tmux.conf, a file mux neither ships nor owns. On the fleet
+# this was written for it belongs to the provisioner, so removing that project
+# broke `mux reload` outright and made a mux install incomplete on its own.
+#
+# The user's file is now sourced IF PRESENT and mux's fragment always is, in
+# that order, so a mux binding wins and a box with no tmux.conf reloads fine.
+# Kept as a case rather than deleted, because an exit code that USED to be a
+# refusal is exactly the kind of thing a remote caller may still expect: see
+# the EXIT STATUS contract above.
 [ ! -f "$T/conf/tmux/tmux.conf" ] || fail "setup: tmux.conf should be absent"
-is 1 "$(rc reload)" "mux reload with no tmux.conf"
+is 0 "$(rc reload)" "mux reload with no tmux.conf"
 case "$(err reload)" in
-*"no tmux.conf"*) ;;
-*) fail "reload's refusal did not name the missing file" ;;
+*"no tmux.conf"*) fail "reload still refuses over a missing tmux.conf, which
+R10 removed: a mux install must be complete without a file another project
+ships" ;;
 esac
 
 # --- 2: usage, or a verb this mux does not know --------------------------
