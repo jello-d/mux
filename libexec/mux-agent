@@ -488,9 +488,26 @@ if [ "$_verb" = peers ]; then
         # real STATE, so its age is null rather than a
         # fabricated 0, which would assert it just
         # changed, a claim there is no evidence for.
+        # THE PATTERNS ARE PARENTHESISED, WHICH IS NOT STYLE. This
+        # `case` sits inside the `_items=$( ... )` substitution
+        # above, and bash 3.2 finds the END of a `$( )` by COUNTING
+        # PARENTHESES, so an unparenthesised case pattern's closing
+        # `)` closes the substitution early and the `;;` that
+        # follows is then a syntax error. macOS `/bin/sh` IS bash
+        # 3.2 and always will be (Apple froze it at GPLv2), so this
+        # file did not PARSE there: `mux agent` was dead on macOS,
+        # every verb, with `syntax error near unexpected token ';;'`
+        # on stderr and exit 2.
+        #
+        # The `(pat)` form is POSIX, and verified identical in dash,
+        # bash 5, bash 3.2 and ksh. Only a `case` INSIDE a command
+        # substitution needs it; the rest of the tree is checked by
+        # the macOS CI job, which runs `/bin/sh -n` over every shell
+        # file precisely so this class cannot come back as a
+        # mysterious exit code in one test.
         case ${_ep:-} in
-        ''|*[!0-9]*) _ag= ;;
-        *)  _ag=$((_now - _ep))
+        (''|*[!0-9]*) _ag= ;;
+        (*) _ag=$((_now - _ep))
             [ "$_ag" -lt 0 ] && _ag=0 ;;
         esac
         # THE CLASS, looked up by the pane the record
@@ -505,9 +522,11 @@ if [ "$_verb" = peers ]; then
           _cl=$(printf '%s\n' "$_ctl" | awk \
             -F'\t' -v k="$_pn" \
             '$1 == k { print $2; exit }')
+          # PARENTHESISED for the bash 3.2 reason given above:
+          # this is inside the same `$( )`.
           case ${_cl:-} in
-          agent|hybrid) ;;
-          *) _cl=human ;;
+          (agent|hybrid) ;;
+          (*) _cl=human ;;
           esac
           # The pane is gone but its record is
           # not: the class is unknowable, which
