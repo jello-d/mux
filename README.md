@@ -94,20 +94,20 @@ The whole point is the bar. A sketch of what you see (colour omitted):
       (optional)      chip    session                                    state
 ```
 
-- **status-left** — an optional **context banner** (e.g. a work marker), a
+- **status-left**: an optional **context banner** (e.g. a work marker), a
   per-**host** colour chip so identically-named sessions on different machines
   are told apart, then the current session name.
-- **status-right** — one token per session, in cycle order, each with an
+- **status-right**: one token per session, in cycle order, each with an
   agent-state glyph: `⚠` needs you, `🧠` working, `✓` just finished, `⚫` no
   agent, and `🔌` an agent mux started that has never reported: its hooks are
   not wired, which `mux setup <agent>` fixes. The session that has needed you
   **longest** is the loudest; `prefix b` jumps there.
-- **the right edge** — one glyph for [view tension](#views-and-tension), always
+- **the right edge**: one glyph for [view tension](#views-and-tension), always
   present: `✱` auto, `┻` floor, `┳` ceil. Shape is the mode you chose; colour is
   what is happening to *this* view.
 
 The strip is measured against the bar's width and **degrades in tiers** rather
-than letting tmux truncate it — it drops the age, folds agentless sessions into
+than letting tmux truncate it: it drops the age, folds agentless sessions into
 a `·N·` cluster, then windows around the current session with edge counts. A
 session that needs you is never silently dropped.
 
@@ -115,7 +115,7 @@ The text is the signal; colour is decoration.
 
 ## Requirements
 
-- **tmux** (3.x) and a POSIX shell (`dash` is fine — mux uses no bash-isms).
+- **tmux** (3.x) and a POSIX shell (`dash` is fine; mux uses no bash-isms).
 - Optional: **fzf** for the fuzzy session picker (`mux` with no arguments falls
   back to a numbered menu without it).
 - Optional: a coding agent CLI (e.g. Claude Code) to actually run in the agent
@@ -128,7 +128,7 @@ The text is the signal; colour is decoration.
 ## Install
 
 mux is a single entry point (`bin/mux`) that self-locates its helpers
-(`libexec/`) and data (`share/`) as siblings under one prefix — the
+(`libexec/`) and data (`share/`) as siblings under one prefix, the
 standard package layout. Clone it and let `setup.sh` wire it into `~/.local`:
 
 ```sh
@@ -230,13 +230,13 @@ A **session** is a running tmux session. mux builds it from a **profile** of
 the same name if there is one, and from its own defaults if there is not. Two
 build verbs differ only in how the agent pane starts:
 
-- `mux go [NAME] [PROFILE]` — the agent **continues** its most recent
+- `mux go [NAME] [PROFILE]`: the agent **continues** its most recent
   conversation.
-- `mux go --resume [NAME]` — the agent **resumes**, prompting you to pick a
+- `mux go --resume [NAME]`: the agent **resumes**, prompting you to pick a
   conversation. (This was once the bare verb `mux resume`; that name now
   belongs to the session rebuild below.)
 
-If the session is already up, both just attach or switch to it (idempotent —
+If the session is already up, both just attach or switch to it (idempotent;
 they never clobber a live session). `--no-agent` builds the same panes but a
 plain shell runs in the agent pane instead.
 
@@ -258,7 +258,7 @@ directive is optional.
 | `layout NAME` | the pane arrangement to build (default: `default`) |
 
 The agent notification fires when an agent stops needing the CPU and starts
-needing *you* — a real transition out of `working`, and only when you are not
+needing *you*: a real transition out of `working`, and only when you are not
 already looking at that pane (`notify always` overrides the second half). It is
 raised at **normal** urgency, never `critical`: critical means "never expire"
 to mako and dunst alike, which left every "needs you" banner sitting there
@@ -312,8 +312,8 @@ jellotron   layout=logs
 
 Same keys as the file form, so the two say the same things. `mux edit NAME`
 opens the row as a readable multi-line draft and folds it back into a line on
-save. If the draft comes back with a **comment** in it — or a value containing a
-space, the other thing a line cannot hold — the entry is promoted to
+save. If the draft comes back with a **comment** in it (or a value containing a
+space, the other thing a line cannot hold) the entry is promoted to
 `$MUX_DIR/profiles.d/<name>.profile` instead and the row is dropped, so the
 breakout happens exactly when you need it and never on a rule you have to
 remember. A draft that will not parse is kept and named rather than discarded;
@@ -324,7 +324,7 @@ remember. A draft that will not parse is kept and named rather than discarded;
 `mux go <name>` reaches a project you have never configured and never have to
 `cd` to first, because mux keeps a **map** of the repositories under your source
 roots. Declare them with `scan PATH [DEPTH]` in the partition (or context) file
-— repeatable, and there is no built-in root, so a partition nobody configured
+Repeatable, and there is no built-in root, so a partition nobody configured
 gets no map rather than quietly indexing someone else's tree:
 
 ```
@@ -344,12 +344,12 @@ partition ignores.
 
 It governs only what mux **volunteers**. An explicit
 `mux go ~/some/ignored/repo` still works, because a path you typed is
-evidence. And a pattern that matches nothing is reported by `mux scan` — a
+evidence. And a pattern that matches nothing is reported by `mux scan`: a
 filter that silently does nothing looks exactly like one that works.
 
 The map is a cache, not config: it holds only derived facts, it is rewritten
 wholesale, and deleting it loses nothing. It rebuilds on exactly three triggers
-and never on a timer — `mux scan`, first use, and a lookup miss (or a hit whose
+and never on a timer: `mux scan`, first use, and a lookup miss (or a hit whose
 directory has since vanished). Between the last two it self-corrects whether a
 project appeared, moved, or went away.
 
@@ -362,14 +362,14 @@ mux go .              # here
 ```
 
 Anything with a slash is a path, since a session name never contains one. A
-path is *evidence*, so it never reaches the unknown-name refusal below — and an
+path is *evidence*, so it never reaches the unknown-name refusal below, and an
 exact-root claim wins over climbing to the git toplevel, so a subdirectory
 session resolves to itself rather than to its enclosing repo. That is what lets
 `mux resume` replay a command anyone could type instead of reaching into
 mux's internals.
 
 `mux go` resolves a NAME in this order: a live session, a breakout profile, a
-table row, the map, and then **nothing** — at which point it refuses:
+table row, the map, and then **nothing**, at which point it refuses:
 
 ```
 $ mux go tackp
@@ -383,11 +383,11 @@ a new session and a typo look identical, and silently creating a session at the
 current directory is almost never what was wanted. **`mux new NAME` is how you
 say you meant it**: it creates the session here and binds the name, writing a
 row only if the name is not one this directory already derives. Bare `mux go`
-never reaches that refusal — no name was typed, so nothing was mistyped.
+never reaches that refusal: no name was typed, so nothing was mistyped.
 
 ### Agents
 
-An **agent**, `share/agents/<name>.agent`, is two lines — a `go`
+An **agent**, `share/agents/<name>.agent`, is two lines: a `go`
 command and a `resume` command, each a shell command mux runs as the agent
 pane's process:
 
@@ -398,7 +398,7 @@ resume  claude --resume
 ```
 
 A layout picks one with `agent <name>`; Claude is the default. Add any CLI by
-dropping in a profile — `$MUX_DIR/agents/<name>.agent` for one of your own, or
+dropping in a profile, `$MUX_DIR/agents/<name>.agent` for one of your own, or
 to override a shipped profile of the same name. The state strip works for any
 agent whose lifecycle events reach `mux agent-hook <EventName>`; mux owns the
 mapping from event to state, so wiring an agent up says only what happened.
@@ -407,7 +407,7 @@ mapping from event to state, so wiring an agent up says only what happened.
 ### Themes
 
 The palette is **data**: `share/themes/<name>.theme`, each naming up to six
-styles — `bar`, `window` (the current-window chip), `accent` (active border),
+styles: `bar`, `window` (the current-window chip), `accent` (active border),
 `border` (inactive), `select` (copy-mode), `prompt`. Only `bar`/`window`/
 `accent` are required; mux derives the rest.
 
@@ -420,7 +420,7 @@ accent  fg=colour214
 
 `themes/defaults` names the global default (`default <name>`) and how an unset
 theme is derived (`derive hash`). Twenty-four themes ship, spread across
-background lightness as well as hue — dark, mid-tone, and light — since a pale
+background lightness as well as hue (dark, mid-tone, and light) since a pale
 bar in a strip of dark ones is the most legible distinction there is.
 
 With `hash`, a session with no `theme` of its
@@ -439,7 +439,7 @@ one of the same name.
 ### Session sets
 
 The sessions you have open are recorded as you open them, per socket, in
-`$MUX_STATE/sessions.<socket>` — one `NAME<TAB>ROOT` per line. After a reboot:
+`$MUX_STATE/sessions.<socket>`: one `NAME<TAB>ROOT` per line. After a reboot:
 
 ```sh
 mux resume           # rebuild them all, then attach the first
@@ -456,12 +456,12 @@ as data loss when the truth is a typo. The session only says where to *focus*
 afterwards (a resume brings them all back either way), and a name that is not
 in the set is refused **before** the rebuild. `global` is the baseline
 partition, and therefore the reserved word for "not the one my context
-resolved" — needed only where a context mechanism can resolve to something
+resolved", needed only where a context mechanism can resolve to something
 other than the baseline in an ordinary login shell.
 
 It is **state, not config**: never in `$MUX_DIR`, never in git, and per
 machine. Recording is additive when a session is built or attached and
-subtractive on `mux kill` (`kill --all` clears it) — deliberately *not* a
+subtractive on `mux kill` (`kill --all` clears it), deliberately *not* a
 snapshot of what is live, which the first `mux go` after a reboot would
 clobber. The root is recorded because the common session is a bare `mux go` in
 a directory, with no profile to rebuild it from. That also makes the set an
@@ -478,13 +478,13 @@ as good a reason to build as a profile or a scanned repo.
 manifold    fg=colour252,bg=colour236
 ```
 
-Optional, and it holds only the hosts you want to pin — an unlisted host gets a
+Optional, and it holds only the hosts you want to pin; an unlisted host gets a
 stable, readable colour derived from its name, so identically-named sessions on
 different machines are told apart with no configuration.
 
 ### Contexts and partitions
 
-mux core knows nothing about any particular notion of "context" — a
+mux core knows nothing about any particular notion of "context": a
 work/personal split, a Kubernetes namespace, a git host. It asks an **optional
 command for one word** and decides everything else itself.
 
@@ -496,7 +496,7 @@ context-command   severance current
 A bare name is looked up in `$MUX_DIR` before `$PATH`, so a config shared
 between machines needn't carry an absolute path. The command prints a
 **token**; empty output or a non-zero exit means `global`. That is the entire
-integration surface — no sockets, no styles, no themes, no path
+integration surface: no sockets, no styles, no themes, no path
 classification. The integrator reports *identity*; mux decides presentation
 and isolation.
 
@@ -505,7 +505,7 @@ Two axes, deliberately separate:
 - a **context** is a settings axis, named by the token;
 - a **partition** is an isolation axis. Sessions in different partitions are
   mutually invisible. A context's partition defaults to its own token, so
-  contexts are isolated by default — but several contexts may name one
+  contexts are isolated by default, but several contexts may name one
   partition to share it, which is how you can pick a default agent from
   external criteria *without* forcing a separate session namespace on yourself.
 
@@ -521,8 +521,8 @@ Settings resolve in three levels, merged last-wins, with no conditions:
 3. contexts/<token>.context     what is unique to this context
 ```
 
-The same key set is legal in either file — `label`, `theme`, `derive`, `agent`,
-`layout`, `scan`, `ignore`, `host-chip`, plus `partition` in a context — so
+The same key set is legal in either file (`label`, `theme`, `derive`, `agent`,
+`layout`, `scan`, `ignore`, `host-chip`, plus `partition` in a context) so
 **where you put a key is the statement of its scope**, and there is no per-key
 rule to
 learn. Drop-in files have owners: an integrator installs
@@ -544,11 +544,11 @@ indexing the wrong tree. mux ships `partitions/global.partition` with
 
 A token becomes a socket name and a path component, so it is validated as a DNS
 label (`[a-z0-9]([a-z0-9-]*[a-z0-9])?`). An invalid one is an error, never a
-silent fall back — a typo'd token quietly becoming the baseline would put work
+silent fall back: a typo'd token quietly becoming the baseline would put work
 sessions in the personal partition.
 
 **mux only reflects a context; it enforces nothing.** Whatever backs a boundary
-— a Unix group, an ACL, a namespace — lives in whatever supplies the token. The
+(a Unix group, an ACL, a namespace) lives in whatever supplies the token. The
 banner is a reminder, never permission.
 
 `mux why` prints the resolved context, partition, and where every setting came
@@ -556,7 +556,7 @@ from.
 
 ### Views and tension
 
-tmux sizes a window from **the clients attached to its session** — so two
+tmux sizes a window from **the clients attached to its session**, so two
 clients of different sizes looking at the same session leave no size that suits
 both. tmux picks one, and by default it picks whichever looked last, so every
 window resizes as you cycle and mux re-pins each layout. That is usually an ssh
@@ -575,7 +575,7 @@ The colour says which side **this** view is on: grey when nothing contends for
 it, white when it is setting the size, amber when it carries dead rows, and the
 caution pairing when it is **clipped** and part of the window is off screen.
 
-No mode is right in general — each buys stability with something — so mux picks
+No mode is right in general; each buys stability with something, so mux picks
 none for you. `mux views` reports every client, its size and how long it has
 been idle (which is what identifies the forgotten one), and says whether the
 tension actually reaches the window you are in. Clicking the glyph cycles the
@@ -615,8 +615,8 @@ spelling, exits 2 and says where partitions went rather than dialling a host
 
 **The colon held the session until 0.56**, so `mux latch box:api` changed
 meaning. The partition took the slot because it is the field a remote command
-cannot otherwise reach — every verb but `resume` acts on whatever the far side's
-own context resolved — while a session needs no slot. Which partitions exist is
+cannot otherwise reach: every verb but `resume` acts on whatever the far side's
+own context resolved, while a session needs no slot. Which partitions exist is
 the far side's question, so latch does not validate the name: one the remote
 does not know exits 3 there, reported as `gone` with the remote's own message
 naming the partitions it does have.
@@ -691,15 +691,15 @@ teardown, so the cursor stays hidden, mouse reporting stays on (moving the mouse
 types control characters at your shell) and the alternate screen stays up.
 `stty sane` only half works: it fixes the kernel's line discipline, while those
 modes live in the terminal *emulator* and need the matching escape sequences.
-latch repairs the terminal **first** on every drop, before it reports or waits —
+latch repairs the terminal **first** on every drop, before it reports or waits;
 otherwise "retrying in 8s" is printed into a hidden-cursor alternate screen and
 a reconnect looks like a hang. `mux sane` is the same repair by hand, after any
-wedged session — named after `stty sane`, which only fixes the kernel half.
+wedged session, named after `stty sane`, which only fixes the kernel half.
 
 **Hooks ship as a library, and wiring them is your step.** `share/latch/` holds
 `ssh-auth`, `ssh-classify` and `ssh-probe`; a bare name in your
 config resolves
-`$MUX_DIR/latch` first, then `$MUX_SHARE/latch`, then `PATH` — the same
+`$MUX_DIR/latch` first, then `$MUX_SHARE/latch`, then `PATH`: the same
 overlay-over-shipped order layouts and themes use, so a config can travel
 between machines without absolute paths. `ssh-auth` and `ssh-classify` are
 wired by default. `ssh-probe` ships **unwired** on purpose: no probe means no
@@ -708,8 +708,8 @@ Eternal Terminal hook is a file, not a patch.
 
 On a retry latch asks for `mux go --attach-only`, which refuses rather than
 creates, so a rebooted host is *reported* instead of silently replaced by an
-empty session. It negotiates that once, lazily, via `mux capabilities` — the
-first real consumer of the handshake — and degrades gracefully against an older
+empty session. It negotiates that once, lazily, via `mux capabilities`, the
+first real consumer of the handshake, and degrades gracefully against an older
 remote. See **LATCH** in `man mux`.
 
 ### The agent contract: mux agent
@@ -867,14 +867,14 @@ Provided by `mux.tmux` (prefix table unless noted; your prefix is untouched):
 
 ## Configuration
 
-- **`MUX_DIR`** — your config and overrides: layouts, the optional `context`
+- **`MUX_DIR`**: your config and overrides: layouts, the optional `context`
   hook, and theme overrides. Default `~/.config/mux`.
-- **`MUX_SHARE`** — shipped package data: themes, shapes, agents, and the tmux
+- **`MUX_SHARE`**: shipped package data: themes, shapes, agents, and the tmux
   fragments. Default: the `share` sibling of the `mux` binary.
-- **`MUX_CACHE`** — regenerable state: palette stamps and the discovery map.
+- **`MUX_CACHE`**: regenerable state: palette stamps and the discovery map.
   Default `~/.cache/mux`. Everything here rebuilds on demand, which is what
-  makes it a cache — and the stamps prune themselves as servers come and go.
-- **`MUX_STATE`** — state that *cannot* be rebuilt: the session set, and an
+  makes it a cache, and the stamps prune themselves as servers come and go.
+- **`MUX_STATE`**: state that *cannot* be rebuilt: the session set, and an
   unsaved profile draft. Default `~/.local/state/mux`. The dividing line is one
   question: does mux regenerate it? A cache clear must not be able to take the
   answer to "what was I working on".

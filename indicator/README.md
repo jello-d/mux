@@ -14,14 +14,14 @@ tray item needs one), so it lives here and installs on its own.
 
 ## Clicking an item
 
-Left-click jumps that host to whatever has been waiting longest — `mux
+Left-click jumps that host to whatever has been waiting longest: `mux
 next-blocked`, run locally for your own box and over the same transport for a
 latched one. That works because **a tray item exists only when a latch does**,
 so a client is attached and you are already looking at it.
 
 **Raising the terminal is not mux's job.** If the window showing that latch is
 behind three others or on another workspace, the switch happens invisibly and
-the click feels broken — but fixing that means knowing about a compositor, and
+the click feels broken, but fixing that means knowing about a compositor, and
 mux manages sessions inside terminals with no opinion about where a terminal
 sits. So it is a seam, unset by default:
 
@@ -29,7 +29,7 @@ sits. So it is a seam, unset by default:
 indicator-activate   focus-kitty
 ```
 
-The hook is handed the **label** — the host's short name — as its **one and
+The hook is handed the **label** (the host's short name) as its **one and
 only** argument, and runs *after* the switch so the window already shows the
 right session when it comes forward. Always one argument, including for your
 own box; there is no partition or session in it, and no argument-less form.
@@ -41,20 +41,20 @@ That is sufficient because mux already puts the label in the window title.
 set-titles-string '#{@mux-prefix}#S:#W⠀⠀⠀⠀[#{host_short}]'
 ```
 
-and `host_short` is the **tmux server's** hostname — so a latched session
+and `host_short` is the **tmux server's** hostname, so a latched session
 advertises the *remote's* name in the terminal sitting in front of you. The
 samples match `[label]` with the brackets, because the bare name would also
 match a session called `manifold` or a path in the title.
 Two samples ship in `share/indicator/`, trading different requirements:
 
-- `focus-kitty` — kitty remote control (needs `allow_remote_control`),
+- `focus-kitty`: kitty remote control (needs `allow_remote_control`),
   matches on the window title
-- `focus-wayfire` — asks the compositor instead, so it is terminal-neutral,
+- `focus-wayfire`: asks the compositor instead, so it is terminal-neutral,
   but needs wayfire's IPC plugin
 
 Both are *samples*: the title match is the part most likely to need changing
 for your setup, and every mechanism in them is yours to replace. They follow
-the same contract as latch's hooks — 0 done, 78 cannot tell — and the
+the same contract as latch's hooks (0 done, 78 cannot tell) and the
 indicator reports a non-zero exit rather than swallowing it, so a
 misconfigured hook says so instead of doing nothing.
 
@@ -248,7 +248,7 @@ channel, since it survives being small and the letters already name the host.
 With more than one item in the tray, each tile carries a **three-character
 mark** reading downward on a black strip at its left edge: `manifold` is `MLD`,
 `manifestor` is `MTR`, `rover` is `RVR`. It is the first character plus the last
-two consonants of the rest — the *tail*, because fleets share prefixes and the
+two consonants of the rest, the *tail*, because fleets share prefixes and the
 first letters are exactly the ones that do not distinguish.
 
 **Three characters, not four.** A fourth costs 22% of the cap height even with
@@ -261,7 +261,7 @@ be 39px wide on a 32px tile.
 it always was, and the mark is composited on top in a fixed order: the icon,
 then the strip, then the badge (so the count is never clipped), then the
 letters. The strip covers the left border and the `>` chevron outright rather
-than trying to fit around them — which is what lets the glyphs be sized to a
+than trying to fit around them, which is what lets the glyphs be sized to a
 third of the tile instead of being squeezed into a column, the difference
 between a 13px capital and an unreadable 7px one at a 32px tray size.
 
@@ -272,11 +272,11 @@ between a marked and an unmarked tile.
 
 **Colour alone cannot do this job.** mux derives one of eight pairs by hashing,
 so with only three machines `manifold` and `manifestor` already collide, and a
-wider palette does not save you — the birthday paradox beats you long before
+wider palette does not save you: the birthday paradox beats you long before
 the colours run out. The mark is derived from the name alone, so it is stable,
 identical on every machine, and needs no configuration.
 
-**One host in the tray gets no mark at all** — the tile is exactly what it has
+**One host in the tray gets no mark at all**: the tile is exactly what it has
 always been, tint included. The mark appears when a second host joins and goes
 when you detach.
 
@@ -286,7 +286,7 @@ The local host is always **white**, reserved. Home is the absence of a hue, it
 is the one item you never have to look up, and a palette slot would mean the
 machine you are sitting at changed colour when you latched somewhere new.
 
-Every remote takes one of **five** — cyan, pink, lilac, mint, salmon — as a
+Every remote takes one of **five** (cyan, pink, lilac, mint, salmon) as a
 second, redundant hint, so you can pick a tile out before reading its letters.
 The palette is small because STATE already owns red, amber, green, purple and
 slate blue across the frame and badge: a warm mark reads as `blocked`, a green
@@ -305,7 +305,7 @@ Slots are **seeded by name, bumped only on collision, and then sticky**:
   first-come rule would make the colour depend on the order you latched.
 - **Bumped**, because a derived rule alone cannot promise distinctness, and
   distinctness is the entire point. The bump is confined to the hosts that
-  actually collide — exactly where the derived rule was already broken.
+  actually collide, exactly where the derived rule was already broken.
 - **Sticky**, recorded in `$XDG_STATE_HOME/mux/indicator-slots`, so latching a
   third host never moves the second one's colour, and a host you unlatch for an
   afternoon comes back the colour you learned. Delete that file to reshuffle.
@@ -317,7 +317,7 @@ This deliberately does **not** agree with `mux host-color`. The status bar
 carries the host *name* in text beside its chip, so colour there is decoration
 and here it is load-bearing; constraining the decorative channel to serve the
 load-bearing one is backwards. The two surfaces already share the identifier
-that is stable everywhere — the three letters.
+that is stable everywhere: the three letters.
 
 **Host colours still matter for the single-host tile**, and two hosts can land
 on the same pair. Pin the ones you care about in `$MUX_DIR/hosts`:
