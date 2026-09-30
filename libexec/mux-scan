@@ -3,8 +3,11 @@
 # it found. The on-demand trigger; mux also rebuilds silently when the map is
 # absent or a lookup misses (see mux-scan_lib).
 #
-#   mux scan          rescan and report
-#   mux scan --list   print the current map without rescanning
+#   mux scan            rescan and report
+#   mux scan --list     print the current map without rescanning
+#   mux scan --init     ask where your projects are, and record it
+#   mux scan --init DIR the same, without asking
+#   mux scan --roots    print the configured roots; exit 1 if there are none
 set -eu
 
 MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
@@ -27,10 +30,11 @@ case "${1:-}" in
   _roots=$(mux_scan_roots)
   if [ -z "$_roots" ]; then
     echo "mux: no scan roots for partition '$_key'" >&2
-    echo "mux: add 'scan <dir> [depth]' to" \
-      "$MUX_DIR/partitions/$_key.partition" >&2
-    echo "mux: (there is no built-in root on purpose, since a" \
-      "partition scans only where you say)" >&2
+    echo "mux: set one with:  mux scan --init" >&2
+    echo "mux: (or add 'scan <dir> [depth]' to" \
+      "$MUX_DIR/partitions/$_key.partition)" >&2
+    echo "mux: there is no built-in root on purpose: a partition scans" \
+      "only where you say" >&2
     exit 1
   fi
   printf 'mux: scanning'
@@ -66,7 +70,90 @@ case "${1:-}" in
   fi
   if [ -n "$_ilog" ]; then rm -f "$_ilog"; fi
   ;;
-*) echo "usage: mux scan [--list]" >&2; exit 2 ;;
+--roots)
+  # A QUERY, so a caller can ask whether discovery is configured without
+  # running a scan or parsing config itself. `mux scan` is the wrong question
+  # (it rebuilds the whole map) and `--list` is too (it prints the map, which is
+  # legitimately empty on a fresh root). setup.sh needs exactly this: ask once,
+  # and only ASK the human when the answer is none.
+  #
+  # EXIT 1 FOR NONE, matching what plain `mux scan` already does about the same
+  # condition, rather than inventing a second spelling of it.
+  _r=$(mux_scan_roots)
+  [ -n "$_r" ] || exit 1
+  printf '%s\n' "$_r"
+  exit 0
+  ;;
+--init)
+  # --- TURNING DISCOVERY ON, WITHOUT GUESSING ------------------------------
+  # mux used to SHIP `scan ~/src 3`, so every install that did not keep
+  # projects in ~/src got a `[FAIL]` from its own check for a location nobody
+  # had chosen. A default is fine; a default nobody confirmed is not, and the
+  # bootstrap is exactly where a question belongs.
+  #
+  # SNIFFED, THEN CONFIRMED: `~/src` if it happens to exist, otherwise $HOME,
+  # and either way the human sees it before it is written. Sniffing beats
+  # hardcoding because it is right for the people who do use ~/src and asks
+  # nothing of the people who do not.
+  shift
+  _want=${1:-}
+  # ALREADY SET IS NOT AN ERROR, it is the second time you ran the command.
+  # Idempotent by the same rule everything else here follows.
+  _have=$(mux_scan_roots)
+  if [ -n "$_have" ]; then
+    echo "mux: scan roots for '$_key' are already set:"
+    printf '%s\n' "$_have" | while read -r _p _d; do
+      printf 'mux:   %s (depth %s)\n' "$_p" "$_d"
+    done
+    echo "mux: edit $MUX_DIR/partitions/$_key.partition to change them"
+    exit 0
+  fi
+  _def=$HOME
+  [ -d "$HOME/src" ] && _def=$HOME/src
+  if [ -z "$_want" ]; then
+    # WITHOUT A TERMINAL IT REFUSES rather than inferring consent, the same
+    # call `mux setup claude` makes: a provisioner runs the installer on every
+    # sweep, and inventing a location there is how one machine silently
+    # indexes a tree the human never named.
+    if [ ! -t 0 ] || [ ! -t 1 ]; then
+      echo "mux: scan --init needs a terminal to ask, or a directory:" >&2
+      echo "mux:   mux scan --init $_def" >&2
+      exit 2
+    fi
+    printf 'mux: where do you keep your projects? [%s] ' "$_def"
+    read -r _want || _want=
+    [ -n "$_want" ] || _want=$_def
+  fi
+  case $_want in
+  "~") _want=$HOME ;;
+  "~/"*) _want=$HOME/${_want#\~/} ;;
+  esac
+  [ -d "$_want" ] || {
+    echo "mux: not a directory: $_want" >&2; exit 2; }
+  _pf=$MUX_DIR/partitions/$_key.partition
+  mkdir -p "$MUX_DIR/partitions" || {
+    echo "mux: cannot create $MUX_DIR/partitions" >&2; exit 1; }
+  # APPENDED IF THE FILE EXISTS, never rewritten: a partition file may already
+  # carry a label, a theme or a layout, and a bootstrap step that overwrote
+  # somebody's config would be the one unrecoverable mistake available here.
+  if [ ! -e "$_pf" ]; then
+    {
+      printf '# %s: written by `mux scan --init`.\n' "$_key"
+      printf '#\n'
+      printf '# `scan DIR [DEPTH]` is where `mux go <name>` looks for\n'
+      printf '# projects. DEPTH is how many levels below DIR to descend;\n'
+      printf '# raise it for a deeper tree, and add more `scan` lines for\n'
+      printf '# more roots.\n'
+    } >"$_pf" || { echo "mux: cannot write $_pf" >&2; exit 1; }
+  fi
+  printf 'scan\t%s 3\n' "$_want" >>"$_pf" || {
+    echo "mux: cannot write $_pf" >&2; exit 1; }
+  echo "mux: discovery on for '$_key': $_want (depth 3)"
+  echo "mux: recorded in $_pf"
+  echo "mux: now run:  mux scan"
+  exit 0
+  ;;
+*) echo "usage: mux scan [--list] [--init [DIR]] [--roots]" >&2; exit 2 ;;
 esac
 
 _sf=$(mux_scan_file "$_key")

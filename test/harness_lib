@@ -109,7 +109,21 @@ chmod 700 "$TMUX_TMPDIR"
 # Same rule as the HOME pin one paragraph up, with the lesson that a derived
 # path is not the only way out of the sandbox: an inherited HANDLE is another.
 # A test that wants $TMUX sets it to a fake value itself, and they all do.
-unset TMUX TMUX_PANE
+#
+# AND `MUX_SHARE` IS THE SAME HOLE, found 2026-09-30 by falling into it.
+# `bin/mux` EXPORTS it into every session it builds, and honours an inherited
+# one whenever it is a real directory, so a suite run from inside mux had it
+# pointing at the INSTALLED tree. Every test asserting on shipped `share/` DATA
+# (a theme, an agent descriptor, a partition, the tmux fragment, a skill) could
+# therefore be reading a different tree from the one under test, and passing or
+# failing about the wrong files. Measured: a probe of the shipped
+# `global.partition` read tackup's deployed clone and reported the line I had
+# just deleted from the checkout.
+#
+# THE SUITE ALREADY PROVES THE UNSET CASE IS RIGHT, which is why this is safe:
+# CI has no MUX_SHARE at all and every test that wants one passes it explicitly
+# (`MUX_SHARE="$HERE/share"`) or clears it (`env -u MUX_SHARE`).
+unset TMUX TMUX_PANE MUX_SHARE
 
 # The session set, pinned explicitly as well. HOME above already keeps it inside
 # T, but a fixture is easier to read as $T/state/sessions.global than as

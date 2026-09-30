@@ -1,9 +1,25 @@
 # global: the partition every context lands in unless it names another, and the
-# one an unconfigured mux uses. Shipped, so discovery works out of the box;
-# override it by dropping your own in $MUX_DIR/partitions/.
+# one an unconfigured mux uses. Override it by dropping your own in
+# $MUX_DIR/partitions/global.partition.
 #
-# `scan` is here rather than in mux's built-in defaults ON PURPOSE. Built-ins
-# carry behaviour only, never a location, so a partition nobody configured gets
-# no roots and therefore no map, which is how a missing context file makes
-# itself visible instead of quietly indexing the wrong tree.
-scan    ~/src 3
+# THERE IS NO `scan` LINE HERE, AND THAT IS THE POINT. This file used to ship
+# `scan ~/src 3`, which contradicted the rule stated two lines below it: a
+# location nobody chose is still a location nobody chose, whether it comes from
+# a built-in or from a shipped file. It cost a `[FAIL]` on every machine that
+# does not happen to keep projects in ~/src, which is most machines and every
+# CI runner, and a fresh install reporting FAIL for having declined to guess is
+# the worst possible first impression.
+#
+# BEHAVIOUR ONLY, NEVER A LOCATION. A partition nobody has configured gets no
+# roots and therefore no map, so an unconfigured discovery is VISIBLE (`mux
+# scan` says so and exits 2, `mux check` warns) rather than quietly indexing
+# somebody else's idea of where your work lives.
+#
+# TO TURN DISCOVERY ON:
+#
+#     mux scan --init          asks where your projects are, and writes it
+#     mux scan --init DIR      the same, without asking
+#
+# or add the line by hand to your own copy of this file:
+#
+#     scan    <dir> [depth]

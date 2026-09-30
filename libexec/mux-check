@@ -204,8 +204,18 @@ if [ -n "${MUX_CFG_scan:-}" ]; then
 $MUX_CFG_scan
 EOF
 else
+  # A WARN AND NOT A FAIL, because discovery is optional and NOT configuring it
+  # is a legitimate state. mux used to ship `scan ~/src 3`, so this arm was
+  # unreachable and every machine without a ~/src got `[FAIL] scan root
+  # missing` instead: a fresh install failing its own check for declining to
+  # guess where somebody keeps their work.
+  #
+  # AND IT NAMES THE REMEDY, the rule this fleet states for any cross-cutting
+  # finding: a gap named without the exact command to close it invites two
+  # reasonable people to close it two different ways.
   warn "no scan roots for partition '${MUX_CTX_PARTITION:-global}'"
-  warn "  discovery is off; \`mux go <name>\` cannot find projects"
+  warn "  discovery is off, so \`mux go <name>\` cannot find projects"
+  warn "  turn it on with: mux scan --init"
 fi
 
 # 4b. view tension. Two clients of different SIZES attached to one server means

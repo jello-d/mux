@@ -2214,3 +2214,53 @@ t mux-undo-pane
 -   '"'*'"') _uq=${_uq#\"}; _uq=${_uq%\"} ;;
 +   '"'*'"') return 0 ;;
 m did not round-trip
+
+= scan-init-writes-without-a-terminal
+f libexec/mux-scan
+t mux-scan-init
+# A provisioner runs `setup.sh install` on every sweep with no tty. Without this
+# refusal `read` takes EOF, the sniffed default is written unasked, and one
+# machine quietly indexes a tree the human never named: the same defect as the
+# shipped `scan ~/src 3`, reached from the other side.
+-     if [ ! -t 0 ] || [ ! -t 1 ]; then
++     if false; then
+m must exit 2
+
+= scan-init-is-not-idempotent
+f libexec/mux-scan
+t mux-scan-init
+# Running it twice must not give the partition two roots: every scan would then
+# cover the same tree twice and the map would read as a mux that cannot count.
+-   if [ -n "$_have" ]; then
++   if false; then
+m added another root
+
+= scan-init-overwrites-a-config
+f libexec/mux-scan
+t mux-scan-init
+# THE ONE UNRECOVERABLE MISTAKE AVAILABLE HERE. A partition file may already
+# carry a label, a theme or a layout, so the bootstrap appends and never
+# rewrites. Inverting the test makes it clobber somebody's config.
+-   if [ ! -e "$_pf" ]; then
++   if true; then
+m DESTROYED an existing setting
+
+= scan-init-hardcodes-src
+f libexec/mux-scan
+t mux-scan-init
+# `~/src` is OFFERED when it exists and never assumed. Hardcoding it is the
+# original defect: a location nobody chose, which then failed mux's own check on
+# every machine that keeps work somewhere else.
+-   [ -d "$HOME/src" ] && _def=$HOME/src
++   _def=$HOME/src
+m with no ~/src the default
+
+= install-never-mentions-discovery
+f setup.sh
+t setup
+# The installer says when discovery has no roots, and is SILENT once it has
+# some. Returning early always makes a new user get a mux whose `mux go <name>`
+# finds nothing, with no hint why: the state this step exists to end.
+-   "$_bin/$PKG" scan --roots >/dev/null 2>&1 && return 0
++   return 0
+m said nothing about discovery
