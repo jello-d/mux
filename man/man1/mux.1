@@ -1102,25 +1102,54 @@ carries a keystroke and knows nothing about hosts, addresses or MTUs \(em it
 decides WHEN to re\-establish an attachment and says WHY it has not, which is
 what keeps it from growing into a transport project.
 .PP
-THE FIRST FIELD IS ALWAYS THE HOST, and the colon is optional. Everything after
-the FIRST colon is the PARTITION; the SESSION is a separate second argument.
+TWO ARGUMENTS, EACH
+.IR primary [: qualifier ],
+and each colon spent on the field that could not otherwise be reached:
+.B "mux latch HOST[:PORT] [[PARTITION:]SESSION]" .
 What latch asks the far side to run follows from that:
 .PP
 .EX
-mux latch box            \(->  mux resume
-mux latch box:           \(->  mux resume
-mux latch box api        \(->  mux go api
-mux latch box:work       \(->  mux resume work
-mux latch box:work api   \(->  mux resume work api
+mux latch box              \(->  mux resume
+mux latch box api          \(->  mux go api
+mux latch box work:        \(->  mux resume work
+mux latch box work:api     \(->  mux resume work api
+mux latch box :api         \(->  mux go api      (default partition, said aloud)
+mux latch box:2222 api     \(->  mux go api      over port 2222
+mux latch [::1]:2222 api   \(->  mux go api      IPv6 needs the brackets
 .EE
 .PP
-THE COLON HELD THE SESSION UNTIL 0.56, so
-.B mux latch box:api
-changed meaning. The partition took the slot because it is the field a remote
-command cannot otherwise reach \(em every verb but
-.B resume
-acts on whatever the far side's own context resolved, which in a login shell is
-its default \(em while a session needs no slot, being an ordinary argument.
+THE PORT IS IN THE TARGET BECAUSE EVERY SEAM NEEDS IT (0.84). Before it, a
+nonstandard port could only live in the transport template or in ssh_config, so
+a PER\-HOST port was inexpressible in one line \(em and ET's probe had to be
+told
+separately, which was a footgun: tell it wrong and latch parks in a backoff
+about a service that is running. latch parses it once now and hands it to the
+template as
+.B %p
+and to the probe as its second argument.
+.B host:port
+is the de facto spelling everywhere else, so it needs no explaining.
+.PP
+A BARE SECOND ARGUMENT IS A SESSION, which is the safe reading rather than a
+toss\-up: the other one would silently change what
+.B "mux latch box api"
+has always meant, and would resurrect a bug latch shipped once, where a session
+sharing a partition's name resumed the wrong set while looking like success. The
+rarer structural field takes the colon, as it has since 0.56.
+.PP
+AN IPv6 LITERAL IS NEVER SPLIT. A colon is a port only when it cannot be
+anything else \(em one colon with digits after it, or brackets \(em because the
+wrong guess dials a host that does not exist while looking like it worked.
+.PP
+THE PRE\-0.84 SPELLING IS REFUSED, NOT REINTERPRETED.
+.B mux latch box:work
+exits 2 and prints where partitions went, since the alternative is dialling a
+host called
+.B box
+on a port called
+.BR work .
+Two breaking changes to this grammar in two releases is a real cost; this is
+intended to be the last.
 .PP
 WHICH PARTITIONS EXIST IS THE FAR SIDE'S QUESTION, so latch does not validate
 the name: the answer lives on the other machine, and a local whitelist would be
@@ -1512,6 +1541,13 @@ it swallows the host and et answers "Missing host to connect to" \(em on exit 0.
 A pty is the DEFAULT for
 .BR \-\-command ,
 so no flag is needed.
+.TP
+.B the target's port is \fBetserver\fR's, not sshd's
+ET needs TWO ports: sshd for the handshake and etserver for the session. The one
+in the target is etserver's, because that is the one mux's probe must also know.
+A nonstandard SSHD port stays a transport detail \(em put
+.B "-p 2222"
+in the template or in ssh_config, where ET's own bootstrap will read it.
 .TP
 .B the credential seam is unchanged
 ET handshakes over ssh, so

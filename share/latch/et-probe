@@ -44,21 +44,29 @@
 # sshd, because ET's bootstrap failing there is ssh's story and `ssh-auth` and
 # the classifier already tell it.
 #
-# THE PORT IS NOT DISCOVERABLE FROM THE ARGUMENT, so it comes from the
-# environment (or `latch-et-port` in the config, read below). The hook is handed
-# a HOST and nothing else: mux's target grammar spends the colon on a PARTITION,
-# so `%h` never carries a port. IF YOU RUN etserver ON A NON-DEFAULT PORT YOU
-# MUST TELL THIS HOOK TOO, or it will test 2022, find nothing, and park latch in
-# a backoff about a service that is running. That is the one way to hold a
-# working transport with this wired, so it is said here loudly rather than left
-# to be discovered.
+# THE PORT ARRIVES AS $2 NOW, which is the whole reason 0.84 moved it into the
+# target: `mux latch box:2022` tells the transport and this hook the same thing
+# once. Before that the port lived only in the transport line, and a probe that
+# could not see it tested 2022, found nothing, and parked latch in a backoff
+# about a service that was running -- the one way to hold a working transport
+# with this wired. `MUX_ET_PORT` and a `latch-et-port` config line still work,
+# for a target written without a port, and the argument wins over both.
 set -eu
 
 _host=${1:-}
 [ -n "$_host" ] || exit 78
 
-# The port: env first, then the config key, then ET's own default.
-_port=${MUX_ET_PORT:-}
+# THE PORT COMES FROM THE TARGET FIRST, since 0.84: latch parses
+# `mux latch box:2022` and hands the port here as $2, which closes the footgun
+# this hook used to carry (a port known to the transport and not to the probe,
+# so the probe tested 2022, found nothing, and parked latch in a backoff about a
+# service that was running). The env var and the config key remain, below, for a
+# target written without one.
+_port=${2:-}
+case ${_port:-} in
+*[!0-9]*) _port= ;;
+esac
+[ -n "$_port" ] || _port=${MUX_ET_PORT:-}
 if [ -z "$_port" ]; then
   _conf=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}/config
   if [ -r "$_conf" ]; then

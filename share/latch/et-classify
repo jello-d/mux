@@ -6,7 +6,7 @@
 #
 # WIRE IT, WITH THE TRANSPORT, in $MUX_DIR/config:
 #
-#     latch-transport  et %h --command %c
+#     latch-transport  et %h --port %p:2022 --command %c
 #     latch-classify   et-classify
 #
 # EVERYTHING BELOW WAS MEASURED against et 7.0.0 (the version its own PPA ships)

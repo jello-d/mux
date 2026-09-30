@@ -1215,41 +1215,12 @@ t mux-latch
 +   if false; then
 m the colon must name a PARTITION
 
-= latch-bare-host-grows-a-partition
-f libexec/mux-latch
-t mux-latch
-# The EXACT-COMMAND assertion in the %c argv case sees this before the target
-# grammar block does -- every `latch box` in the file becomes `mux resume box`
-# -- so `m` names that one. It owns the bare form's composed command just as
-# legitimately; naming the later assertion would make this record fail for
-# being caught too early.
-- [ "$_part" = "$_target" ] && _part=
-+ :
-m %c must arrive as ONE argv element
-
-= latch-partition-takes-the-last-colon
-f libexec/mux-latch
-t mux-latch
-- _part=${_target#*:}
-+ _part=${_target##*:}
-m only the FIRST colon splits host from partition
-
 = latch-extra-arguments-ignored
 f libexec/mux-latch
 t mux-latch
 - [ "$#" -le 2 ] || {
 + [ "$#" -le 9 ] || {
 m three arguments must be a usage error
-
-= latch-lock-key-drops-the-session
-f libexec/mux-latch
-t mux-latch
-# Caught by the SINGLE-FLIGHT case before the registry one: with the session
-# gone from the key, `latch box proj` no longer sees the seeded box_proj.lock,
-# which IS the collision this guard prevents, one release earlier in the file.
-- _lockkey=$_target${_sess:+ $_sess}
-+ _lockkey=$_target
-m a concurrent latch should refuse
 
 = latch-lock-omits-the-session-line
 f libexec/mux-latch
@@ -2137,8 +2108,8 @@ m clean exit must be
 = et-documented-line-has-no-dash-t
 f share/latch/et-classify
 t mux-latch-et
-- #     latch-transport  et %h --command %c
-+ #     latch-transport  et -t %h --command %c
+- #     latch-transport  et %h --port %p:2022 --command %c
++ #     latch-transport  et -t %h --port %p:2022 --command %c
 m documented line passes
 
 = et-probe-closed-port-waits
@@ -2161,3 +2132,66 @@ t mux-latch-et
 - ''|*[!0-9]*) _port=2022 ;;
 + ''|*[!0-9]*) _port=2222 ;;
 m default port
+
+= latch-bare-arg2-is-a-session
+f libexec/mux-latch
+t mux-latch
+# THE MOST VALUABLE GUARD IN THE 0.84 GRAMMAR. A bare second argument reading as
+# a PARTITION is the direction that silently resumes the wrong set while looking
+# like success, which this file has shipped once before.
+#
+# The `%s` SUBSTITUTION CASE SEES IT FIRST, which is why `m` names that one:
+# with the session emptied, `%s` falls back to the host and the earlier template
+# test
+# dies before the grammar block is reached. Naming the grammar assertion would
+# make this record fail for being caught too early.
+- *) _sess=$_arg2 ;;
++ *) _part=$_arg2 ;;
+m host and session were not substituted
+
+= latch-partition-takes-the-first-colon
+f libexec/mux-latch
+t mux-latch
+- *:*) _part=${_arg2%%:*}; _sess=${_arg2#*:} ;;
++ *:*) _part=${_arg2%:*}; _sess=${_arg2##*:} ;;
+m only the FIRST colon splits partition from session
+
+= latch-lock-key-keeps-the-session
+f libexec/mux-latch
+t mux-latch
+# Caught by the SINGLE-FLIGHT case before the registry one: with the session
+# gone from the key, `latch box proj` no longer sees the seeded lock, which IS
+# the collision this guard prevents.
+- _lockkey=$_host${_part:+ $_part}${_sess:+ $_sess}
++ _lockkey=$_host${_part:+ $_part}
+m a concurrent latch should refuse
+
+= latch-port-default-from-template
+f libexec/mux-latch
+t mux-latch
+-       _wp=$(printf '%s' "$_wp" | sed "s|%p:$_pdef|${_port:-$_pdef}|g") ;;
++       _wp=$(printf '%s' "$_wp" | sed "s|%p:$_pdef|$_port|g") ;;
+m must fall back to the template
+
+= latch-port-must-be-numeric
+f libexec/mux-latch
+t mux-latch
+# Widening the pattern so a word passes as a port turns the old spelling
+# `box:work` into a host `box` on a port `work`: dialled, plausible and wrong,
+# instead of refused with the migration. A no-op mutation was tried first here
+# (adding a character to the negated class that the fixture never contains),
+# which SURVIVED and proved nothing -- the replacement has to change the path
+# the fixture actually takes.
+-   *[!0-9]*)
++   *[!0-9a-z]*)
+m pre-0.84 target form must exit 2
+
+= latch-ipv6-is-not-split
+f libexec/mux-latch
+t mux-latch
+# Requiring a THIRD colon sends `fe80::1` down the single-colon arm, where the
+# tail is digits, so it splits into host `fe80:` and port `1` -- a host that
+# does not exist, dialled while looking like it worked.
+- *:*:*)
++ *:*:*:*)
+m IPv6 literal must be left whole

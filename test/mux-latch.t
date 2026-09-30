@@ -796,35 +796,114 @@ sent() {   # <target> [session] -> the remote command latch composed
 [$(sent box)]. Sending a go at the HOSTNAME attaches a session that is not
 yours and looks like it worked."
 [ "$(sent box:)" = 'mux resume' ] \
-  || fail "a trailing colon names no partition either, got [$(sent box:)]"
+  || fail "a trailing colon is a host with no port, as it always was, got
+[$(sent box:)]"
 [ "$(sent box proj)" = 'mux go proj' ] \
   || fail "a named session must be a plain go, got [$(sent box proj)]"
 
-# --- THE COLON NAMES A PARTITION NOW (0.56) --------------------------------
-# A BREAKING change from 0.55, where `box:proj` named a SESSION. The colon slot
-# holds the partition because a partition is the thing a remote command cannot
-# otherwise reach: every verb but `resume` acts on whatever the far side's own
-# context resolved. A session needs no slot, being a plain second argument.
+# --- THE GRAMMAR IS TWO `primary[:qualifier]` ARGUMENTS (0.84) --------------
+# `HOST[:PORT] [[PARTITION:]SESSION]`. The colon in the TARGET is the port now,
+# and the partition moved to a colon in the second argument. That is the second
+# breaking change to this grammar in two releases, and the last one intended:
+# before it a nonstandard port could only live in the transport template or in
+# ssh_config, so a PER-HOST port was inexpressible, and ET's probe had to be
+# told the port separately.
 #
-# THE COMPOSED COMMAND IS THE ASSERTION, not "it attached". Both forms attach
-# successfully against a stub, and latch has already shipped a default that
-# attached to the wrong thing and looked like it worked (`mux latch box` asking
-# for a session named after the host) -- which is exactly what a
+# A BARE SECOND ARGUMENT IS A SESSION, deliberately and not as a toss-up. The
+# other reading would silently change what `mux latch box api` has always meant
+# and would resurrect a bug this file already shipped once, where a session
+# sharing a partition's name resumed the wrong set while looking like success.
+#
+# THE COMPOSED COMMAND IS THE ASSERTION, not "it attached". Every form attaches
+# successfully against a stub, and latch has shipped a default that attached to
+# the wrong thing and looked like it worked -- which is exactly what a
 # did-it-attach assertion cannot see.
-[ "$(sent box:work)" = 'mux resume work' ] \
-  || fail "the colon must name a PARTITION, sent as 'mux resume work':
-got [$(sent box:work)]"
-[ "$(sent box:work api)" = 'mux resume work api' ] \
+[ "$(sent box work:)" = 'mux resume work' ] \
+  || fail "a trailing colon in the SECOND argument names a partition and no
+session, sent as 'mux resume work': got [$(sent box work:)]"
+[ "$(sent box work:api)" = 'mux resume work api' ] \
   || fail "a partition AND a session is resume's two-argument form, got
-[$(sent box:work api)]"
+[$(sent box work:api)]"
 # NOT also asserted separately is "it did not use `go`": the exact-equality
 # above already excludes every other command, and a second guard for one
 # condition is a pair neither of whose mutations can be killed.
-# Everything after the FIRST colon is the partition, so latch itself never has
-# to decide what a partition may contain -- the far side does, and answers 3.
-[ "$(sent box:a:b)" = 'mux resume a:b' ] \
-  || fail "only the FIRST colon splits host from partition, got
-[$(sent box:a:b)]"
+[ "$(sent box :api)" = 'mux go api' ] \
+  || fail "a LEADING colon says 'the default partition' out loud and must mean
+the same as a bare session, got [$(sent box :api)]"
+# Everything after the FIRST colon is the session, so a session name may contain
+# one and latch never has to decide what a partition may hold -- the far side
+# does, and answers 3.
+[ "$(sent box work:a:b)" = 'mux resume work a:b' ] \
+  || fail "only the FIRST colon splits partition from session, got
+[$(sent box work:a:b)]"
+
+# --- THE OLD SPELLING IS REFUSED, NOT REINTERPRETED ------------------------
+# `box:work` meant partition `work` until 0.84. Under the new grammar its tail
+# is not a port, and the dangerous outcome would be dialling a host called `box`
+# on a port called `work` -- or worse, silently dropping it. It exits 2 and says
+# where the partition went, which is the only version of this that helps someone
+# with muscle memory.
+_orc=0
+env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
+  MUX_LATCH_TRANSPORT="$T/bin/echocmd %h sh -lc %c" MUX_LATCH_AUTH=/bin/true \
+  MUX_LATCH_MAX_TRIES=1 "$HERE/libexec/mux-latch" box:work \
+  >"$T/oldout" 2>&1 || _orc=$?
+[ "$_orc" = 2 ] || fail "the pre-0.84 target form must exit 2, got $_orc"
+grep -q 'partitions moved to the SECOND argument' "$T/oldout" \
+  || fail "the refusal does not say where partitions went, so someone with
+muscle memory gets a bare error: [$(head -2 "$T/oldout")]"
+grep -q 'mux latch box work:' "$T/oldout" \
+  || fail "the refusal does not PRESCRIBE the new form. A tool that reports a
+gap without saying how to close it invites two different fixes:
+[$(head -3 "$T/oldout")]"
+
+# --- THE PORT REACHES THE TRANSPORT, AND ITS DEFAULT COMES FROM THE TEMPLATE -
+# mux must not know that 22 is ssh's default and 2022 is ET's, or it would know
+# what a transport is. So `%p:22` reads as "the port, or 22", and the knowledge
+# stays in the line that already holds every other transport-specific fact.
+argv() {   # <template> <target> [session] -> the argv the transport got
+  : >"$CMDS"
+  _tpl=$1; shift
+  env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
+    CMDS="$CMDS" MUX_LATCH_TRANSPORT="$_tpl" MUX_LATCH_AUTH=/bin/true \
+    MUX_LATCH_SLEEP="$T/bin/nosleep" MUX_LATCH_MAX_TRIES=1 \
+    "$HERE/libexec/mux-latch" "$@" >/dev/null 2>&1 || true
+  head -1 "$CMDS"
+}
+cat >"$T/bin/echoargv" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$*" >>"$CMDS"
+exit 0
+EOF
+chmod +x "$T/bin/echoargv"
+_got=$(argv "$T/bin/echoargv -p %p:22 %h -- %c" box api)
+[ "$_got" = '-p 22 box -- mux go api' ] \
+  || fail "with no port in the target, %p:22 must fall back to the template's
+default. Wanted [-p 22 box -- mux go api], got [$_got]"
+_got=$(argv "$T/bin/echoargv -p %p:22 %h -- %c" box:2222 api)
+[ "$_got" = '-p 2222 box -- mux go api' ] \
+  || fail "a port in the target must reach the transport. Wanted
+[-p 2222 box -- mux go api], got [$_got]"
+
+# AN IPv6 LITERAL IS NOT SPLIT, and this is the case a naive `${t##*:}` gets
+# wrong in the direction that dials a host which does not exist while looking
+# like it worked. Brackets are the one unambiguous way to write IPv6 with a
+# port.
+_got=$(argv "$T/bin/echoargv -p %p:22 %h -- %c" 'fe80::1' api)
+[ "$_got" = '-p 22 fe80::1 -- mux go api' ] \
+  || fail "an IPv6 literal must be left whole. Wanted
+[-p 22 fe80::1 -- mux go api], got [$_got]"
+_got=$(argv "$T/bin/echoargv -p %p:22 %h -- %c" '[::1]:2222' api)
+[ "$_got" = '-p 2222 ::1 -- mux go api' ] \
+  || fail "a BRACKETED IPv6 target must split into host and port. Wanted
+[-p 2222 ::1 -- mux go api], got [$_got]"
+
+# A TEMPLATE WITH NO %p SIMPLY NEVER SEES ONE, so every pre-0.84 transport line
+# keeps working unchanged.
+_got=$(argv "$T/bin/echoargv %h -- %c" box:2222 api)
+[ "$_got" = 'box -- mux go api' ] \
+  || fail "a template with no %p must be unaffected by a port in the target,
+got [$_got]"
 
 # --- too many arguments is a usage error ----------------------------------
 # The grammar is HOST[:PARTITION] and at most one SESSION. A third word is a
@@ -970,11 +1049,11 @@ _rc=$(latch box proj)
 # watch, so the format is a contract now, not an implementation detail.
 #
 # THE TARGET IS IN THE FILE BECAUSE THE FILENAME CANNOT HOLD IT. The name is
-# sanitised through `tr -c`, so `northwood:work` becomes `northwood_work` and no
+# sanitised through `tr -c`, so a host and partition collapse into one name and
 # reader can tell that from a host genuinely called `northwood_work`. A tray item
 # polling the wrong hostname would draw `unknown` forever with nothing on screen
 # to say why.
-MAXT=1 _rc=$(latch 'hostwith:part')
+MAXT=1 _rc=$(latch hostwith 'part:')
 _lk=$T/run/mux-latch/hostwith_part.lock
 [ ! -e "$_lk" ] || fail "the lock outlived the run: the trap must remove it on
 every exit path, or a finished latch leaves a phantom host in the tray"
@@ -995,7 +1074,7 @@ MAXT=1 env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
   MUX_LATCH_AUTH="$T/bin/auth" MUX_LATCH_PROBE="$T/bin/probe" \
   MUX_LATCH_STATUS="$T/bin/status" MUX_LATCH_SLEEP="$T/bin/nosleep" \
   MUX_LATCH_BACKOFF=1 MUX_LATCH_MAX_TRIES=1 \
-  "$HERE/libexec/mux-latch" 'hostwith:part' sess >/dev/null 2>&1 || :
+  "$HERE/libexec/mux-latch" hostwith 'part:sess' >/dev/null 2>&1 || :
 # THE PATH IT READ IS THE ASSERTION, and it carries the SESSION:
 # `hostwith_part_sess`, not `hostwith_part`. The session left the target string
 # in 0.56, so a lock keyed on the target alone would make two latches to one
@@ -1010,10 +1089,16 @@ _tgt=$(sed -n 2p "$T/seen.lock")
 case $_pid in
 ''|*[!0-9]*) fail "line 1 of the lock must be the pid, got [$_pid]" ;;
 esac
-[ "$_tgt" = 'hostwith:part' ] \
+# SINCE 0.84 LINE 2 IS PURELY THE ADDRESS, `host[:port]`, because that is what a
+# reader needs in order to REACH the box: the partition moved to the second
+# argument and the tray discovers partitions for itself with
+# `mux agent-summary --all`. The filename is still sanitised
+# (hostwith_part_sess), so the file remains the only place an address can be
+# recovered intact.
+[ "$_tgt" = 'hostwith' ] \
   || fail "line 2 must be the target VERBATIM, got [$_tgt]. The filename is
-sanitised (hostwith_part), so the file is the only place a reader can recover
-which host to poll."
+sanitised, so the file is the only place a reader can recover which host to
+poll."
 # THE SESSION IS LINE 3, NOT APPENDED TO LINE 2, and that is what keeps every
 # existing reader correct: the indicator asks line 2 for the host and the
 # partition, so folding a space-separated session into it would hand that parse
