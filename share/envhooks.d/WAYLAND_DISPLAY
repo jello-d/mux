@@ -1,0 +1,33 @@
+#!/bin/sh
+# envhooks.d/WAYLAND_DISPLAY - is this display actually being served?
+#
+# THE HOOK THAT PROVES WHY VALIDITY IS NOT MUX'S TO CLASSIFY. The value is a
+# NAME, not a path, so it needs a transform before anything can be tested, and
+# the transform needs ANOTHER variable's resolved value.
+#
+# AND A PRESENCE TEST IS NOT ENOUGH, which cost this package a real mistake:
+# a repair validated this with `[ -e "$XDG_RUNTIME_DIR/$1" ]`, it PASSED, and
+# the value was dead. A unix socket FILE outlives its listener, so after a
+# compositor exits the socket sits there and every presence test says yes.
+# Measured: `wayland-info` on that path answered "Connection refused" while
+# `-e` and `-S` both agreed it was fine.
+#
+# SO THIS CONNECTS, and reports UNDETERMINED (exit 2) when it cannot ask, which
+# is the case mux must not read as dead: no tool is not the same answer as no
+# compositor.
+set -eu
+_d=${MUX_RESOLVED_XDG_RUNTIME_DIR:-${XDG_RUNTIME_DIR:-}}
+[ -n "${1:-}" ] && [ -n "$_d" ] || exit 1
+_s=$_d/$1
+[ -S "$_s" ] || exit 1
+# A CONNECT, by whichever tool is here. Absent all of them the answer is 2:
+# the socket exists and mux cannot say whether anyone is behind it.
+if command -v wayland-info >/dev/null 2>&1; then
+  wayland-info >/dev/null 2>&1 || exit 1
+  exit 0
+fi
+if command -v nc >/dev/null 2>&1; then
+  nc -zU "$_s" >/dev/null 2>&1 || exit 1
+  exit 0
+fi
+exit 2

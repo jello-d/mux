@@ -1,0 +1,10 @@
+#!/bin/sh
+# envhooks.d/XDG_RUNTIME_DIR - is this runtime dir present?
+#
+# VALIDATED FIRST IN SPIRIT, though nothing here declares an order: two of the
+# other hooks build a path out of this one's resolved value, which is why
+# mux resolves every name before validating any and exports the set as
+# MUX_RESOLVED_*. Without that, this would have to run first and the others
+# would have to say so.
+set -eu
+[ -d "${1:-}" ]

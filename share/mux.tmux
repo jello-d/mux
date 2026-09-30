@@ -271,3 +271,56 @@ set-hook -ag client-attached \
   'run-shell -b "mux style -q #S #{pane_pid}"'
 set-hook -g  session-created \
   'run-shell -b "mux style -q #S #{pane_pid}"'
+
+# --- handing a notice back to the terminal you started from ----------------
+# mux sometimes has to tell you it WITHHELD something: an environment pointer
+# that resolved but failed its own validator, say. Saying it on stderr before
+# the attach is not enough, and the reason is not that it gets erased.
+# Measured: such a line DOES survive a detach, because tmux uses the alternate
+# screen and the terminal restores the primary one underneath. It is simply
+# hours old by then, sitting above a prompt you stopped looking at, and it IS
+# lost on any path that clears or resets the terminal rather than merely
+# leaving the alternate screen.
+#
+# So the notice is ALSO delivered as the terminal is handed back, which puts
+# it under the cursor at the moment you return to your shell.
+#
+# TWO HOOKS, BECAUSE ONE CANNOT WORK. `client-detached` fires, but
+# `#{client_tty}` and `#{client_name}` are both EMPTY inside it: the client is
+# gone by the time the body runs, so the hook cannot address the terminal it
+# should write to. The tty therefore has to be captured while a client still
+# exists, and read back afterwards.
+#
+# `-F`, WHICH IS THE WHOLE TRICK AND IS NOT OBVIOUS. `set -g @x "#{client_tty}"`
+# stores the LITERAL nine characters; `-F` expands the format at set time and
+# stores `/dev/pts/21`. Measured both ways. Note the limit of `-F` that bit
+# elsewhere in this package: it expands a FORMAT `#{...}` and NOT a shell
+# substitution `#(...)`, which is why @mux-wired has to be written from shell
+# and this one does not.
+#
+# NO FORK ON THE ATTACH PATH: this is a pure tmux command, evaluated inside
+# the server, so a client arriving pays nothing. Only the detach spends a
+# process, and by then the human is leaving anyway.
+#
+# ORDERING WAS MEASURED, SIX RUNS OUT OF SIX: the bytes the flush writes land
+# AFTER `?1049l`, so they are on the real terminal rather than on the
+# alternate screen that is about to be discarded. Had they landed before, this
+# would have been silently useless.
+#
+# ONE KNOWN LIMIT, recorded rather than papered over: one option holds one
+# tty, so with two clients attached the second overwrites the first's record
+# and a detach prints on whichever was recorded last. tmux offers no
+# per-client storage and `client-detached` knows no client identity, so this
+# cannot be fixed from here. A notice in the wrong terminal is confusing
+# rather than harmful, and one client is the common case.
+#
+# AND THE DETACH HOOK IS FOREGROUND, which the first version of it got wrong.
+# `run-shell -b` is asynchronous, so the flush RACED the teardown and the
+# bytes arrived after the terminal had already been handed back: the notice
+# simply vanished, with nothing failing. That is the same trap this package
+# records for the undo-pane recorder, which is foreground alone among mux's
+# hooks for exactly this reason. Caught by an end-to-end test rather than by
+# review, because every part in isolation was correct.
+set-hook -ag client-attached 'set -gF @mux-notice-tty "#{client_tty}"'
+set-hook -g  client-detached \
+  'run-shell "mux notice-flush #{@mux-notice-tty}"'

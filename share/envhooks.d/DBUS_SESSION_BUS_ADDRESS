@@ -1,0 +1,25 @@
+#!/bin/sh
+# envhooks.d/DBUS_SESSION_BUS_ADDRESS - is this bus address usable?
+#
+# THE VALUE IS A STRUCTURED ADDRESS, not a path: `unix:path=/run/user/1000/bus`,
+# and it may carry several comma-separated key=value pairs or name a transport
+# mux has never heard of. So the field has to be extracted before anything can
+# be checked, which is the second reason a closed vocabulary of kinds cannot
+# express these four.
+#
+# A TRANSPORT THIS CANNOT PARSE IS UNDETERMINED, never invalid: `tcp:` and
+# `autolaunch:` are legitimate and this hook has no opinion about them. Saying
+# "invalid" would drop a working value, which is the failure mode mux's whole
+# three-answer contract exists to prevent.
+set -eu
+case ${1:-} in
+unix:path=*)
+  _p=${1#unix:path=}
+  _p=${_p%%,*}
+  [ -S "$_p" ] ;;
+unix:abstract=*)
+  # An abstract socket has no filesystem entry to test at all.
+  exit 2 ;;
+'') exit 1 ;;
+*)  exit 2 ;;
+esac
