@@ -35,12 +35,12 @@ instructions for using it (`mux skill`, and the same text as `AGENTS.md`), so an
 orchestrator above mux does not have to reverse-engineer a status bar. mux stays
 serverless and leaves orchestration to that layer.
 
-**Remote sessions survive the network.** `mux latch HOST[:PARTITION] [SESSION]`
-holds an attachment to another machine's mux open across drops, and **brings
-your own transport**: mux owns the state machine and the attach semantics while
-ssh, mosh or anything else supplies the pipe. It tells a wait apart from a dead
-end, repairs the terminal when a session dies under it, and never carries a
-keystroke.
+**Remote sessions survive the network.** `mux latch HOST[:PORT]
+[[PARTITION:]SESSION]` holds an attachment to another machine's mux open across
+drops, and **brings your own transport**: mux owns the state machine and the
+attach semantics while ssh, mosh or anything else supplies the pipe. It tells a
+wait apart from a dead end, repairs the terminal when a session dies under it,
+and never carries a keystroke.
 
 **One tray for every box you are attached to.** An optional StatusNotifier icon
 shows one item per (host, partition) with its worst agent state and a count,
@@ -432,7 +432,7 @@ compiles the palette into tmux `@theme-*` options at server start and re-pushes
 it on drift, so a theme edit needs no manual step. `mux theme [NAME|next|prev]`
 switches a live session and **remembers** it: a theme chosen by hand is a
 decision, so it is written to the profile immediately rather than behind a flag
-you have to recall. (`-p`/`--persist` is retired -- accepted and ignored, since
+you have to recall. (`-p`/`--persist` is retired: accepted and ignored, since
 it is the default now.) A theme dropped in `$MUX_DIR/themes` overrides a shipped
 one of the same name.
 
@@ -583,11 +583,11 @@ mode; `mux views --detach <client>` ends a claim outright.
 
 ### Remote sessions: latch
 
-`mux latch HOST[:PARTITION] [SESSION]` holds an attachment to a mux session on
-another machine open across network drops. **Bring your own transport:** mux
-owns the state machine and the attach semantics, and ssh, mosh, Eternal Terminal
-or anything else supplies the pipe. latch never carries a keystroke and knows
-nothing about hosts, addresses or MTUs.
+`mux latch HOST[:PORT] [[PARTITION:]SESSION]` holds an attachment to a mux
+session on another machine open across network drops. **Bring your own
+transport:** mux owns the state machine and the attach semantics, and ssh, mosh,
+Eternal Terminal or anything else supplies the pipe. latch never carries a
+keystroke and knows nothing about hosts, addresses or MTUs.
 
 Two arguments, each `primary[:qualifier]`, and each colon is spent on the field
 that could not otherwise be reached: `HOST[:PORT] [[PARTITION:]SESSION]`. A bare
@@ -845,7 +845,8 @@ mux reload                   re-source tmux.conf on every mux server
 mux kill NAME | kill-all     tear down a session, or all (prompts)
 mux sane                     put the terminal back after a wedged session
 mux go --attach-only [NAME]  attach if live, else refuse (never create)
-mux latch HOST[:PART] [SESS] hold a remote attachment open across drops
+mux latch HOST[:PORT] [[PARTITION:]SESSION]
+                             hold a remote attachment open across drops
 mux capabilities             what this mux supports, for other programs
 ```
 
