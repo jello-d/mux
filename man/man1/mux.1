@@ -9,10 +9,10 @@ mux \- a tmux session manager for agent-heavy, many-session work
 builds and drives tmux sessions from declarative
 .B layouts
 and puts a live status bar on top: each session's coding-agent state at a
-glance (idle, working, blocked), a per-host colour chip, and \(em through an
+glance (idle, working, blocked), a per-host colour chip, and (through an
 optional
 .B context
-hook \(em a marker for whichever side of a work / personal boundary a pane
+hook), a marker for whichever side of a work / personal boundary a pane
 sits on.
 .PP
 A session is created from a layout of the same name (or an explicit one), its
@@ -44,8 +44,8 @@ its most recent conversation.
 As
 .BR go ,
 but the agent
-.B resumes
-\(em it prompts to choose a conversation. Only meaningful when the session is
+.BR resumes :
+it prompts to choose a conversation. Only meaningful when the session is
 being built. This was once the bare verb
 .BR "mux resume" ;
 that name now belongs to the session rebuild below, and the flag is the only
@@ -56,7 +56,7 @@ Build the session but run neither the agent's
 .I go
 nor
 .I resume
-command \(em a plain shell in the agent pane.
+command: a plain shell in the agent pane.
 .RB ( \-\-bare
 is kept as an alias.)
 .TP
@@ -107,8 +107,8 @@ needed only where a context mechanism can resolve to something other than the
 baseline in an ordinary login shell.
 .IP
 .I SESSION
-only says where to FOCUS once the rebuild is done \(em a resume brings them all
-back either way \(em so its real job is failing loud: a name that is not in the
+only says where to FOCUS once the rebuild is done (a resume brings them all
+back either way), so its real job is failing loud: a name that is not in the
 set exits 3 BEFORE anything is built, since discovering the typo afterwards
 would mean the work happened and the one thing asked for did not.
 .IP
@@ -134,7 +134,7 @@ reported rather than silently replaced with an empty session.
 .B mux host-color " [" \fIHOST\fR ]
 Print the colour PAIR that identifies HOST (default: this machine) as
 .RI # rrggbb
-for the foreground then the background \(em the same pair
+for the foreground then the background: the same pair
 .B mux style
 paints that host's status\-bar chip with.
 .IP
@@ -149,13 +149,13 @@ should not have to learn.
 ANY host, not just this one: the colour derives from the NAME, so the box you
 are sitting at can colour a remote host correctly with nothing shared.
 .IP
-It REFUSES (exit 1) rather than answering half a pair: colours 0\(en15 are the
+It REFUSES (exit 1) rather than answering half a pair: colours 0-15 are the
 terminal's own and have no fixed value, so a guess would put a wrong colour on
 the thing whose whole job is identifying a machine.
 .TP
 .B mux log " [" \-n " " \fILINES\fR "] [" \-f "] [" \fISUBSYSTEM\fR ]
 Read mux's log: what mux CHANGED, and what it could not do. Mutations and
-failures only \(em never routine activity \(em which is what keeps it small
+failures only (never routine activity), which is what keeps it small
 enough to read and makes it answer the question you actually have after an
 incident.
 .IP
@@ -166,7 +166,7 @@ log you must switch on BEFORE the incident cannot help with one you cannot
 reproduce, and a network outage is exactly that. It exists because
 .B mux latch
 once held a session across an hour\-long outage and a recovery while leaving
-nothing behind \(em every transition went to stderr, and the state machine lived
+nothing behind: every transition went to stderr, and the state machine lived
 in shell variables that died with the process.
 .IP
 Entries are
@@ -191,8 +191,8 @@ usually scrolled away by the time it is asked.
 It REPORTS ITS OWN SILENCES rather than printing nothing, because "logging is
 off", "nothing has happened yet", "the file is empty" and "no entries for that
 subsystem" are four different answers and an empty screen cannot tell them
-apart. Writing is best\-effort by design \(em a full disk must never kill a
-latch holding your session \(em so this reader is where an unwritable or
+apart. Writing is best\-effort by design (a full disk must never kill a
+latch holding your session), so this reader is where an unwritable or
 missing log is said out loud.
 .TP
 .B mux undo-pane
@@ -201,11 +201,11 @@ Put back the pane you just closed by accident. Bound to
 .IP
 .B ^D
 is one keystroke away from detaching and does something very different, and the
-recovery was otherwise to rebuild the window by hand \(em which costs every
+recovery was otherwise to rebuild the window by hand, which costs every
 OTHER pane's scrollback, so the slip was expensive out of all proportion to it.
 .IP
-WHAT COMES BACK: the pane, at its old position, at the size it actually had
-\(em the saved geometry is the LIVE layout, not the declared one, so a window
+WHAT COMES BACK: the pane, at its old position, at the size it actually had;
+the saved geometry is the LIVE layout, not the declared one, so a window
 you resized by hand returns the way YOU had it. It reopens in its old directory
 and re\-runs what it was running, replayed from tmux's own record of how the
 pane was started, so an agent pane comes back on the same conversation rather
@@ -213,7 +213,7 @@ than a fresh one.
 .IP
 WHAT DOES NOT: that pane's SCROLLBACK. tmux frees a pane's history the moment
 it dies and there is no way to ask for it back. Every SURVIVING pane is left
-untouched, though, which is the point \(em nothing is killed, respawned or
+untouched, though, which is the point: nothing is killed, respawned or
 cleared but the one pane that went.
 .IP
 It refuses when nothing was lost, including when you filled the hole yourself
@@ -225,7 +225,7 @@ with no split or resize after it is not seen.
 .TP
 .B mux sane
 Put the terminal back after a full\-screen program died without tearing
-down \(em a dropped ssh, a killed tmux, a crashed editor. Named after
+down: a dropped ssh, a killed tmux, a crashed editor. Named after
 .BR "stty sane" ,
 which is the reflex and does half the job: the tty line discipline it fixes
 lives in the KERNEL, while the hidden cursor, mouse reporting, bracketed paste
@@ -284,10 +284,10 @@ decisions live, so it is written immediately rather than behind a flag you have
 to recall. A breakout profile takes it in place; everything else becomes a table
 row.
 .RB ( \-p / \-\-persist
-is retired \(em accepted and ignored, since it is now the default.)
+is retired (accepted and ignored, since it is now the default.)
 .TP
 .B mux next-blocked " [" \-\-partition " " \fINAME\fR ]
-Jump to the session whose agent has needed you longest \(em the loudest chip on
+Jump to the session whose agent has needed you longest), the loudest chip on
 the strip. Repeat to walk down the urgency order.
 .IP
 .B \-\-partition
@@ -306,7 +306,7 @@ the far side's login shell resolved.
 .B mux hide " " \fISESSION\fR ", " mux show " " \fISESSION\fR
 Hide or unhide
 .I SESSION
-for this client only \(em it drops off this attachment's status strip and out of
+for this client only: it drops off this attachment's status strip and out of
 its
 .RB ( "/" )
 cycling. Per client, so monitors can differ.
@@ -323,8 +323,8 @@ takes effect without a restart.
 .B mux kill " " \fINAME\fR ", " mux kill-all
 Tear down the named session, or (with a prompt) every session on this socket.
 Killing is also how the session set FORGETS a session, and it is the only thing
-that prunes it. A name that is merely RECORDED \(em its session already gone,
-its root moved or deleted \(em is killable too: there is nothing to tear down,
+that prunes it. A name that is merely RECORDED (its session already gone,
+its root moved or deleted) is killable too: there is nothing to tear down,
 but it stops
 .B mux resume
 reporting it as unbuildable on every run. A name that is neither live nor
@@ -340,8 +340,8 @@ layout and agent with the provenance of each.
 It answers for what
 .B mux go
 would do with the same argument, which is the point of it. A typed NAME is
-resolved through the session set and then the discovery map \(em the same two
-sources go uses \(em so an AMBIGUOUS name reports as ambiguous and lists its
+resolved through the session set and then the discovery map (the same two
+sources go uses), so an AMBIGUOUS name reports as ambiguous and lists its
 candidates, and a name nothing knows reports as unknown, each saying that go
 would refuse rather than describing a session mux will not build.
 .TP
@@ -350,7 +350,7 @@ Who is attached to this server, at what size, and what that costs.
 .IP
 tmux sizes a window to ONE client. With two attached at DIFFERENT dimensions
 there is no size that suits both, so windows resize as you cycle sessions and
-every mux layout is re-pinned each time \(em the usual cause being an ssh
+every mux layout is re-pinned each time: the usual cause being an ssh
 window left attached at another height. mux calls that VIEW TENSION, shows it
 on the status bar while it lasts, and names the ways out:
 .RS
@@ -381,11 +381,11 @@ present so the bar never changes width and the mode stays legible when nothing
 is contending. It carries both dimensions at once:
 .B SHAPE
 is the mode you chose: a heavy bar with a stem, where the BAR is the pin and
-its position is the bound \(em below for
+its position is the bound: below for
 .BR floor ,
 above for
-.BR ceil
-\(em and a heavy asterisk for
+.BR ceil ,
+and a heavy asterisk for
 .BR auto ,
 which is not pinned at all. The asterisk is deliberate: every up\-down arrow
 actually present in a monospace face renders too small to read at a glance, and
@@ -402,7 +402,7 @@ the question it answers is what each of them is losing.
 Contention is scoped to the WINDOW, not the server. tmux sizes a window from
 the clients attached to its SESSION, so two differently\-sized clients sitting
 on two different sessions contend over nothing and the mode changes nothing for
-either \(em the indicator stays grey and says so.
+either: the indicator stays grey and says so.
 .B mux views
 reports the server\-wide picture as well, and says plainly whether it bites the
 window you are looking at.
@@ -418,8 +418,8 @@ Does each session's RECORDED agent state match what its agent is doing? The
 status strip reports state from per\-pane files written by an agent's lifecycle
 hooks; when a hook does not fire, the file keeps saying whatever it last said
 and nothing on the bar can contradict it, because the bar IS the file. This
-asks the other side \(em whether an agent process under that pane is burning
-CPU \(em and reports any disagreement.
+asks the other side (whether an agent process under that pane is burning
+CPU), and reports any disagreement.
 .IP
 It also asks the REVERSE question: is an agent running with no record at all?
 That case is the more damaging of the two and was long invisible here. A stale
@@ -449,7 +449,7 @@ definition may declare a
 line: a string that appears in the pane only while a turn runs. Asking the AGENT
 DEFINITION keeps mux neutral, since mux never learns what any particular agent's
 interface says. An agent that declares no marker, or a pane that cannot be
-captured, leaves the verdict exactly where it was \(em guessing would make this
+captured, leaves the verdict exactly where it was: guessing would make this
 confidently wrong about a working agent.
 .IP
 Non\-zero exit when a session reports a finished agent that is working, when a
@@ -474,7 +474,7 @@ lifecycle event has the standing to do that.
 .IP
 Only the state word changes. The epoch is kept deliberately: it marks when the
 current state began, and the turn ended at some unknown point after that, so
-stamping the present would claim the turn just finished \(em the one thing known
+stamping the present would claim the turn just finished: the one thing known
 to be false. The notification id is kept too, so the next real transition closes
 the banner the ordinary way. The write is a compare\-and\-swap against the state
 and epoch sampled before the CPU window, so a record that a genuine hook moved
@@ -525,11 +525,11 @@ but must never resurrect one out of
 That distinction is load-bearing, and its absence was a live bug.
 .B idle
 means THE TURN ENDED, and only a turn start may leave it. Any event that fires
-AFTER a turn finishes \(em a trailing
+AFTER a turn finishes (a trailing
 .BR PostToolUse ,
 a
 .BR SubagentStop ,
-a post-turn summary \(em otherwise writes
+a post-turn summary), otherwise writes
 .B working
 as a fresh transition, and since nothing fires again afterwards it sticks
 forever. The session then shows a working glyph while sitting at an empty
@@ -557,7 +557,7 @@ Per\-session agent state, machine readable, one line each:
 Where
 .B mux agent-summary
 collapses a namespace to a single worst\-state\-and\-count line for a tray icon,
-this keeps every session \(em what a tooltip, a right\-click menu, or a tray
+this keeps every session: what a tooltip, a right\-click menu, or a tray
 aggregating SEVERAL MACHINES needs. A session with more than one agent pane
 reports its worst state, so nothing hides behind an idle sibling.
 .IP
@@ -578,9 +578,9 @@ zero.
 .IP
 THE EXIT STATUS IS PART OF THE CONTRACT. A host with no agents prints nothing
 and exits ZERO. This command has no failure of its own, so a non\-zero exit can
-only have come from the transport \(em an unreachable box, no
+only have come from the transport (an unreachable box, no
 .B mux
-on the remote PATH \(em and a presenter MUST render that as unknown rather than
+on the remote PATH), and a presenter MUST render that as unknown rather than
 as calm. A host that is down but draws as idle is how you stop checking a
 machine that needed you.
 .IP
@@ -604,14 +604,14 @@ answers for EVERY partition instead, one
 line each. That is one round trip rather than one per partition, which is the
 point of it: a reader on another machine cannot know the partition names to
 ask for, and over a transport N partitions must not mean N connections. THE
-CALLER'S OWN PARTITION ALWAYS APPEARS, even with nothing tracked in it \(em
+CALLER'S OWN PARTITION ALWAYS APPEARS, even with nothing tracked in it:
 "quiet" and "not there" are different answers, and a presenter that saw
 nothing for the partition it is sitting in would have to guess which.
 .IP
 .B \-\-attached
 narrows that to the partitions SOMEBODY IS LOOKING AT: those whose tmux server
 has a client attached. A tray item means a human is watching, and remotely that
-is precisely what a latch encodes \(em the local counterpart is an attached
+is precisely what a latch encodes: the local counterpart is an attached
 client. Without it a partition with a running server and no terminal window
 showing it publishes an item nobody can act on.
 .IP
@@ -641,8 +641,8 @@ are bound to mux verbs rather than to whatever tmux left there, and that
 .I status\-right
 and
 .I status\-left
-are still mux's own jobs. With no server for this partition these are skipped
-\(em a healthy state on a fresh boot or a headless box \(em and the skip is
+are still mux's own jobs. With no server for this partition these are skipped:
+a healthy state on a fresh boot or a headless box, and the skip is
 reported rather than passed over in silence.
 .IP
 These are READ\-ONLY queries. The check deliberately never runs
@@ -677,7 +677,7 @@ anything containing a slash, a leading tilde, or a bare
 .B .
 is a path, since a session name never contains one. A path is EVIDENCE, so it
 never reaches the unknown\-name refusal, and an exact\-root claim wins over
-climbing to the git toplevel \(em a subdirectory session resolves to itself,
+climbing to the git toplevel: a subdirectory session resolves to itself,
 not to its enclosing repository. This is the form
 .B mux resume
 replays, so resuming is a loop over a public command rather than a private
@@ -807,7 +807,7 @@ cannot.
 .IP
 Both matter because tmux redistributes size proportionally on every resize, so
 a window resized a few times drifts off the even split its layout asked for and
-stays there \(em and border\-drag is unbound (a copy drag across a divider
+stays there, and border\-drag is unbound (a copy drag across a divider
 would otherwise yank it), so nothing else puts it back.
 .IP
 Panes of differing HEIGHT are left alone: those are stacked rather than a single
@@ -855,15 +855,15 @@ directory, the discovery map, the session set, and profile visibility.
 Settings resolve in three levels, merged last\-wins, unconditionally:
 .TP
 1.
-mux's built\-in defaults \(em BEHAVIOUR only, never a location.
+mux's built\-in defaults: BEHAVIOUR only, never a location.
 .TP
 2.
-.IR partitions/<name> .partition
-\(em what this partition shares.
+.IR partitions/<name> .partition:
+what this partition shares.
 .TP
 3.
-.IR contexts/<token> .context
-\(em what is unique to this context.
+.IR contexts/<token> .context:
+what is unique to this context.
 .PP
 The same key set is legal in either file
 .RB ( label ", " theme ", " derive ", " agent ", " layout ", " scan ,
@@ -920,8 +920,8 @@ into
 (a permission prompt) or
 .B idle
 (the turn finished). Not on a same-state repeat, not on the way INTO
-.B working
-\(em that transition is you \(em and not while you are already looking at the
+.BR working :
+that transition is you, and not while you are already looking at the
 pane, unless the profile says
 .BR "notify always" .
 .PP
@@ -960,7 +960,7 @@ source-file ~/.local/share/mux/mux-opinions.tmux   # optional
 .fi
 .PP
 .I mux.tmux
-is required \(em the status bar, feature bindings, and resize hooks; it reaches
+is required: the status bar, feature bindings, and resize hooks; it reaches
 mux's helpers only as
 .RB ' "mux <verb>" ',
 so it carries no paths.
@@ -997,8 +997,8 @@ latch\-fallback no
 THE WHOLE KNOWN SET IS ENUMERATED, including what this build does not implement.
 A present\-only list makes absence ambiguous: a consumer cannot tell "this mux
 does not support it" from "whoever added the verb forgot the line". Declaring
-everything makes absence mean exactly one thing \(em that this mux predates the
-capability itself \(em and gives three answers instead of two:
+everything makes absence mean exactly one thing (that this mux predates the
+capability itself), and gives three answers instead of two:
 .TP
 .I <n>
 Usable here. The integer is the INTERFACE version, not the release: it is bumped
@@ -1009,7 +1009,7 @@ could keep its name and go back to emitting an epoch instead of an age, which is
 exactly the property a cross\-machine reader depends on.
 .TP
 .B unavailable
-Implemented, but not usable in this context \(em
+Implemented, but not usable in this context:
 .B notify
 with no send backend,
 .B context
@@ -1042,7 +1042,7 @@ Internal verbs are deliberately absent from the report, but they are still
 CLASSIFIED in the manifest, and
 .I test/mux-capabilities.t
 asserts every dispatchable verb appears there. So a new verb nobody classified
-fails the suite rather than quietly never being advertised \(em omission is the
+fails the suite rather than quietly never being advertised: omission is the
 one failure a curated list cannot catch.
 .SH LATCH
 .B mux latch " " \fIHOST\fR [: \fIPARTITION\fR "] [" \fISESSION\fR ]
@@ -1071,7 +1071,7 @@ SINGLE FLIGHT, through a lock at
 because a network flap can fire several attach attempts at once (a hook, a key
 binding, a human) and N loops against one target is N credential prompts and N
 reconnect races. The file holds the pid on line 1, the target verbatim on line
-2, and the session on line 3 \(em the target, because the FILENAME is sanitised
+2, and the session on line 3: the target, because the FILENAME is sanitised
 and cannot carry it:
 .B manifold:work
 becomes
@@ -1093,12 +1093,12 @@ reaps locks whose process is gone: the trap covers every exit this process
 controls, but a SIGKILL or a reboot mid\-latch does not, and nothing else would
 ever remove one. That moment is chosen for the same reason
 .B mux themes load
-prunes palette stamps \(em it is the only one needing no decision, since every
+prunes palette stamps: it is the only one needing no decision, since every
 latch already opens the directory.
 .PP
 BRING YOUR OWN TRANSPORT. mux owns the state machine and the attach semantics;
 ssh, mosh, Eternal Terminal or anything else supplies the pipe. latch never
-carries a keystroke and knows nothing about hosts, addresses or MTUs \(em it
+carries a keystroke and knows nothing about hosts, addresses or MTUs: it
 decides WHEN to re\-establish an attachment and says WHY it has not, which is
 what keeps it from growing into a transport project.
 .PP
@@ -1120,7 +1120,7 @@ mux latch [::1]:2222 api   \(->  mux go api      IPv6 needs the brackets
 .PP
 THE PORT IS IN THE TARGET BECAUSE EVERY SEAM NEEDS IT (0.84). Before it, a
 nonstandard port could only live in the transport template or in ssh_config, so
-a PER\-HOST port was inexpressible in one line \(em and ET's probe had to be
+a PER\-HOST port was inexpressible in one line, and ET's probe had to be
 told
 separately, which was a footgun: tell it wrong and latch parks in a backoff
 about a service that is running. latch parses it once now and hands it to the
@@ -1138,7 +1138,7 @@ sharing a partition's name resumed the wrong set while looking like success. The
 rarer structural field takes the colon, as it has since 0.56.
 .PP
 AN IPv6 LITERAL IS NEVER SPLIT. A colon is a port only when it cannot be
-anything else \(em one colon with digits after it, or brackets \(em because the
+anything else (one colon with digits after it, or brackets), because the
 wrong guess dials a host that does not exist while looking like it worked.
 .PP
 THE PRE\-0.84 SPELLING IS REFUSED, NOT REINTERPRETED.
@@ -1167,7 +1167,7 @@ had, where
 would build a single empty one. It is deterministic, so a retry lands in the
 same place, and idempotent, so retrying costs nothing.
 .PP
-Attach\-only therefore applies to the bare NAMED form only \(em a host and a
+Attach\-only therefore applies to the bare NAMED form only: a host and a
 session, with no partition. Nothing is lost either way:
 .B resume
 already never invents anything, since it only rebuilds what was recorded, and a
@@ -1181,7 +1181,7 @@ except one, where it is actively harmful.
 Down, recoverable with no human action. Retried on a backoff.
 .TP
 .B blocked
-No credential is live YET \(em an empty agent, a key not added, a hardware key
+No credential is live YET: an empty agent, a key not added, a hardware key
 waiting for a touch. latch DOES NOT ATTEMPT, because every attempt is a prompt
 and a loop here is a prompt storm. It polls the CREDENTIAL instead, which costs
 nothing (\c
@@ -1200,7 +1200,7 @@ forever is the same storm wearing a backoff.
 The far side's identity does not match what is on file. This was part of
 .B denied
 until 0.71, on the reasoning that it is the same refusal pointing the other way,
-and it is not \(em on the one axis that decides terminality. The refusal lands
+and it is not: on the one axis that decides terminality. The refusal lands
 during KEY EXCHANGE, before user authentication, so no credential is offered to
 the unverified peer and nothing is spent; and latch CAN observe this one being
 fixed, because the next attempt simply answers, at no cost. So it retries a
@@ -1210,7 +1210,7 @@ default 4) and only then calls the change permanent.
 .IP
 Bounded because the two causes are indistinguishable from here: something
 interfering with the path resolves itself, a rebuilt host does not. The
-asymmetry decides it \(em retrying a permanent change costs a short delay before
+asymmetry decides it: retrying a permanent change costs a short delay before
 the human is told, while not retrying a transient one leaves a roaming
 attachment dead until somebody notices.
 .IP
@@ -1219,7 +1219,7 @@ ssh prints the fingerprint, the offending file and line, and the exact remedy
 command, and then ends with its least informative line; latch normally reports
 the LAST line, which is right for a tool that warns before it fails and wrong
 for one that writes a report. mux does not learn ssh's wording to pick the
-useful lines out \(em it hands the whole thing over, bounded.
+useful lines out: it hands the whole thing over, bounded.
 .TP
 .B unknown
 Cannot be determined. Never reported as usable and never as blocked; retried
@@ -1227,14 +1227,14 @@ with more patience. On a real fleet this is common rather than exotic: an MTU
 blackhole passes every cheap liveness probe there is.
 .TP
 .B ended
-The human detached or quit. TERMINAL, and latch exits 0 \(em retrying would
+The human detached or quit. TERMINAL, and latch exits 0: retrying would
 resurrect the session they just closed.
 .TP
 .B gone
 The far side no longer has that session. Reported loudly, never silently
 recreated.
 .IP
-This also covers the remote tmux SERVER going away under a live attach \(em a
+This also covers the remote tmux SERVER going away under a live attach: a
 kill\-server, a
 .BR "mux kill-all" ,
 or a crash. tmux exits 1 and writes "lost server" to the TERMINAL rather than to
@@ -1265,7 +1265,7 @@ Those codes are attributable only because mux itself uses none of them: see
 run against a second machine showed it.
 .PP
 Only one latch runs per target at a time. A network flap can fire several
-attempts at once \(em a hook, a key binding, a human \(em and N loops against
+attempts at once (a hook, a key binding, a human), and N loops against
 one target is N credential prompts and N reconnect races. A stale lock from a
 killed run is reclaimed by checking the recorded pid.
 .SS Seams
@@ -1339,9 +1339,9 @@ THE TIMEOUTS IN THE DEFAULT ARE WHAT MAKE RECONNECTION WORK AT ALL, and they
 cover two different phases. ssh sets
 .B ServerAliveInterval
 to 0 by default, meaning off, and there are two disruptions that look nothing
-alike to TCP. When the far side says goodbye \(em a reboot, sshd stopping, a
-router sending RST \(em ssh returns at once. When the packets simply STOP \(em
-wifi drops, a lid closes, a VPN dies \(em nothing is refused, so ssh waits on a
+alike to TCP. When the far side says goodbye (a reboot, sshd stopping, a
+router sending RST), ssh returns at once. When the packets simply STOP:
+wifi drops, a lid closes, a VPN dies: nothing is refused, so ssh waits on a
 socket the kernel will not give up on for about two hours.
 .B TCPKeepAlive
 is on by default and does not help, because a keepalive probe into a blackhole
@@ -1411,7 +1411,7 @@ the teardown captured from tmux itself.
 .IP
 FIRST, not last, for two reasons: you are sitting in front of a wedged terminal
 and every second of a backoff is spent that way, and latch's own messages go to
-that same terminal \(em printing "retrying in 8s" into a hidden\-cursor
+that same terminal: printing "retrying in 8s" into a hidden\-cursor
 alternate screen is how a reconnect looks like a hang.
 .TP
 .BR MUX_LATCH_STATUS " (" latch\-status )
@@ -1436,7 +1436,7 @@ A hook is NAMED, not spelled out, and a bare name resolves
 .IR $MUX_DIR /latch
 first, then
 .IR $MUX_SHARE /latch,
-then PATH \(em the same overlay\-over\-shipped order layouts, themes and agents
+then PATH: the same overlay\-over\-shipped order layouts, themes and agents
 use, and for the reason
 .B context\-command
 already documents: this config travels between machines through a dotfiles repo,
@@ -1506,7 +1506,7 @@ port open. IF etserver RUNS ON A NON\-DEFAULT PORT, tell the probe too, with
 .B MUX_ET_PORT
 or a
 .B latch\-et\-port
-line in the same config \(em otherwise it tests 2022, finds nothing, and parks
+line in the same config: otherwise it tests 2022, finds nothing, and parks
 latch in a backoff about a service that is running. With no
 .BR nc (1)
 it answers "attempt it" rather than "cannot tell", because the latter is what
@@ -1537,7 +1537,7 @@ is
 .BR \-\-tunnel ,
 not "request a pty", and it TAKES A VALUE: given
 .BR "et \-t %h \-\-command %c" ,
-it swallows the host and et answers "Missing host to connect to" \(em on exit 0.
+it swallows the host and et answers "Missing host to connect to": on exit 0.
 A pty is the DEFAULT for
 .BR \-\-command ,
 so no flag is needed.
@@ -1545,7 +1545,7 @@ so no flag is needed.
 .B the target's port is \fBetserver\fR's, not sshd's
 ET needs TWO ports: sshd for the handshake and etserver for the session. The one
 in the target is etserver's, because that is the one mux's probe must also know.
-A nonstandard SSHD port stays a transport detail \(em put
+A nonstandard SSHD port stays a transport detail: put
 .B "-p 2222"
 in the template or in ssh_config, where ET's own bootstrap will read it.
 .TP
@@ -1570,8 +1570,8 @@ where et wrote it, so the reason is visible even though latch cannot quote it or
 act on it.
 .TP
 .B latch cannot quote the transport's reason
-et writes its diagnostics to STDOUT, not stderr, so the CLASSIFY hook \(em which
-is handed a stderr file \(em never sees them. That is why
+et writes its diagnostics to STDOUT, not stderr, so the CLASSIFY hook (which
+is handed a stderr file), never sees them. That is why
 .B et\-classify
 keys on the exit code alone:
 .B 0
@@ -1594,7 +1594,7 @@ success and the work is gone.
 NEGOTIATED ONCE, LAZILY, and this is the first real consumer of
 .BR "mux capabilities" .
 A remote too old for the flag answers exit 2 with a usage block, so using it
-blind would make latch work perfectly until the first drop and then break \(em
+blind would make latch work perfectly until the first drop and then break,
 exactly the discover\-by\-failure the handshake exists to end. The query is
 deferred to the first RETRY, so the happy path pays nothing, and cached for the
 run. A remote that cannot do it degrades to the older behaviour rather than to
@@ -1610,14 +1610,14 @@ keeps the always\-creating behaviour, so this is opt\-in by template.
 .PP
 A failure to REACH the far side is never cached as a capability verdict. The
 transport failing says nothing whatever about the remote's version, so the
-question stays open and is asked again \(em the same rule as everywhere else
+question stays open and is asked again: the same rule as everywhere else
 here: cannot tell is not no.
 .SS The agent contract
 .TP
 .B mux skill " [" \-\-agents\-md "] [" \fINAME\fR ]
 Print the agent instructions that match THIS mux, on stdout. An API agents do
 not know about does not get used, which is the whole reason it ships: the
-verbs, the JSON contract and \(em the part that matters \(em the rule about
+verbs, the JSON contract and (the part that matters) the rule about
 never answering another agent's permission prompt are no use living only in a
 man page an agent will not read.
 .IP
@@ -1644,12 +1644,12 @@ RELEASE\-MATCHED, which is the point of printing it rather than linking it. It
 is installed once into a config directory and then nobody looks at it again, so
 a copy taken from a website teaches whatever the verbs were that day. This one
 comes out of the same tree as the binary answering the calls, so it cannot
-describe a flag this mux does not have \(em and the suite checks its verbs,
+describe a flag this mux does not have, and the suite checks its verbs,
 flags, states and statuses against the source, in both directions.
 .IP
 IT PRINTS AND DOES NOT INSTALL. Where either file belongs is somebody else's
 business, and mux does not learn the layout of another program's config
-directory \(em the same seam it holds by taking indicator sources as commands
+directory: the same seam it holds by taking indicator sources as commands
 and never learning what ssh is. The integrator places it:
 .IP
 .EX
@@ -1725,7 +1725,7 @@ README promises sits on the far side of the one step nobody wants to do by
 hand, so a new user reasonably concludes mux does not work.
 .IP
 IT WRITES SOMEBODY ELSE'S CONFIGURATION FILE, which every other part of mux
-refuses to do \(em
+refuses to do:
 .B mux skill
 prints rather than installs, deliberately. The difference is that this verb's
 whole purpose IS that step: a seam nobody can cross for you is not a seam, it
@@ -1737,7 +1737,7 @@ puts it back. Without
 and without a terminal it REFUSES rather than assuming consent.
 .IP
 IDEMPOTENT BY CONSTRUCTION: entries are keyed by event and replaced wholesale,
-so running it twice is running it once. That matters more than it sounds \(em a
+so running it twice is running it once. That matters more than it sounds: a
 hook appended twice FIRES twice, and a second
 .I working
 after a turn ends is exactly the straggler mux spent two releases learning to
@@ -1764,7 +1764,7 @@ THE MACHINE CONTRACT: a surface a program is invited to depend on, and
 deliberately a different contract from the rest of mux rather than a second
 spelling of it. Two verbs so far.
 .B mux agent status
-answers what is going on as JSON \(em the same question
+answers what is going on as JSON: the same question
 .B mux agent-summary \-\-all \-\-attached
 answers, in the contract's shape;
 .B \-\-any
@@ -1792,7 +1792,7 @@ types into that agent's pane.
 .IP
 .B send
 IS A HOOK FOR A HIGHER LAYER, not orchestration. mux already knows which pane
-is the agent's, which partition it is in and \(em the part only mux knows \(em
+is the agent's, which partition it is in and: the part only mux knows;
 whether it is BLOCKED; without the verb an orchestrator reaches around mux to
 .BR "tmux send-keys" ,
 re-derives pane resolution and inherits none of the guards. What is NOT here is
@@ -1809,7 +1809,7 @@ each other and route around the person.
 .B idle
 and
 .B working
-are ordinary \(em a running turn buffers the text and picks it up when it ends,
+are ordinary: a running turn buffers the text and picks it up when it ends,
 which is the natural "queue the next instruction" case.
 .IP
 AN OVERRIDE NEEDS TWO THINGS THAT CANNOT SUBSTITUTE FOR EACH OTHER: a grant in
@@ -1831,7 +1831,7 @@ decides, and one that does know passes the flag up front and pays nothing.
 WHO CONTROLS THE PANE decides whether an override is possible at all, read from
 the
 .B @mux-control
-pane option and set by whatever spawned the pane \(em mux reads it and never
+pane option and set by whatever spawned the pane: mux reads it and never
 writes it.
 .B human
 (the default, so an unclassified pane is a human's) is refused before the policy
@@ -1841,7 +1841,7 @@ is grantable as a whole class, which is what makes a village of generated names
 workable;
 .B hybrid
 is its own class because it DEPENDS, and folding it into either neighbour is
-wrong \(em into
+wrong: into
 .B human
 it would force the strictest grant to express the middling case.
 .IP
@@ -1851,14 +1851,14 @@ agent set on answering its neighbour's prompt can call
 .B tmux send-keys
 today. What the refusal buys is that the dangerous thing stops being the easy
 one, the default sits outside the agent's reach, and a bypass leaves mux's
-audit log \(em which is itself a signal. Every send that lands is written to
+audit log, which is itself a signal. Every send that lands is written to
 .BR "mux log" .
 .IP
 .B peers
 is HEADLESS by construction, and that is protected rather than incidental: it
 derives sessions from the state FILES and roots from the session set, so it
 answers over a transport, at boot, with no tmux client and no server attached.
-It carries no pane id on purpose \(em a verb that acts on a pane resolves one
+It carries no pane id on purpose: a verb that acts on a pane resolves one
 at the moment it acts, which is more correct than a caller caching an id that
 can change under it.
 .IP
@@ -1868,8 +1868,8 @@ is the class
 gates on, reported here so a caller can see it without attempting a send and
 reading the refusal. It costs ONE tmux query per PARTITION rather than one per
 peer, and it is
-.B null
-\(em never a guess \(em when the server cannot be reached or when the pane a
+.BR null ,
+never a guess, when the server cannot be reached or when the pane a
 record names is gone. That distinction is the point: a remote
 .B peers
 at boot would otherwise report every pane as human\-controlled, which is
@@ -1888,7 +1888,7 @@ asks for it, because an agent pane's scrollback can be enormous and a verb
 whose default answer is unbounded is one a caller learns to be afraid of.
 .IP
 .B wait
-IS ALWAYS BOUNDED \(em an unbounded wait from an agent is a hang with no
+IS ALWAYS BOUNDED: an unbounded wait from an agent is a hang with no
 operator, so
 .B \-t
 has a default (300s) rather than meaning forever. A timeout answers status
@@ -1896,7 +1896,7 @@ has a default (300s) rather than meaning forever. A timeout answers status
 and exit 1, and REPORTS THE STATE IT IS ACTUALLY IN: "not idle yet" is a
 different problem from "blocked and waiting for a human", and a caller that has
 just burned its timeout should not need a second round trip to find out which.
-That status is the clearest case for carrying a word beside the number \(em it
+That status is the clearest case for carrying a word beside the number: it
 needs no new exit code, which is what keeps 126, 127 and 255 attributable.
 .IP
 AN OPTION IS AN OPTION WHEREVER IT SITS on this surface, unlike the front end,
@@ -1920,7 +1920,7 @@ is a document or a sentence.
 .IP
 A SYMBOLIC
 .B status
-alongside the numeric exit \(em
+alongside the numeric exit:
 .BR ok ,
 .BR refused ,
 .B usage
@@ -1936,7 +1936,7 @@ THE SHAPE IS STABLE OR THE CAPABILITY NUMBER MOVES.
 .B mux capabilities
 declares
 .BR "agent contract 1" ,
-and a breaking change to any of these documents is a new number there \(em
+and a breaking change to any of these documents is a new number there,
 which is how a consumer finds out without sniffing a version string.
 .IP
 WHY A NAMESPACE AT ALL: without one, nothing declares which output is meant to
@@ -1948,8 +1948,8 @@ for a human could silently break a consumer that had started reading it. A
 declared machine surface is what frees the human surface to keep changing. The
 hyphenated
 .B agent\-*
-verbs are mux's own plumbing \(em called by tmux hooks, the status bar and the
-tray \(em and mean "about agent state", which is a different thing from "for
+verbs are mux's own plumbing (called by tmux hooks, the status bar and the
+tray), and mean "about agent state", which is a different thing from "for
 an agent to call".
 .SH EXIT STATUS
 mux uses exactly four codes, and the absence of every other one is part of the
@@ -1970,7 +1970,7 @@ A guard fired, or drift was found.
 A usage error, or a verb this mux does not know.
 .TP
 .B 3
-THE NAME YOU GAVE IS NOT KNOWN HERE \(em no such session, and nothing that
+THE NAME YOU GAVE IS NOT KNOWN HERE: no such session, and nothing that
 could be resolved into one. A PARTITION nobody knows is the same condition and
 returns the same code.
 .BR go ,
@@ -2065,7 +2065,7 @@ Bytes after which the log is truncated. Default 262144. Capped rather than
 rotated, on the same reasoning as
 .BR MUX_EMIT_LOG :
 an unbounded always\-on file is its own bug. Truncation is safe only BECAUSE the
-log records mutations and failures rather than activity \(em at that volume the
+log records mutations and failures rather than activity: at that volume the
 default holds years of incidents, so if truncation ever fires in real use,
 something is logging routine events and that is the bug, not the cap.
 .TP
@@ -2078,7 +2078,7 @@ Everything here rebuilds on demand, which is what makes it a cache.
 THE STAMPS PRUNE THEMSELVES. Every tmux server that sources the fragment writes
 one, throwaway
 .B -L
-servers included, and nothing used to remove them \(em 60 had accumulated here
+servers included, and nothing used to remove them: 60 had accumulated here
 from 59 sockets that no longer existed. A server start now drops any stamp whose
 socket has no server behind it, so the steady state is however many servers you
 actually have. That moment was chosen because it needs no decision: a verb has
@@ -2099,7 +2099,7 @@ at a time, and a draft is what you typed. A cache clear would silently destroy
 the answer to "what was I working on", and the only moment you would notice is
 the
 .B mux resume
-after a reboot \(em exactly when you cannot reconstruct it.
+after a reboot, exactly when you cannot reconstruct it.
 .IP
 THE LINE BETWEEN THE TWO IS ONE QUESTION: does mux rebuild it? Stamps and the
 discovery map do. The session set and a draft do not. Anything left in the old
@@ -2128,7 +2128,7 @@ which reads the pane's foreground process group from
 .IR /proc/<pid>/stat .
 A TEST SEAM. Without it that arithmetic is unreachable under test: a test shell
 has no controlling terminal, so tpgid is \-1, the non\-numeric guard fires and
-the field is never read \(em so a wrong field index passes unnoticed, which it
+the field is never read, so a wrong field index passes unnoticed, which it
 did. Same seam, and the same reason, as
 .BR MUX_DOCTOR_PROC .
 .TP
@@ -2139,8 +2139,8 @@ rather than closed. Default 3600.
 A freedesktop id is a small integer the daemon assigns sequentially and REUSES
 after it restarts, so an id held long enough stops naming our banner and starts
 naming somebody else's. mux carries an id per STATE, not per notification, so a
-session that finishes and is never touched again keeps its id indefinitely
-\(em found on one holding an id for 32 hours, which the next transition would
+session that finishes and is never touched again keeps its id indefinitely:
+found on one holding an id for 32 hours, which the next transition would
 have dutifully closed.
 .IP
 Dropping a stale id costs nothing, and that is only true because mux sends
@@ -2250,7 +2250,7 @@ Jump to whoever has been blocked longest, then back:
 .PP
 .RS
 prefix
-.BR b " \(em ... \(em prefix " B
+.BR b " ... then prefix " B
 .RE
 .SH SEE ALSO
 .BR tmux (1)
