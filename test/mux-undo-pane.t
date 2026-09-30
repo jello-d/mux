@@ -139,6 +139,20 @@ _npanes() { [ "$(tm list-panes -t t 2>/dev/null | wc -l)" -eq "$1" ]; }
 # had been hiding. A human pressing prefix-u is far slower than either, so this
 # is a test-harness ordering problem rather than a bug, but it is exactly the
 # kind a sleep converts into an intermittent failure on someone else's machine.
+# --- THREE DIRECTORIES THAT DIFFER, RESOLVED RATHER THAN SPELLED ----------
+# The restore has to put a pane back where it was, so the fixture needs three
+# distinguishable directories that exist everywhere. /tmp, /etc and /usr are
+# that, with one platform catch: on macOS the first two are SYMLINKS into
+# /private, and tmux reports `pane_current_path` RESOLVED, so a comparison
+# against the spelling asserts a fact about the filesystem layout rather than
+# about the restore. Resolve once, compare against what tmux will actually say.
+D0=$(CDPATH= cd -- /tmp && pwd -P)
+D1=$(CDPATH= cd -- /etc && pwd -P)
+D2=$(CDPATH= cd -- /usr && pwd -P)
+[ "$D0" != "$D1" ] && [ "$D1" != "$D2" ] && [ "$D0" != "$D2" ] \
+  || fail "the three fixture directories are not distinct ($D0 $D1 $D2), so a
+pane restored into the wrong one would read as a pass"
+
 _recorded() { [ -n "$(ls -A "$T/run/mux-undo" 2>/dev/null)" ]; }
 # The shells must have STARTED before their cwd is readable: pane_current_path
 # reports the server's directory until then, which silently recorded the wrong
@@ -147,11 +161,17 @@ _recorded() { [ -n "$(ls -A "$T/run/mux-undo" 2>/dev/null)" ]; }
 # tracker snapshot before pane 0's shell had reported /tmp, so the record
 # carried the SERVER's directory and the restore came back in the wrong place.
 # Intermittent: it survived five clean runs before showing up.
+#
+# AND THE THREE DIRECTORIES ARE RESOLVED, NOT SPELLED (see D0/D1/D2 above):
+# macOS reports them through /private, so a literal `/tmp` matches nothing
+# there and this precondition could never be satisfied. It failed for 10s and
+# then reported "the panes never reported their cwd", which is a true statement
+# about the pattern and a false one about the panes.
 _cwds_ready() {
   _cr=$(state)
-  case $_cr in *:/tmp*) ;; *) return 1 ;; esac
-  case $_cr in *:/etc*) ;; *) return 1 ;; esac
-  case $_cr in *:/usr*) ;; *) return 1 ;; esac
+  case $_cr in *":$D0 "*) ;; *) return 1 ;; esac
+  case $_cr in *":$D1 "*) ;; *) return 1 ;; esac
+  case $_cr in *":$D2 "*) ;; *) return 1 ;; esac
   return 0
 }
 
@@ -168,10 +188,10 @@ state() { tm list-panes -t t -F '#{pane_height}:#{pane_current_path}' \
 build() {
   stage "building the window (a fresh socket each time)"
   rotate
-  tm new-session -d -s t -x 120 -y 60 -c /tmp
+  tm new-session -d -s t -x 120 -y 60 -c "$D0"
   tm source-file "$HERE/share/mux.tmux"
-  tm split-window -t t -c /etc "echo MARK_A; exec \"\${SHELL:-/bin/sh}\""
-  tm split-window -t t -c /usr "echo MARK_B; exec \"\${SHELL:-/bin/sh}\""
+  tm split-window -t t -c "$D1" "echo MARK_A; exec \"\${SHELL:-/bin/sh}\""
+  tm split-window -t t -c "$D2" "echo MARK_B; exec \"\${SHELL:-/bin/sh}\""
   tm select-layout -t t even-vertical
   # ORDER IS LOAD-BEARING: wait for the shells to report their real cwd,
   # and only THEN make a layout event, so the tracker's snapshot is taken
@@ -303,8 +323,9 @@ feature exists for."
 stage "the directory is remembered"
 _until 10 _cwds_ready || true
 case "$(state)" in
-*":/etc "*) ;;
-*) fail "the restored pane did not come back in its old directory: $(state)" ;;
+*":$D1 "*) ;;
+*) fail "the restored pane did not come back in its old directory [$D1]:
+$(state)" ;;
 esac
 
 # --- twice is once --------------------------------------------------------
