@@ -54,3 +54,17 @@ disable=SC2094
 # `ls` where the alternative is a find(1) that mux deliberately avoids: the
 # sandbox that runs these cannot traverse some config dirs that globs can read.
 disable=SC2012
+
+# A FUNCTION WITH AN OPTIONAL ARGUMENT, called with none, which is an idiom this
+# tree uses everywhere: `mux_ctx_socket() { printf '%s' "${1:-global}"; }`,
+# `mux_sess_file()  # [partition]`, `mux_agent_dir [NS]`. SC2119 says "use $@ if
+# the function's $1 should mean the script's $1" and SC2120 says "references
+# arguments, but none are ever passed"; both are true statements about code that
+# is correct, since the whole point of the default is that a caller may omit it.
+#
+# VERSION-DEPENDENT, WHICH IS WHY THEY ARE HERE AND NOT INLINE. shellcheck 0.11
+# (this box) emits NEITHER of these, and 0.9.0 (ubuntu-latest's apt package)
+# emits 13 of them, so the same tree linted clean here and failed in CI on every
+# push since CI existed. Disabling with the reason recorded makes the verdict
+# the same under both, rather than pinning a version and freezing the rule set.
+disable=SC2119,SC2120
