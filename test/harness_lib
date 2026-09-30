@@ -19,7 +19,25 @@
 # nothing outside T is touched. POSIX sh; run one test with `sh test/<name>.t`
 # or all with test/run.
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-T=$(mktemp -d)
+
+# T IS CANONICAL, and that is a portability fix rather than tidiness. mux
+# RESOLVES a project root before recording it, correctly: a root stored once per
+# symlink would make one project several. So every assertion comparing what mux
+# reports against a `$T`-relative string is comparing a resolved path with an
+# unresolved one, and they differ the moment TMPDIR contains a symlink.
+#
+# WHICH IS macOS, ALWAYS: `/var` is a symlink to `/private/var` there and
+# `$TMPDIR` lives under it, so `mktemp -d` hands back `/var/folders/...` while
+# mux resolves `/private/var/folders/...`. Three tests failed on the runner for
+# this and no other reason (mux-new, mux-migrate, mux-discover), reading as
+# defects in `mux go`, `mux new` and the discovery map.
+#
+# REPRODUCED ON LINUX before fixing, by pointing TMPDIR at a symlink
+# (`ln -s /tmp /var/tmp/tdlink`): the same three tests fail with the same
+# messages, which is what turned the macOS log from an inference into a
+# measurement. Pin the ROOT the paths derive from, the same lesson HOME=$T/home
+# and TMUX_TMPDIR already record here.
+T=$(CDPATH= cd -- "$(mktemp -d)" && pwd -P)
 trap 'rm -rf "$T"' EXIT INT TERM
 
 # t_trap 'COMMAND': a test's OWN cleanup, composed with the scratch removal
