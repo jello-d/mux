@@ -103,7 +103,12 @@ except Exception as e:
 sys.stdout.write(str(eval(os.environ["MUX_T_EXPR"])))
 PY
 }
-eq() { [ "$2" = "$3" ] || fail "$1: got [$2] want [$3]"; }
+# $OUT IS INCLUDED, because `run` captured it and the whole point of this
+# surface is that a refusal is a DOCUMENT: `{"status":"usage",...}` names the
+# cause outright, so printing the exit code alone throws the answer away. macOS
+# CI reported `status-rc: got [2] want [0]` for days with it sitting in hand.
+eq() { [ "$2" = "$3" ] || fail "$1: got [$2] want [$3]
+mux said: ${OUT:-<nothing>}"; }
 
 # `read` is a mux VERB here, not the shell builtin, but shellcheck sees the
 # word after a wrapper function and assumes the builtin, at every call site.
