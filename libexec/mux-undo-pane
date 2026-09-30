@@ -78,31 +78,44 @@ _lookup() {   # <pane id> <tab-separated list> -> the value for that id
     '$1 == k { sub(/^[^\t]*\t/, ""); print; exit }'
 }
 
-# tmux's `pane_start_command` is QUOTED for display, and HOW it quotes differs
-# between tmux versions, which cost a live bug on Ubuntu LTS. Measured, the same
-# command in both:
+# tmux's `pane_start_command` is QUOTED for display, and HOW MANY LAYERS of
+# escaping it applies DIFFERS BY tmux VERSION. Captured off the CI runners, the
+# same command through the same fragment:
 #
-#   tmux 3.6  ["echo MARK_A; exec \"\${SHELL:-/bin/sh}\""]   wrapped + escaped
-#   tmux 3.4  [echo MARK_A; exec "\${SHELL:-/bin/sh}"]      escaped, no wrapper
+#   tmux 3.6   "echo MARK_A; exec \"\${SHELL:-/bin/sh}\""    one layer
+#   tmux 3.4   "echo MARK_A; exec \"\\${SHELL:-/bin/sh}\""   TWO
 #
-# THE OUTER QUOTES WERE TREATED AS THE SIGNAL and they are not: a value without
-# them was returned VERBATIM, so on tmux 3.4 the recorded command kept its `\$`
-# and the restored pane tried to exec a program literally named
-# `${SHELL:-/bin/sh}`. Replaying it does not fail loudly, which is how the same
-# class slipped past a first live test once before: the pane is created and runs
-# the wrong thing. Every Ubuntu 24.04 user had that, since prefix-u is the only
-# way to reach it.
+# Both WRAP. 3.4 additionally escapes the backslash it added, so a single
+# unescape pass leaves `exec "\${SHELL:-/bin/sh}"`, and replaying that execs a
+# program literally named `${SHELL:-/bin/sh}`, because `\$` inside double quotes
+# is a literal dollar to the shell. It does not fail loudly: the pane is created
+# and runs the wrong thing, the same way this function's first bug did. Every
+# Ubuntu 24.04 box had it, at the moment a user has just lost a pane.
 #
-# SO THE UNESCAPE IS UNCONDITIONAL and only the WRAPPER is optional. Both forms
-# then land on the same command, and `test/mux-undo-pane.t` pins both literals
-# rather than trusting whichever tmux the box has, which is what let a version
-# difference hide here in the first place.
+# SO IT UNESCAPES TO A FIXPOINT, bounded at three passes: both forms land on the
+# same command and no version number is consulted, which is the property worth
+# having, since sniffing `tmux -V` is one more thing to be wrong about on the
+# next release. The wrapper is stripped when present rather than required, which
+# costs nothing and is one less assumption about a form nobody has measured yet.
+#
+# WHAT THE FIXPOINT COSTS, said plainly rather than left to be discovered: a
+# start command containing a LITERAL backslash loses it. The trade is the right
+# way round. mux's own commands (`exec "${SHELL:-/bin/sh}"`, an agent's
+# `claude --continue || claude`) hold `$` and `"` and no backslashes, so the
+# broken case was the common one on an entire LTS release and the cost is a rare
+# one. `test/mux-undo-pane.t` pins the measured literals.
 _unquote() {   # <display form> -> the command as it was given
   _uq=$1
   case $_uq in
   '"'*'"') _uq=${_uq#\"}; _uq=${_uq%\"} ;;
   esac
-  printf '%s' "$_uq" | sed 's/\\\(.\)/\1/g'
+  _uqn=0
+  while [ "$_uqn" -lt 3 ]; do
+    _uqx=$(printf '%s' "$_uq" | sed 's/\\\(.\)/\1/g')
+    [ "$_uqx" = "$_uq" ] && break
+    _uq=$_uqx; _uqn=$((_uqn + 1))
+  done
+  printf '%s' "$_uq"
 }
 
 _record() {   # <window id>
