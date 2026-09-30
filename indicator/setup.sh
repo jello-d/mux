@@ -198,6 +198,14 @@ _running_current() {
   _rn_stale=
   for _rn_f in "$_rn_dir"/*.py; do
     [ -f "$_rn_f" ] || continue
+    # shellcheck disable=SC3013  # -nt is not POSIX; see below
+    # `-nt` IS A REAL PORTABILITY NOTE AND IS KEPT ON PURPOSE, which is why this
+    # is disabled here rather than in .shellcheckrc: a second, accidental use
+    # somewhere portable must still fail. dash and bash both implement it, and
+    # this line is already Linux-only by construction because it compares
+    # against `/proc/<pid>`, whose mtime IS the process start time. The portable
+    # alternative is date arithmetic on two `stat` formats that differ between
+    # GNU and BSD, which is more code and more to get wrong for no gain here.
     [ "$_rn_f" -nt "/proc/$_rn_pid" ] || continue
     _rn_stale="$_rn_stale ${_rn_f##*/}"
   done

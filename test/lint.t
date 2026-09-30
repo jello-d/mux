@@ -320,5 +320,15 @@ which reads as a missing feature rather than a broken install."
   esac
 done
 
-printf 'ok   %s (%s files clean)\n' "$_name" "$_n"
+# THE VERSION IS REPORTED, because this verdict DEPENDS on it and that was
+# invisible for the whole life of CI. shellcheck 0.11 and 0.9.0 disagree about
+# SC2119/SC2120 (0.9.0 finds 13 of them in this tree, 0.11 finds none), so a
+# green run here stood in for a red one on ubuntu-latest, whose apt package is
+# 0.9.0, on every push since the workflow was added. The rules the two disagree
+# about are now disabled with their reason in .shellcheckrc; printing the
+# version is what makes the NEXT disagreement legible instead of mysterious.
+_scv=$(shellcheck --version 2>/dev/null \
+  | awk '/^version:/{print $2; exit}')
+printf 'ok   %s (%s files clean, shellcheck %s)\n' \
+  "$_name" "$_n" "${_scv:-?}"
 exit 0
