@@ -481,6 +481,7 @@ _line() {
 # trailing CARRIAGE RETURN. Embedded mid-message it sends the cursor back to
 # column 0, so the rest of the sentence overwrites the beginning of it:
 #
+# conventions: allow -- mux latch's own output, quoted verbatim
 #   probing -- Connection closed by 10.0.0.64 port 22^M, retrying in 60s
 #
 # which renders as `, retrying in 60s`d by 10.0.0.64 port 22` and reads as a
