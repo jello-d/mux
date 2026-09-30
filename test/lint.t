@@ -145,6 +145,48 @@ if [ -s "$_bad" ]; then
   exit 1
 fi
 
+# --- A DESTRUCTIVE TRAP MAY NOT DEFER ITS EXPANSION ------------------------
+# The standing rule in ~/src/CLAUDE.md, made mechanical: `rm -rf` never runs
+# with variable expansion, and a `trap` is the sharpest case because the
+# expansion happens at FIRE TIME, when the shell is already exiting and usually
+# on an error path.
+#
+# THIS EXISTS BECAUSE IT HAPPENED. `trap 'rm -rf "$T"' EXIT` in test/harness_lib
+# removed ~/src/mux on 2026-09-30: `$T` had resolved to the CURRENT DIRECTORY,
+# because `cd -- "$(mktemp -d)" && pwd -P` turns an empty mktemp answer into
+# `cd ""` plus `pwd -P`, and nothing could see that until the trap fired. The
+# tracked files came back from a re-clone; the untracked ones did not.
+#
+# Bake the literal in when ARMING it (`_C="'$T'"; trap "rm -rf $_C" EXIT`), so
+# `trap` prints exactly what will run and no later assignment can move it.
+#
+# test/conventions.t IS EXCLUDED BY NAME, not forgiven: it is vendored
+# byte-identical from ~/src/shared-notes/_conventions.t and carries the same
+# shape, so the fix belongs in the canonical copy and is reported there. Editing
+# the vendored copy would reach no other repo and the drift check would say so.
+# THE DISCRIMINATOR IS THE QUOTING, which the first version of this rule got
+# wrong by flagging any trap mentioning `rm -rf` and a `$`: that is also the
+# CORRECT form, where the variable already holds a literal expanded at arm time.
+# A SINGLE-quoted trap string defers to fire time and is the dangerous one; a
+# double-quoted one has already expanded. So the pattern is a single-quoted trap
+# carrying both `rm -rf` and a `$`.
+#
+# lint.t IS EXCLUDED BY NAME because a checker necessarily contains the shape it
+# looks for, the same reason the dash-name rule below excludes its own message.
+_trp=$T/traps
+( cd "$HERE" && grep -rnE "trap '[^']*rm -rf[^']*\\\$" \
+  bin libexec test share setup.sh indicator 2>/dev/null \
+  | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' \
+  | grep -vE '^test/(conventions|lint)\.t:' ) >"$_trp" || true
+if [ -s "$_trp" ]; then
+  printf 'FAIL %s: a destructive trap defers its expansion:\n' "$_name" >&2
+  sed 's/^/  /' "$_trp" >&2
+  printf 'Bake the literal in at ARM time: _C="'"'"'$DIR'"'"'"; ' >&2
+  printf 'trap "rm -rf $_C" EXIT\n' >&2
+  printf 'This shape deleted this repository once.\n' >&2
+  exit 1
+fi
+
 # --- `${*##pat}` IS PER-ELEMENT IN bash AND JOINED IN dash -----------------
 # The single biggest macOS cluster this suite has had: SEVEN failing tests from
 # one idiom. Measured, `set -- has-session -t =api` in three shells:

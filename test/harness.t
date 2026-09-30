@@ -67,6 +67,34 @@ person meets a test that simply will not run: $_o" ;;
   esac
 done
 
+# --- THE CLEANUP TRAP HOLDS LITERALS, NOT A VARIABLE ----------------------
+# The standing rule in ~/src/CLAUDE.md: `rm -rf` never runs with variable
+# expansion. A trap is the sharpest case because it defers the expansion to FIRE
+# TIME, which is when this harness removed a working tree: `$T` had resolved to
+# the cwd and nothing could see that until the shell was already exiting.
+#
+# INSPECTED WITHOUT A SUBSTITUTION, which is load-bearing and was measured: in
+# dash `$(trap)` reports NOTHING, because the subshell clears the EXIT trap,
+# while bash reports it. So `$(trap)` would have made this assertion vacuous on
+# the platform the suite mostly runs on. Redirecting keeps it in this shell.
+trap >"$T/traps"
+[ -s "$T/traps" ] || fail "could not read this shell's traps, so the assertion
+below proves nothing"
+grep -q 'rm -rf' "$T/traps" || fail "no cleanup trap is armed at all:
+$(cat "$T/traps")"
+if grep 'rm -rf' "$T/traps" | grep -q '\$'; then
+  fail "the cleanup trap DEFERS AN EXPANSION:
+$(grep 'rm -rf' "$T/traps")
+It must hold the literal path, baked in when the trap was armed, so \`trap\`
+prints exactly what will run and no later assignment can move the target. This
+is the shape that deleted the repository."
+fi
+# ... and it is the RIGHT literal, or a trap naming some other path would pass
+# the check above while removing the wrong thing (or nothing).
+grep -q "$T" "$T/traps" || fail "the cleanup trap does not name the scratch
+dir [$T]:
+$(grep 'rm -rf' "$T/traps")"
+
 # --- THE SOCKET PATH FITS ON macOS ----------------------------------------
 # `sun_path` caps a unix socket path at 104 bytes there (108 on Linux), and
 # macOS $TMPDIR spends ~50 of them before anything is added. With TMUX_TMPDIR
