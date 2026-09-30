@@ -536,11 +536,18 @@ scan    ~/src/manifest 3
 ignore  */athena-repos/*
 ```
 
-The built-in defaults carry **no location keys**. That is what stops `scan`
-leaking between partitions: a partition nobody configured gets no roots and
-therefore no map, so a missing context file is *visible* rather than quietly
-indexing the wrong tree. mux ships `partitions/global.partition` with
-`scan ~/src 3`, which is why the out-of-the-box case works.
+The built-in defaults carry **no location keys**, and neither does the shipped
+`partitions/global.partition`. That is what stops `scan` leaking between
+partitions: a partition nobody configured gets no roots and therefore no map, so
+a missing context file is *visible* rather than quietly indexing the wrong tree.
+
+mux used to ship `scan ~/src 3` there, and that was a mistake worth naming: a
+location nobody chose still reaches every install, and `mux check` then reported
+`[FAIL] scan root missing` on every machine that keeps work somewhere else,
+which is most of them. **`mux scan --init`** asks instead, offering `~/src` when
+it happens to exist and your home directory otherwise; `mux scan --init DIR`
+skips the question. `setup.sh install` runs it for you at a terminal and prints
+the command when there is no terminal to ask at.
 
 A token becomes a socket name and a path component, so it is validated as a DNS
 label (`[a-z0-9]([a-z0-9-]*[a-z0-9])?`). An invalid one is an error, never a
@@ -845,6 +852,7 @@ mux reload                   re-source tmux.conf on every mux server
 mux kill NAME | kill-all     tear down a session, or all (prompts)
 mux sane                     put the terminal back after a wedged session
 mux go --attach-only [NAME]  attach if live, else refuse (never create)
+mux scan --init [DIR]        turn discovery on: where your projects are
 mux latch HOST[:PORT] [[PARTITION:]SESSION]
                              hold a remote attachment open across drops
 mux capabilities             what this mux supports, for other programs

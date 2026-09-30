@@ -92,6 +92,37 @@ grep -q 'setup.sh indicator' "$T/out" || fail "the notice did not name the
 command that fixes it; a gap named without a remedy invites two different fixes"
 rm -f "$T/bin/mux-indicator"
 
+# --- DISCOVERY HAS NO ROOTS: SAID, and NOT written ------------------------
+# mux used to SHIP `scan ~/src 3`, so this state was unreachable and every
+# machine without that directory got `[FAIL] scan root missing` from mux's own
+# check instead. Now the installer asks at a terminal and SAYS without one.
+#
+# THE SECOND HALF IS THE LOAD-BEARING ONE: it must write NOTHING here. A
+# provisioner runs this on every sweep with no tty, and a silent write would
+# give one machine a scan root the human never named, which is this whole
+# defect wearing a different hat. The assertion is on the ABSENCE of the file.
+runmd() {   # the installer, with mux's config dir pinned where we can see it
+  env PREFIX="$T" XDG_BIN_HOME="$T/bin" XDG_DATA_HOME="$T/share" NO_COLOR=1 \
+    MUX_DIR="$T/conf-mux" sh "$HERE/setup.sh" "$@"
+}
+runmd install >"$T/out" 2>&1 || fail "reinstall errored"
+grep -q 'discovery has no roots' "$T/out" || fail "with nothing configured the
+install said nothing about discovery, so a new user gets a mux whose \`mux go
+<name>\` finds no projects and no hint why: $(cat "$T/out")"
+grep -q 'mux scan --init' "$T/out" || fail "the notice did not name the command
+that fixes it; a gap named without a remedy invites two different fixes"
+[ -e "$T/conf-mux/partitions/global.partition" ] && fail "the installer WROTE a
+scan root with no terminal to ask at. A provisioner runs this on every sweep;
+inventing a location there is the defect this step exists to remove"
+
+# ... and SILENT once roots exist, or a re-install is noise people skip.
+mkdir -p "$T/conf-mux/partitions"
+printf 'scan\t%s 3\n' "$T" >"$T/conf-mux/partitions/global.partition"
+runmd install >"$T/out" 2>&1 || fail "reinstall errored"
+grep -q 'discovery has no roots' "$T/out" && fail "the discovery notice fired
+with a root already configured: $(cat "$T/out")"
+rm -rf "$T/conf-mux"
+
 # --- A LIVE SERVER IS RELOADED, because installing a file does not ----------
 # This package's most expensive recurring bug: a running tmux keeps the
 # bindings, hooks and status format it read at START, so a new binding is inert

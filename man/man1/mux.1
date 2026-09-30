@@ -246,9 +246,28 @@ rejected. See
 .B LATCH
 for the state machine and the seams.
 .TP
-.B mux scan " [" \-\-list ]
+.B mux scan " [" \-\-list "] [" \-\-init " [" \fIDIR\fR "]] [" \-\-roots ]
 Rebuild the project discovery map for this context, or print it. The map is a
 cache: it also rebuilds on first use and on a lookup miss, never on a timer.
+.B \-\-init
+records where your projects are, which is the one thing a fresh install cannot
+work out for itself: it offers
+.I ~/src
+when that exists and your home directory otherwise, and writes the
+.B scan
+line into
+.IR $MUX_DIR/partitions/<partition>.partition ,
+appending rather than rewriting. With a
+.I DIR
+it asks nothing; with no terminal and no
+.I DIR
+it refuses and prints the command to run, because inventing a location on a
+provisioner's behalf is the defect it exists to remove. Running it twice changes
+nothing.
+.B \-\-roots
+prints the configured roots and exits 1 when there are none, which is how
+.B setup.sh
+decides whether to ask.
 .TP
 .B mux save " [" \fINAME\fR ]
 Snapshot the current session, recording only what mux could not have derived:
@@ -879,8 +898,13 @@ leaking between partitions: a partition nobody configured gets no roots and so
 no map, making a missing context file visible rather than quietly indexing the
 wrong tree.
 .I $MUX_SHARE/partitions/global.partition
-ships with
-.RB ' "scan ~/src 3" '.
+ships with NO
+.B scan
+line, deliberately: a location nobody chose reaches every install, and
+.B mux check
+then failed on every machine that keeps work elsewhere. Use
+.B mux scan \-\-init
+to record one.
 .PP
 .PP
 .B ignore \fIPATTERN\fR

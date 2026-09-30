@@ -58,6 +58,7 @@ do_install() {
   echo "$PKG: linked into $PREFIX (bin, libexec/$PKG, share/$PKG, man)"
   _reload_live
   _tmux_conf_notice
+  _scan_root_step
   _indicator_notice
 }
 
@@ -165,6 +166,41 @@ _tmux_conf_notice() {
   echo "$PKG:        source-file $_shr/$PKG/mux-opinions.tmux   # optional" >&2
   echo "$PKG:" >&2
   echo "$PKG:      Then: mux setup claude   (wires your agent's hooks)" >&2
+}
+
+# THE ONE QUESTION A FIRST INSTALL CANNOT ANSWER FOR YOU: where your projects
+# live. `mux go <name>` finds a project through the discovery map, and the map
+# has no roots until somebody names one.
+#
+# mux USED TO SHIP `scan ~/src 3` AND FAIL WITHOUT IT, which is the defect this
+# step replaces: a location nobody chose, and then `[FAIL] scan root missing` on
+# every machine that keeps work somewhere else, which is most machines. A
+# default is fine. A default nobody confirmed is not.
+#
+# IT ASKS ONLY WITH A TERMINAL, and the reason is the same one that keeps the
+# tmux.conf notice from editing your config: a provisioner runs this installer
+# on every sweep, so a prompt here would hang it and a silent write would give
+# one machine a root the human never named. Without a tty it SAYS, exactly as
+# the notice above does.
+#
+# AND IT IS mux's OWN CONFIG, which is what makes writing it legitimate at all.
+# $MUX_DIR is where `mux save`, `mux new` and `mux theme` already write; a
+# tmux.conf is the user's file and gets a notice instead. Same rule, opposite
+# answer, because the OWNER differs.
+_scan_root_step() {
+  # Nothing to do when discovery is already configured, which keeps a
+  # re-install silent: `mux scan --init` is idempotent and says so itself, so
+  # this only has to decide whether to ASK.
+  "$_bin/$PKG" scan --roots >/dev/null 2>&1 && return 0
+  if [ -t 0 ] && [ -t 1 ]; then
+    "$_bin/$PKG" scan --init || true
+    return 0
+  fi
+  echo "$PKG: NOTE discovery has no roots yet, so \`mux go <name>\` cannot" >&2
+  echo "$PKG:      find your projects. When you are at a terminal:" >&2
+  echo "$PKG:" >&2
+  echo "$PKG:        mux scan --init        # asks where they are" >&2
+  echo "$PKG:        mux scan --init DIR    # or say so outright" >&2
 }
 
 # AN INSTALLED INDICATOR IS A SECOND PACKAGE THAT TALKS TO THIS ONE, and core
