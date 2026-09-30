@@ -64,10 +64,39 @@ T=$(CDPATH= cd -- "$_t" && pwd -P) || T=
   echo "harness: refusing to use [$T] as the scratch dir: it is empty, the" >&2
   echo "harness: current directory, or /. The EXIT trap would rm -rf it." >&2
   exit 1; }
-# TMUX_TMPDIR goes with it (set below, and OUTSIDE $T because of a socket path
-# length limit: see there). Guarded with `:+` so a death before that line
-# cannot turn this into `rm -rf ""`.
-trap 'rm -rf "$T" ${TMUX_TMPDIR:+"$TMUX_TMPDIR"}' EXIT INT TERM
+# A quote in the path would break the LITERAL trap built below. mktemp never
+# produces one; refusing is cheaper than reasoning about it again later.
+case $T in
+*\'*) echo "harness: refusing a scratch dir containing a quote: [$T]" >&2
+  exit 1 ;;
+esac
+
+# --- THE DESTRUCTIVE TRAP HOLDS LITERALS, NEVER A VARIABLE ------------------
+# STANDING RULE (the user's, 2026-09-30, after this harness deleted the
+# repository): `rm -rf` is never run with variable expansion. The value is
+# expanded FIRST, while it can still be checked, and the LITERAL is written down
+# so the exact command can be inspected before it ever runs.
+#
+# A trap is the sharpest case, because `trap 'rm -rf "$T"' EXIT` defers the
+# expansion to FIRE TIME, which is the worst possible moment to find out what it
+# means: the shell is already exiting, often on an error path, and whatever `$T`
+# happens to hold by then is what goes. Two ways that bites, and this suite has
+# now met the first:
+#
+#   T resolved to the CURRENT DIRECTORY at set-up (an empty mktemp answer
+#       through `cd ""` + `pwd -P`), so the trap removed a working tree;
+#   and a test that reassigns or unsets T later moves the target under the
+#       trap, which nothing would report.
+#
+# Baking the literal closes both: after this line the trap text contains a fixed
+# path, `trap` prints exactly what will run, and no later assignment can change
+# it. test/harness.t asserts the armed trap contains no `$` at all.
+_CLEAN="'$T'"
+# shellcheck disable=SC2064  # EXPANDING NOW IS THE POINT: shellcheck's
+# advice here is to defer the expansion to signal time, and deferring is
+# exactly what removed a working tree (see the rule above). The literal is
+# baked in deliberately.
+trap "rm -rf $_CLEAN" EXIT INT TERM
 
 # t_trap 'COMMAND': a test's OWN cleanup, composed with the scratch removal
 # above instead of replacing it.
@@ -81,7 +110,13 @@ trap 'rm -rf "$T" ${TMUX_TMPDIR:+"$TMUX_TMPDIR"}' EXIT INT TERM
 # test/lint.t refuses a bare `trap ... EXIT` in a test now, so the next one
 # cannot reintroduce it: the rule rather than the vigilance.
 t_trap() {
-  trap "$1"'; rm -rf "$T" ${TMUX_TMPDIR:+"$TMUX_TMPDIR"}' EXIT INT TERM
+  # $_CLEAN is already a list of quoted LITERAL paths (see above), so this
+  # composes without reintroducing a deferred expansion of the target.
+  # shellcheck disable=SC2064  # EXPANDING NOW IS THE POINT: shellcheck's
+  # advice here is to defer the expansion to signal time, and deferring is
+  # exactly what removed a working tree (see the rule above). The literal is
+  # baked in deliberately.
+  trap "$1; rm -rf $_CLEAN" EXIT INT TERM
 }
 
 # HOME IS PINNED INSIDE T, and that one line is what makes the claim above
@@ -136,9 +171,25 @@ mkdir -p "$HOME"
 # thing that makes the length independent of whose machine it is. It is removed
 # by the same traps that remove $T, so nothing is left behind and the socket
 # litter property is unchanged.
-TMUX_TMPDIR=$(mktemp -d /tmp/muxt.XXXXXX)
+TMUX_TMPDIR=$(mktemp -d /tmp/muxt.XXXXXX) || TMUX_TMPDIR=
+case ${TMUX_TMPDIR:-} in
+''|*\'*) echo "harness: mktemp -d for the tmux socket dir failed or gave an" >&2
+  echo "harness: unusable path: [${TMUX_TMPDIR:-}]" >&2
+  exit 1 ;;
+esac
+[ -d "$TMUX_TMPDIR" ] || {
+  echo "harness: [$TMUX_TMPDIR] is not a directory" >&2; exit 1; }
 export TMUX_TMPDIR
 chmod 700 "$TMUX_TMPDIR"
+# IT JOINS THE LITERAL LIST NOW, not at trap time, and the trap is re-armed with
+# both paths baked in. Re-arming rather than deferring is the whole point: the
+# text of the trap is the record of what will be removed.
+_CLEAN="$_CLEAN '$TMUX_TMPDIR'"
+# shellcheck disable=SC2064  # EXPANDING NOW IS THE POINT: shellcheck's
+# advice here is to defer the expansion to signal time, and deferring is
+# exactly what removed a working tree (see the rule above). The literal is
+# baked in deliberately.
+trap "rm -rf $_CLEAN" EXIT INT TERM
 
 # AND `TMUX` HAS TO GO, which is the half that pinning a directory does not
 # cover and the half that actually bit. A tmux CLIENT takes its socket from

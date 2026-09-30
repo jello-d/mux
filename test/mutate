@@ -32,8 +32,25 @@ set -eu
 
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 CORPUS=$HERE/test/mutants.rec
-T=$(mktemp -d)
-trap 'rm -rf "$T"' EXIT INT HUP TERM
+# THE SAME RULE THE HARNESS NOW FOLLOWS, and for the same reason: `rm -rf` is
+# never run with variable expansion, and a trap is the sharpest case because it
+# defers the expansion to FIRE TIME. mux's test harness removed a working tree
+# that way on 2026-09-30 (an empty mktemp answer resolved to the cwd), and this
+# driver carried the identical shape. Verify, then bake the LITERAL in, so
+# `trap` prints exactly what will run.
+T=$(mktemp -d) || T=
+[ -n "$T" ] && [ -d "$T" ] && [ "$T" != "$PWD" ] && [ "$T" != / ] || {
+  echo "mutate: refusing to use [$T] as a scratch dir: the trap removes it" >&2
+  exit 2; }
+case $T in
+*\'*) echo "mutate: refusing a scratch dir containing a quote: [$T]" >&2
+  exit 2 ;;
+esac
+# shellcheck disable=SC2064  # EXPANDING NOW IS THE POINT: shellcheck's
+# advice here is to defer the expansion to signal time, and deferring is
+# exactly what removed a working tree (see the rule above). The literal is
+# baked in deliberately.
+trap "rm -rf '$T'" EXIT INT HUP TERM
 
 PASS=0; FAIL=0; ERR=0
 
