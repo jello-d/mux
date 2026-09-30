@@ -119,7 +119,7 @@ EOF
 _reload_live() {
   command -v tmux >/dev/null 2>&1 || return 0
   # Each form on its own LINE, so the corpus can mutate either: an anchor that
-  # ends in a continuation backslash is failure mode two in test/mutants' own
+  # ends in a continuation backslash is failure mode two in the corpus's own
   # header and never matches.
   _rf=$_shr/$PKG/mux.tmux
   _rt="~${_shr#"$HOME"}/$PKG/mux.tmux"

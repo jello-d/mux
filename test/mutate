@@ -31,7 +31,7 @@
 set -eu
 
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-CORPUS=$HERE/test/mutants
+CORPUS=$HERE/test/mutants.rec
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT INT HUP TERM
 

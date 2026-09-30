@@ -15,8 +15,8 @@ set -eu
 _name=mutants
 . "$(dirname "$0")/harness_lib"
 
-CORPUS=$HERE/test/mutants
-[ -f "$CORPUS" ] || fail "no mutation corpus at test/mutants"
+CORPUS=$HERE/test/mutants.rec
+[ -f "$CORPUS" ] || fail "no mutation corpus at test/mutants.rec"
 [ -x "$HERE/test/mutate" ] || fail "test/mutate is missing or not executable"
 
 _n=0
