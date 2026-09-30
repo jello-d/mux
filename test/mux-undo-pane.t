@@ -153,7 +153,34 @@ pane restored into the wrong one would read as a pass"
 # had been hiding. A human pressing prefix-u is far slower than either, so this
 # is a test-harness ordering problem rather than a bug, but it is exactly the
 # kind a sleep converts into an intermittent failure on someone else's machine.
-_recorded() { [ -n "$(ls -A "$T/run/mux-undo" 2>/dev/null)" ]; }
+# A COMPLETE RECORD, NOT A NON-EMPTY DIRECTORY, and the difference is the
+# whole precondition. 0.61 made the write ATOMIC (into `<name>.tmp.$$`, then
+# rename) precisely so that "the record exists" regains its meaning, and this
+# check was never updated: it goes true the instant the TEMP file is created,
+# which is several forks before the content lands.
+#
+# MEASURED ON macOS, where it lost the race: the foreign-record case took
+# `ls -A | head -1`, got the temp file, rewrote THAT, and reported the product
+# as having accepted a foreign record. The record it printed was empty, which
+# is what pointed here.
+#
+# TWO CONDITIONS, because either alone still races: the name must be the
+# RENAMED one (a temp file is by definition not finished) and the content must
+# carry the `layout` line, which is exactly what `_restore` requires and
+# refuses without. That is the same correction 0.62 made for the cwd tracker:
+# waiting for the FIRST of several things a producer writes is not a
+# precondition.
+_records() {   # the complete records, one per line, temp files excluded
+  for _rr in "$T"/run/mux-undo/*; do
+    [ -f "$_rr" ] || continue
+    case ${_rr##*/} in
+    (*.tmp.*) continue ;;
+    esac
+    grep -q '^layout	' "$_rr" 2>/dev/null || continue
+    printf '%s\n' "$_rr"
+  done
+}
+_recorded() { [ -n "$(_records)" ]; }
 # The shells must have STARTED before their cwd is readable: pane_current_path
 # reports the server's directory until then, which silently recorded the wrong
 # one the first time this ran by hand.
@@ -234,8 +261,7 @@ _raw_up=$(tm show-options -wqv -t t @mux-up 2>/dev/null | cat -v || true)
 tm send-keys -t t.1 'exit' Enter
 _until 10 _npanes 2 || fail "unquote: the pane did not close"
 _until 10 _recorded || fail "unquote: no undo record was written"
-_cr=$(sed -n 's/^command	//p' "$T/run/mux-undo/$(ls -A "$T/run/mux-undo" \
-  | head -1)")
+_cr=$(sed -n 's/^command	//p' "$(_records | head -1)")
 # `[\\]`, a bracket expression, rather than a quoted backslash: `'\\'` inside
 # single quotes is TWO characters and shellcheck rightly calls it ambiguous
 # (SC1003): the same trap these notes record costing a doubled spinner.
@@ -414,7 +440,7 @@ stage "an unknown directory is said, not inherited"
 tm send-keys -t t.1 'exit' Enter
 _until 10 _npanes 2 || fail "nocwd: the pane did not close"
 _until 10 _recorded || fail "nocwd: no undo record was written"
-_rec=$T/run/mux-undo/$(ls -A "$T/run/mux-undo" | head -1)
+_rec=$(_records | head -1)
 grep -v '^cwd	' "$_rec" >"$_rec.x" && mv -f "$_rec.x" "$_rec"
 _sp=$(tm display-message -p '#{socket_path}')
 _o=$(env TMUX="$_sp,0,0" "$HERE/libexec/mux-undo-pane" 2>&1 || true)
@@ -450,10 +476,20 @@ _until 10 _recorded || fail "otherserver: no undo record was written"
 # EXACTLY ONE RECORD, ASSERTED, because `ls | head -1` picks A record rather
 # than THE record and would silently rewrite the wrong one. `rotate` clears the
 # directory, so anything else here means the fixture has drifted.
-_nrec=$(ls -A "$T/run/mux-undo" | wc -l)
-[ "$_nrec" -eq 1 ] || fail "otherserver: expected one undo record, found
-$_nrec: $(ls -A "$T/run/mux-undo" | tr '\n' ' ')"
-_rec=$T/run/mux-undo/$(ls -A "$T/run/mux-undo" | head -1)
+_nrec=$(_records | wc -l)
+[ "$_nrec" -eq 1 ] || fail "otherserver: expected one complete undo record,
+found $_nrec:
+$(ls -la "$T/run/mux-undo" 2>&1 | sed 's/^/    /')"
+_rec=$(_records | head -1)
+# AND IT IS A READABLE, NON-EMPTY FILE, asserted separately from the rewrite
+# below because they fail for different reasons and the rewrite's message
+# cannot tell them apart: `sed` over a file that is empty prints nothing, over
+# one that is missing prints nothing AND errors, and the record dump is empty
+# either way. macOS reported exactly that, so the next question is which.
+[ -s "$_rec" ] || fail "otherserver: the undo record is missing or empty at
+  [$_rec]
+the record directory holds:
+$(ls -la "$T/run/mux-undo" 2>&1 | sed 's/^/    /')"
 
 # ... AND THE REWRITE TOOK. This is the precondition for everything below, and
 # without it a fixture that failed to edit the record reports the PRODUCT as
@@ -466,7 +502,9 @@ sed 's/^server	.*/server	999999/' "$_rec" >"$_rec.x" && mv -f "$_rec.x" "$_rec"
 grep -q "^server	999999$" "$_rec" || fail "otherserver: the fixture could not
 rewrite the record's server field, so the refusal below would be testing
 nothing. The record now reads:
-$(sed 's/^/    /' "$_rec")"
+$(sed 's/^/    /' "$_rec" 2>&1)
+and the directory holds:
+$(ls -la "$T/run/mux-undo" 2>&1 | sed 's/^/    /')"
 
 _sp=$(tm display-message -p '#{socket_path}')
 _rc=0
@@ -484,7 +522,7 @@ esac
 _npanes 2 || fail "a record from another server RESTORED A PANE: $(state)"
 # AND IT IS DISCARDED, or every press repeats the refusal for a record that can
 # never become valid.
-[ -n "$(ls -A "$T/run/mux-undo" 2>/dev/null)" ] \
+[ -n "$(_records)" ] \
   && fail "the foreign record was refused and KEPT, so the window is stuck
 answering this instead of the ordinary 'nothing to undo'"
 
@@ -496,7 +534,7 @@ stage "a record with no server field"
 tm send-keys -t t.1 'exit' Enter
 _until 10 _npanes 2 || fail "noserver: the pane did not close"
 _until 10 _recorded || fail "noserver: no undo record was written"
-_rec=$T/run/mux-undo/$(ls -A "$T/run/mux-undo" | head -1)
+_rec=$(_records | head -1)
 grep -v '^server	' "$_rec" >"$_rec.x" && mv -f "$_rec.x" "$_rec"
 _sp=$(tm display-message -p '#{socket_path}')
 _rc=0
@@ -531,7 +569,7 @@ _before=$(state)
 tm send-keys -t t.1 'exit' Enter
 _until 10 _npanes 2 || fail "partial: the pane did not close"
 _until 10 _recorded || fail "partial: no undo record was written"
-_rec=$T/run/mux-undo/$(ls -A "$T/run/mux-undo" | head -1)
+_rec=$(_records | head -1)
 # THE SERVER LINE IS KEPT AND VALID, or the 0.74 attribution check refuses
 # this record first and the partial-record guard below becomes unreachable,
 # which is exactly what happened: the full corpus reported this record dying
