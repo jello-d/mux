@@ -200,4 +200,66 @@ there rather than degrading."
   done
 done
 
+# --- THE HARNESS'S OWN PTY HELPER, on a BSD `script` -----------------------
+# Not a product assertion, and here on purpose: this is the one place in the
+# suite that can reach it. `script -qc CMD FILE` is GNU util-linux, BSD script
+# has no `-c` and takes `script -q FILE command args...`, and SEVEN call sites
+# across three test files used the GNU form. On macOS they all reported a false
+# product failure ("nothing was captured from the pty run", "the palette is
+# missing the system 0-15 band"). t_pty picks the form; without this case its
+# bsd arm is DARK on every box that has GNU script, which is every box here.
+mkdir -p "$T/bsd"
+cat >"$T/bsd/script" <<'EOS'
+#!/bin/sh
+# BSD script(1): `script [-q] [file [command ...]]`. There is NO -c, and the
+# command is EXEC'd rather than handed to a shell, which is why t_pty has to
+# supply one. Refusing -c the way getopt does is what makes the detection real.
+#
+# THE WHOLE ARGV IS LOGGED, before any of it is consumed, so the assertion can
+# see the FILE'S POSITION rather than just the command that came after it.
+printf '%s\n' "$*" >>"$ARGV"
+while [ $# -gt 0 ]; do
+  case $1 in
+  -q) shift ;;
+  -*) echo "script: illegal option -- ${1#-}" >&2; exit 1 ;;
+  *)  break ;;
+  esac
+done
+_f=${1:-typescript}; shift || true
+[ "$_f" = /dev/null ] || printf 'typescript\n' >"$_f"
+[ $# -gt 0 ] || exit 0
+"$@"
+EOS
+chmod +x "$T/bsd/script"
+
+ARGV=$T/bsd.argv; export ARGV; : >"$ARGV"
+(
+  PATH=$T/bsd:$PATH; export PATH
+  t_pty_detect
+  # THE DETECTION ITSELF INVOKES script, so the log is cleared between the two
+  # or the argv assertion below reads the probe's line. Caught by that
+  # assertion on its first run, which is the argument for making it exact.
+  : >"$ARGV"
+  [ "$T_PTY" = bsd ] || { printf 'detection picked [%s] against a script(1)
+with no -c, so every pty test would run the GNU form and fail\n' "$T_PTY" >&2
+    exit 1; }
+  _o=$(t_pty /dev/null 'printf hello' 2>/dev/null || true)
+  case $_o in
+  *hello*) ;;
+  *) printf 'the bsd form did not pass the child output through: [%s]\n' \
+       "$_o" >&2; exit 1 ;;
+  esac
+) || fail "the bsd arm of t_pty is broken, so the pty tests would all fail on
+macOS while looking like product failures"
+
+# THE ARGV IS THE ASSERTION, not just the output: a helper that happened to work
+# by running the command some other way would pass an output check. The file
+# comes FIRST and the command is wrapped in a shell.
+_argv=$(cat "$ARGV")
+case $_argv in
+"-q /dev/null /bin/sh -c printf hello") ;;
+*) fail "t_pty composed the wrong BSD argv: [$_argv]
+wanted the typescript FIRST, then a shell to run the command string" ;;
+esac
+
 pass

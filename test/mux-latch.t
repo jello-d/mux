@@ -1293,7 +1293,7 @@ EOF
   # A four-second wait, so the loop turns four times and every glyph in
   # the cycle is drawn at least once.
   printf '%s\n%s\n' "$_drop" "$_drop" >"$SCRIPT"
-  script -qc "$T/bin/spinrun" "$T/spin.raw" >/dev/null 2>&1 || true
+  t_pty "$T/spin.raw" "$T/bin/spinrun" >/dev/null 2>&1 || true
   _sp=$(cat "$T/spin.raw" 2>/dev/null || true)
 
   case $_sp in

@@ -41,12 +41,12 @@ terminal attached. Anything on stdout here corrupts a caller's pipe:
 $(cat -v "$_out")"
 
 # --- WITH A PTY IT EMITS THE RESETS -------------------------------------
-if ! command -v script >/dev/null 2>&1; then
-  printf 'skip %s (no script(1), cannot supply a pty)\n' "$_name"
+if [ -z "$T_PTY" ]; then
+  printf 'skip %s (no usable script(1), cannot supply a pty)\n' "$_name"
   exit 0
 fi
 _raw=$T/raw
-script -qc "sh $HOOK" "$_raw" >/dev/null 2>&1 || true
+t_pty "$_raw" "sh $HOOK" >/dev/null 2>&1 || true
 [ -s "$_raw" ] || fail "nothing was captured from the pty run"
 _seen=$(cat -v "$_raw")
 
@@ -105,7 +105,7 @@ esac
 # latch runs it on every transport return without asking whether it was needed,
 # which is only defensible if running it twice equals running it once.
 _raw2=$T/raw2
-script -qc "sh $HOOK; sh $HOOK" "$_raw2" >/dev/null 2>&1 || true
+t_pty "$_raw2" "sh $HOOK; sh $HOOK" >/dev/null 2>&1 || true
 _n1=$(grep -c . "$_raw" 2>/dev/null || echo 0)
 [ -s "$_raw2" ] || fail "the second run captured nothing"
 case $(cat -v "$_raw2") in
