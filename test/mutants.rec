@@ -2264,3 +2264,16 @@ t setup
 -   "$_bin/$PKG" scan --roots >/dev/null 2>&1 && return 0
 +   return 0
 m said nothing about discovery
+
+= check-probe-creates-a-server
+f libexec/mux-check
+t mux-check
+# `tmux list-keys` STARTS a server when none is running and answers from tmux's
+# DEFAULTS, so probing with it meant the no-server branch could never fire: on a
+# bare box `mux check` SPAWNED a server and then reported five FAILs about the
+# pristine thing it had just made. Reverting to that probe makes a serverless
+# box take the server branch, which the real-tmux case at the end of the test
+# catches by asking whether a server now exists.
+- if ! _vt list-sessions >/dev/null 2>&1; then
++ if [ -z "$(_vt list-keys -T prefix 2>/dev/null || true)" ]; then
+m the check did not say so

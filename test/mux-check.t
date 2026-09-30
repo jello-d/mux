@@ -29,6 +29,13 @@ export KEYS SROPT SLOPT HOOKS PANES
 cat >"$T/bin/tmux" <<'EOF'
 #!/bin/sh
 case "$*" in
+# NO SERVER IS AN EXIT CODE, not empty output, which is how the real tool says
+# it: `tmux list-sessions` ERRORS when nothing is running, and `list-keys`
+# cheerfully STARTS a server and answers from tmux's defaults. mux-check
+# therefore probes with list-sessions, so this arm has to fail the same way or
+# the stub is looser than the tool and the no-server case passes for the wrong
+# reason. Keyed on $KEYS, so one fixture still presents one whole server.
+*list-sessions*)                   [ -f "$KEYS" ] || exit 1 ;;
 *list-keys*)                       [ -f "$KEYS" ]  && cat "$KEYS" ;;
 *list-panes*)                      [ -f "$PANES" ] && cat "$PANES" ;;
 *"show-options -gv status-right"*) [ -f "$SROPT" ] && cat "$SROPT" ;;
@@ -405,5 +412,41 @@ rm -f "$T/bin/tmux"
 check >/dev/null
 [ "$RC" -ne 0 ] || fail "a missing tmux exited 0"
 has "tmux not found" "no report of the missing dependency"
+
+# --- THE PROBE MUST NOT CREATE A SERVER, against a REAL tmux -------------
+# The one case a stub cannot answer, and the reason it went unnoticed for the
+# life of the check: `tmux list-keys` STARTS a server when none is running and
+# answers out of tmux's DEFAULTS, so the old guard (is list-keys output empty?)
+# could never conclude "no server". On a bare box `mux check` therefore SPAWNED
+# one and then reported five FAILs about the pristine thing it had just made,
+# exiting non-zero. Found on ubuntu-latest, which is the only bare box in this
+# project's history.
+#
+# A STUB CANNOT SEE THIS because spawning is real tmux's behaviour, not the
+# check's logic, which is the same lesson the stale-code check learned: a suite
+# that stubs a seam to test the caller leaves the seam untested.
+if command -v tmux >/dev/null 2>&1; then
+  _sock=$(tmux_fresh_socket muxchk)
+  _o=$(env -u TMUX -u TMUX_PANE -u MUX_SHARE NO_COLOR=1 \
+    MUX_CTX_PARTITION="$_sock" MUX_DIR="$T/conf" \
+    "$HERE/libexec/mux-check" 2>&1 || true)
+  case $_o in
+  *"no tmux server"*) ;;
+  *) fail "with no server running, the check did not say so. Its honest
+'tmux state unchecked' line is unreachable if the probe can create what it is
+looking for, and every assertion below it then fails about a server the user
+never started:
+$_o" ;;
+  esac
+  # THE ASSERTION THAT MATTERS: a check may not mutate what it inspects, which
+  # this file's own source says three lines above the line that did.
+  if env -u TMUX tmux -L "$_sock" list-sessions >/dev/null 2>&1; then
+    tmux_drop_socket "$_sock"
+    fail "mux check STARTED a tmux server on '$_sock'. A check must never be
+able to damage or create what it inspects, and the five FAILs it then reports
+are about a server nobody asked for."
+  fi
+  tmux_drop_socket "$_sock"
+fi
 
 pass
