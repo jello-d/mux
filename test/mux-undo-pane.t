@@ -198,6 +198,13 @@ build() {
 # record report the wrong assertion under a busy run.
 stage "the record is written unquoted"
 build
+# THE TRACKED OPTION IS CAPTURED WHILE THE PANE IS STILL ALIVE, so a failure can
+# show what the recorder was actually HANDED rather than only what it wrote. The
+# two differ by exactly the transformation under test, and the escaping in
+# between is tmux's, which varies by version: without this, a failure here says
+# the output is wrong and nothing about the input, which is how a wrong guess at
+# the cause gets made twice.
+_raw_up=$(tm show-options -wqv -t t @mux-up 2>/dev/null | cat -v || true)
 tm send-keys -t t.1 'exit' Enter
 _until 10 _npanes 2 || fail "unquote: the pane did not close"
 _until 10 _recorded || fail "unquote: no undo record was written"
@@ -212,7 +219,10 @@ _cr=$(sed -n 's/^command	//p' "$T/run/mux-undo/$(ls -A "$T/run/mux-undo" \
 # `"` and `$`. Checking for a quote fails on correct code, which it did here.
 case $_cr in
 *[\\]*) fail "the recorded command is still tmux's DISPLAY form, quoted
-and escaped: [$_cr]. Replaying that does not fail loudly: the pane comes
+and escaped: [$_cr]
+what tmux ($(tmux -V)) handed the recorder, via @mux-up:
+[$_raw_up]
+Replaying that does not fail loudly: the pane comes
 back running the wrong thing, which is how it survived a first live check." ;;
 esac
 case $_cr in
