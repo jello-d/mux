@@ -24,12 +24,12 @@ cat >"$T/bin/tmux" <<'EOF'
 #!/bin/sh
 case "$*" in
 *has-session*)
-  _n=${*##*=}
+  _n=$*; _n=${_n##*=}
   grep -qxF "$_n" "$LIVE" 2>/dev/null && exit 0
   exit 1 ;;
 *rename-session*)
   _o=$(printf '%s' "$*" | sed -n 's/.*-t =\([^ ]*\).*/\1/p')
-  _n=${*##* }
+  _n=$*; _n=${_n##* }
   grep -vxF "$_o" "$LIVE" 2>/dev/null >"$LIVE.t" || :
   mv -f "$LIVE.t" "$LIVE"
   printf '%s\n' "$_n" >>"$LIVE" ;;

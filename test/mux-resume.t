@@ -21,7 +21,7 @@ cat >"$T/bin/tmux" <<'EOF'
 # LIVE holds "name<TAB>root" per running session.
 case "$*" in
 *has-session*)
-  _n=${*##*=}
+  _n=$*; _n=${_n##*=}
   cut -f1 "$LIVE" 2>/dev/null | grep -qxF "$_n" && exit 0
   exit 1 ;;
 *list-sessions*)
@@ -38,7 +38,7 @@ case "$*" in
   done
   printf '%s\t%s\n' "$_n" "$_c" >>"$LIVE" ;;
 *kill-session*)
-  _n=${*##*=}
+  _n=$*; _n=${_n##*=}
   grep -v "^$_n	" "$LIVE" 2>/dev/null >"$LIVE.t"; mv -f "$LIVE.t" "$LIVE" ;;
 *kill-server*) : >"$LIVE" ;;
 *window_index*) printf '0\n' ;;

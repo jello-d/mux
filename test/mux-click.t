@@ -29,7 +29,9 @@ cat >"$T/bin/tmux" <<'EOF'
 case "$*" in
 *switch-client*) printf 'switch %s\n' "$*" >>"$LOG" ;;
 "show -gqv "*)
-  awk -F'\t' -v k="${*##* }" '$1==k{print $2; exit}' "$OPTS" 2>/dev/null ;;
+  _j=$*
+  awk -F'\t' -v k="${_j##* }" '$1==k{print $2; exit}' "$OPTS" \
+    2>/dev/null ;;
 "set -g "*)
   shift 2; _n=$1; shift; _v=$*
   printf 'set %s\n' "$_n" >>"$LOG"

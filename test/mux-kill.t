@@ -32,12 +32,12 @@ case "$*" in
 *kill-server*)
   printf 'kill-server\n' >>"$KILLED"; : >"$LIVE" ;;
 *kill-session*)
-  _n=${*##*=}
+  _n=$*; _n=${_n##*=}
   printf 'kill-session %s\n' "$_n" >>"$KILLED"
   grep -vxF "$_n" "$LIVE" 2>/dev/null >"$LIVE.t" || :
   mv -f "$LIVE.t" "$LIVE" ;;
 *has-session*)
-  _n=${*##*=}
+  _n=$*; _n=${_n##*=}
   grep -qxF "$_n" "$LIVE" 2>/dev/null && exit 0
   exit 1 ;;
 *list-sessions*)

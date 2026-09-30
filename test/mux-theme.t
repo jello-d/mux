@@ -50,7 +50,8 @@ OPT=$T/opt; export OPT
 cat >"$T/bin/tmux" <<'EOF'
 #!/bin/sh
 case "$*" in
-*"set-option"*@mux-theme*) printf '%s\n' "${*##* }" >"$OPT" ;;
+*"set-option"*@mux-theme*) _j=$*; printf '%s\n' "${_j##* }" \
+  >"$OPT" ;;
 *"show-options"*@mux-theme*) cat "$OPT" 2>/dev/null ;;
 *display-message*session_name*) printf 'proj\n' ;;
 *display-message*pane_pid*)     printf '4242\n' ;;

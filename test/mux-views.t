@@ -29,7 +29,7 @@ cat >"$T/bin/tmux" <<'EOF'
 #!/bin/sh
 printf '%s\n' "$*" >>"$LOG"
 case "$*" in
-*set-option*window-size*)         printf '%s\n' "${*##* }" >"$OPT" ;;
+*set-option*window-size*) _j=$*; printf '%s\n' "${_j##* }" >"$OPT" ;;
 *list-clients*)                   cat "$CLIENTS" ;;
 # The probe: client size, window size and the mode in one round trip. The
 # mode comes from $OPT so a set-option above is visible to the next read.
