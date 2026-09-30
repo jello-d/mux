@@ -86,7 +86,7 @@ case $_o in
 *) fail "no backup was reported, so the change is not reversible by copy:
 [$_o]" ;;
 esac
-[ "$(ls "$CDIR"/settings.json.mux-* 2>/dev/null | wc -l)" = 1 ] \
+[ "$(ls "$CDIR"/settings.json.mux-* 2>/dev/null | wc -l)" -eq 1 ] \
   || fail "expected exactly one backup file"
 
 # EVERY EVENT IS WIRED, to `mux agent-hook <Event>` and NOT to a state: the
@@ -118,7 +118,7 @@ case $_o in
 *"nothing to change"*) ;;
 *) fail "a second run was not a no-op: [$_o]" ;;
 esac
-[ "$(ls "$CDIR"/settings.json.mux-* 2>/dev/null | wc -l)" = 1 ] \
+[ "$(ls "$CDIR"/settings.json.mux-* 2>/dev/null | wc -l)" -eq 1 ] \
   || fail "a no-op run took another backup"
 for _e in $_events; do
   [ "$(j "len([h for g in d['hooks']['$_e'] for h in g['hooks']
