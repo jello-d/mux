@@ -115,7 +115,7 @@ lg latch ''
 # that does not exist, so they fail at the `mkdir -p` refusal and never attempt
 # the write at all. Only the third has an existing-but-unwritable directory,
 # which skips mkdir and reaches the append. Both refusals are load-bearing and
-# each is mutated separately in test/mutants; a comment claiming the first case
+# each is mutated separately in the corpus; a comment claiming the first case
 # covers the write would have been wrong.
 ( . "$LIB"; MUX_LOG=/proc/definitely/not/writable/x mux_log latch 'x' ) \
   || fail "an unwritable PATH made mux_log fail (the mkdir guard).

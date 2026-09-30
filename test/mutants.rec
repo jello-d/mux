@@ -1,5 +1,11 @@
-# test/mutants - the corpus: each record breaks ONE guard on purpose and names
-# the test that must notice.
+# test/mutants.rec - the corpus: each record breaks ONE guard on purpose and
+# names the test that must notice.
+#
+# `.rec` BECAUSE THIS IS DATA. The naming rule in ~/src/CLAUDE.md is decided by
+# how a file is USED: an executed file takes a bare name, and content takes a
+# real suffix, because there the suffix IS the role. This file is neither run
+# nor sourced; it is records, read by `test/mutate` and validated by
+# `test/mutants.t`, and the pair now says which is which at a glance.
 #
 # WHY A FILE AND NOT A HABIT. Every guard in this package was confirmed by hand
 # at some point, and the discipline failed repeatedly IN MY OWN HANDS rather
