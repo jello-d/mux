@@ -18,6 +18,7 @@
 # then trust a net with a hole in it. MEASURED, with `-s sh`:
 #
 #     for x in $*                 SC2048     CAUGHT
+#     conventions: allow -- the table's "no SC code" column value
 #     for x in $(tmux ls)         --         NOT CAUGHT
 #     for x in $set               --         NOT CAUGHT
 #     case " $set " in *" $n "*)  --         NOT CAUGHT

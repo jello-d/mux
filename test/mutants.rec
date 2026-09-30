@@ -26,7 +26,7 @@
 # based, so a generator that put a `\n` inside the `+` value wrote a
 # replacement equal to the `-` line and orphaned the intended second line,
 # which the parser ignored. Nothing was mutated, so the named test passed, and
-# the run reported SURVIVED -- blaming a perfectly good test for not catching a
+# the run reported SURVIVED, blaming a perfectly good test for not catching a
 # change that never happened. `mutate` now refuses it. One line per directive.
 #
 # Each of those produced a "passing" test that proved nothing. This file turns
@@ -509,8 +509,8 @@ m idle
 
 # Making repair unconditional is caught by the EARLIEST plain run in the file,
 # not by the byte-comparison written for it further down, and the `m` says so on
-# purpose. Repairing by default changes the VERDICT everywhere -- every plain
-# `doc` call reports REPAIRED instead of STALE -- so the first assertion about
+# purpose. Repairing by default changes the VERDICT everywhere: every plain
+# `doc` call reports REPAIRED instead of STALE, so the first assertion about
 # a stale verdict dies before any later one about bytes can be reached. There
 # is no mutation that reaches the later one while the earlier assertion exists,
 # which makes the byte check a deliberately redundant second statement of the
@@ -1487,7 +1487,7 @@ m restored SILENTLY into the neighbour's
 f libexec/mux-undo-pane
 t mux-undo-pane
 # Inverting this sends a KNOWN cwd down the no-`-c` path, so the pane comes
-# back in its neighbour's directory -- which the slot-0 comparison catches
+# back in its neighbour's directory, which the slot-0 comparison catches
 # first, and catches deterministically. That comparison is exactly what a
 # real run caught once in twelve, from the same cause.
 -   if [ -n "$_cwd" ]; then
@@ -2186,7 +2186,7 @@ t mux-latch
 # `box:work` into a host `box` on a port `work`: dialled, plausible and wrong,
 # instead of refused with the migration. A no-op mutation was tried first here
 # (adding a character to the negated class that the fixture never contains),
-# which SURVIVED and proved nothing -- the replacement has to change the path
+# which SURVIVED and proved nothing: the replacement has to change the path
 # the fixture actually takes.
 -   *[!0-9]*)
 +   *[!0-9a-z]*)
@@ -2196,7 +2196,7 @@ m pre-0.84 target form must exit 2
 f libexec/mux-latch
 t mux-latch
 # Requiring a THIRD colon sends `fe80::1` down the single-colon arm, where the
-# tail is digits, so it splits into host `fe80:` and port `1` -- a host that
+# tail is digits, so it splits into host `fe80:` and port `1`, a host that
 # does not exist, dialled while looking like it worked.
 - *:*:*)
 + *:*:*:*)

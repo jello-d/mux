@@ -1198,6 +1198,7 @@ rm -f "$T/run/mux-latch"/*.lock "$T/run/mux-latch/notalock.txt"
 # it sends the cursor to column 0 and the rest of the sentence overwrites the
 # start of it:
 #
+# conventions: allow -- mux latch's own output, quoted verbatim
 #   probing -- Connection closed by 10.10.0.64 port 22^M, retrying in 60s
 #
 # which renders as a corrupt terminal, and is what "the text garbles and writes
