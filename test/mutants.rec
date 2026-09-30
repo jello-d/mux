@@ -1233,7 +1233,7 @@ f libexec/mux-latch
 t mux-latch
 -   if [ -n "$_part" ]; then
 +   if false; then
-m the colon must name a PARTITION
+m a trailing colon in the SECOND argument names a partition
 
 = latch-extra-arguments-ignored
 f libexec/mux-latch
