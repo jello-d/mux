@@ -132,7 +132,7 @@ _until() {   # <seconds> <command...>: true as soon as it succeeds
   done
   return 1
 }
-_npanes() { [ "$(tm list-panes -t t 2>/dev/null | wc -l)" = "$1" ]; }
+_npanes() { [ "$(tm list-panes -t t 2>/dev/null | wc -l)" -eq "$1" ]; }
 # THE RECORD IS THE REAL PRECONDITION FOR AN UNDO, not the pane count. The pane
 # disappears slightly before the hook finishes writing, so polling the count
 # alone raced the write and undo found nothing to do: a window a fixed sleep
@@ -311,7 +311,7 @@ esac
 stage "twice is once"
 # The record is consumed, so a second undo cannot bolt on a pane nobody lost.
 _o=$(tm run-shell "mux undo-pane" 2>&1 || true)
-[ "$(tm list-panes -t t | wc -l)" = 3 ] \
+[ "$(tm list-panes -t t | wc -l)" -eq 3 ] \
   || fail "a second undo added a pane nobody closed"
 
 # --- ... and so is filling the hole YOURSELF ------------------------------
@@ -331,7 +331,7 @@ tm split-window -t t.0            # you put it back by hand
 _until 10 _npanes 3 || fail "the manual split did not happen"
 _o=$(tm run-shell "mux undo-pane" 2>&1 || true)
 sleep 0.3
-[ "$(tm list-panes -t t | wc -l)" = 3 ] \
+[ "$(tm list-panes -t t | wc -l)" -eq 3 ] \
   || fail "undo added a pane to a window that was already whole. The
 record alone does not mean something is missing: the hole may have been
 filled by hand since."
@@ -507,7 +507,7 @@ case $_o in
 *unusable*) ;;
 *) fail "a half-written record was not refused by name: [$_o]" ;;
 esac
-[ "$(tm list-panes -t t 2>/dev/null | wc -l)" = 2 ] \
+[ "$(tm list-panes -t t 2>/dev/null | wc -l)" -eq 2 ] \
   || fail "a half-written record still changed the window: it must refuse
 before touching anything, or a truncated file rearranges a live layout"
 

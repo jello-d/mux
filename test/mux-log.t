@@ -102,7 +102,7 @@ not the writer's: two concurrent latches would be indistinguishable"
 _before=$(wc -l <"$L")
 lg latch
 lg latch ''
-[ "$(wc -l <"$L")" = "$_before" ] \
+[ "$(wc -l <"$L")" -eq "$_before" ] \
   || fail "an empty message was logged as an entry"
 
 # --- A WRITE MUST NEVER FAIL ITS CALLER ---------------------------------
@@ -151,8 +151,8 @@ has "$_o" "no 'no-such-subsystem' entries" "an empty filter result said nothing"
 
 # --- -n bounds the output, and is validated -----------------------------
 lg latch 'one'; lg latch 'two'; lg latch 'three'
-[ "$(rd -n 2 latch | wc -l)" = 2 ] || fail "-n 2 did not return 2 lines"
-[ "$(rd -n2 latch | wc -l)" = 2 ] || fail "-n2 (attached form) did not work"
+[ "$(rd -n 2 latch | wc -l)" -eq 2 ] || fail "-n 2 did not return 2 lines"
+[ "$(rd -n2 latch | wc -l)" -eq 2 ] || fail "-n2 (attached form) did not work"
 # The LAST lines, not the first: a log is read from the end, where the incident
 # you are chasing is.
 has "$(rd -n 1 latch)" "three" "-n 1 returned the OLDEST entry, not the newest"

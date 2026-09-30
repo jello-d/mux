@@ -145,6 +145,32 @@ if [ -s "$_bad" ]; then
   exit 1
 fi
 
+# --- `wc -l` IN A STRING COMPARISON ----------------------------------------
+# BSD `wc` PADS ITS COUNT WITH SPACES, so `[ "$(... | wc -l)" = 2 ]` compares
+# `"       2"` with `"2"` as STRINGS: false on macOS, true here. Three of the
+# macOS failures were this, in nine places across three files: mux-log's `-n`
+# bound, mux-setup's backup count, and mux-undo-pane's pane count.
+#
+# `-eq` IS THE FIX, not `tr -d ' '`: a numeric comparison ignores whitespace by
+# definition, so there is nothing to remember to strip. `bin/mux` already
+# carried a `| tr -d ' '` at one site, the same fact discovered once and never
+# written down.
+#
+# THE RULE IS THE COMPARISON, NOT THE TOOL: `wc -l` is fine, and so is capturing
+# it. Only `=` against a captured count is wrong, which is what this matches.
+_wcl=$T/wcl
+_wclre='\[ *"\$\([^)]*wc -l[^)]*\)" *=|= *"\$\([^)]*wc -l\)"'
+( cd "$HERE" && grep -rnE "$_wclre" \
+  bin libexec test share setup.sh indicator 2>/dev/null \
+  | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' \
+  | grep -v '^test/lint\.t:' ) >"$_wcl" || true
+if [ -s "$_wcl" ]; then
+  printf 'FAIL %s: `wc -l` compared as a STRING:\n' "$_name" >&2
+  sed 's/^/  /' "$_wcl" >&2
+  printf 'BSD wc pads the count, so this is false on macOS. Use -eq.\n' >&2
+  exit 1
+fi
+
 # --- A DESTRUCTIVE TRAP MAY NOT DEFER ITS EXPANSION ------------------------
 # The standing rule in ~/src/CLAUDE.md, made mechanical: `rm -rf` never runs
 # with variable expansion, and a `trap` is the sharpest case because the
