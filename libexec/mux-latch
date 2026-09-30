@@ -517,6 +517,8 @@ _say() {   # <state> <detail...>
   _ss=$1; shift
   _sd=$(_clean "$*")
   _line
+  # conventions: allow -- this IS mux latch's published line format, and
+  # two comments plus the notes quote it verbatim
   printf 'mux latch: %s%s\n' "$_ss" "${_sd:+ -- $_sd}" >&2
   # The log gets every transition, and this is the ONE place that needs to
   # know: a transition is latch's unit of both change and failure, and

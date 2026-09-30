@@ -1679,7 +1679,7 @@ _why_derived_root() {
 _why_note_refusal() {
   if [ "$w_nhit" -gt 1 ]; then
     echo
-    echo "note: \`mux go $wh\` REFUSES --" \
+    echo "note: \`mux go $wh\` REFUSES," \
       "$w_nhit projects share this name:"
     printf '%s\n' "$w_hits" | cut -f2 | while IFS= read -r _wd; do
       [ -n "$_wd" ] && \
