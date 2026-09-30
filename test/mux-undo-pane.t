@@ -24,14 +24,19 @@ _name=mux-undo-pane
 # form THIS box's tmux happens to produce, and the form is exactly what differs.
 # Measured on two versions of the same command:
 #
-#   tmux 3.6  ["echo MARK_A; exec \"\${SHELL:-/bin/sh}\""]   wrapped + escaped
-#   tmux 3.4  [echo MARK_A; exec "\${SHELL:-/bin/sh}"]      escaped, no wrapper
+#   tmux 3.6  ["echo MARK_A; exec \"\${SHELL:-/bin/sh}\""]    one escape layer
+#   tmux 3.4  ["echo MARK_A; exec \"\\${SHELL:-/bin/sh}\""]   TWO
 #
-# The unwrapped one was returned verbatim, so on tmux 3.4 a restored pane tried
-# to exec a program literally named `${SHELL:-/bin/sh}`: created, silent, wrong.
-# Found by ubuntu-latest, which ships 3.4, after the test below passed here on
-# 3.6 for months. Pinning the LITERALS is what stops the next version hiding in
-# the same place.
+# Both CAPTURED off the runners rather than guessed. Both WRAP; 3.4 escapes the
+# backslash it added as well, so ONE unescape pass leaves
+# `exec "\${SHELL:-/bin/sh}"` and the replay execs a program literally named
+# `${SHELL:-/bin/sh}`: created, silent, wrong.
+#
+# THE THIRD FORM BELOW IS NOT SOMETHING tmux EMITS. It is what a regression to a
+# single pass produces, so asserting it round-trips keeps the fixpoint honest.
+#
+# This test passed here on 3.6 for months; ubuntu-latest ships 3.4 and found it.
+# Pinning the LITERALS is what stops the next version hiding in the same place.
 #
 # The function is lifted out of the source rather than sourced, because the file
 # is a command and sourcing it would run it.
@@ -39,6 +44,7 @@ eval "$(sed -n '/^_unquote() {/,/^}/p' "$HERE/libexec/mux-undo-pane")"
 _want='echo MARK_A; exec "${SHELL:-/bin/sh}"'
 for _form in \
   '"echo MARK_A; exec \"\${SHELL:-/bin/sh}\""' \
+  '"echo MARK_A; exec \"\\${SHELL:-/bin/sh}\""' \
   'echo MARK_A; exec "\${SHELL:-/bin/sh}"'
 do
   _got=$(_unquote "$_form")
