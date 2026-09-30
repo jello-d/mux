@@ -4,7 +4,7 @@
 # It is the verb you reach for when mux surprised you, so an answer that
 # disagrees with the thing it explains is worse than no answer at all. It used
 # to disagree constantly: the root of a TYPED name was derived as the CURRENT
-# DIRECTORY, consulting neither the session set nor the discovery map -- the two
+# DIRECTORY, consulting neither the session set nor the discovery map: the two
 # sources `go` actually resolves from. So `mux why NAME` reported a confident
 # root for a name resolving somewhere else entirely, for an AMBIGUOUS name that
 # `go` refuses outright, and for a name nothing knew at all.
@@ -82,7 +82,7 @@ has "$_g" "ambiguous" "go: no ambiguity refusal"
 
 # --- a name NOTHING knows: likewise a refusal, not a fabricated root -------
 # `|| true` because `why` EXITS 3 on a name nothing knows, and an unguarded
-# command substitution takes the whole file down silently under `set -e` -- it
+# command substitution takes the whole file down silently under `set -e`: it
 # did exactly that when the code was introduced, and the only symptom was this
 # test vanishing from the runner's output.
 _o=$(run "$T" why nosuchproject || true)
@@ -127,7 +127,7 @@ has "$_r" "$T/src/other" "bare: wrong directory"
 
 # --- the session set OUTRANKS the map, and says so -------------------------
 # It is the only source that knows where a profile-less `mux go` was rooted,
-# so it must win -- and be named, not passed off as the map.
+# so it must win, and be named, not passed off as the map.
 printf 'solo\t%s/src/other\n' "$T" >"$T/state/sessions.work"
 _o=$(run "$T" why solo); _r=$(line "$_o" root)
 has "$_r" "a session you had" "session set: not credited"

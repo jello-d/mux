@@ -1,5 +1,5 @@
 # parchment: a LIGHT warm theme. Background lightness is a stronger at-a-glance
-# signal than hue -- a pale bar is unmistakable in a strip of dark ones -- and
+# signal than hue (a pale bar is unmistakable in a strip of dark ones), and
 # glacier was the only light theme in the set. Kept clearly tinted, not
 # near-white, so the constant white current-session chip still reads on it.
 # All six keys, because the derived dim-grey border is wrong on a light bar.

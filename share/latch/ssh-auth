@@ -6,7 +6,7 @@
 #
 #   0   yes, a credential is live: go ahead and attempt
 #   1   no, and a HUMAN has to fix it (an agent with no keys in it)
-#   78  cannot tell -- see below, and note this is NOT "no"
+#   78  cannot tell: see below, and note this is NOT "no"
 #
 # WHY THIS HOOK EXISTS AT ALL. `blocked` is the one latch state where retrying
 # is actively harmful: every attempt against a host with no live credential is a
@@ -23,7 +23,7 @@
 # password, a certificate, a GSSAPI ticket, or `ssh` may be configured in a way
 # this hook cannot see); the second is a specific, fixable human task.
 # Answering 1 for both would park latch in `blocked` forever on a box that would
-# have connected fine. An edge nobody can check must not report success -- and
+# have connected fine. An edge nobody can check must not report success, and
 # it must not report failure either.
 set -eu
 

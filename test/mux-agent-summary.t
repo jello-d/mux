@@ -5,7 +5,7 @@
 #
 # That makes it the one consumer of mux-agent-state_lib whose namespace cannot
 # come from $TMUX, and it is exactly where a stale default hid. It used to fall
-# back to the literal name `default` -- the old tmux socket basename. When the
+# back to the literal name `default`: the old tmux socket basename. When the
 # personal partition became `global` that directory stopped existing, so the
 # indicator read an empty dir and reported "none 0" indefinitely: no error, no
 # clue, just a tray that never lit up.
@@ -62,7 +62,7 @@ eq headless "$(sum)" "blocked 1"
 eq explicit-global "$(sum global)" "blocked 1"
 eq explicit-work "$(sum work)" "idle 1"
 
-# A namespace with no state is "none 0" -- the honest answer, and the one the
+# A namespace with no state is "none 0": the honest answer, and the one the
 # stale default was accidentally producing for a namespace that DID have state.
 eq empty-ns "$(sum nosuchpartition)" "none 0"
 
@@ -87,7 +87,7 @@ eq worst-wins "$(sum global)" "blocked 2"
 # human timescales. One question, one answer.
 #
 # Two namespaces exist in this fixture (global and work), so this also pins
-# that --all reports the OTHER partition, not just the caller's -- a version
+# that --all reports the OTHER partition, not just the caller's: a version
 # that quietly answered for one would pass any single-line assertion.
 _o=$(sum --all)
 printf '%s\n' "$_o" | grep -q '^global blocked 2$' \
@@ -105,7 +105,7 @@ printf '%s\n' "$_o" | grep -q '^work idle 1$' \
 # an item nobody could act on.
 #
 # STATE FILES ARE NOT THE ANSWER and that is why this cannot be inferred from
-# the directory -- they outlive their server, and a server can outlive the last
+# the directory: they outlive their server, and a server can outlive the last
 # client. Both look identical from the state dir.
 WATCHED=global
 _o=$(WATCHED=global sum --all --attached)
@@ -117,7 +117,7 @@ eq attached-only "$_o" "global blocked 2"
 _o=$(WATCHED=work sum --all --attached)
 eq attached-other "$_o" "work idle 1"
 
-# Both attached, both reported -- so the filter is not simply keeping one.
+# Both attached, both reported, so the filter is not simply keeping one.
 _o=$(WATCHED="global work" sum --all --attached | grep -c .)
 eq attached-both "$_o" "2"
 
@@ -136,7 +136,7 @@ _o=$(WATCHED= sum --all | grep -c .)
 eq all-unfiltered "$_o" "2"
 
 # The caller's own partition appears even when NOTHING has any state, so a
-# consumer always gets at least one line -- the same reason the tray always
+# consumer always gets at least one line: the same reason the tray always
 # carries the local host rather than emptying when nothing is latched.
 #
 # Asserted by emptying the lot rather than by setting MUX_CTX_PARTITION:

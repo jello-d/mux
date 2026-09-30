@@ -1,6 +1,6 @@
 #!/bin/sh
 # mux-next-blocked: switch this client to the session whose agent has been
-# BLOCKED (needs-you) the LONGEST -- the loudest, most-escalated chip on the
+# BLOCKED (needs-you) the LONGEST: the loudest, most-escalated chip on the
 # strip (see mux-agent-state-render). "Jump to whoever needs me most." Skips
 # this
 # client's hidden sessions (mux hide) and the session you are already on, so a
@@ -36,7 +36,7 @@ while [ $# -gt 0 ]; do
   --partition)
     _pflag=1; _part=${2:-}
     # GUARDED, because `shift 2` on a bare `--partition` is a shell
-    # error that also exits 2 -- the right code for the wrong
+    # error that also exits 2: the right code for the wrong
     # reason, and one no mutation of the real guard could ever be
     # distinguished from.
     if [ $# -gt 1 ]; then shift; fi ;;
@@ -56,8 +56,8 @@ client=${1:-}
 current=${2:-}
 
 # EVERY tmux CALL GOES THROUGH THIS. Inside tmux, $TMUX names the socket and a
-# bare call is right. HEADLESS -- which is how a remote caller arrives over a
-# transport -- a bare call reaches the DEFAULT socket, which is not where mux's
+# bare call is right. HEADLESS (which is how a remote caller arrives over a
+# transport), a bare call reaches the DEFAULT socket, which is not where mux's
 # server lives, so every query came back empty and this reported "no attached
 # client" on a box with clients attached. Same wrapper the doctor already uses,
 # for the same reason.
@@ -65,7 +65,7 @@ current=${2:-}
 # must agree and they were resolving from different places: this wrapper used
 # `$MUX_CTX_PARTITION` while mux_agent_dir independently defaults to `global`.
 # Headless with a partition of `default` that asked the right server for its
-# clients and then read an empty state dir -- so it resolved a client, found
+# clients and then read an empty state dir, so it resolved a client, found
 # nothing blocked, and exited 0 having done nothing. Silent, and indisting-
 # uishable from "nothing needs you".
 #
@@ -77,7 +77,7 @@ _nb() {
   else tmux "$@"; fi
 }
 # No CLIENT given (the bare `mux next-blocked`): resolve the client of the pane
-# we are in, which means we have to BE in one -- switch-client needs a target.
+# we are in, which means we have to BE in one: switch-client needs a target.
 if [ -z "$client" ]; then
   if [ -n "${TMUX:-}" ]; then
     client=$(_nb display-message -p '#{client_name}' \
@@ -85,7 +85,7 @@ if [ -z "$client" ]; then
   else
     # HEADLESS, which is how a REMOTE caller arrives. The tray
     # indicator reaches a latched host over the same transport it
-    # polls with, so there is no pane to resolve from -- and there
+    # polls with, so there is no pane to resolve from, and there
     # does not need to be, because a tray item EXISTS only when a
     # latch does, which means a client is attached and the human is
     # looking at it.
@@ -95,7 +95,7 @@ if [ -z "$client" ]; then
     # at its console) this picks the one used last, which is
     # usually but not always the one you meant. Precise attribution
     # would need the attach to record its own $SSH_TTY, which is
-    # more plumbing than the ambiguity has so far been worth --
+    # more plumbing than the ambiguity has so far been worth:
     # revisit if it ever picks wrong in practice.
     client=$(_nb list-clients \
       -F '#{client_activity} #{client_name}' 2>/dev/null \
@@ -117,7 +117,7 @@ if [ -r "$_lib/mux-exclude_lib" ]; then
 fi
 dir=$(mux_agent_dir "$_ns")
 
-# LINE by line, and a here-doc rather than a pipe -- `best` is carried out of
+# LINE by line, and a here-doc rather than a pipe: `best` is carried out of
 # this loop, and a pipe would run it in a subshell and discard it. Word
 # splitting here made a session named `my project` two phantom candidates and
 # hid the real one, in the feature whose whole job is "take me to whoever has

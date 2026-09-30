@@ -46,7 +46,7 @@ done
 
 # --- the EVENTS come from mux, not from a list typed here -----------------
 # `mux agent-hook`'s table IS the contract. Scraped, so this cannot wire an
-# event mux would reject (exit 2, logged) nor miss one it understands -- and so
+# event mux would reject (exit 2, logged) nor miss one it understands, and so
 # that adding an event to the table wires it without anyone remembering to.
 _hookf=$HERE/libexec/mux-agent-hook
 _events=$(sed -n 's/^\([A-Za-z]*\))  *set -- .*/\1/p' "$_hookf")

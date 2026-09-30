@@ -38,7 +38,7 @@ if [ "$_rc" -ne 0 ]; then
   # sorts first, and eight releases went out red while `test/run | tail`
   # showed a reassuring `ok setup`. The verdict has to be the last thing
   # on screen, not the first.
-  printf 'SOME MUX TESTS FAILED -- scroll up, or: sh test/run | grep FAIL\n'
+  printf 'SOME MUX TESTS FAILED. Scroll up, or: sh test/run | grep FAIL\n'
 fi
 if [ "$_rc" -eq 0 ]; then
   echo "all mux tests passed"

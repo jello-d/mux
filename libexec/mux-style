@@ -1,13 +1,13 @@
 #!/bin/sh
 # mux-style: reflect the CONTEXT the active pane is ACTUALLY in, rather than the
-# one its layout claimed -- a banner and title prefix when the pane's process is
+# one its layout claimed: a banner and title prefix when the pane's process is
 # in a marked context, plus a colour theme.
 #
 # THE TEXT IS THE SIGNAL; THE COLOUR IS NOT. A context is reported by the
 # optional context hook (see mux-context_lib); mux only REFLECTS it in the UI
 # and
-# enforces nothing -- whatever actually enforces a boundary, if anything, lives
-# in the integrator. The banner and the title prefix are the human reminder --
+# enforces nothing: whatever actually enforces a boundary, if anything, lives
+# in the integrator. The banner and the title prefix are the human reminder:
 # text, so it does not depend on registering a hue. The colour is cosmetic: a
 # per-context default any session may override with a `theme` directive. Never
 # read either the banner or the colour as permission.
@@ -26,7 +26,7 @@
 # status-left wants the banner on stdout; the attach/create HOOKS want only the
 # side effects. tmux run-shell displays a command's stdout in a VIEW-MODE buffer
 # over the pane (freezing it on a [0/0] snapshot until a key is pressed), so a
-# hook must never let the banner through -- it would do exactly that the instant
+# hook must never let the banner through: it would do exactly that the instant
 # a marked session attaches.
 set -eu
 
@@ -66,7 +66,7 @@ fi
 # MUX_STYLE_PROC relocates /proc so the field arithmetic below can be exercised
 # against a stat line with a KNOWN foreground group. Without it that branch is
 # unreachable in a test: a test shell has no controlling terminal, so tpgid is
-# -1, the non-numeric guard fires, and $6 is never read -- a wrong field index
+# -1, the non-numeric guard fires, and $6 is never read: a wrong field index
 # would go unnoticed. Same seam, and the same reason, as MUX_DOCTOR_PROC.
 _proc=${MUX_STYLE_PROC:-/proc}
 fg=$pane_pid
@@ -90,7 +90,7 @@ mux_ctx_resolve "$fg" || :
 
 # Resolve the colour theme: an explicit per-session @mux-theme (set by a
 # layout's `theme` directive) wins; else the context's default theme; else the
-# global default. The theme is cosmetic -- the banner and title prefix below
+# global default. The theme is cosmetic: the banner and title prefix below
 # mark the boundary regardless of which theme is in force. All colour VALUES in
 # tmux.conf.
 theme=$(tmux show-options -qv -t "$session" @mux-theme || true)
@@ -147,7 +147,7 @@ set_opt message-style "$bar"
 #
 # MUX OWNS THE STYLE. It used to come from the integrator, which meant an
 # integrator that supplied a label and no style got NO banner and no title
-# prefix at all -- a safety reminder that disappeared when its colours were
+# prefix at all: a safety reminder that disappeared when its colours were
 # omitted. The style is fixed, loud and theme-neutral (bright red, white, bold)
 # so the reminder reads against any bar theme: it is the SIGNAL, and the theme
 # colour is decoration. An integrator says WHAT the boundary is; mux guarantees
@@ -165,7 +165,7 @@ else
   set_opt @mux-prefix ""
 fi
 
-# Host label (status-left only, both modes): the machine identity as a CHIP --
+# Host label (status-left only, both modes): the machine identity as a CHIP;
 # a per-host fg on a per-host bg, so it reads clearly against ANY bar theme (a
 # bare fg colour collides with the bar bg), and near-identically-named boxes
 # are told apart at a glance. Printed AFTER any context banner, so the banner
@@ -173,7 +173,7 @@ fi
 #
 # Colours are DATA, not code: an explicit `<host> <style>` line in
 # $MUX_DIR/hosts wins (style is a comma-joined tmux run, e.g.
-# fg=colour230,bg=#5f3a1a -- the hash sits after a comma, not whitespace, so the
+# fg=colour230,bg=#5f3a1a: the hash sits after a comma, not whitespace, so the
 # normalizer keeps it); an unlisted host gets a colour derived from its name, so
 # every machine still gets a distinct, readable chip with zero config (an
 # integrator can pin specific hosts to hand-picked hues there).

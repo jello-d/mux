@@ -89,7 +89,7 @@ eq failed-bad-token "$MUX_CTX_TOKEN" global
 cc 'echo lonely'
 mux_ctx_resolve || fail "resolve failed for an unconfigured token"
 eq lonely-token "$MUX_CTX_TOKEN" lonely
-# The partition still applies -- that is the load-bearing part, and why an
+# The partition still applies: that is the load-bearing part, and why an
 # unconfigured context is a warning rather than a refusal.
 eq lonely-part "$MUX_CTX_PARTITION" lonely
 eq lonely-unknown "$MUX_CTX_UNKNOWN" 1
@@ -122,7 +122,7 @@ eq gpu-token "$MUX_CTX_TOKEN" gpu
 eq gpu-part  "$MUX_CTX_PARTITION" global
 eq gpu-agent "$MUX_CFG_agent" gemini
 # It inherits the GLOBAL partition's roots, because that is the partition it
-# joined -- which is the whole point of letting contexts share one.
+# joined, which is the whole point of letting contexts share one.
 eq gpu-scan "$MUX_CFG_scan" "$T/g 3"
 
 # --- the context wins over its partition -----------------------------------

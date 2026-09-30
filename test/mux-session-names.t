@@ -8,7 +8,7 @@
 #   the ring   `for s in $(tmux list-sessions -F ...)` word-splits, so one
 #              session became two phantom entries and the real one was never
 #              reachable. The target uses tmux's exact-match `=`, so the switch
-#              failed SILENTLY -- and mux-cycle is silent by contract (it runs
+#              failed SILENTLY, and mux-cycle is silent by contract (it runs
 #              from a key binding), so prefix ( and ) simply went dead.
 #
 #   the hidden set  was joined with SPACES and searched with
@@ -16,7 +16,7 @@
 #              name a member. `mux hide "my project"` also hid unrelated
 #              sessions called `my` and `project`.
 #
-# They are independent -- fixing the loops does not fix the set -- but they are
+# They are independent (fixing the loops does not fix the set), but they are
 # one class, so they are pinned together.
 #
 # THE STUB WAS CHECKED AGAINST REAL TMUX before this was written, which matters
@@ -102,7 +102,7 @@ unhide
 # --- next-blocked walks the same ring, and it is the headline feature -----
 # "take me to whoever has waited longest" is the reason prefix+b exists, and it
 # shared the word-splitting loop.
-# Record: state window pane epoch notif SESSION -- session LAST, which is the
+# Record: state window pane epoch notif SESSION: session LAST, which is the
 # whole point here: `my project` must come back whole.
 st() { agent_rec "$T/run/agent-state/global/${1#%}" "$2" "$1" 1 "$3"; }
 st %2 blocked 'my project'
@@ -178,8 +178,8 @@ _stolen=$(env XDG_RUNTIME_DIR="$T/run" sh -c '
 #
 # The existing emitter case above cannot catch it: its stub reports the pane as
 # VISIBLE, and a visible pane raises no banner, so it never enters this block.
-# This one forces the banner -- previous state `working`, new state `idle`,
-# pane not visible -- which is the only path that was broken.
+# This one forces the banner (previous state `working`, new state `idle`,
+# pane not visible), which is the only path that was broken.
 mkdir -p "$T/notifbin"
 cat >"$T/notifbin/tmux" <<'EOF'
 #!/bin/sh
@@ -225,7 +225,7 @@ _found=$(env XDG_RUNTIME_DIR="$T/run" sh -c '
   mux_agent_state "$(mux_agent_dir global)" "my project"' _ "$HERE")
 [ -n "${_found%% *}" ] \
   || fail "no state after a notification: [$_rec]"
-# The BANNER names the session too -- it read "Claude finished: 0".
+# The BANNER names the session too: it read "Claude finished: 0".
 grep -qF 'my project' "$NLOG" \
   || fail "banner did not name the session: [$(cat "$NLOG")]"
 grep -qxF 'Claude finished: 0' "$NLOG" \
@@ -237,7 +237,7 @@ st %3 blocked zulu
 
 # --- the strip shows the whole name, and hides exactly ---------------------
 # mux-agent-state-render always read line by line, so it never had the ring bug
-# --
+#,
 # but it shared the hidden-set test.
 render() {
   env -u TMUX -u TMUX_PANE XDG_RUNTIME_DIR="$T/run" MUX_STRIP_WIDTH=400 \
@@ -252,7 +252,7 @@ hide 'my project'
 case "$(render)" in
 *"my project"*) fail "a hidden session is still on the strip" ;;
 esac
-# alpha and zulu survive -- hiding one name must not take out its neighbours.
+# alpha and zulu survive: hiding one name must not take out its neighbours.
 case "$(render)" in
 *alpha*zulu*) ;;
 *) fail "hiding took out other sessions: [$(render)]" ;;
@@ -320,7 +320,7 @@ emit working --beat
 # The refusal above is right about a trailing event and wrong about the other
 # half, which is live: an agent continuing in AUTO MODE starts its turn with no
 # UserPromptSubmit, so nothing may ever create `working` again and the session
-# reads DONE while it works. Seen on northwood 2026-09-27 -- vigilance idle for
+# reads DONE while it works. Seen on northwood 2026-09-27: vigilance idle for
 # 9 minutes of a 34-minute turn, unrecoverable until a human typed something.
 #
 # So a beat over `idle` leaves a MARK, and a second beat inside the window
@@ -351,7 +351,7 @@ emit working --beat
 
 # A REAL TRANSITION CLEARS THE MARK. Otherwise a mark left by a beat during
 # one turn lets a straggler in the NEXT turn find corroboration it never
-# earned -- the straggler bug, reintroduced through the back door.
+# earned: the straggler bug, reintroduced through the back door.
 agent_rec "$T/run/agent-state/global/30" idle %30 100 vicus
 rm -f "$BEATF"
 emit working --beat               # leaves a mark

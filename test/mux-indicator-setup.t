@@ -8,7 +8,7 @@
 #
 # SYSTEMCTL IS STUBBED, and that is not tidiness. `setup.sh uninstall` runs
 # `systemctl --user disable --now mux-indicator.service`, and the user manager
-# knows that unit by NAME regardless of where XDG_CONFIG_HOME points -- so a
+# knows that unit by NAME regardless of where XDG_CONFIG_HOME points, so a
 # test running it unstubbed would stop the developer's actually-running tray.
 # The stub also lets the assertions be about what setup.sh DID rather than about
 # whatever state this machine happens to be in.
@@ -64,7 +64,7 @@ run() {   # <verb ...>
 }
 # has PATTERN MESSAGE. NOT `has "$OUT" PATTERN MESSAGE`, which eleven calls in
 # this file used to do: `case $OUT in *"$OUT"*)` matches unconditionally, so
-# every one of them was VACUOUS -- they read as coverage and asserted nothing.
+# every one of them was VACUOUS: they read as coverage and asserted nothing.
 # Found by mutation, which is the only thing that can tell those apart: two
 # guards removed from setup.sh SURVIVED against a green suite.
 has() {
@@ -91,7 +91,7 @@ case $OUT in
 *'[OK]'*) fail "nothing is installed, so nothing should read [OK]:
 $OUT" ;;
 esac
-# It must not FIX anything -- an audit that installs is not an audit.
+# It must not FIX anything: an audit that installs is not an audit.
 [ ! -e "$T/bin/mux-indicator" ] || fail "check created the bin symlink"
 [ ! -e "$UNITF" ] || fail "check installed the unit file"
 
@@ -132,7 +132,7 @@ cp "$HERE/indicator/$UNIT" "$UNITF"
 # --- `service` SAYS WHAT IT DID, and the restart is the point -----------
 # It used to print "installed + enabled" unconditionally while also running
 # `systemctl restart`, so the one action anybody watches for after a code
-# change was invisible -- and a restart that FAILED printed the same sentence
+# change was invisible, and a restart that FAILED printed the same sentence
 # as one that worked. Found by a human reading a provisioning run and
 # concluding, reasonably, that the daemon had not been restarted. It had.
 #
@@ -189,7 +189,7 @@ run uninstall
 # --- the INSTALLED CODE is checked, not just its presence -----------------
 # THE BUG THIS EXISTS FOR, and it is not hypothetical: northwood ran a copy
 # installed on 2026-08-30 for weeks while every marker read [OK]. Everything was
-# present, the unit file matched, the service was enabled -- and a provisioner
+# present, the unit file matched, the service was enabled, and a provisioner
 # runs `apply` only when `check` FAILS, so passing is precisely what kept the
 # stale code alive. The green check was the thing preventing the fix.
 #
@@ -218,7 +218,7 @@ for _f in "$HERE"/indicator/mux_indicator/*.py; do cp "$_f" "$SITE/"; done
 run check
 has "installed code matches" "identical copies were not reported current"
 
-# DRIFTED: one file differs. This is the northwood case exactly -- present,
+# DRIFTED: one file differs. This is the northwood case exactly: present,
 # importable, wrong.
 printf '\n# a local edit\n' >>"$SITE/render.py"
 run check
@@ -234,7 +234,7 @@ Passing is what stopped a provisioner from ever re-running apply."
 # two reasonable people close it two different ways.
 has "setup.sh indicator install" "the stale report named no remedy"
 
-# MISSING: a new module that was never installed. Same verdict as drifted --
+# MISSING: a new module that was never installed. Same verdict as drifted:
 # a half-updated install is not a working one.
 cp "$HERE"/indicator/mux_indicator/render.py "$SITE/render.py"
 rm -f "$SITE/sources.py"
@@ -256,7 +256,7 @@ has "not found" "an unimportable package did not report so"
 # --- and the RUNNING daemon is checked against the installed code ---------
 # THE LAYER ABOVE THE ONE ABOVE. The block above closed "installed versus
 # package"; a long-lived process is a THIRD copy, and nothing compared it to
-# either -- so a daemon that was never restarted after an install passed every
+# either, so a daemon that was never restarted after an install passed every
 # marker in this file while drawing last week's icon. Reported by a human, in
 # exactly those words: "it did not restart the indicator, which I would expect
 # it to".

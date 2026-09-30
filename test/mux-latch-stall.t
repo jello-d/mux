@@ -4,7 +4,7 @@
 #
 # WHY THIS IS A TEST AND NOT A COMMENT. The options in `_DEF_ALIVE` are the
 # only thing standing between a dropped link and latch sleeping forever, and
-# for two releases the COMMENT explaining them was wrong in both directions --
+# for two releases the COMMENT explaining them was wrong in both directions:
 # each half generalised from the single peer it had been measured against. A
 # comment cannot notice when an option is dropped, reordered or weakened; this
 # can.
@@ -34,7 +34,7 @@ command -v python3 >/dev/null 2>&1 || {
 
 # THE OPTIONS UNDER TEST, taken from the shipped source. Both lines, because
 # _DEF_ALIVE is built in two steps and reading only the first would silently
-# drop ConnectTimeout -- the very option whose absence this file must catch.
+# drop ConnectTimeout: the very option whose absence this file must catch.
 OPTS=$(sed -n "s/^_DEF_ALIVE=['\"]*\(-o [^'\"]*\)['\"]*$/\1/p" \
   "$HERE/libexec/mux-latch" | tr '\n' ' ')
 OPTS="$OPTS$(sed -n 's/^_DEF_ALIVE="\$_DEF_ALIVE \(.*\)"$/\1/p' \
@@ -53,7 +53,7 @@ esac
 
 # A peer that stalls at a CHOSEN point. Nothing here speaks ssh: it accepts,
 # optionally sends a banner, optionally reads the client's KEXINIT, and then
-# goes quiet forever -- which is all three phases a real box can stall in.
+# goes quiet forever, which is all three phases a real box can stall in.
 cat >"$T/stall.py" <<'PY'
 import socket, sys, threading, time
 mode, port = sys.argv[1], int(sys.argv[2])
@@ -102,7 +102,7 @@ for _mode in silent banner kexinit; do
   _t0=$(date +%s)
   # `|| _rc=$?`, never a bare call: ssh failing is the EXPECTED outcome
   # here, and under `set -e` a bare invocation takes the whole file down
-  # before the next line runs -- no ok, no FAIL, just a silent exit. This
+  # before the next line runs: no ok, no FAIL, just a silent exit. This
   # file did exactly that on its first run.
   _rc=0
   # shellcheck disable=SC2086   # OPTS is a list of -o flags, split on purpose

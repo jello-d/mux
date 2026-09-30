@@ -130,7 +130,7 @@ $_newest:
 # THE TAG MUST CARRY THE VERSION IT CLAIMS, read out of the tagged commit rather
 # than out of the working tree. Homebrew infers the version from the tag, so a
 # tag cut at the wrong commit makes `brew install` produce a mux whose `-V`
-# disagrees with what brew believes it installed -- and the formula's own `test`
+# disagrees with what brew believes it installed, and the formula's own `test`
 # block asserts those agree, which would then fail on the user's machine
 # instead of here.
 _tv=$(git -C "$HERE" show "$_newest:bin/mux" 2>/dev/null \

@@ -12,7 +12,7 @@
 # not have to learn a standard nobody should own twice.
 #
 # THE CONVERSION IS ARITHMETIC, NOT A TABLE, so it is worth pinning: 16-231 is a
-# 6x6x6 cube on the levels 0/95/135/175/215/255 (unevenly spaced -- the 0-to-95
+# 6x6x6 cube on the levels 0/95/135/175/215/255 (unevenly spaced: the 0-to-95
 # jump is the standard's own and getting it wrong shifts every dark colour), and
 # 232-255 is greyscale at 8 + 10n. The values below were cross-checked against
 # an independent implementation rather than read off this one.
@@ -46,14 +46,14 @@ eq greyscale  "$(hc greybox)"  "#d0d0d0 #303030"
 eq literal-bg "$(hc creambox)" "#ffffd7 #5f3a1a"
 eq cube       "$(hc cubebox)"  "#ffffff #005f87"
 # A LEADING ZERO IS NOT OCTAL HERE, and proving that takes care. `$((016))` IS
-# 14 in dash, sh and bash -- measured, not assumed -- while `[ 016 -ge 16 ]` is
+# 14 in dash, sh and bash (measured, not assumed), while `[ 016 -ge 16 ]` is
 # true, so a padded colour sails past the range check and then does arithmetic
 # on the wrong number. `$((10#016))` is the usual fix and is a bashism dash
 # rejects outright, so the zeros are stripped by hand.
 #
 # colour016 CANNOT TEST THAT, which is the interesting part: the buggy path
 # computes a negative cube index, every component falls through to nothing, and
-# printf renders `#000000` -- which is the CORRECT answer for colour016. A
+# printf renders `#000000`, which is the CORRECT answer for colour016. A
 # mutation removing the strip passed against it. colour024 is the case that
 # tells them apart: 24 is #005f87, octal 024 is 20 and gives #0000d7.
 eq leading-zero "$(hc zerobox)" "#000000 #87afaf"
@@ -88,7 +88,7 @@ done
 
 # --- IT REFUSES rather than answering half ------------------------------
 # Colours 0-15 are the terminal's OWN sixteen, remapped by every theme, so
-# there is no correct hex -- only whatever the user's terminal happens to use.
+# there is no correct hex: only whatever the user's terminal happens to use.
 # Guessing would put a wrong colour on a tray item that claims to identify a
 # machine, which is worse than drawing nothing.
 printf 'ansibox fg=colour7,bg=colour0\n' >>"$T/conf/hosts"

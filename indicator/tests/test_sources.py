@@ -12,7 +12,7 @@ invisible from the bar:
 
   A STALE LOCK IS NOT A HOST. The pid on line 1 is what makes a killed latch
   detectable. Poll a dead one and a crashed latch leaves a permanent phantom in
-  the tray -- the "confidently reporting a host you cannot see" failure the
+  the tray: the "confidently reporting a host you cannot see" failure the
   whole cross-machine design exists to avoid.
 
   THE REMOTE COMMAND MUST SURVIVE SSH. Both halves of it were real failures
@@ -45,7 +45,7 @@ class Latched(unittest.TestCase):
         """The filename is sanitised through `tr -c`, so `northwood:api` lands as
         `northwood_api` and is indistinguishable from a host genuinely called
         that. Polling `northwood_api` would draw `unknown` forever with nothing
-        on screen to say why -- so latch writes the target verbatim on line 2
+        on screen to say why, so latch writes the target verbatim on line 2
         and this reads it."""
         self._lock("northwood_api", os.getpid(), "northwood:api")
         self.assertEqual(latched(self.d), [("northwood", "northwood:api")])
@@ -86,7 +86,7 @@ class Latched(unittest.TestCase):
 
     def test_two_latches_to_one_host_are_ONE_item(self):
         """`mux agent-summary` answers for the whole box, so two items for
-        `box:api` and `box:web` would be identical twins -- a puzzle rather
+        `box:api` and `box:web` would be identical twins: a puzzle rather
         than information."""
         self._lock("box_api", os.getpid(), "box:api")
         self._lock("box_web", os.getpid(), "box:web")
@@ -140,14 +140,14 @@ class RemoteCommand(unittest.TestCase):
     """Composing the command that asks a remote host for its state.
 
     Both properties below were live failures before they were tests, and both
-    failed by doing something PLAUSIBLE instead of erroring -- which is the kind
+    failed by doing something PLAUSIBLE instead of erroring, which is the kind
     that survives a green suite.
     """
 
     def test_the_command_is_ONE_argv_element(self):
         """ssh CONCATENATES its remaining arguments and the remote shell
         re-splits them. Passed as separate words, the far side ran `sh -lc mux`
-        with `agent-summary` as $0 -- mux's bare session PICKER -- which
+        with `agent-summary` as $0 (mux's bare session PICKER), which
         answered a menu that parsed as the state `1)`."""
         argv = remote_argv("box", "ssh %h %q")
         self.assertEqual(argv[0], "ssh")
@@ -203,7 +203,7 @@ class RemoteCommand(unittest.TestCase):
 
 
 class TransportFromConfig(unittest.TestCase):
-    """`indicator-transport` in $MUX_DIR/config -- the MIDDLE layer of the
+    """`indicator-transport` in $MUX_DIR/config: the MIDDLE layer of the
     three, and the only one that had never been read.
 
     The env override and the shipped default were both covered; a 2026-09-26
@@ -298,7 +298,7 @@ class LockReading(unittest.TestCase):
     def test_a_pid_owned_by_SOMEONE_ELSE_counts_as_alive(self):
         """`os.kill(pid, 0)` raises PermissionError for a live process owned by
         another uid. Reading that as dead would drop a host from the tray
-        because of who started it -- pid 1 is always there and never ours."""
+        because of who started it: pid 1 is always there and never ours."""
         d = tempfile.mkdtemp(prefix="muxlock")
         with open(os.path.join(d, "init.lock"), "w") as fh:
             fh.write("1\nrover\n")
@@ -331,7 +331,7 @@ class LockReading(unittest.TestCase):
 class Label(unittest.TestCase):
     def test_local_label_is_a_short_hostname(self):
         """It keys `mux host-color`, so it has to be the token the status bar
-        hashes -- a FQDN would colour the tray differently from the chip."""
+        hashes: a FQDN would colour the tray differently from the chip."""
         self.assertNotIn(".", local_label())
         self.assertTrue(local_label())
 
@@ -345,7 +345,7 @@ class ActivateSeam(unittest.TestCase):
 
     Clicking a tray item switches that host's session, which mux owns. Raising
     the terminal that shows it means knowing about a compositor, which mux
-    does not get to know about -- the same boundary that put window placement
+    does not get to know about: the same boundary that put window placement
     in usher. So it is a seam, unset by default, and a click still does the
     half mux legitimately owns when nobody wired one.
     """
@@ -395,7 +395,7 @@ class ActivateSeam(unittest.TestCase):
 class ActivateCommand(unittest.TestCase):
     def test_the_remote_click_asks_for_next_blocked(self):
         """Not agent-summary. The same transport carries both, so the COMMAND
-        is what distinguishes a poll from a click -- passing the wrong one
+        is what distinguishes a poll from a click: passing the wrong one
         would make every click silently re-read the state it already had."""
         argv = sources.remote_argv("box", template="ssh %h %q",
                                    cmd=sources.activate_cmd())
@@ -413,7 +413,7 @@ class ActivateCommand(unittest.TestCase):
     def test_a_partition_that_is_not_a_LABEL_is_refused(self):
         """These names arrive from another machine and go straight back out
         inside `sh -lc`, so this is untrusted input crossing into a shell. The
-        click still happens -- it simply asks for the host's own default,
+        click still happens: it simply asks for the host's own default,
         which is what an item with no partition asks for anyway."""
         for bad in ("a b", "a;rm -rf /", "a'b", "../x", "A", ""):
             got = sources.activate_cmd(bad)
@@ -434,7 +434,7 @@ class ActivateCommand(unittest.TestCase):
         human-facing summary meant improving it for a terminal could silently
         break this, and nothing declared which was which.
 
-        The attached-only property moved WITH the verb -- it is the default of
+        The attached-only property moved WITH the verb: it is the default of
         `mux agent status` now, asserted in test/mux-agent.t rather than here,
         because it became the contract's promise instead of this caller's
         flag."""
@@ -446,7 +446,7 @@ class ActivateCommand(unittest.TestCase):
         """`--all` was parsed and never read until 0.73, so this daemon got
         every partition by accident and depended on it. Once the verb honours
         its own documented scoping, omitting the flag reduces a remote host to
-        whichever partition its login shell resolves -- which is exactly the
+        whichever partition its login shell resolves, which is exactly the
         blindness 0.56 existed to fix, and it would come back silently: the
         tray would simply stop publishing an item, which reads as "that
         partition is gone".

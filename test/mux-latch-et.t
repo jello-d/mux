@@ -87,7 +87,7 @@ as ONE UNQUOTED element. %q shell-quotes it, which is right for ssh (the far
 side re-parses) and wrong here." ;;
 esac
 case $_line in
-*%q*) fail "the documented line uses %q: $_line -- see above" ;;
+*%q*) fail "the documented line uses %q: $_line. See above" ;;
 esac
 case $_line in
 *" -t "*) fail "the documented line passes \`-t\`: $_line
@@ -146,7 +146,7 @@ P=$HERE/share/latch/et-probe
 # `nc` IS STUBBED, because the real one needs a network this test must not
 # touch, and because the interesting cases are its exit codes rather than its
 # bytes. NCRC is what the stub returns; NCLOG records the argv so the port
-# actually used can be asserted -- a probe that tests the wrong port parks latch
+# actually used can be asserted: a probe that tests the wrong port parks latch
 # in a backoff about a service that is running.
 mkdir -p "$T/pbin"
 cat >"$T/pbin/nc" <<'EOF'
@@ -198,7 +198,7 @@ rm -f "$T/pconf/config"
 
 # timeout(1)'s CODE IS A DEFINITE NO. A port that will not complete a handshake
 # inside the bound will not serve an attach either, so this is 1 rather than
-# "cannot tell" -- which keeps latch in a visible backoff instead of a silent
+# "cannot tell", which keeps latch in a visible backoff instead of a silent
 # wait.
 _got=$(probe 124)
 [ "$_got" = 1 ] || fail "the bound being hit must answer 1, got [$_got]"
@@ -217,7 +217,7 @@ env PATH="$T/pbin:$PATH" "$P" >/dev/null 2>&1 || _prc=$?
 
 # AND NO `nc` MEANS NO OPINION, WHICH IS THE ONE ANSWER THAT DIFFERS FROM
 # ssh-probe. latch treats 78 as WAIT, so answering it here would park a
-# perfectly good ET transport forever on a box that merely lacks netcat --
+# perfectly good ET transport forever on a box that merely lacks netcat,
 # whereas a missing `ssh` genuinely means the ssh transport is dead anyway.
 # A curated PATH, not a broken stub: absence has to be modelled by absence, the
 # lesson test/mux-portability.t paid for.

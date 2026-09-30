@@ -21,9 +21,9 @@
 #
 # THAT TEST IS THE WHOLE DESIGN, and it was got wrong twice. The session set
 # sat in $MUX_CACHE until 0.38 and the edit draft until 0.39, both on the
-# reasoning that they were "transient" -- true of the FACT each records, and
+# reasoning that they were "transient": true of the FACT each records, and
 # irrelevant to whether the file can be rebuilt. The cost shows up much later:
-# a cache clear, then a reboot, then a `mux resume` that finds nothing -- at the
+# a cache clear, then a reboot, then a `mux resume` that finds nothing: at the
 # one moment the answer cannot be reconstructed from anywhere.
 #
 # So when adding a new file, ask only whether mux could regenerate it. If not,
@@ -46,7 +46,7 @@ mux_state_dir() {
 #
 # THE ADOPTION IS WHY THIS IS A FUNCTION AND NOT A VARIABLE. An upgrade lands
 # while things are already recorded, and the next thing to read them may be the
-# `mux resume` after a reboot -- so a file left behind in the old location is a
+# `mux resume` after a reboot, so a file left behind in the old location is a
 # file lost at the one moment it mattered. Doing it on first touch means there
 # is no verb to remember and no window in which it has not happened yet.
 #

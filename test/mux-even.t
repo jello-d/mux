@@ -2,7 +2,7 @@
 # test/mux-even.t - `mux even`, the put-it-back-to-the-declared-shape verb.
 #
 # WHY IT EXISTS. `mux refresh` acted on the CURRENT window only, so a row that
-# drifted to 79|81 in a session you were not looking at stayed that way -- and
+# drifted to 79|81 in a session you were not looking at stayed that way, and
 # the drift you actually notice is BETWEEN sessions, because borders jump as
 # you cycle. Found live: six sessions, five identical, one at 81x53/79x53/161x9
 # where the rest were 80x52/80x52/161x10.
@@ -71,7 +71,7 @@ esac
 # --- A MISSING @mux-bottom IS ADOPTED BACK FROM A SIBLING -----------------
 # The live failure. Without the marker neither half can act, so `mux even`
 # takes the spec the rest of the server agrees on rather than leaving the
-# window frozen -- which for a verb whose whole question is "what do the other
+# window frozen, which for a verb whose whole question is "what do the other
 # windows agree on" IS the answer, not a guess.
 build
 tm new-session -d -s other -x 161 -y 63 -c /tmp
@@ -92,7 +92,7 @@ both silently do nothing for it"
 
 # --- with NOTHING to learn from, it does not invent a spec ----------------
 # The other direction, and it has to be asserted separately: adopting a
-# sibling's value is right, making one up is not -- an invented height would
+# sibling's value is right, making one up is not: an invented height would
 # cement whatever drift is already there.
 build
 _bot=$(tm list-panes -t t -F '#{pane_id}' | tail -1)
@@ -129,13 +129,13 @@ esac
 # existed this case said what it meant and proved none of it: `far` was the
 # newest session, so it WAS the current window, and a `mux even` reduced to the
 # current window alone still evened it and still passed. The mutation survived
-# the full corpus run on 2026-09-29 -- the comment above described an intent the
+# the full corpus run on 2026-09-29: the comment above described an intent the
 # fixture did not implement, the same shape as the mark's font claiming to be
 # condensed for three releases.
 #
 # MEASURED, after two plausible fixes were wrong. With no client attached,
 # tmux's default target is the MOST RECENTLY CREATED session, and `run-shell`
-# exports NO TMUX_PANE to its child at all -- so `run-shell -t t` cannot steer
+# exports NO TMUX_PANE to its child at all, so `run-shell -t t` cannot steer
 # what a later `tmux display-message` inside that child resolves, and a fix
 # built on it was inert while looking correct. The only thing that moves the
 # default target off `far` is a session newer than it.
@@ -155,7 +155,7 @@ esac
 # `mux even` is mostly a key binding, so the case that works hid the one that
 # did not: every tmux call was bare, which outside tmux reaches the DEFAULT
 # socket. `mux even --all` from a shell therefore found no windows and exited
-# 0 having done nothing -- silent, and indistinguishable from "already tidy".
+# 0 having done nothing: silent, and indistinguishable from "already tidy".
 # Headless the socket comes from MUX_CTX_PARTITION, which is the partition
 # this verb is scoped to.
 build
@@ -168,7 +168,7 @@ env -u TMUX MUX_CTX_PARTITION="$SOCK" "$HERE/libexec/mux-even" --all \
   >/dev/null 2>&1 || true
 case $(geom) in
 "80x"*"80x"*) ;;
-*) fail "headless did not reach the partition's server: [$(geom)] -- it
+*) fail "headless did not reach the partition's server: [$(geom)]. It
 went to the default socket, found nothing, and exited 0" ;;
 esac
 
@@ -182,7 +182,7 @@ _s=$SOCK
 cleanup
 [ ! -e "${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)/$_s" ] \
   || fail "cleanup killed the server and left its socket behind:
-${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)/$_s -- every run leaks one, forever"
+${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)/$_s. Every run leaks one, forever"
 build
 
 # --- an unknown option is an error ----------------------------------------

@@ -101,7 +101,7 @@ done <"$CORPUS"
 
 # Every record SHOULD carry an expected-failure fragment. Without one, `killed`
 # only means some assertion died, and a mutation that breaks an earlier
-# unrelated check counts as coverage -- which has happened here. Not yet a hard
+# unrelated check counts as coverage, which has happened here. Not yet a hard
 # requirement, because a couple of records legitimately have no stable message
 # to match, but the count is held so it cannot quietly erode.
 _m=$(grep -c '^m ' "$CORPUS" 2>/dev/null || true)

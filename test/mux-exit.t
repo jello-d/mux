@@ -52,13 +52,13 @@ printf 'scan %s 1\n' "$T" >"$T/conf/partitions/global.partition"
 
 # Outside tmux, and with XDG_CONFIG_HOME pinned INTO the scratch dir so
 # TMUX_CONF resolves deterministically. Without that, reload finds the real
-# ~/.config/tmux/tmux.conf and its refusal path is never reached -- which is
+# ~/.config/tmux/tmux.conf and its refusal path is never reached, which is
 # exactly what happened while surveying these codes by hand.
 #
 # EDITOR is neutered and stdin is /dev/null for EVERY invocation. The sweep
 # below drives `mux edit`, which opens an editor, and the picker, which reads a
 # choice. Without both guards this file inherited the ambient $EDITOR and hung
-# NONDETERMINISTICALLY -- it timed out once and then passed in 5s with nothing
+# NONDETERMINISTICALLY: it timed out once and then passed in 5s with nothing
 # changed, which is worse than a consistent failure.
 # `|| _r=$?` is load-bearing, not decoration: under set -eu a bare non-zero
 # statement aborts the whole script, so the FIRST refusal case would kill this

@@ -4,7 +4,7 @@
 # configured and never have to cd to first. Sourced (functions only).
 #
 # The map is a CACHE, not config. It holds only derived facts, it is rewritten
-# wholesale, and deleting it loses nothing -- which is what makes it safe to
+# wholesale, and deleting it loses nothing, which is what makes it safe to
 # regenerate without any merge against things you have edited. Everything you
 # decided lives in the profile table (see mux-profiles_lib); the two are never
 # the same file.
@@ -25,7 +25,7 @@
 # Roots come from the resolved context ($MUX_CFG_scan: repeatable `scan PATH
 # [DEPTH]` keys in a .partition or .context file). There is NO built-in
 # fallback: the built-in defaults carry behaviour only, never a location, so a
-# partition nobody configured gets no roots and therefore no map -- which is
+# partition nobody configured gets no roots and therefore no map, which is
 # how a missing context file makes itself visible rather than silently
 # indexing somebody else's tree.
 
@@ -62,7 +62,7 @@ mux_scan_roots() {
 # you typed is evidence, and ignore governs what mux VOLUNTEERS, never what you
 # can ask for by name. Ignoring a path you then hand over verbatim would be mux
 # arguing with you.
-_mux_scan_pat_hit() {   # <abs path> <pattern> -- one pattern, both rules
+_mux_scan_pat_hit() {   # <abs path> <pattern>: one pattern, both rules
   # $2 is UNQUOTED on purpose in the two inner cases: it is a glob the
   # user wrote (`*/vendor/*`) and must be matched as one. Quoting it, as
   # SC2254 asks, would make every ignore pattern a literal string and
@@ -108,12 +108,12 @@ EOF
 # it indexed stopped existing.
 #
 # THE ORACLE IS mux_ctx_partitions, which already answers "which partitions mux
-# knows of" -- anything with a .partition file, plus the one we are in. A map
+# knows of": anything with a .partition file, plus the one we are in. A map
 # outside that set indexes a namespace that cannot be reached.
 #
 # ONE GUARD, AND AN EMPTY ANSWER IS NOT AN ANSWER. This lib is sourced by three
 # programs that each happen to source mux-context_lib too, but "happens to" is
-# not a contract -- so an absent oracle, or one that answers nothing, must mean
+# not a contract, so an absent oracle, or one that answers nothing, must mean
 # DO NOTHING. The alternative is reading an empty list as "no partition exists"
 # and deleting every map on the box.
 #
@@ -201,7 +201,7 @@ mux_scan_names() {      # [socket key]
 # mux_scan_near NAME [socket key] -> names worth suggesting for a miss: within
 # an edit distance of 2, or containing / contained by NAME. Suggestions are what
 # make refusing an unknown name palatable rather than merely strict, so this is
-# worth doing properly -- a prefix test misses `alfa` for `alpha`, which is
+# worth doing properly: a prefix test misses `alfa` for `alpha`, which is
 # exactly the shape of typo it exists to catch. Levenshtein in awk, no
 # dependency. Candidates come from both the map and the table, so an alias is
 # suggested as readily as a scanned repo.

@@ -119,7 +119,7 @@ if mux_view_server_tension; then
   echo
   # WHERE it bites. tmux sizes a window from the clients attached to its
   # SESSION, so two differently-sized clients on two different sessions
-  # contend over nothing -- and the mode changes nothing for either of
+  # contend over nothing, and the mode changes nothing for either of
   # them. Saying only "N sizes attached" invites the reasonable but wrong
   # conclusion that pinning will move the window you are looking at.
   if [ -n "$_self_client" ] && mux_view_tension "$_self_client"; then

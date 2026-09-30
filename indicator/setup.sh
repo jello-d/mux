@@ -52,8 +52,8 @@ service() {
   # change, and `--now` only starts something that is not already running.
   #
   # AND IT SAYS WHICH OF THE THREE HAPPENED, which it did not before. This
-  # printed "installed + enabled" unconditionally, so the RESTART -- the one
-  # action anybody is watching for after a code change -- was invisible, and
+  # printed "installed + enabled" unconditionally, so the RESTART (the one
+  # action anybody is watching for after a code change) was invisible, and
   # a restart that FAILED printed the same sentence as one that worked.
   # Reported from a real run: the daemon had in fact been restarted onto the
   # new code, and the only evidence on screen said it had not been.
@@ -67,7 +67,7 @@ service() {
   # NO USER MANAGER IS NOT A FAILURE. A headless or pre-login install
   # legitimately cannot start anything, the unit is enabled, and it comes up
   # at the next login. That is the third answer, and it is why this was
-  # wrapped in `|| true` in the first place -- the mistake was letting that
+  # wrapped in `|| true` in the first place: the mistake was letting that
   # one real case silence every other one too.
   case $_svc_err in
   *"Failed to connect to"*|*"not been booted"*|*"No such file or dir"*)
@@ -76,7 +76,7 @@ service() {
     return 0 ;;
   esac
   echo "mux-indicator: service $UNIT installed + enabled, but the" \
-    "RESTART FAILED -- it is still running the OLD code:" >&2
+    "RESTART FAILED, and it is still running the OLD code:" >&2
   printf '%s\n' "$_svc_err" | sed 's/^/mux-indicator:   /' >&2
   return 1
 }
@@ -92,7 +92,7 @@ uninstall() {
 #
 # THE CHECK THAT WAS MISSING, and its absence was not theoretical: northwood ran
 # a copy installed on 2026-08-30 for weeks while every marker here read [OK].
-# Everything existed, the unit matched, the service was enabled -- and because a
+# Everything existed, the unit matched, the service was enabled, and because a
 # provisioner runs `apply` only when `check` FAILS, passing is exactly what kept
 # the stale code alive. A green check was the thing preventing the fix.
 #
@@ -106,7 +106,7 @@ uninstall() {
 # be forgotten.
 #
 # The interpreter is ASKED where the package landed rather than globbing a
-# python version out of the venv path -- one less thing to break when the
+# python version out of the venv path: one less thing to break when the
 # interpreter moves.
 # THE PROBE RUNS FROM `/`, WHICH IS LOAD-BEARING. Python puts the current
 # directory FIRST on sys.path for `python -c`, so running this check from inside
@@ -131,7 +131,7 @@ _code_current() {
     return 0
   fi
   # AND REFUSE A SELF-COMPARISON OUTRIGHT, which covers every OTHER way the
-  # two paths can converge -- an editable install, a symlinked site-packages,
+  # two paths can converge: an editable install, a symlinked site-packages,
   # a future change to where the venv lives. Fixing only the cwd would leave a
   # check that is correct today and silently vacuous the next time something
   # moves. A comparison with no two sides cannot answer the question, so it
@@ -161,7 +161,7 @@ _code_current() {
 # THE LAYER THIS FILE'S OWN CHECK WAS MISSING. _code_current closed "installed
 # versus package"; a long-lived process is a THIRD copy and nothing compared it
 # to either, so a daemon that was never restarted after an install passed every
-# marker here -- venv current, unit matching, service enabled -- while drawing
+# marker here (venv current, unit matching, service enabled), while drawing
 # last week's icon. That is precisely the bug this file was written to fix, one
 # layer out, and it was found the way the first one was: by a human saying "it
 # did not restart, and I would expect it to".
@@ -209,7 +209,7 @@ _running_current() {
   fi
 }
 
-# check: the [OK]/[FAIL] MARKER contract (same as `mux check`) -- coloured ONLY
+# check: the [OK]/[FAIL] MARKER contract (same as `mux check`): coloured ONLY
 # on a real terminal, so a caller that captures the output repaints the plain
 # markers itself. mux owns this copy; no integrator dependency.
 check() {
@@ -224,7 +224,7 @@ check() {
   bad() { printf '  %s[FAIL]%s %s\n' "$_R" "$_O" "$*"; RC=1; }
 
   if [ -x "$VENV/bin/mux-indicator" ]; then ok "venv app ($VENV)"
-  else bad "venv app missing ($VENV) -- run: install app"; fi
+  else bad "venv app missing ($VENV); run: install app"; fi
   if "$VENV/bin/python" -c 'import dbus_next, PIL' 2>/dev/null
   then ok "deps import (dbus-next, Pillow)"
   else bad "deps not importable in the venv"; fi

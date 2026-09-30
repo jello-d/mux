@@ -10,7 +10,7 @@ $XDG_RUNTIME_DIR/mux-latch/<target>.lock at start (pid on line 1, the target
 verbatim on line 2, and since 0.56 the session on line 3) and removes it via a
 trap on every exit path. So a host
 appears in the tray when you latch to it and leaves when you detach, with
-nothing to stand up, tear down, or keep in sync -- and nothing to edit on each
+nothing to stand up, tear down, or keep in sync, and nothing to edit on each
 machine. A second job for a file that already did it perfectly.
 
 THE LOCAL HOST IS ALWAYS PRESENT and is not part of that choice: it is the
@@ -18,7 +18,7 @@ daemon's own box, it needs no transport, and showing it is what the indicator
 did before it could do anything else.
 
 A STALE LOCK IS NOT A HOST. The pid on line 1 is what makes a killed run
-detectable, so a lock whose process is gone is skipped rather than polled --
+detectable, so a lock whose process is gone is skipped rather than polled:
 otherwise a crashed latch would leave a permanent phantom in the tray, which is
 exactly the "confidently reporting a host you cannot see" failure the whole
 design exists to avoid.
@@ -73,8 +73,8 @@ DEFAULT_TRANSPORT = (
 # in the first place.
 #
 # ATTACHED IS THE DEFAULT THERE, because A TRAY ITEM MEANS A HUMAN IS LOOKING
-# AT THIS. For a remote host that is already what the latch registry encodes
-# -- an item exists only because a latch does, and the latch IS the human's
+# AT THIS. For a remote host that is already what the latch registry encodes:
+# an item exists only because a latch does, and the latch IS the human's
 # live view of that box. The local counterpart is a client attached to that
 # partition's server, and without it a partition with a live server and no
 # terminal window showing it published an item nobody could act on.
@@ -88,7 +88,7 @@ DEFAULT_TRANSPORT = (
 # flag was parsed and never read, so every caller got every partition and this
 # daemon depended on that by accident; scoping the verb to the caller's
 # partition (which is what its own documentation promised) would have quietly
-# reduced a remote host to whichever partition its login shell resolves --
+# reduced a remote host to whichever partition its login shell resolves,
 # exactly the blindness 0.56 existed to fix. An older mux on the far side
 # ignores the flag and still answers for everything, so it is safe to send.
 REMOTE_CMD = "sh -lc 'mux agent status --all'"
@@ -97,7 +97,7 @@ LOCAL_CMD = ("agent", "status", "--all")
 # A partition name is a DNS label (see mux_ctx_valid): lowercase alphanumerics
 # and hyphens. VALIDATED HERE because the names arrive from the far side and
 # go back out inside a shell command, so this is untrusted input crossing into
-# `sh -lc` -- not a second copy of mux's rule, which decides what a partition
+# `sh -lc`, not a second copy of mux's rule, which decides what a partition
 # may be CALLED rather than what this daemon may quote.
 _PART_OK = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
 
@@ -122,7 +122,7 @@ def activate_cmd(part=None):
 
 def local_label():
     """This machine's short hostname: the local item's label, and the token
-    `mux host-color` hashes -- so a FQDN here would colour the tray differently
+    `mux host-color` hashes, so a FQDN here would colour the tray differently
     from the status bar."""
     return socket.gethostname().split(".")[0] or "local"
 
@@ -167,7 +167,7 @@ def activate_hook():
     """What to run LOCALLY after a click, or None. Env, then config, UNSET.
 
     THE SEAM EXISTS BECAUSE THE USEFUL HALF IS NOT MUX'S. Clicking a tray item
-    switches that host's tmux client to whatever needs you -- but if the
+    switches that host's tmux client to whatever needs you, but if the
     terminal showing it is behind three windows or on another workspace, the
     switch is invisible and the click feels broken. Raising that window means
     knowing about a compositor, and mux does not get to know about compositors:

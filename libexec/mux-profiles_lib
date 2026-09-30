@@ -19,9 +19,9 @@
 # is exactly the case that should live in a breakout file, where a directive is
 # `key rest-of-line` and spaces are free.
 #
-# Rows exist only for deviations. Everything else is derived -- name from the
+# Rows exist only for deviations. Everything else is derived (name from the
 # directory, root from the scan map, theme from the name's hash, layout from
-# `default`, agent from `claude` -- so most projects need no row at all.
+# `default`, agent from `claude`), so most projects need no row at all.
 
 # Expand a leading tilde without eval. Here rather than in the front end because
 # every root comparison below needs it, and two copies would drift.

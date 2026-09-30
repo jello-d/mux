@@ -149,12 +149,12 @@ The scrape has stopped matching and would pass no matter what is missing"
 
 # AND THE SUB-VERBS OF A MODE SWITCH, which the scrape above cannot see. A
 # nested dispatch appears as ONE verb (`agent`), so every verb inside it would
-# be unaudited by the guard that exists to stop exactly that -- a verb added
+# be unaudited by the guard that exists to stop exactly that: a verb added
 # and never declared. Read out of the sub-dispatcher's own case, the same way
 # the two above are read out of bin/mux rather than listed here.
 # ALTERNATION SPLIT, the same way the main scrape handles it: the dispatcher
 # writes `status|peers)` on one line, and a pattern anchored on a single word
-# silently matches NOTHING there -- which reads as "no sub-verbs" rather than
+# silently matches NOTHING there, which reads as "no sub-verbs" rather than
 # as a broken scrape, so the floor below is what catches it.
 _sub=$(awk '/^case \$_verb in$/,/^esac$/' "$HERE/libexec/mux-agent" \
   | grep -oE '^[a-z][a-z|-]*\)' | tr -d ')' | tr '|' '\n' | grep .)
@@ -164,12 +164,12 @@ for _v in $_sub; do
   # NOT "it exits 0": `read` and `wait` REQUIRE arguments, so a bare call
   # answering usage is correct for them. The question is whether the verb
   # EXISTS, and the dispatcher has exactly one answer for one that does
-  # not -- so that is what this looks for.
+  # not, so that is what this looks for.
   _o=$("$HERE/bin/mux" agent "$_v" 2>&1 || true)
   case $_o in
   *"unknown agent verb"*) fail "capabilities declares the agent contract
 and \`mux agent $_v\` is scraped from its dispatch, but invoking it says
-unknown -- which is the gap a nested dispatch hides from the guard below:
+unknown, which is the gap a nested dispatch hides from the guard below:
 [$_o]" ;;
   esac
 done

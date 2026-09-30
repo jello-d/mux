@@ -1,5 +1,5 @@
 #!/bin/sh
-# mux: the single front end to tmux -- bring up, tear down, list, and reload
+# mux: the single front end to tmux: bring up, tear down, list, and reload
 # sessions without ever touching tmux directly. A session is an identity (its
 # name, used to resume) and a shape (a layout, used only to build it the first
 # time); the two are separate, so naming a session needs no layout and resuming
@@ -31,7 +31,7 @@
 #   mux new [NAME] [COLOR] [ROOT]
 #                          write a <NAME>.profile. NAME
 #                          and ROOT default to the project (the git toplevel,
-#                          else the cwd -- the same derivation go uses); ROOT
+#                          else the cwd: the same derivation go uses); ROOT
 #                          takes '-' to omit it, COLOR defaults to the
 #                          per-context default. --force to overwrite.
 #                          It lands in the (dir-linked) mux dir, so it shows as
@@ -56,8 +56,8 @@
 # A non-default CONTEXT is a separate namespace. When the context hook reports a
 # socket (see mux-context_lib), mux drives a tmux server on that socket and sees
 # only that context's sessions; otherwise the default socket. The same name can
-# live in both, mutually invisible. mux never establishes a context itself -- it
-# runs in whatever the hook observes -- so an integrator can back a context with
+# live in both, mutually invisible. mux never establishes a context itself (it
+# runs in whatever the hook observes), so an integrator can back a context with
 # real isolation (a Unix group, a namespace) and mux just reflects it. `ls`
 # lists only the context you are in; `reload` freshens EVERY server (the config
 # is shared), so a single reload from any pane updates everything.
@@ -99,7 +99,7 @@
 #
 # The profile and its layout are parsed and VALIDATED together before any tmux
 # call, so a malformed pair builds nothing. root and theme are resolved for the
-# session as a whole -- last one wins, position irrelevant; window/pane/bottom
+# session as a whole: last one wins, position irrelevant; window/pane/bottom
 # build the arrangement in the order they appear.
 set -eu
 
@@ -109,8 +109,8 @@ set -eu
 MUX_VERSION=0.84
 
 # EXIT 3: THE NAME YOU GAVE IS NOT KNOWN HERE. A standard code rather than a
-# per-verb one, because it is one CONDITION that many verbs can trip on -- go,
-# kill, rename, hide, show, why -- and a caller should not have to learn six
+# per-verb one, because it is one CONDITION that many verbs can trip on (go,
+# kill, rename, hide, show, why), and a caller should not have to learn six
 # spellings of the same answer.
 #
 # It replaces a STRING contract with a numeric one, which is the real win.
@@ -129,7 +129,7 @@ MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
 TMUX_CONF=${XDG_CONFIG_HOME:-$HOME/.config}/tmux/tmux.conf
 
 # Find our own libexec (the helper executables + the sourced *_lib files),
-# computed from this script's RESOLVED location -- no hardcoded path, no env
+# computed from this script's RESOLVED location: no hardcoded path, no env
 # seam. $0 may be a bare name (a PATH lookup: how tmux run-shell and the agent
 # hooks invoke us), relative, or absolute, and may arrive through symlinks
 # (~/.local/bin/mux is a symlink to the install); resolve all of it. bin/,
@@ -156,7 +156,7 @@ else
   # One `readlink` per link in the chain. Only the FINAL component is resolved,
   # which is what the install layout needs (bin/mux is the symlink); a directory
   # symlink higher up resolves to the same tree either way. Bounded, because a
-  # symlink loop must not hang the status bar -- `readlink -f` errors on one and
+  # symlink loop must not hang the status bar: `readlink -f` errors on one and
   # so must this.
   _n=0
   while [ -L "$_self" ] && [ "$_n" -lt 40 ]; do
@@ -170,13 +170,13 @@ else
   done
 fi
 LIBEXEC=${_self%/*}/../libexec
-# Package DATA -- the shipped defaults (themes, agents, shapes, the default
-# layout) -- lives in share, a sibling of bin/ and libexec/ under the prefix.
+# Package DATA, the shipped defaults (themes, agents, shapes, the default
+# layout), lives in share, a sibling of bin/ and libexec/ under the prefix.
 # User layouts and the integrator OVERLAY (context, hosts) live in $MUX_DIR.
 #
 # Respect an exported $MUX_SHARE ONLY if it still points at a real directory: a
-# stale value -- e.g. inherited from a long-running tmux server started against
-# a since-moved or removed install -- would otherwise send every include/theme
+# stale value: e.g. inherited from a long-running tmux server started against
+# a since-moved or removed install: would otherwise send every include/theme
 # lookup to a dead path. Unset or dangling, self-locate the sibling share/.
 if [ -n "${MUX_SHARE:-}" ] && [ -d "$MUX_SHARE" ]; then :   # a valid override
 else MUX_SHARE=${_self%/*}/../share
@@ -341,7 +341,7 @@ _cmd_capabilities() {
 
 # Fast path: the helper verbs ARE standalone executables in libexec, and the
 # tmux fragment + agent hooks reach them as `mux <verb>` (one entry point, on
-# PATH -- no path knowledge in the caller). exec straight through, so this
+# PATH: no path knowledge in the caller). exec straight through, so this
 # script is never parsed past here on a hot path: the status bar runs `mux
 # style` / `mux agent-render` every tick and the agent hooks fire `mux
 # agent-emit` on every state change. Each helper self-locates its own siblings.
@@ -368,8 +368,8 @@ sane)          shift; exec "$LIBEXEC/mux-sane" "$@" ;;
 agent-hook)    shift; exec "$LIBEXEC/mux-agent-hook" "$@" ;;
 # THE MACHINE CONTRACT, and a MODE SWITCH rather than a verb: everything under
 # `mux agent` answers JSON on stdout, always, including on failure. The
-# hyphenated `agent-*` verbs above are mux's own plumbing -- called by tmux
-# hooks, the status bar and the tray -- and mean "about agent state", which is
+# hyphenated `agent-*` verbs above are mux's own plumbing (called by tmux
+# hooks, the status bar and the tray), and mean "about agent state", which is
 # a different thing from "for an agent to call".
 agent)         shift; exec "$LIBEXEC/mux-agent" "$@" ;;
 # NOT `mux agent skill`: that surface promises one JSON object on stdout, and
@@ -390,8 +390,8 @@ log)           shift; exec "$LIBEXEC/mux-log" "$@" ;;
 capabilities)  shift; _cmd_capabilities "$@" ;;
 esac
 
-# The ONE comment/normalize rule (mux_conf_clean) for every config parse below
-# -- layouts, themes, agents. Core, so sourced unconditionally (it deploys with
+# The ONE comment/normalize rule (mux_conf_clean) for every config parse below:
+# layouts, themes, agents. Core, so sourced unconditionally (it deploys with
 # mux); a fallback keeps mux alive if the lib is somehow missing, stripping only
 # whole-line comments (the pre-normalizer behaviour) so nothing hard-breaks.
 _conf_lib=$LIBEXEC/mux-conf_lib
@@ -400,7 +400,7 @@ else mux_conf_clean() { grep -vE '^[[:space:]]*(#|$)'; }
 fi
 
 # The ONE $MUX_DIR-over-$MUX_SHARE rule (mux_data_find / _stems / _files) for
-# every package-data read below -- layouts, shapes, themes, agent profiles. No
+# every package-data read below: layouts, shapes, themes, agent profiles. No
 # fallback here, unlike mux_conf_clean above: a normalizer has a safe degraded
 # mode, a data resolver has none (it would silently resolve nothing), so a
 # missing lib is a broken install and says so.
@@ -454,7 +454,7 @@ _find_profile() {  # <name>
 # Every profile NAME available, in any of its forms: a row in the table, a
 # breakout file, or (transitionally) a pre-rename <name>.layout at the overlay
 # root. The table is the PRIMARY form now, so anything that lists profiles has
-# to start here -- listing only files showed an empty set to anyone who had
+# to start here: listing only files showed an empty set to anyone who had
 # done the sensible thing and used rows.
 _profile_names() {
   {
@@ -476,7 +476,7 @@ _profile_names() {
 # profile belongs to `global`.
 #
 # This replaced classifying a profile by its ROOT, which needed the integrator
-# to answer "which context owns this path" -- the one question requiring its
+# to answer "which context owns this path": the one question requiring its
 # private knowledge (severance's personal carve-outs inside the work tree), and
 # the messiest thing in the old contract. A profile's root is now purely a
 # session property: where its panes open, never a context signal.
@@ -507,7 +507,7 @@ _profile_root() {   # <name>
   printf '%s' "$_r"
 }
 
-# Space-joined NAMEs for one data kind -- what the help listings and the theme
+# Space-joined NAMEs for one data kind: what the help listings and the theme
 # cycler want (one line, or a word-splittable list). Feeds `mux --help`, so it
 # lists the themes and agents actually available on this box, shipped ones and
 # overlay ones alike.
@@ -517,7 +517,7 @@ _stems_line() {   # <kind> <ext>
 
 # A theme chosen deterministically from a session NAME, so a project wears a
 # stable colour with nothing configured and two projects share one only by
-# coincidence. cksum is POSIX and its exact value does not matter -- only that
+# coincidence. cksum is POSIX and its exact value does not matter: only that
 # the same name always lands on the same theme.
 #
 # The index is into the SORTED theme set, so adding or removing a theme
@@ -538,7 +538,7 @@ _hash_theme() {   # <session name>
 # The PROJECT a bare invocation refers to: the git toplevel if we are in a
 # repo, else the current directory. The ONE derivation, used for both the
 # default session NAME and the default root, so `mux new` writes a layout under
-# exactly the name `mux go` will later look for. They used to disagree -- new
+# exactly the name `mux go` will later look for. They used to disagree: new
 # took the cwd basename and go the git toplevel basename, so a `mux new` run
 # anywhere but a repo's top level wrote a layout go could never find.
 _project_base() {   # [dir]
@@ -563,7 +563,7 @@ _is_path() {   # <arg>
 # The scan map for this context, self-correcting: entries whose path has since
 # vanished are dropped (a moved repo must read as a MISS, not as a hit that
 # fails later at build), and a miss rebuilds the map once and asks again. Those
-# two checks are the whole staleness story -- no TTL, no timer.
+# two checks are the whole staleness story: no TTL, no timer.
 _map_lookup() {   # <name> -> matching project paths, one per line
   _mk=$part
   _mp=$(mux_scan_lookup "$1" "$_mk" | while IFS= read -r _d; do
@@ -583,7 +583,7 @@ _map_lookup() {   # <name> -> matching project paths, one per line
 #
 # `go` and `why` share this ON PURPOSE. `why` used to derive a typed name's root
 # as the CURRENT DIRECTORY, consulting neither source, so `mux why NAME` cheerly
-# described a session `go` would have flatly refused to build -- reporting a
+# described a session `go` would have flatly refused to build: reporting a
 # root for an ambiguous name, and for a name nothing knew at all. An explanation
 # that contradicts the thing it explains is worse than no explanation, and this
 # verb exists only to be trusted.
@@ -597,7 +597,7 @@ _typed_roots() {   # <name> -> SOURCE<TAB>ROOT lines
     return 0
   fi
   # `|| [ -n "$_d" ]`: _map_lookup ends its last path with NO newline, and
-  # a bare `while read` discards an unterminated final line -- which would
+  # a bare `while read` discards an unterminated final line, which would
   # silently drop one candidate, turning an ambiguous name into a
   # confidently wrong single hit.
   _map_lookup "$1" | while IFS= read -r _d || [ -n "$_d" ]; do
@@ -610,7 +610,7 @@ _typed_roots() {   # <name> -> SOURCE<TAB>ROOT lines
 # mux-context_lib); mux core just compares tokens. A layout shows when its side
 # is `shared` (rootless / any context) or equals the caller's side. Resolved
 # once,
-# lazily -- usage() lists layouts before the socket block below runs.
+# lazily: usage() lists layouts before the socket block below runs.
 _cur_part=''
 _ensure_side() {
   [ -n "$_cur_part" ] && return 0
@@ -619,7 +619,7 @@ _ensure_side() {
 
 }
 
-# Layout stems for the caller's side plus the shared (rootless) ones -- the same
+# Layout stems for the caller's side plus the shared (rootless) ones: the same
 # one-side-or-the-other view `mux ls` gives for sessions.
 _list_layouts() {
   _ensure_side
@@ -711,7 +711,7 @@ EOF
 # --- options and the verb in either order, then positionals ----------------
 # ONE loop takes both: an option is an option wherever it sits, and the first
 # non-option is the VERB. Once we have a verb the loop stops at the next
-# non-option -- those are the positionals, which must stay positional. So `mux
+# non-option: those are the positionals, which must stay positional. So `mux
 # --bare go` and `mux go --bare` are the same command; the flag-first form is
 # what the README and the man page have always shown, and it used to die on
 # "unknown verb: --bare".
@@ -766,8 +766,8 @@ esac
 # `go --resume` (the agent offers a conversation to pick up) and now names the
 # session rebuild that was briefly called `restore`. The FLAG is untouched, so
 # the old behaviour is still there as `mux go --resume`; only the bare verb
-# moved. Nothing may test `cmd = resume` to mean the flag now -- $resume does
-# that -- since under the rename the two meanings are the same string, and a
+# moved. Nothing may test `cmd = resume` to mean the flag now ($resume does
+# that), since under the rename the two meanings are the same string, and a
 # leftover test would silently give one of them the other's behaviour.
 case $cmd in
   kill-all)  cmd=kill; all=1 ;;
@@ -775,7 +775,7 @@ case $cmd in
 esac
 
 # Arity per verb. --bare is meaningful only where claude is launched. kill
-# requires an explicit NAME -- it is too destructive to run against an inferred
+# requires an explicit NAME: it is too destructive to run against an inferred
 # session; kill-all takes none (it hits the whole socket, behind a prompt).
 case $cmd in
   reload|ls) [ "$#" -eq 0 ] || {
@@ -859,7 +859,7 @@ layout_arg=${2:-}
 # --- help: `mux help [agents|colors|layouts|palette]` -----------------------
 # A proper verb. Bare (and the -h/--help flags) prints the plain usage; `colors`
 # renders each theme in its OWN palette so you see it; `layouts` diagrams each
-# session shape in ASCII. All read-only file work -- runs here, before any git
+# session shape in ASCII. All read-only file work: runs here, before any git
 # or socket touch.
 # Colour only when stdout is a terminal; an empty _RST doubles as the "no
 # colour" flag for _sgr_* below, so `mux help colors | less` stays plain text.
@@ -898,7 +898,7 @@ _sgr_style() {          # <style>
   done
 }
 help_colors() {
-  echo 'themes -- `mux theme NAME`, or a `theme` line in a profile:'
+  echo 'themes (`mux theme NAME`, or a `theme` line in a profile):'
   echo
   mux_data_files themes .theme | while IFS= read -r _f; do
     _n=${_f##*/}; _n=${_n%.theme}
@@ -991,7 +991,7 @@ help_profiles() {
   # is active); the default single-context case stays untagged.
   _tag=''
   [ "$_cur_part" = global ] || _tag=" [$_cur_part]"
-  printf 'profiles%s -- `mux go NAME`:\n' "$_tag"
+  printf 'profiles%s (`mux go NAME`):\n' "$_tag"
   echo
   _profile_names | while IFS= read -r _n; do
     _flat=$(_flat_profile "$_n")
@@ -1014,7 +1014,7 @@ help_profiles() {
 }
 # The xterm 256-colour palette as swatches (bg=colourN, contrast fg) so a
 # theme's bg=/fg= number can be picked by eye. Meaningless without colour.
-# palette test BAR_FG BAR_BG ACT_FG ACT_BG -- a mock status bar in the given
+# palette test BAR_FG BAR_BG ACT_FG ACT_BG: a mock status bar in the given
 # bar and active-chip colours, so a whole theme is judged IN CONTEXT rather
 # than one swatch at a time. Colours: bar fg, bar bg, active-window fg, bg.
 _palette_preview() {    # BAR_FG BAR_BG ACT_FG ACT_BG
@@ -1027,8 +1027,8 @@ _palette_preview() {    # BAR_FG BAR_BG ACT_FG ACT_BG
   done
   _b=$(_sgr_color "$2" 48)$(_sgr_color "$1" 38)   # bar bg + fg
   _a=$(_sgr_color "$4" 48)$(_sgr_color "$3" 38)$(printf '\033[1m')
-  printf 'status bar preview -- '
-  printf 'bar fg=%s bg=%s, active fg=%s bg=%s:\n\n' \
+  printf 'status bar preview '
+  printf '(bar fg=%s bg=%s, active fg=%s bg=%s):\n\n' \
     "$1" "$2" "$3" "$4"
   printf '  %s edit │ %s code %s logs   ⏳ · host 09:41 %s\n' \
     "$_b" "$_a" "$_b" "$_RST"
@@ -1085,9 +1085,9 @@ help_palette() {        # [FG] | test BAR_FG BAR_BG ACT_FG ACT_BG
       exit 2; }
   fi
   if [ -n "$_fg" ]; then
-    printf 'palette -- fg %s over every bg:\n\n' "$1"
+    printf 'palette (fg %s over every bg):\n\n' "$1"
   else
-    echo 'palette -- the 256 colours; any works as fg OR bg:'
+    echo 'palette (the 256 colours; any works as fg OR bg):'
     echo
   fi
   _palette_grid "$_fg"
@@ -1095,11 +1095,11 @@ help_palette() {        # [FG] | test BAR_FG BAR_BG ACT_FG ACT_BG
     '\n  tip: `palette N` renders colour N as fg here;\n'
     printf '       `palette test FG BG FG BG` mocks a bar.\n'; }
 }
-# The agent profiles and how to select one -- the mux peer of help_colors, so
+# The agent profiles and how to select one: the mux peer of help_colors, so
 # `pane agent`'s target (and how to add another CLI) is discoverable.
 help_agents() {
-  echo 'agents -- the CLI a `pane agent` runs; choose per session with an'
-  echo '`agent <name>` line in a layout (or `pane <name>` for one pane):'
+  echo 'agents (the CLI a `pane agent` runs). Choose per session with an'
+  echo '`agent <name>` line in a layout, or `pane <name>` for one pane:'
   echo
   mux_data_files agents .agent | while IFS= read -r _f; do
     _n=${_f##*/}; _n=${_n%.agent}
@@ -1115,7 +1115,7 @@ help_agents() {
   done
   printf '\n  profiles: <name>.agent, a `go` line and a `resume` line:\n'
   printf '    %s/agents\n' "$MUX_DIR"
-  printf '      (yours -- a profile here overrides a shipped one)\n'
+  printf '      (yours: a profile here overrides a shipped one)\n'
   printf '    %s/agents\n' "$MUX_SHARE"
   printf '      (shipped)\n'
   printf '  add a CLI by dropping in one; the state strip also needs'
@@ -1136,7 +1136,7 @@ cmd_help() {
 }
 
 # "$@" matters: this was an inline block, where $1 was the script's first
-# POSITIONAL -- the topic. Extracting it into a function without passing
+# POSITIONAL: the topic. Extracting it into a function without passing
 # them made $1 the function's own, which is unset, so every
 # `mux help TOPIC` silently printed the usage summary instead.
 if [ "$cmd" = help ]; then cmd_help "$@"; fi
@@ -1172,7 +1172,7 @@ elif [ -n "$name_arg" ]; then
   name=$name_arg
 else
   # No name typed: the directory decides. A row whose `root` IS this
-  # directory names it -- so an alias is authoritative for its own
+  # directory names it, so an alias is authoritative for its own
   # project, and `mux go` there reaches the same session `mux go <alias>`
   # would, instead of creating a second one under the derived name.
   # EXACT match only; a subdirectory still derives the enclosing project.
@@ -1192,7 +1192,7 @@ sock=$(mux_ctx_socket)
 # The PARTITION KEY: what the session set, the scan map and the agent-state dir
 # are filed under. Identical in VALUE to $sock (a partition's socket is named
 # after it) but a different QUESTION: $sock answers "which tmux -L", $part
-# answers "whose records". Conflating them is how a stale name spread -- eleven
+# answers "whose records". Conflating them is how a stale name spread: eleven
 # sites wrote ${sock:-default} as a partition key, naming a partition that
 # stopped existing when the personal one became `global`, while every library
 # fell back to `global`. Unreachable today (resolve either sets a partition or
@@ -1206,7 +1206,7 @@ part=$MUX_CTX_PARTITION
 # resume's optional PARTITION and SESSION. Only resume takes them today; every
 # other verb acts on the partition you are in, which is the point of a context.
 #
-# POSITIONAL, and the first is ALWAYS the partition -- never "whichever of
+# POSITIONAL, and the first is ALWAYS the partition, never "whichever of
 # these happens to name one". That magic would change meaning the day you add
 # a partition, and a session sharing a partition's name would silently do the
 # wrong thing, which is the exact shape of bug `mux latch` already shipped
@@ -1216,7 +1216,7 @@ rs_focus=${2:-}
 if [ "$cmd" = resume ] && [ -n "$rs_want" ]; then
   mux_ctx_valid "$rs_want" || {
     echo "mux: not a partition name: $rs_want" >&2; usage; }
-  # KNOWN, or exit 3 -- mux's cross-cutting "the name is not known
+  # KNOWN, or exit 3: mux's cross-cutting "the name is not known
   # here", the same code `go` and `why` use. A typo must not resume an
   # EMPTY set and report "no sessions recorded", which reads as data
   # loss rather than as a misspelling.
@@ -1232,7 +1232,7 @@ elif [ "$cmd" = resume ] && [ "${MUX_CTX_SRC:-baseline}" = failed ]; then
   # ABSENCE of an answer, and resuming `global` on the strength of it
   # hands you somebody else's sessions while looking like success.
   # `mux why` already refuses to credit a failed command for a token it
-  # did not supply -- this is the same lie, available to resume.
+  # did not supply: this is the same lie, available to resume.
   echo "mux: the context-command FAILED, so the partition is unknown" >&2
   echo "mux: name one (mux resume global), or fix the command" >&2
   exit 1
@@ -1244,7 +1244,7 @@ fi
 _RS_NL='
 '
 _cur_part=$MUX_CTX_PARTITION
-# Nothing knows this context. Say so ONCE, here in the front end -- never from
+# Nothing knows this context. Say so ONCE, here in the front end, never from
 # mux-context_lib, which mux-style and mux-agent-render call every status
 # interval, where output pops a view-mode buffer over the active pane.
 [ "${MUX_CTX_UNKNOWN:-0}" -eq 1 ] && {
@@ -1266,7 +1266,7 @@ tm() {
 
 # True when a pane's current command is just a shell (so it maps to a bare
 # directive, no command). tmux re-quotes pane_start_command, so the clean signal
-# is pane_current_command -- a single word.
+# is pane_current_command: a single word.
 is_shell() {
   case $1 in
   sh|-sh|bash|-bash|ksh|-ksh|zsh|-zsh|dash|fish|login) return 0 ;;
@@ -1307,7 +1307,7 @@ fi
 
 # --- (no verb): pick a session to attach -----------------------------------
 # `mux` with no arguments lists the sessions in this context and lets you choose
-# one -- fzf if present, else a numbered menu. One session attaches straight
+# one: fzf if present, else a numbered menu. One session attaches straight
 # away; none points you at `mux go`. Sets `name`, then falls through to the
 # attach path below.
 if [ "$pick" = 1 ]; then
@@ -1324,7 +1324,7 @@ if [ "$pick" = 1 ]; then
     # or working agent is visible while you choose (⚫ = no agent).
     # The menu line is "GLYPH NAME"; NAME is the last field (mux
     # names hold no spaces), so the pick maps straight back. Skipped
-    # when the shared state lib is absent -- then it is plain names.
+    # when the shared state lib is absent, then it is plain names.
     _menu=$_sessions
     if [ "$_have_astate" -eq 1 ]; then
       _adir=$(mux_agent_dir "$part")
@@ -1483,7 +1483,7 @@ _theme_apply() {        # reads $_s, $_pp and $_t
 
 _theme_remember() {     # reads $_s and $_t
   # REMEMBERED, not just applied. A theme set by hand is a decision, and
-  # the file is the only place decisions live -- so it is written now
+  # the file is the only place decisions live, so it is written now
   # rather than behind a flag you have to remember. A breakout profile
   # takes it in place; everything else becomes a row.
   _bo=$(_find_profile "$_s")
@@ -1580,7 +1580,7 @@ _why_header() {
   # From MUX_CTX_SRC, which the resolver sets from what actually
   # happened. Asking whether a context-command was merely CONFIGURED
   # credited one that had failed, or declined to answer, for a token that
-  # came from the baseline -- the one lie this verb must never tell.
+  # came from the baseline: the one lie this verb must never tell.
   case ${MUX_CTX_SRC:-baseline} in
   command)  w_csrc='from context-command' ;;
   declined) w_csrc='context-command named none; the baseline' ;;
@@ -1615,14 +1615,14 @@ _why_get() {   # <key>
 }
 
 # KEY, then either the declared value or the derived one, then where it came
-# from. ALT is shown only where knowing the road not taken is useful -- the
+# from. ALT is shown only where knowing the road not taken is useful: the
 # theme, where "why is it not the hashed one" is the question people ask.
 _why_field() { # <key> <derived> <derived source> [show-alt]
   _v=$(_why_get "$1")
   case $1 in root) _v=$(mux_fold_tilde "$_v") ;; esac
   if [ -n "$_v" ]; then
     _w=declared
-    # Only worth showing the road not taken when it DIFFERS --
+    # Only worth showing the road not taken when it DIFFERS:
     # "declared (x would give x)" reads like a bug.
     [ -n "${4:-}" ] && [ "$_v" != "$2" ] \
       && _w="declared ($3 would give $2)"
@@ -1631,26 +1631,26 @@ _why_field() { # <key> <derived> <derived source> [show-alt]
     # verb: the name resolved to a profile, and that profile lives
     # somewhere else.
     [ "$1" = root ] && [ "$_v" != "$2" ] \
-      && _w="$_w -- NOT where you are"
+      && _w="$_w (NOT where you are)"
     printf '%-9s %-26s %s\n' "$1" "$_v" "$_w"
   else
     printf '%-9s %-26s %s\n' "$1" "$2" "$3"
   fi
 }
 
-# The DERIVED root -- what `go` would use when no profile declares one -- and
+# The DERIVED root (what `go` would use when no profile declares one), and
 # the candidate list behind it. A bare `mux why` (or a path) answers about
 # where you are standing. A TYPED name answers about what `mux go NAME` would
 # RESOLVE, which is the session set and then the map. It used to answer "the
 # project you are in" for every typed name, which was wrong whenever the name
-# meant anywhere else -- that is, nearly always.
+# meant anywhere else: that is, nearly always.
 _why_derived_root() {
   w_droot=$(mux_fold_tilde "$base")
   w_rsrc="the project you are in"
   [ "$w_bypath" -eq 1 ] && w_rsrc="the path you gave"
   w_hits=; w_nhit=0
   # Not applicable unless a NAME was typed and no profile already
-  # declared a root -- `go` skips the map in both those cases too.
+  # declared a root: `go` skips the map in both those cases too.
   if [ -z "$name_arg" ] || [ "$w_bypath" -eq 1 ] \
      || [ -n "$(_why_get root)" ]; then
     return 0
@@ -1673,7 +1673,7 @@ _why_derived_root() {
 # A typed name `go` would REFUSE. Saying so is the whole point: every field
 # above describes a session, and without this you would read them as a session
 # mux is willing to build. The conditions mirror the two refusals in the go
-# path exactly -- ambiguity outranks a profile (a rootless one cannot say WHICH
+# path exactly: ambiguity outranks a profile (a rootless one cannot say WHICH
 # project it meant), while an unknown name is a refusal only when no profile
 # claims it at all.
 _why_note_refusal() {
@@ -1690,7 +1690,7 @@ _why_note_refusal() {
        && [ "$w_bypath" -eq 0 ] && [ "$w_row" -eq 0 ] \
        && [ -z "$w_file" ]; then
     echo
-    echo "note: \`mux go $wh\` REFUSES -- nothing here knows that" \
+    echo "note: \`mux go $wh\` REFUSES. Nothing here knows that" \
       "name, and from"
     echo "      the name alone a new session and a typo are" \
       "indistinguishable."
@@ -1810,7 +1810,7 @@ cmd_rename() {
 if [ "$cmd" = rename ]; then cmd_rename; fi
 
 # --- edit: open a layout in $EDITOR -----------------------------------------
-# `mux edit [NAME]` -- NAME defaults to the current session's layout.
+# `mux edit [NAME]`: NAME defaults to the current session's layout.
 # --- edit: open a profile, and never eat the work ---------------------------
 # Shared state:
 #   _edit_target   _en (the profile name)
@@ -1837,7 +1837,7 @@ _edit_target() {
 _edit_draft() {
   # STATE, not cache: a draft is work you typed and nothing can
   # rebuild it. It sat in $MUX_CACHE until 0.39 on the reasoning that
-  # it was transient -- true of the draft's LIFETIME and irrelevant to
+  # it was transient: true of the draft's LIFETIME and irrelevant to
   # whether a cache clear may take it mid-edit.
   _dd=$(mux_state_path edit)
   _df=$_dd/$_en.profile
@@ -1854,7 +1854,7 @@ _edit_draft() {
 }
 
 # Parse the draft back into pairs. Anything unparseable KEEPS the draft and
-# says where it is -- the failure hands your work back rather than eating it.
+# says where it is: the failure hands your work back rather than eating it.
 _edit_parse() {
   _pairs=
   _promote=0
@@ -1876,7 +1876,7 @@ _edit_parse() {
     *) _bad="unknown key '$_k'"; break ;;
     esac
     [ -n "$_v" ] || { _bad="'$_k' has no value"; break; }
-    # A value with whitespace cannot be a pair on a shared line --
+    # A value with whitespace cannot be a pair on a shared line:
     # the other case a breakout file exists for.
     case $_v in *[[:space:]]*) _promote=1 ;; esac
     _pairs="$_pairs $_k=$_v"
@@ -1937,14 +1937,14 @@ if [ "$cmd" = edit ]; then cmd_edit; fi
 # not have worked out for itself:
 #
 #   - the arrangement, as layouts/<name>.layout, unless it is byte-for-byte one
-#     that already exists -- saving a session you never rearranged should not
+#     that already exists: saving a session you never rearranged should not
 #     mint a private copy of the shipped default;
 #   - a row, carrying root only when the name would not derive from it, theme
 #     only when it is not the one the name hashes to, and layout only when it is
 #     not `default`.
 #
 # So `mux save` on an untouched session can correctly write NOTHING. Pane
-# commands are best-effort -- review them. Runs inside a session; NAME defaults
+# commands are best-effort: review them. Runs inside a session; NAME defaults
 # to the session name.
 # --- save: snapshot the live session ---------------------------------------
 # Shared state, in the order the steps below set it:
@@ -1997,7 +1997,7 @@ $(mux_data_stems layouts .layout)
 EOF
 }
 
-# Write the captured arrangement, unless an existing layout already matched --
+# Write the captured arrangement, unless an existing layout already matched:
 # config never restates what mux can already point at.
 _save_write_layout() {
   sv_lfile=$MUX_DIR/layouts/$sv_name.layout
@@ -2028,7 +2028,7 @@ _save_write_layout() {
 _save_deltas() {
   # Root: the session's own start directory, folded to ~. Dropped when
   # the name derives from it, which needs the root to BE a project base
-  # (a git toplevel, or in no repo at all) -- a subdirectory of a repo
+  # (a git toplevel, or in no repo at all): a subdirectory of a repo
   # derives the REPO's name, so its root must be kept.
   sv_root=$(tm display-message -t "=$sv_sess" -p '#{session_path}' \
     2>/dev/null || true)
@@ -2063,7 +2063,7 @@ _save_record() {
     echo "mux: $sv_name -> $sv_pairs"
   else
     mux_prof_drop "$sv_name"
-    echo "mux: nothing to record -- $sv_name is entirely derivable"
+    echo "mux: nothing to record: $sv_name is entirely derivable"
   fi
   echo "mux: launch it with  mux go $sv_name"
 }
@@ -2124,7 +2124,7 @@ esac
 
 # Attach a fresh client, or switch THIS client's view if we are genuinely inside
 # a live client on the same socket. $TMUX alone is NOT a safe test: it (and
-# TMUX_PANE) LEAK into any terminal spawned from within a pane -- a kitty opened
+# TMUX_PANE) LEAK into any terminal spawned from within a pane: a kitty opened
 # from a tmux pane inherits them though it is not a tmux client. Acting on
 # that stale value made `mux go X` run switch-client and HIJACK a different
 # window instead of attaching this one (the same trap the session watcher dodges
@@ -2154,7 +2154,7 @@ _attach_record() {
 # A SEPARATE question from "is the target on my socket", and keeping them
 # separate is the whole point. This test used to be nested inside the socket
 # comparison, so a CROSS-socket target skipped it, fell through to the
-# fresh-attach path, and that path deliberately unsets $TMUX -- which is exactly
+# fresh-attach path, and that path deliberately unsets $TMUX, which is exactly
 # what defeats tmux's own "sessions should be nested with care" guard. Result: a
 # session nested in a pane. Rare when the only other socket was a work one you
 # seldom crossed; routine the moment the personal partition got a socket name of
@@ -2186,8 +2186,8 @@ mux_attach() {
       exec tmux switch-client -t "=$name"
     fi
     # Different socket, and switch-client cannot cross one. The only
-    # other move is a fresh attach, which from inside a pane NESTS
-    # -- so refuse and say how. Partitions are isolated on purpose;
+    # other move is a fresh attach, which from inside a pane NESTS,
+    # so refuse and say how. Partitions are isolated on purpose;
     # reaching across one is a thing to do deliberately, from
     # outside.
     echo "mux: '$name' is in partition" \
@@ -2219,7 +2219,7 @@ expand_tilde() {
 }
 
 # Agent PROFILES make the "agent pane" pluggable, and are the ONE Claude
-# coupling in the front end -- now behind a file, so another CLI (gemini, codex)
+# coupling in the front end, now behind a file, so another CLI (gemini, codex)
 # is just a profile and mux can run with no Claude at all. A profile is data in
 # agents/<name>.agent: a `go` line and a `resume` line, each a shell command.
 # `mux go` runs the agent's `go` (continue the recent conversation), `mux
@@ -2233,7 +2233,7 @@ _find_agent() {   # <name>
 }
 
 # Which of the agent profile's lines to run. `new` builds a session exactly as
-# `go` does -- it only differs in having bound a name first -- so it takes go's.
+# `go` does (it only differs in having bound a name first), so it takes go's.
 agent_verb=go
 # $resume, not `cmd = resume`: `resume` is now the session-rebuild VERB, so the
 # flag has to be read from the flag.
@@ -2264,7 +2264,7 @@ shape_cmd() {
 }
 
 # The process a pane runs: the (reshaped) command, then an interactive shell so
-# the pane drops back to a prompt when the command exits -- the behaviour
+# the pane drops back to a prompt when the command exits: the behaviour
 # send-keys gave, but run AS the pane's own process, so nothing is typed into a
 # starting shell and it cannot race the rc. An empty command (--bare claude) is
 # just the shell.
@@ -2279,7 +2279,7 @@ pane_process() {
 
 # Flatten a PROFILE and the LAYOUT it names into one directive stream: the
 # profile's own lines, then the layout's window/pane/bottom lines. Two files,
-# one level, no recursion -- a profile names a layout, a layout names nothing.
+# one level, no recursion: a profile names a layout, a layout names nothing.
 #
 # This replaced a recursive `include` with a depth cap, a visited-path set and
 # cycle detection. That machinery existed to support composition that never
@@ -2287,7 +2287,7 @@ pane_process() {
 # A profile that declares `layout code` says the same thing without a splice.
 expand_profile() {      # PROFILE_PATH [LABEL]
   # Normalize via mux_conf_clean (the single comment/whitespace/CRLF
-  # rule), then read from a FILE -- a bad layout name must exit the whole
+  # rule), then read from a FILE: a bad layout name must exit the whole
   # run, which a pipe's subshell would swallow. Every surviving line is a
   # directive, so no comment/blank case is needed here.
   _cl=$(mktemp) || { echo "mux: mktemp failed" >&2; exit 1; }
@@ -2367,7 +2367,7 @@ bottom_spec() {         # ARG
 }
 
 # --- kill --all: tear down every session on the current socket -------------
-# No name, and it hits the whole context (personal OR work -- whichever socket
+# No name, and it hits the whole context (personal OR work: whichever socket
 # you are on, never both), so it is guarded behind a typed confirmation and
 # lists what it will kill first. It must never fire by accident.
 cmd_kill_all() {
@@ -2396,12 +2396,12 @@ if [ "$cmd" = kill ] && [ "$all" -eq 1 ]; then cmd_kill_all; fi
 
 # --- kill: tear down on whichever socket we resolved -----------------------
 # Killing is how you say you are done with a session, so the set forgets it.
-# Nothing else prunes -- that is the whole reason a snapshot of the live set
+# Nothing else prunes: that is the whole reason a snapshot of the live set
 # would be wrong.
 #
 # Which left a hole: the set is pruned ONLY here, and this used to require the
 # session to be LIVE. A recorded session whose root has since moved or been
-# deleted is already dead, so it could not be killed -- and therefore could
+# deleted is already dead, so it could not be killed, and therefore could
 # never be forgotten. `mux resume` reported it as unbuildable on every single
 # run while offering no way out, and the only real fix was hand-editing
 # $MUX_CACHE. So a name that is merely RECORDED is killable too: there is
@@ -2428,7 +2428,7 @@ if [ "$cmd" = kill ]; then cmd_kill; fi
 
 # --- new: bind a NAME to this project, then build it ------------------------
 # The ONE explicit creation verb. `mux go` creates implicitly whenever it can
-# point at evidence the target exists -- a row, a breakout profile, a scanned
+# point at evidence the target exists: a row, a breakout profile, a scanned
 # repo, or the directory you are standing in. `mux go NAME` for a name nothing
 # knows is refused, because from the input alone a new session and a typo look
 # identical. `mux new NAME` is how you say you meant it.
@@ -2481,13 +2481,13 @@ if [ "$cmd" = new ]; then cmd_new; fi
 # --- resume: bring back this partition's sessions ---------------------------
 # The point of the session set: after a reboot, `mux resume` and the five
 # sessions you had are back. It acts on the CURRENT partition only and takes no
-# way to name another -- if you want a different partition's sessions, you go to
+# way to name another, if you want a different partition's sessions, you go to
 # that partition, which is what partitions are for.
 #
 # Each session is rebuilt by re-running the front end with --no-attach, so the
 # whole build path (profile resolution, layout, theme, agent) is reused exactly
 # rather than reimplemented here. Then we attach the first, which insertion
-# order makes the oldest -- usually the one you think of as primary.
+# order makes the oldest, usually the one you think of as primary.
 # Rebuild every recorded session that is not already up, counting outcomes
 # into rs_built / rs_up / rs_failed.
 #
@@ -2503,8 +2503,8 @@ _resume_rebuild() {     # <partition key> <recorded names, one per line>
   rs_builtn=
   rs_failed=
   # LINE by line. `for rs_n in $*` word-splits, so a recorded session
-  # named `my project` was rebuilt as two phantoms -- `my` and
-  # `project` -- and the real one never came back. A here-doc rather
+  # named `my project` was rebuilt as two phantoms (`my` and
+  # `project`), and the real one never came back. A here-doc rather
   # than a pipe: the counters are carried out of this loop.
   while IFS= read -r rs_n; do
     [ -n "$rs_n" ] || continue
@@ -2532,7 +2532,7 @@ EOF
 }
 
 # The first recorded session that is actually up. Insertion order makes that
-# the oldest -- usually the one you think of as primary.
+# the oldest, usually the one you think of as primary.
 _resume_landing() {     # <recorded names> -> a live session name, or empty
   while IFS= read -r _rn; do
     [ -n "$_rn" ] || continue
@@ -2564,7 +2564,7 @@ cmd_resume() {
   # THE FOCUS TARGET, checked BEFORE rebuilding. Naming a session that
   # is not in the set is a typo, and finding that out after the rebuild
   # would mean the work happened and the one thing you asked for did
-  # not -- reported as a success with a footnote. Exit 3 is mux's "the
+  # not: reported as a success with a footnote. Exit 3 is mux's "the
   # name is not known here", the same answer `go` gives.
   if [ -n "${rs_focus:-}" ] \
      && ! mux_sess_has "$rs_focus" "$rs_key"; then
@@ -2664,7 +2664,7 @@ fi
 #
 # WHO ASKS FOR THIS: `mux latch`, on every attempt after the first. A reattach
 # that finds nothing means the far side rebooted, and building a fresh empty
-# session where the work was is the worst available answer -- so latch needs a
+# session where the work was is the worst available answer, so latch needs a
 # form that REFUSES. The message is matched by latch's classifier, which turns
 # it into the `gone` state, so the wording is a contract and not decoration.
 if [ "$attachonly" -eq 1 ]; then
@@ -2679,14 +2679,14 @@ fi
 #
 # With NEITHER, mux builds from its own defaults rather than demanding a file:
 # the shipped layouts/default arrangement, rooted at the project, themed by the
-# global default. That is the whole point of the profile/layout split -- a
+# global default. That is the whole point of the profile/layout split: a
 # profile records a DEVIATION, so needing none is the normal case, and a fresh
 # install with an empty $MUX_DIR runs `mux go` with nothing configured at all.
 # /dev/null stands in as the empty profile so one code path serves both.
 profile=
 prow=
 if [ -n "$layout_arg" ]; then
-  # An explicit PROFILE positional wins and must exist -- a typo here is
+  # An explicit PROFILE positional wins and must exist: a typo here is
   # an error, never a silent fallback. It may name a row or a breakout.
   profile=$(_find_profile "$layout_arg")
   if [ -z "$profile" ]; then
@@ -2718,8 +2718,8 @@ fi
 # A DERIVED name that collides with a profile meaning somewhere ELSE. Exactly
 # the live-session guard one step earlier: a name mux picked FOR you must not
 # silently resolve to a different place. Standing in ~/src/manifest and getting
-# a session rooted at ~/src/work/PlatformOS -- because the directory's
-# basename happens to match an unrelated profile -- is a surprise, not a
+# a session rooted at ~/src/work/PlatformOS (because the directory's
+# basename happens to match an unrelated profile) is a surprise, not a
 # service. A name you TYPED is still trusted, since looking a profile up by
 # name is what a name argument is for.
 if [ -z "$name_arg" ] && [ "$cmd" != new ] && [ "$bypath" -eq 0 ]; then
@@ -2745,14 +2745,14 @@ fi
 # directory is the answer, and there was no name to have mistyped.
 if [ -n "$name_arg" ] && [ "$bypath" -eq 0 ] && [ "$cmd" != new ] \
    && [ "$hasroot" -eq 0 ]; then
-  # The session set first, then the map -- the precedence lives in
+  # The session set first, then the map: the precedence lives in
   # _typed_roots, which `mux why` reads too so the two cannot drift.
   hits=$(_typed_roots "$name" | cut -f2)
   nhit=$(printf '%s\n' "$hits" | grep -c . || true)
   if [ "$nhit" -eq 1 ]; then
     base=$hits
   elif [ "$nhit" -gt 1 ]; then
-    echo "mux: '$name' is ambiguous -- $nhit projects share it:" >&2
+    echo "mux: '$name' is ambiguous ($nhit projects share it):" >&2
     printf '%s\n' "$hits" | sed 's/^/         /' >&2
     echo "mux: name one of them:  cd <dir> && mux new <alias>" >&2
     exit 1
@@ -2792,8 +2792,8 @@ fi
 
 # Flatten includes into one directive stream, then parse it TWICE: first to
 # resolve the session-wide root/theme and validate the whole shape (touching
-# no tmux state), then to build. A malformed layout -- or a missing or cyclic
-# include -- fails before any session exists, never leaving a half-built one,
+# no tmux state), then to build. A malformed layout (or a missing or cyclic
+# include), fails before any session exists, never leaving a half-built one,
 # and root/theme are position-independent (last one wins).
 flat=$(mktemp) || { echo "mux: mktemp failed" >&2; exit 1; }
 trap 'rm -f "$flat"' EXIT
@@ -2802,7 +2802,7 @@ expand_profile "$profile" "$plabel" >"$flat"
 # Pass 1: resolve root (default the project; a leading ~ expands) and theme,
 # each last-wins across the profile, and validate structure. window/pane/bottom
 # are checked only here; the build pass trusts what got through. `layout` never
-# reaches this stream -- expand_profile consumed it to pick the layout file.
+# reaches this stream: expand_profile consumed it to pick the layout file.
 root=$base
 want_theme=
 want_notify=
@@ -2878,7 +2878,7 @@ done <"$flat"
 
 # $plabel, not $layout: nothing ever assigned `layout`, so under set -u
 # this error path aborted with "layout: parameter not set" instead of
-# saying which profile was empty -- a broken message on an error path,
+# saying which profile was empty: a broken message on an error path,
 # which is where a clear one matters most.
 [ "$v_win" -eq 1 ] || {
   echo "mux: empty layout: $plabel" >&2; exit 1; }
@@ -2929,14 +2929,14 @@ if [ -z "$want_theme" ]; then
   fi
 fi
 
-# Pass 2: build. Everything is validated, so this only executes -- using the
+# Pass 2: build. Everything is validated, so this only executes; using the
 # now-final root for every pane's -c, wherever root sat in the source.
 # The geometry a session is BUILT at, as `-x W -y H` for new-session, or empty
 # when no terminal can be asked (a hook, a cron job, a headless script).
 #
 # tmux builds a detached session at `default-size`, which is 80x24. Every split
-# below is then sized against 24 rows -- a `bottom 5-10` pane takes 10 of them,
-# 42% of the window -- and when the session is finally shown at a real terminal
+# below is then sized against 24 rows (a `bottom 5-10` pane takes 10 of them,
+# 42% of the window), and when the session is finally shown at a real terminal
 # size tmux rescales every pane PROPORTIONALLY. A 10-row bottom becomes 22.
 #
 # `mux pin` exists to undo exactly that, but it only runs from the
@@ -2961,12 +2961,12 @@ _session_geometry() {
     return 0
   fi
   # Outside it, ask the terminal. stty reports "rows cols" and needs a
-  # tty on its INPUT, which mux's stdin may not be -- /dev/tty is the
+  # tty on its INPUT, which mux's stdin may not be: /dev/tty is the
   # controlling terminal regardless of redirection.
   # 2>/dev/null comes FIRST, and that ordering is the whole point:
   # redirections are applied left to right, so with </dev/tty first the
   # OPEN is what fails, and it fails while stderr is still the terminal.
-  # The shell then prints "cannot open /dev/tty" itself -- stty never
+  # The shell then prints "cannot open /dev/tty" itself: stty never
   # runs, so stty's own 2>/dev/null never covers it. Any context without
   # a controlling terminal (a cron job, a systemd unit, the test suite)
   # got a spurious error on a path that is designed to fall through.

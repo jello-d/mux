@@ -4,7 +4,7 @@
 # The largest file in the tree and, until now, the only substantial one with no
 # test at all. Its interesting behaviour is GRACEFUL REDUCTION: the strip is
 # measured against status-right-length and, when the full chips overflow, it
-# degrades in tiers rather than letting tmux truncate it blind --
+# degrades in tiers rather than letting tmux truncate it blind:
 #
 #   full chips -> drop the age -> fold agentless runs -> window around the
 #   current session with edge counts -> a bare "needs-you count · total"
@@ -12,7 +12,7 @@
 # with ONE invariant across all of them: a session that needs you is never
 # silently dropped. It stays a chip, becomes a caution-marked edge count, or
 # survives in the summary count. Blind truncation would drop whatever fell off
-# the right, which could be exactly that session -- which is why the tiers
+# the right, which could be exactly that session, which is why the tiers
 # exist.
 #
 # The budgets here are not hardcoded widths. The test sweeps the whole range
@@ -46,7 +46,7 @@ chmod +x "$T/bin/tmux"
 
 printf 'alpha\nbravo\ncharlie\ndelta\n' >"$SESSIONS"
 printf '%%1\n%%2\n%%3\n' >"$PANES"
-# Record: state window pane epoch notif SESSION -- the session LAST, so a
+# Record: state window pane epoch notif SESSION: the session LAST, so a
 # name containing a space is read back whole. notif is `-` when absent,
 # never empty: an empty field collapses in the whitespace run and shifts
 # everything after it.
@@ -55,7 +55,7 @@ st() { printf '%s 0 %s 1 %s %s\n' "$2" "$1" "${4:--}" "$3" \
   >"$T/run/agent-state/global/${1#%}"; }
 st %1 blocked alpha
 st %2 working delta
-# bravo and charlie have no agent at all -- the fold candidates.
+# bravo and charlie have no agent at all: the fold candidates.
 
 # render CURRENT BUDGET -> the strip, tmux format escapes and all.
 render() {
@@ -72,31 +72,31 @@ no_has() { case "$1" in *"$2"*) fail "$3: unwanted [$2] in [$(vis "$1")]" ;;
 
 # --- UNWIRED: mux started an agent and has never heard from it ------------
 # THE FIRST-RUN FAILURE, and the reason it needs a glyph of its own: install
-# mux, start a session, and every chip reads `⚫` -- which is also exactly what
+# mux, start a session, and every chip reads `⚫`, which is also exactly what
 # a plain shell looks like, so nothing says the hooks were never wired and the
 # reasonable conclusion is that mux is broken.
 #
 # The signal is `@mux-agent` set on a pane with NO record for that session: a
 # wired agent emits on SessionStart, so the absence of any record is the tell.
-# Deliberately not a process check -- tmux reports a live Claude pane's
+# Deliberately not a process check: tmux reports a live Claude pane's
 # `#{pane_current_command}` as the SHELL, and `#{pane_start_command}` keeps
 # naming the agent long after it exits, so neither can tell a running agent
 # from a finished one (measured).
 #
-# Fields: pane id, @mux-agent, session -- the session LAST because a name may
+# Fields: pane id, @mux-agent, session: the session LAST because a name may
 # contain a space.
 printf '%%1\t\talpha\n%%2\t\tdelta\n%%3\t1\tcharlie\n' >"$PANES"
 _o=$(vis "$(render delta 400)")
 has "$_o" "$MUX_GLYPH_UNWIRED charlie" "charlie has an agent pane and no
 record, so it must draw the unwired glyph rather than reading like a plain
-shell -- which is the whole first-run problem"
+shell, which is the whole first-run problem"
 
 # AND IT DOES NOT FIRE FOR EVERYONE, which is the half that makes the glyph
 # mean something: bravo has no record AND no agent pane, so it is genuinely
 # agentless and stays `none`. Asserted separately because one "the strip
 # changed" check passes with the condition inverted.
 has "$_o" "$MUX_GLYPH_NONE bravo" "bravo has no agent pane, so it is agentless
-rather than unwired -- marking every recordless session would make the glyph
+rather than unwired: marking every recordless session would make the glyph
 noise"
 
 # AND IT SURVIVES REDUCTION. The fold tier collapses runs of agentless
@@ -115,7 +115,7 @@ for _s in alpha bravo charlie delta; do
 done
 has "$_o" "$MUX_GLYPH_BLOCKED" "full strip: no blocked glyph"
 # fmt_age renders a fixed 3-col field; epoch 1 pins it at the 99h ceiling.
-# NOT a bare "d" -- that matches the "d" in "delta" and proves nothing.
+# NOT a bare "d": that matches the "d" in "delta" and proves nothing.
 case $_o in *99h*) ;; *) fail "full strip: no age field in [$_o]" ;; esac
 
 # --- the narrowest tier: a bare count -------------------------------------
@@ -139,7 +139,7 @@ _check() {
   [ -n "$_r" ] || fail "width $1: empty strip"
   case $_r in
   *"$MUX_GLYPH_BLOCKED"*|*alpha*) ;;
-  *) fail "width $1: the blocked session vanished -- [$_r]" ;;
+  *) fail "width $1: the blocked session vanished: [$_r]" ;;
   esac
   case $_r in
   *"·2·"*)   _saw_fold=1 ;;
@@ -174,7 +174,7 @@ done
 
 # --- the view indicator is FIXED FURNITURE at the right edge --------------
 # It is drawn by this script rather than as its own status-left segment so its
-# width comes out of the SAME budget the tiers spend -- a second #() appended
+# width comes out of the SAME budget the tiers spend: a second #() appended
 # by tmux would be invisible to them and would silently push the strip past
 # status-right-length. Two things follow, and both are contract:
 #
@@ -190,7 +190,7 @@ while [ "$_w" -ge 10 ]; do
   _r=$(vis "$(render delta "$_w")")
   case $_r in
   *"✱"*) ;;
-  *) fail "width $_w: the view indicator was dropped -- [$_r]" ;;
+  *) fail "width $_w: the view indicator was dropped: [$_r]" ;;
   esac
   _w=$((_w - 1))
 done
@@ -219,8 +219,8 @@ rm -f "$T/run/mux-exclude/testclient"
 
 # --- a FAILED pane query must never read as "every pane died" --------------
 # This script uses a bare `tmux`, so it inherits its server from $TMUX. Run
-# from a shell without one -- over ssh, from a cron, or by hand to see what the
-# strip says -- it asks tmux's DEFAULT socket, which usually has no server, so
+# from a shell without one (over ssh, from a cron, or by hand to see what the
+# strip says), it asks tmux's DEFAULT socket, which usually has no server, so
 # list-panes errors and returns nothing. Treating that as truth meant every
 # recorded pane looked dead and the prune deleted EVERY agent's state on the
 # real server. It did exactly that on a live machine, from one diagnostic run.

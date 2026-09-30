@@ -31,7 +31,7 @@ mux() { env -u MUX_SHARE "$HERE/bin/mux" "$@"; }
 # verify a binding that calls mux, because a binding that does not mention mux
 # is indistinguishable from another config's. The cheat sheet documents what mux
 # GIVES YOU, and `bind B switch-client -l` is mux's binding even though the
-# command is tmux's own -- it is the other half of the b/B pair and a sheet
+# command is tmux's own: it is the other half of the b/B pair and a sheet
 # without it would be wrong.
 #
 # `[^ -]` excludes the mouse binding (`bind -n MouseDown1Status`), which has no

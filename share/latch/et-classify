@@ -17,14 +17,14 @@
 #
 # 1. `-t` IS `--tunnel`, NOT "REQUEST A PTY". The first template said
 #    `et -t %h --command %c`; `-t` takes a value, so it swallowed the host and
-#    et answered "Missing host to connect to" -- on exit 0. A pty is the
+#    et answered "Missing host to connect to": on exit 0. A pty is the
 #    DEFAULT for `--command` anyway, so no flag is needed. `%c` is still right
 #    (the command is typed into a remote LOGIN shell, so it must arrive
 #    unquoted), and that part held up: `mux -V` through it prints the version,
 #    and a real attach renders mux's status bar on the far side.
 # 2. et WRITES ITS DIAGNOSTICS TO STDOUT, not stderr. "Could not reach the ET
-#    server: host:port" goes to the terminal, so a CLASSIFY hook -- which is
-#    handed a STDERR file -- cannot see it. Every string match in the first
+#    server: host:port" goes to the terminal, so a CLASSIFY hook (which is
+#    handed a STDERR file) cannot see it. Every string match in the first
 #    version was therefore inert, which is why latch reported `refused` with
 #    advice about the far side being up when etserver was simply stopped.
 # 3. THE REMOTE EXIT STATUS IS NOT PROPAGATED. `mux resume nosuchpartition`
@@ -43,7 +43,7 @@
 #   - A REMOTE REFUSAL READS AS `ended`. If the far side has no mux, or the
 #     session is gone, et still exits 0 and latch reports the session as closed
 #     deliberately. The far side's own message is on YOUR TERMINAL, where et put
-#     it, so you are not blind -- but latch cannot quote it and cannot act on
+#     it, so you are not blind, but latch cannot quote it and cannot act on
 #     it. This is the one thing to fix if et ever propagates the status.
 #   - LATCH CANNOT QUOTE THE TRANSPORT'S REASON. Over ssh a failure report
 #     carries ssh's own words; over ET there is nothing in stderr to carry.
@@ -71,7 +71,7 @@ case $_rc in
   # A malformed transport line also exits 1 here, and would be retried
   # forever. That is tolerable because the shipped line is the tested one
   # (test/mux-latch-et.t scrapes it out of this header and runs it), and
-  # because the alternative -- calling a booting box terminal -- is worse.
+  # because the alternative (calling a booting box terminal) is worse.
   printf 'probing' ;;
 *)
   # Anything else, including whatever et exits with when it stops

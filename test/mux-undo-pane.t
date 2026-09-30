@@ -3,12 +3,12 @@
 #
 # ^D is one keystroke from detach and does something very different. The
 # recovery used to be rebuilding the window by hand, which costs every OTHER
-# pane's scrollback -- so the accident was expensive out of all proportion.
+# pane's scrollback, so the accident was expensive out of all proportion.
 #
 # THIS TEST DRIVES A REAL TMUX SERVER, not the stub the rest of the suite uses,
 # and that is deliberate: every property worth having here is a property of tmux
 # itself. A stub would be a second model of `select-layout`, and the bugs found
-# while building this were all in the real thing's behaviour -- a hook that
+# while building this were all in the real thing's behaviour: a hook that
 # reports the WRONG pane, an asynchronous hook that races the removal it is
 # recording, a start command that comes back quoted, and geometry that is
 # applied POSITIONALLY. None of those are reachable from a stub.
@@ -30,7 +30,7 @@ tm() { tmux -L "$SOCK" "$@"; }
 cleanup() { tmux_drop_socket "$SOCK"; }
 
 # WHERE IT DIED, because this file has now gone NO VERDICT three times under a
-# loaded full-suite run and never once in isolation -- twice during a mutation
+# loaded full-suite run and never once in isolation, twice during a mutation
 # sweep, once during a plain `test/run`. It drives a REAL tmux, so it is the
 # one file exposed to contention, and under `set -e` a tmux command that fails
 # takes the whole file down with nothing printed at all: no ok, no FAIL, just
@@ -55,7 +55,7 @@ t_trap '_bail'
 trap 'cleanup' INT TERM
 
 # A SERVER ON A NAME NOBODY HAS KILLED. build() used to `cleanup` and then
-# immediately create on the SAME socket, which races tmux's teardown -- see
+# immediately create on the SAME socket, which races tmux's teardown: see
 # tmux_fresh_socket in harness_lib. That is what made this file flake under the
 # full
 # suite and never in isolation. The old server is killed and NOT waited for,
@@ -66,7 +66,7 @@ rotate() {
   # AND THE RECORDS GO WITH THE SERVER. This is the whole undo-pane flake,
   # finally caught: a record is keyed by WINDOW ID, every fresh tmux server
   # calls its first window `@0`, and $XDG_RUNTIME_DIR is shared across
-  # cycles -- so the previous cycle's record sits at the path this cycle
+  # cycles, so the previous cycle's record sits at the path this cycle
   # will write. `_recorded` only asks whether the DIRECTORY is non-empty,
   # so it returned true instantly from the stale file and the undo then
   # raced the new recorder. When it lost, the slot-0 cycle restored the
@@ -84,7 +84,7 @@ rotate() {
 # than one: a sleep long enough to be reliable on a loaded machine is wasted on
 # every other run, and a sleep tuned to a fast machine is a test that fails for
 # someone else. This turned a 43s file into a few seconds.
-_until() {   # <seconds> <command...> -- true as soon as it succeeds
+_until() {   # <seconds> <command...>: true as soon as it succeeds
   _lim=$(( ${1} * 20 )); shift
   _n=0
   while [ "$_n" -lt "$_lim" ]; do
@@ -97,7 +97,7 @@ _until() {   # <seconds> <command...> -- true as soon as it succeeds
 _npanes() { [ "$(tm list-panes -t t 2>/dev/null | wc -l)" = "$1" ]; }
 # THE RECORD IS THE REAL PRECONDITION FOR AN UNDO, not the pane count. The pane
 # disappears slightly before the hook finishes writing, so polling the count
-# alone raced the write and undo found nothing to do -- a window a fixed sleep
+# alone raced the write and undo found nothing to do: a window a fixed sleep
 # had been hiding. A human pressing prefix-u is far slower than either, so this
 # is a test-harness ordering problem rather than a bug, but it is exactly the
 # kind a sleep converts into an intermittent failure on someone else's machine.
@@ -108,7 +108,7 @@ _recorded() { [ -n "$(ls -A "$T/run/mux-undo" 2>/dev/null)" ]; }
 # ALL THREE, not just the two splits. Waiting only for /etc and /usr let the
 # tracker snapshot before pane 0's shell had reported /tmp, so the record
 # carried the SERVER's directory and the restore came back in the wrong place.
-# Intermittent -- it survived five clean runs before showing up.
+# Intermittent: it survived five clean runs before showing up.
 _cwds_ready() {
   _cr=$(state)
   case $_cr in *:/tmp*) ;; *) return 1 ;; esac
@@ -117,7 +117,7 @@ _cwds_ready() {
   return 0
 }
 
-# state: "height:cwd height:cwd ..." top to bottom -- the two things a restore
+# state: "height:cwd height:cwd ..." top to bottom: the two things a restore
 # has to get right, in the one order that makes a mismatch readable.
 state() { tm list-panes -t t -F '#{pane_height}:#{pane_current_path}' \
   2>/dev/null | tr '\n' ' '; }
@@ -141,8 +141,8 @@ build() {
   _until 10 _cwds_ready || fail "the panes never reported their cwd"
   tm resize-pane -t t.0 -y 30
   # THE LAST TRACKER, NOT THE FIRST. The three snapshots are three
-  # SEPARATE hook commands appended to window-layout-changed -- @mux-ul,
-  # then @mux-up, then @mux-uc -- so waiting on @mux-ul proves only that
+  # SEPARATE hook commands appended to window-layout-changed (@mux-ul,
+  # then @mux-up, then @mux-uc), so waiting on @mux-ul proves only that
   # the first has landed. Under load the gap widens, the pane dies inside
   # it, and the record is written from a cwd snapshot that does not list
   # the pane: the restore then puts it back in its NEIGHBOUR's directory.
@@ -152,7 +152,7 @@ build() {
     || fail "the cwd tracker never recorded anything"
 }
 
-# --- THE RECORD IS WRITTEN UNQUOTED -- asserted before anything is restored
+# --- THE RECORD IS WRITTEN UNQUOTED: asserted before anything is restored
 # tmux hands `pane_start_command` back QUOTED for display (wrapped, with inner
 # quotes and $ escaped). Replaying that verbatim does not fail loudly: the pane
 # is created and runs the wrong thing, which is exactly how it survived a first
@@ -173,14 +173,14 @@ _cr=$(sed -n 's/^command	//p' "$T/run/mux-undo/$(ls -A "$T/run/mux-undo" \
   | head -1)")
 # `[\\]`, a bracket expression, rather than a quoted backslash: `'\\'` inside
 # single quotes is TWO characters and shellcheck rightly calls it ambiguous
-# (SC1003) -- the same trap these notes record costing a doubled spinner.
+# (SC1003): the same trap these notes record costing a doubled spinner.
 # A BACKSLASH is the discriminator, not a quote. The real command contains
 # double quotes of its own (`exec "${SHELL:-/bin/sh}"`); what the display form
-# adds is ESCAPES -- it wraps the whole thing and backslash-escapes the inner
+# adds is ESCAPES: it wraps the whole thing and backslash-escapes the inner
 # `"` and `$`. Checking for a quote fails on correct code, which it did here.
 case $_cr in
 *[\\]*) fail "the recorded command is still tmux's DISPLAY form, quoted
-and escaped: [$_cr]. Replaying that does not fail loudly -- the pane comes
+and escaped: [$_cr]. Replaying that does not fail loudly: the pane comes
 back running the wrong thing, which is how it survived a first live check." ;;
 esac
 case $_cr in
@@ -208,7 +208,7 @@ for _slot in 0 1 2; do
   _after=$(state)
   [ "$_before" = "$_after" ] || fail "slot $_slot did not come back the
 same. The saved layout is applied POSITIONALLY, so a pane created in the wrong
-place does not merely sit wrong -- it takes another pane's size.
+place does not merely sit wrong: it takes another pane's size.
   before [$_before]
   after  [$_after]"
 done
@@ -285,7 +285,7 @@ _o=$(tm run-shell "mux undo-pane" 2>&1 || true)
 sleep 0.3
 [ "$(tm list-panes -t t | wc -l)" = 3 ] \
   || fail "undo added a pane to a window that was already whole. The
-record alone does not mean something is missing -- the hole may have been
+record alone does not mean something is missing: the hole may have been
 filled by hand since."
 
 # --- THE PANE'S OWN OPTIONS COME BACK WITH IT -----------------------------
@@ -304,7 +304,7 @@ _bot=$(tm list-panes -t t -F '#{pane_id}' | tail -1)
 tm set-option -p -t "$_bot" @mux-bottom 5-10
 tm set-option -p -t "$_bot" @mux-agent 1
 # A LAYOUT CHANGE IS WHAT LATCHES THE TRACKER. Setting a pane option is not
-# one, so the value is picked up on the next geometry event -- which in mux's
+# one, so the value is picked up on the next geometry event, which in mux's
 # own build path is the next split, and in life is any resize. Forced here so
 # the test asserts the restore rather than the hook's timing.
 tm resize-pane -t t.0 -y 29
@@ -320,7 +320,7 @@ _until 10 _npanes 3 || fail "undo restored no pane"
 _new=$(tm list-panes -t t -F '#{pane_id}' | tail -1)
 [ "$(tm show-options -pqv -t "$_new" @mux-bottom)" = 5-10 ] \
   || fail "@mux-bottom did not come back on the restored pane, so
-mux pin will skip it and the width balance will refuse -- that window's
+mux pin will skip it and the width balance will refuse: that window's
 geometry is frozen and nothing says so"
 [ "$(tm show-options -pqv -t "$_new" @mux-agent)" = 1 ] \
   || fail "@mux-agent did not come back, so 'mux save' would read the
@@ -335,7 +335,7 @@ _o=$(env XDG_RUNTIME_DIR="$T/run" TMUX= "$HERE/libexec/mux-undo-pane" 2>&1) \
 [ "$_rc" != 0 ] || fail "with no record and no tmux, undo-pane must fail"
 
 # --- AN UNKNOWN DIRECTORY IS SAID, NOT INHERITED -------------------------
-# Without `-c`, split-window uses the ANCHOR pane's directory -- so a cwd the
+# Without `-c`, split-window uses the ANCHOR pane's directory, so a cwd the
 # record does not have does not fail, it puts the pane back beside its
 # neighbour and says nothing. Asserted on the MESSAGE, because the placement
 # itself is indistinguishable from a correct restore of a pane that genuinely
@@ -354,7 +354,7 @@ case $_o in
 *) fail "a record with no cwd restored SILENTLY into the neighbour's
 directory: [$_o]" ;;
 esac
-_until 10 _npanes 3 || fail "nocwd: the pane should still come back -- the
+_until 10 _npanes 3 || fail "nocwd: the pane should still come back. The
 directory is the only thing lost, and losing the pane as well would be worse"
 
 # --- A RECORD BELONGS TO ONE SERVER -------------------------------------
@@ -366,7 +366,7 @@ directory is the only thing lost, and losing the pane as well would be worse"
 #
 # VERIFIED BY HAND BEFORE THIS WAS WRITTEN: a brand new server on a different
 # socket, with one pane and nothing ever lost in it, restored a pane from a dead
-# server's window -- with that window's command, cwd and LAYOUT, which is
+# server's window, with that window's command, cwd and LAYOUT, which is
 # applied positionally and so resizes the survivors too. Plausible, wrong,
 # silent: this codebase's recurring failure shape.
 #
@@ -425,7 +425,7 @@ esac
 # The other half of writing the record atomically, and the half that can be
 # asserted deterministically. `> file` creates and truncates before any bytes
 # land, and the writer forks four command substitutions in between, so a
-# reader could see the file empty or half-written -- suspected cause of this
+# reader could see the file empty or half-written: suspected cause of this
 # file's own flake, which only ever appeared under a loaded suite run.
 #
 # THE FAILURE IS SILENT WITHOUT THIS, which is why it is worth a case: undo
@@ -441,14 +441,14 @@ _until 10 _npanes 2 || fail "partial: the pane did not close"
 _until 10 _recorded || fail "partial: no undo record was written"
 _rec=$T/run/mux-undo/$(ls -A "$T/run/mux-undo" | head -1)
 # THE SERVER LINE IS KEPT AND VALID, or the 0.74 attribution check refuses
-# this record first and the partial-record guard below becomes unreachable --
+# this record first and the partial-record guard below becomes unreachable,
 # which is exactly what happened: the full corpus reported this record dying
 # for the wrong reason. Two guards in sequence means the FIXTURE has to get
 # past the first one to exercise the second.
 printf 'server\t%s\n' "$(tm display-message -p '#{pid}')" >"$_rec"
 printf 'slot\t1\n' >>"$_rec"         # everything after `slot` is missing
 # DIRECTLY, with $TMUX pointed at this server, because the MESSAGE is the
-# observable here and through run-shell tmux reports only "returned 1" -- the
+# observable here and through run-shell tmux reports only "returned 1": the
 # stderr it swallows is the whole reason a partial record fails silently in
 # real life. Same reason mux-even.t drives its refusal case this way.
 _sp=$(tm display-message -p '#{socket_path}')

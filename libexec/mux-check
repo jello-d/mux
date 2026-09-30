@@ -1,12 +1,12 @@
 #!/bin/sh
-# mux-check: audit that mux is coherently installed -- its package DATA (share),
+# mux-check: audit that mux is coherently installed: its package DATA (share),
 # its config overlay (MUX_DIR), and its one runtime dependency (tmux).
 #
 # Output is the [OK]/[FAIL]/[WARN] MARKER contract: one status line per check,
 # and a non-zero exit on any [FAIL]. An integrator can style the plain markers
 # with its own palette (tmux's mux ships no such coupling); run standalone at a
 # terminal, mux-check colours the markers itself. Either way mux depends on NO
-# integrator machinery -- the markers are a string convention, not shared code.
+# integrator machinery: the markers are a string convention, not shared code.
 set -eu
 
 # Inherited from the mux entry point (exported there); self-located as a
@@ -16,7 +16,7 @@ MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
 MUX_SHARE=${MUX_SHARE:-$(dirname "$0")/../share}
 
 # The shared $MUX_DIR-over-$MUX_SHARE resolver (mux-data_lib), so the check
-# audits the data mux would ACTUALLY read -- a default theme or layout supplied
+# audits the data mux would ACTUALLY read: a default theme or layout supplied
 # by the overlay counts, and one shadowed by it is judged on the overlay copy.
 for _l in mux-paths_lib mux-data_lib mux-context_lib mux-scan_lib \
     mux-profiles_lib mux-notify_lib mux-views_lib; do
@@ -45,12 +45,12 @@ ok()   { printf '  %s[OK]%s   %s\n'   "$_G" "$_O" "$*"; }
 bad()  { printf '  %s[FAIL]%s %s\n'   "$_R" "$_O" "$*"; RC=1; }
 warn() { printf '  %s[WARN]%s %s\n'   "$_Y" "$_O" "$*"; }
 
-# 1. tmux -- the one hard runtime dependency.
+# 1. tmux: the one hard runtime dependency.
 if command -v tmux >/dev/null 2>&1; then ok "tmux present"
 else bad "tmux not found (mux's one runtime dependency)"; fi
 
-# 1b. mux ITSELF on PATH. share/mux.tmux carries no paths on purpose -- it
-# reaches every helper as `mux <verb>` -- so a mux that is not on PATH breaks
+# 1b. mux ITSELF on PATH. share/mux.tmux carries no paths on purpose (it
+# reaches every helper as `mux <verb>`), so a mux that is not on PATH breaks
 # every key binding and every status-bar tick, while `mux check` run by its own
 # path would otherwise look perfectly healthy. This is the install failure that
 # actually happens.
@@ -59,7 +59,7 @@ if _mp=$(command -v mux 2>/dev/null); then
 
   # TWO mux commands on PATH is the banned state (see the install-placement
   # rule): the earlier entry silently shadows the later one, and then rots
-  # behind it -- a seam added this morning is inert because a day-old copy
+  # behind it: a seam added this morning is inert because a day-old copy
   # wins `command -v`. Nothing else in this check can see that, because
   # everything else follows the copy it is already running from.
   _dupes=
@@ -74,7 +74,7 @@ if _mp=$(command -v mux 2>/dev/null); then
   _dn=0
   for _d in $_dupes; do _dn=$((_dn + 1)); done
   if [ "$_dn" -gt 1 ]; then
-    bad "$_dn mux commands on PATH -- the first shadows the rest:"
+    bad "$_dn mux commands on PATH, and the first shadows the rest:"
     for _d in $_dupes; do bad "    $_d"; done
   fi
 
@@ -91,9 +91,9 @@ if _mp=$(command -v mux 2>/dev/null); then
     warn "  this verdict is about the tree you invoked, not the one"
     warn "  your key bindings and status bar actually use"
   fi
-else bad "mux not on PATH -- the tmux fragment reaches it as \`mux <verb>\`"; fi
+else bad "mux not on PATH: the tmux fragment reaches it as \`mux <verb>\`"; fi
 
-# 1c. Desktop notifications: OPTIONAL, so a gap is a WARN, never a FAIL -- a
+# 1c. Desktop notifications: OPTIONAL, so a gap is a WARN, never a FAIL; a
 # headless box or a bare tty is a perfectly healthy mux that simply nudges
 # nobody. Reported in TWO halves, because the second is the one that used to be
 # assumed. Raising needs notify-send. CLEARING a notification mux already
@@ -106,7 +106,7 @@ if [ -n "${MUX_NOTIFY_SEND:-}${MUX_NOTIFY_CLOSE:-}" ]; then
     ok "notifications overridden (MUX_NOTIFY_SEND/CLOSE)"
   else
     warn "notifications: set MUX_NOTIFY_SEND and MUX_NOTIFY_CLOSE" \
-      "together, or neither -- half an override leaves the" \
+      "together, or neither, since half an override leaves the" \
       "other half on the built-in path"
   fi
 elif command -v notify-send >/dev/null 2>&1; then
@@ -142,14 +142,14 @@ if [ -d "$MUX_SHARE" ]; then
   # THE AGENT INSTRUCTIONS MUST ASSEMBLE, which is not the same question
   # as share/skills being present. The document is a body (AGENTS.md)
   # plus a frontmatter file, and a skill emitted without the frontmatter
-  # installs cleanly, errors nothing and then never triggers -- so the
+  # installs cleanly, errors nothing and then never triggers, so the
   # check has to be whether it composes, not whether the directory is
   # there. Read-only, and the sibling helper so a dev tree audits itself.
   if "$(dirname "$0")/mux-skill" >/dev/null 2>&1; then
     ok "agent instructions assemble (mux skill)"
   else bad "mux skill cannot assemble share/skills/mux-agent"; fi
 else
-  bad "package data missing ($MUX_SHARE) -- reinstall mux"
+  bad "package data missing ($MUX_SHARE): reinstall mux"
 fi
 
 # 3. config overlay (MUX_DIR): where user layouts + the integrator overlay live.
@@ -186,7 +186,7 @@ if [ -d "$MUX_DIR" ]; then
 else warn "no config overlay at $MUX_DIR (using shipped defaults)"; fi
 
 # 4. discovery. A configured root that has since moved means `mux go <name>`
-# quietly stops finding half your projects, with no error anywhere -- the map
+# quietly stops finding half your projects, with no error anywhere: the map
 # just comes back smaller. Cheap to check, invisible otherwise.
 if [ -n "${MUX_CFG_scan:-}" ]; then
   # Fed by a here-doc, NOT a pipe. A `while` behind a pipe runs in a
@@ -194,7 +194,7 @@ if [ -n "${MUX_CFG_scan:-}" ]; then
   # scan root printed [FAIL] and mux check still exited 0. This file's
   # whole contract is "non-zero on any FAIL", so the one check that could
   # not honour it made the auditor itself the thing asserting something
-  # untrue -- and anything gating on the exit code saw a clean bill.
+  # untrue, and anything gating on the exit code saw a clean bill.
   while read -r _p _d; do
     [ -n "$_p" ] || continue
     case $_p in "~") _p=$HOME ;; "~/"*) _p=$HOME/${_p#\~/} ;; esac
@@ -210,7 +210,7 @@ fi
 
 # 4b. view tension. Two clients of different SIZES attached to one server means
 # there is no window size that suits both, so tmux picks one and the windows
-# move as you cycle -- the "why did that redraw" question. Advisory, never a
+# move as you cycle: the "why did that redraw" question. Advisory, never a
 # FAIL: it is a normal consequence of attaching from a second place, and often
 # the second place is an ssh window you forgot rather than a fault.
 MUX_VIEW_SOCKET=${MUX_CTX_PARTITION:-}
@@ -225,7 +225,7 @@ if mux_view_server_tension 2>/dev/null; then
 fi
 
 # 5. unsaved edit drafts. A draft survives an unparseable save on purpose, so
-# the work is handed back rather than eaten -- but a forgotten one means an edit
+# the work is handed back rather than eaten, but a forgotten one means an edit
 # you think you made is not in effect anywhere. Surface it.
 _ed=$(mux_state_path edit)
 if [ -d "$_ed" ]; then
@@ -240,28 +240,28 @@ fi
 # 6. Does the product actually WORK on the running server?
 #
 # Everything above this point is a PRESENCE check: files exist, commands
-# resolve, config parses. Asked the only question that matters -- what would
-# this say about a box that is fully installed and fully broken? -- the answer
+# resolve, config parses. Asked the only question that matters (what would
+# this say about a box that is fully installed and fully broken?), the answer
 # was [OK] to every line. That is not hypothetical: a box ran for days with the
 # strip wrong about six of seven sessions while this check reported clean.
 #
 # So these ask tmux what it is actually configured to do. They are READ-ONLY
 # queries (list-keys, show-options) and deliberately do NOT run the renderer:
 # `mux agent-render` PRUNES state files it believes orphaned, and run against
-# the wrong socket it deletes every agent's state -- which has happened. A
+# the wrong socket it deletes every agent's state, which has happened. A
 # check must never be able to damage what it inspects.
 _keys=$(_vt list-keys -T prefix 2>/dev/null || true)
 if [ -z "$_keys" ]; then
   # No server for this partition. A perfectly healthy state (a fresh boot,
-  # a headless box), so it is not a WARN -- but it is said out loud, because
+  # a headless box), so it is not a WARN, but it is said out loud, because
   # a check that silently skips its only functional assertions is exactly
   # the check this section exists to replace.
-  ok "no tmux server for '${MUX_CTX_PARTITION:-global}' -- tmux state unchecked"
+  ok "no tmux server for '${MUX_CTX_PARTITION:-global}': tmux state unchecked"
 else
   # share/mux.tmux carries no paths: every binding reaches a helper as
   # `mux <verb>`. So a binding that exists but does not mention mux is a
   # binding tmux kept from some other config, not mux's.
-  _bound() {   # <key> -- is prefix+<key> bound to a mux verb?
+  _bound() {   # <key>: is prefix+<key> bound to a mux verb?
     printf '%s\n' "$_keys" | awk -v k="$1" '
       $1 == "bind-key" && $3 == "prefix" && $4 == k {
         if (index($0, "mux ") > 0) found = 1 }
@@ -275,7 +275,7 @@ else
   # drift from it again.
   # ANY bind whose command mentions mux, not just `run-shell` ones. The
   # narrower pattern missed `prefix ?` the day it was added, because that one
-  # is a `display-popup` -- which is the same silent-shrink this derivation
+  # is a `display-popup`, which is the same silent-shrink this derivation
   # exists to prevent, reproduced by the shape of the match rather than by a
   # hand-written list. A bind that does NOT mention mux is still excluded: it
   # is tmux's own, or another config's.
@@ -297,7 +297,7 @@ else
     # a LIVE server whose tmux.conf already sources the fragment, but which
     # started before the binding existed. Sourcing a file does not reload a
     # server, so the line was already there and adding it again changes
-    # nothing -- and a provisioner reading this loops forever, applying a fix
+    # nothing, and a provisioner reading this loops forever, applying a fix
     # that cannot work. (tackup reported exactly that: "APPLY DID NOT FIX ...
     # a fix owed by another repo".)
     #
@@ -318,7 +318,7 @@ else
   # bindings above are the visible half; the hooks are the half that
   # carries `mux undo-pane`'s trackers and its recorder, the bottom-pane
   # pin, and the status style. A server started before a feature landed
-  # keeps running without them and every other marker stays green --
+  # keeps running without them and every other marker stays green,
   # which is exactly what happened: `prefix u` and the whole
   # window-layout-changed set were absent from a live server while this
   # reported clean, for two releases.
@@ -341,22 +341,22 @@ else
     ok "tmux hooks live ($(printf '%s' "$_want_hooks" | tr '\n' ' '))"
   else
     bad "tmux hook(s) missing or not mux's:$_nh"
-    bad "  this server predates them -- run: mux reload"
+    bad "  this server predates the hooks: run \`mux reload\`"
   fi
 
   # The status bar is drawn by two #() jobs. If either is not mux's, the
-  # bar still renders -- just without the thing mux exists to show, which
+  # bar still renders: just without the thing mux exists to show, which
   # is why this fails silently and looks like "no agents are running".
   _sr=$(_vt show-options -gv status-right 2>/dev/null || true)
   case $_sr in
   *"mux agent-render"*) ok "status-right draws the agent strip" ;;
-  "") bad "status-right is empty -- the agent strip cannot appear" ;;
-  *)  bad "status-right is not mux's renderer -- no agent strip" ;;
+  "") bad "status-right is empty: the agent strip cannot appear" ;;
+  *)  bad "status-right is not mux's renderer: no agent strip" ;;
   esac
   _sl=$(_vt show-options -gv status-left 2>/dev/null || true)
   case $_sl in
   *"mux style"*) ok "status-left draws the session chip" ;;
-  *) warn "status-left is not mux's -- session chip styling is off" ;;
+  *) warn "status-left is not mux's: session chip styling is off" ;;
   esac
 
   # AN AGENT MUX STARTED AND HAS NEVER HEARD FROM. This is the first-run
@@ -387,7 +387,7 @@ else
         # THE FIRST FIELD, not the whole answer.
         # `mux_agent_state` returns "STATE EPOCH" and
         # with no record that is a single SPACE, which
-        # is non-empty -- so testing the pair skipped
+        # is non-empty, so testing the pair skipped
         # every session and this could never fire.
         _pair=$(mux_agent_state "$_adir" "$_s")
         [ -n "${_pair%% *}" ] && continue
@@ -395,7 +395,7 @@ else
       done | sort -u | tr '\n' ' ')
     case ${_unwired% } in
     '') ok "every agent session has reported its state" ;;
-    *)  warn "no agent state from: ${_unwired% } -- the agent's hooks" \
+    *)  warn "no agent state from: ${_unwired% }; the agent's hooks" \
       "are not wired. Fix with: mux setup <agent>" ;;
     esac
   fi

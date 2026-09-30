@@ -1,5 +1,5 @@
 #!/bin/sh
-# mux-status-banner: a CENTRED, loud status-bar banner for two modes --
+# mux-status-banner: a CENTRED, loud status-bar banner for two modes:
 #   PREFIX HELD  -> a bright "PREFIX ENABLED" banner: the prefix (C-Space) is
 #                   armed and tmux is waiting for the next key, unmissable.
 #   PANE ZOOMED  -> a "how to unzoom" hint: prefix z hid the other panes, so an
@@ -10,7 +10,7 @@
 # status line declaratively, so this REBUILDS status-format[0] as the pristine
 # default plus the banner. The pristine default is stashed in @mux-sf0-default
 # on the first run and reused every time after, so this is idempotent AND the
-# banner can be UPDATED just by re-running (mux reload) -- no accumulation, no
+# banner can be UPDATED just by re-running (mux reload): no accumulation, no
 # stale copy. Run from tmux.conf via run-shell at server start and on reload.
 set -eu
 

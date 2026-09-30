@@ -3,7 +3,7 @@
 
 Called by `mux setup claude`, never directly. TWO MODES OVER ONE
 IMPLEMENTATION: `plan` prints what would change and writes nothing, `write`
-does it -- and both compute the change with the SAME function, because a
+does it, and both compute the change with the SAME function, because a
 preview produced by different code than the write is a preview that can lie.
 
 WHY PYTHON AT ALL, in a package that is otherwise POSIX sh: mux ships a JSON
@@ -13,7 +13,7 @@ mangled. This runs once, at human speed, so the dependency costs nothing where
 it would be unacceptable in the status bar.
 
 IT TOUCHES ONLY MUX'S OWN ENTRIES. Every other hook in the file, and every
-other key, survives -- asserted in test/mux-setup.t, because the failure that
+other key, survives (asserted in test/mux-setup.t), because the failure that
 matters here is not "mux did not get wired", it is "mux ate somebody's
 configuration".
 """
@@ -132,7 +132,7 @@ def main():
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
 
     # ATOMIC: a temp file beside it, then a rename. The same rule mux-undo-pane
-    # had to learn the hard way -- `> file` truncates before a byte lands, so a
+    # had to learn the hard way: `> file` truncates before a byte lands, so a
     # reader that finds the file existing can read it empty.
     tmp = "%s.mux-tmp.%d" % (path, os.getpid())
     with open(tmp, "w") as fh:

@@ -7,7 +7,7 @@
 # which shipped in four separate places before shellcheck was pointed at it.
 #
 # So the bug-capable codes stay ON, and only the ones that are systematically
-# wrong ABOUT THIS CODEBASE are disabled -- each with the reason, so a future
+# wrong ABOUT THIS CODEBASE are disabled: each with the reason, so a future
 # reader can tell a considered exception from an inherited one. Anything
 # genuinely intentional but rare is disabled INLINE at the site instead, so it
 # is visible where it matters and a second accidental instance still fails.
@@ -44,13 +44,13 @@ disable=SC2209
 
 # A literal tilde in a `case` PATTERN (matching the character, not a home
 # directory) and the tilde expansion mux performs itself rather than leaving to
-# the shell -- see mux_expand_tilde.
+# the shell: see mux_expand_tilde.
 disable=SC2088
 
 # Reading a temp file after writing it in a SEPARATE statement. shellcheck
 # warns as if they shared a pipeline; they are sequential passes.
 disable=SC2094
 
-# `ls` where the alternative is a find(1) that mux deliberately avoids -- the
+# `ls` where the alternative is a find(1) that mux deliberately avoids: the
 # sandbox that runs these cannot traverse some config dirs that globs can read.
 disable=SC2012

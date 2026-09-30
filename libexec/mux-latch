@@ -32,11 +32,11 @@
 #             refusal pointing the other way. It is not, on the one axis that
 #             decides terminality: measured, the refusal lands during KEY
 #             EXCHANGE, before user authentication, so no credential is offered
-#             and nothing is spent -- and latch CAN observe it being fixed,
+#             and nothing is spent, and latch CAN observe it being fixed,
 #             because the next attempt simply answers. So: retry, BOUNDED, then
 #             terminal. Bounded because the two causes are indistinguishable
-#             from here -- something intercepting the path resolves itself, a
-#             rebuilt host does not -- and the asymmetry says to try: retrying a
+#             from here (something intercepting the path resolves itself, a
+#             rebuilt host does not), and the asymmetry says to try: retrying a
 #             permanent change costs a short delay before the human is told,
 #             while not retrying a transient one leaves a roaming attachment
 #             dead until somebody notices.
@@ -97,7 +97,7 @@ _seam() {   # <env value> <config key> [default]
 }
 
 # THE HOOK LIBRARY. A hook is named, not spelled out, and a BARE name resolves
-# against the overlay before the shipped set before PATH -- the same
+# against the overlay before the shipped set before PATH: the same
 # $MUX_DIR-over-$MUX_SHARE order layouts, themes and agents use, and the same
 # reason `context-command` already documents: this config travels between
 # machines through a dotfiles repo, so it must not carry an absolute path that
@@ -133,11 +133,11 @@ _hook() {   # <value> -> the value with its command resolved
 # meaning OFF. Without it latch cannot recover from the most common disruption
 # there is. Two failures look nothing alike to TCP:
 #
-#   the far side says goodbye (reboot, sshd stop, a router sending RST) -- ssh
+#   the far side says goodbye (reboot, sshd stop, a router sending RST): ssh
 #   returns immediately and latch retries within a second.
 #
 #   the packets simply STOP (wifi drops, the lid closes, a VPN dies, an MTU
-#   blackhole) -- nothing is refused, so ssh sits in a read that will not
+#   blackhole): nothing is refused, so ssh sits in a read that will not
 #   return until the kernel gives up on the socket. TCPKeepAlive is on by
 #   default and does not help, because a keepalive probe into a blackhole is
 #   just another lost packet; the kernel's own timer is ~2 hours.
@@ -147,7 +147,7 @@ _hook() {   # <value> -> the value with its command resolved
 # channel and give up on their own schedule: 5s x 3 means ssh returns 255 in
 # about 15 seconds and latch is back in `probing` where it belongs.
 #
-# AND ConnectTimeout, WHICH COVERS A DIFFERENT PHASE -- a NARROWER one than
+# AND ConnectTimeout, WHICH COVERS A DIFFERENT PHASE: a NARROWER one than
 # this comment used to claim. Re-measured 2026-09-27 against a peer that stalls
 # at a CHOSEN point, because the original test only ever used a peer that sent
 # nothing at all, and both conclusions drawn from it were over-general:
@@ -159,7 +159,7 @@ _hook() {   # <value> -> the value with its command resolved
 #
 # So ConnectTimeout covers only up to RECEIVING THE BANNER; the moment one
 # arrives it is satisfied and stops, which is the opposite of "governs the whole
-# setup". And ServerAlive does NOT need a session -- it bounds the post-banner
+# setup". And ServerAlive does NOT need a session: it bounds the post-banner
 # handshake perfectly well, which is the opposite of "not until a session
 # exists". Each old claim was true of the one peer it was tested against.
 #
@@ -167,7 +167,7 @@ _hook() {   # <value> -> the value with its command resolved
 # the table shows: neither covers the other's column.
 #
 # WHAT NEITHER COVERS is a peer that is CONNECTED AND ANSWERING but not making
-# progress -- a box mid-boot whose sshd completes key exchange and then blocks
+# progress: a box mid-boot whose sshd completes key exchange and then blocks
 # in authentication. ServerAlive cannot help by construction: the peer replies
 # to every probe, so no probe goes unanswered and ssh waits. That is the
 # 342s attempt in the log, and bounding it is latch's job, not an ssh option's.
@@ -197,7 +197,7 @@ RESTORE=$(_hook "$_r_seam")
 
 # A NAMED HOOK THAT DOES NOT EXIST IS A CONFIG ERROR, and it must be loud.
 # Silently carrying on means the classifier never answers, every attempt lands
-# in `unknown`, and latch retries forever against a host that is fine -- exactly
+# in `unknown`, and latch retries forever against a host that is fine, exactly
 # what a stale MUX_SHARE produced here during development, with no clue on
 # screen as to why. An empty seam is a different thing entirely and stays
 # silent: it means nobody asked for a hook.
@@ -241,7 +241,7 @@ _usage() {
 # OPTIONS ARE OPTIONS. Without this, `mux latch --help` took `--help` as the
 # HOSTNAME: it tried to ssh there, wrote a lock called `--help.lock`, and
 # retried on a backoff. Found by seeing that lock sitting in a live runtime
-# directory. `mux latch -V` was worse -- `ssh -V` SUCCEEDS, so the transport
+# directory. `mux latch -V` was worse: `ssh -V` SUCCEEDS, so the transport
 # exited cleanly, which latch reads as the human having detached, and it
 # reported success and exit 0 for a session that never existed.
 #
@@ -272,7 +272,7 @@ done
 #
 # THE PORT IS IN THE TARGET BECAUSE EVERY SEAM NEEDS IT. Before 0.84 a
 # nonstandard port could only live in the transport template or in ssh_config,
-# so a PER-HOST port was inexpressible in one template line -- and for ET the
+# so a PER-HOST port was inexpressible in one template line, and for ET the
 # probe had to be told separately, which was a documented footgun (get it wrong
 # and latch parks in a backoff about a service that is running). Now latch
 # parses it once and hands it to the template as `%p` and to the probe as its
@@ -283,7 +283,7 @@ done
 # direction rather than a toss-up. The rarer structural field takes the colon,
 # as before; making the bare word a PARTITION would silently change what
 # `mux latch box api` has always meant and would resurrect a bug this file has
-# already shipped once -- a session sharing a partition's name resuming the
+# already shipped once: a session sharing a partition's name resuming the
 # wrong set while looking like success.
 #
 # WHICH PARTITIONS EXIST IS THE FAR SIDE'S QUESTION, so latch does not validate
@@ -317,7 +317,7 @@ case $_target in
   esac ;;
 *:*:*)
   # TWO OR MORE COLONS AND NO BRACKETS: an IPv6 literal, or the pre-0.84
-  # grammar. Told apart by shape rather than by hope -- an IPv6 literal is hex
+  # grammar. Told apart by shape rather than by hope: an IPv6 literal is hex
   # digits, colons and an optional zone id, and anything else was a partition
   # in the old spelling and must be REFUSED rather than dialled.
   case $_target in
@@ -369,7 +369,7 @@ esac
 # extra has to be stood up or torn down.
 #
 # THREE LINES: the pid, the TARGET verbatim, then the SESSION (empty when none
-# was named). The target is written because the FILENAME CANNOT CARRY IT -- it
+# was named). The target is written because the FILENAME CANNOT CARRY IT: it
 # is sanitised through `tr -c`, so `northwood:work` becomes `northwood_work` and a
 # reader cannot tell that from a host genuinely called `northwood_work`. A reader
 # wanting the host takes everything before the first colon and the partition
@@ -382,8 +382,8 @@ esac
 #
 # BUT THE LOCK KEY INCLUDES IT, because single flight is per ATTACHMENT. The
 # session left the target string in 0.56, so keying the lock on the target alone
-# would make two latches to the same box -- `box api` and `box web`, which were
-# distinct targets a release ago -- collide, and the second would refuse as a
+# would make two latches to the same box (`box api` and `box web`, which were
+# distinct targets a release ago) collide, and the second would refuse as a
 # duplicate of the first.
 _run=${XDG_RUNTIME_DIR:-/tmp}/mux-latch
 mkdir -p "$_run" 2>/dev/null || true
@@ -400,7 +400,7 @@ _lock=$_run/$(printf '%s' "$_lockkey" | tr -c 'A-Za-z0-9_.-' '_').lock
 if [ -f "$_lock" ]; then
   # ONE LINE, via read: `$(cat)` would fold both lines into one string, and
   # the numeric test below would then reject a perfectly live pid (a
-  # newline is not a digit) -- so single-flight would silently stop
+  # newline is not a digit), so single-flight would silently stop
   # holding and a flap would again mean N loops against one target.
   _other=
   read -r _other 2>/dev/null <"$_lock" || _other=
@@ -420,7 +420,7 @@ trap 'rm -f "$_lock"' EXIT INT HUP TERM
 # trap covers every exit path this process controls, but a SIGKILL, a reboot
 # mid-latch, or an OOM kill leaves the file behind, and the reclaim above only
 # overwrites the lock for the target you are latching to RIGHT NOW. A lock for a
-# host you never latch to again simply stays -- which is how a `--help.lock`
+# host you never latch to again simply stays, which is how a `--help.lock`
 # from a since-fixed bug was still sitting in a live runtime directory.
 #
 # It matters more than tidiness now: the tray indicator reads this directory to
@@ -431,12 +431,12 @@ trap 'rm -f "$_lock"' EXIT INT HUP TERM
 # HERE is the right moment, by the same argument `mux themes load` already
 # makes about palette stamps: it is the only one needing no decision. A prune
 # verb must be remembered and a timer must be installed, whereas every latch
-# already opens this directory -- so each new latch tidies away the dead and the
+# already opens this directory, so each new latch tidies away the dead and the
 # steady state is however many latches you actually have.
 #
 # AFTER our own lock is written, never before: a failure in the sweep must not
 # cost this run the lock it just took. Locks only, and only ones whose pid is
-# gone -- the same liveness test the reclaim uses.
+# gone: the same liveness test the reclaim uses.
 for _stale in "$_run"/*.lock; do
   [ -e "$_stale" ] || continue
   [ "$_stale" = "$_lock" ] && continue
@@ -449,7 +449,7 @@ for _stale in "$_run"/*.lock; do
 done
 
 # say STATE DETAIL: to the terminal AND to the status seam. The terminal copy is
-# the point -- "why is my terminal dead" is the actual daily complaint, and
+# the point: "why is my terminal dead" is the actual daily complaint, and
 # autossh's silence is the thing being fixed.
 #
 # EVERY remaining argument is the detail, joined. With `"$2"` only, a call
@@ -468,7 +468,7 @@ _TTY=0
 # POSITION: leaving the alternate screen puts the cursor wherever the normal
 # screen last had it, which is mid-line after whatever the shell printed, or
 # in the middle of an earlier latch message. So a report written straight
-# there lands on top of existing text -- the garbled, overwritten output seen
+# there lands on top of existing text: the garbled, overwritten output seen
 # during a real reconnect. \r fixes the column and the erase clears whatever
 # that line still held.
 _line() {
@@ -489,14 +489,29 @@ _line() {
 # terminal and a control character in one is just damage.
 #
 # Sanitised HERE rather than in _errline because this is the single funnel every
-# detail passes through on its way to all three consumers -- the terminal, the
-# log and the status hook -- so one strip covers paths a per-source fix would
+# detail passes through on its way to all three consumers (the terminal, the
+# log and the status hook), so one strip covers paths a per-source fix would
 # keep missing.
 _clean() {   # <text> -> the same text, printable characters only
   printf '%s' "$1" | tr -dc '[:print:]' 2>/dev/null \
     || printf '%s' "$1"
 }
 
+# THE ` -- ` HERE IS A FIELD SEPARATOR, NOT PUNCTUATION, and it is deliberately
+# exempt from the sweep that took the prose dashes out of this tree. Two
+# reasons, and the first is the load-bearing one:
+#
+# THE DETAIL IS A FOREIGN MESSAGE, and foreign messages are full of colons:
+# `ssh: connect to host 10.0.0.1 port 22: Connection refused`. A colon separator
+# would put mux's own field boundary in a line with three of them, where neither
+# a reader nor a grep can find it; the dash is the one character the transports
+# do not use this way. Same argument the notes make for a symmetric banner being
+# a delimiter rather than a dash.
+#
+# AND IT IS QUOTED AS A RECORD in eight places in the working notes, each a
+# verbatim transcript of a real incident (the CR garbling, the backoff ratchet,
+# the roaming event, the two-VM lab). Rewording the format would make every one
+# of those a false quotation of what the tool printed at the time.
 _say() {   # <state> <detail...>
   _ss=$1; shift
   _sd=$(_clean "$*")
@@ -558,7 +573,7 @@ _classify_state() {   # <exit> <stderr file>
 #
 # That is what makes `%c` possible, and `%c` is why this stopped being a string.
 # The old form printed one line for the caller to word-split, so it could not
-# express an argument CONTAINING a space -- and the default transport now needs
+# express an argument CONTAINING a space, and the default transport now needs
 # exactly that: `sh -lc "mux go NAME"` is three words plus one argument, and
 # word-splitting it would hand `go` and `NAME` to the inner shell as $0 and $1.
 #
@@ -578,8 +593,8 @@ _classify_state() {   # <exit> <stderr file>
 #
 # So: %c for a transport that preserves argv (`docker exec`, `kubectl exec`),
 # %q for one that flattens to a string and re-parses remotely (ssh). %q is still
-# one LOCAL argv element -- the quoting is for the far side's shell, not this
-# one -- which is why both go through the same machinery.
+# one LOCAL argv element (the quoting is for the far side's shell, not this
+# one), which is why both go through the same machinery.
 #
 # A template using %s rather than %c keeps the pre-0.31 behaviour of always
 # creating, so attach-only is opt-in by template and no existing config breaks.
@@ -637,8 +652,8 @@ _errf=$(mktemp)
 trap '$RESTORE >/dev/null 2>&1 || true
   rm -f "$_lock" "$_errf"' EXIT INT HUP TERM
 
-# ATTACH-ONLY ON RETRY. The FIRST attempt may create -- you asked to latch onto
-# something -- but a REattach that finds nothing means the host rebooted, and
+# ATTACH-ONLY ON RETRY. The FIRST attempt may create (you asked to latch onto
+# something), but a REattach that finds nothing means the host rebooted, and
 # handing over a fresh empty session where the work was is the worst available
 # answer. So every attempt after the first asks for `mux go --attach-only`,
 # which refuses rather than creates, and the classifier turns the far side's own
@@ -647,7 +662,7 @@ trap '$RESTORE >/dev/null 2>&1 || true
 # NEGOTIATED, ONCE, LAZILY, and this is the first real consumer of `mux
 # capabilities`. A remote too old for the flag answers exit 2 with a usage
 # block, so using it blind would make latch work perfectly until the first drop
-# and then break -- the exact discover-by-failure the handshake exists to end.
+# and then break: the exact discover-by-failure the handshake exists to end.
 # The query is deferred to the first RETRY, so the happy path pays nothing, and
 # cached for the run. A remote that cannot do it degrades to pre-0.31 behaviour
 # rather than to nothing: a stale far side is a reason to create, not to stop.
@@ -657,7 +672,7 @@ _remote_attach_only=          # empty / yes / no, decided at most once per run
 # terminal, so it costs nothing in the steady state, and it resolves the one
 # ambiguity latch cannot read off an exit code.
 #
-# THE CASE: the remote tmux SERVER goes away under a live attach -- a
+# THE CASE: the remote tmux SERVER goes away under a live attach; a
 # kill-server, a `mux kill-all`, or a crash. tmux exits 1 and writes "lost
 # server" to the TERMINAL, not to stderr, so all latch ever sees is the
 # transport's own generic goodbye ("Connection to host closed."). That is
@@ -666,7 +681,7 @@ _remote_attach_only=          # empty / yes / no, decided at most once per run
 #
 # One read-only question separates them. `mux capabilities` is the right one: it
 # changes nothing, it is cheap, and even a mux too old to know the verb exits 2
-# with usage -- which still proves the host is up and mux ran. So any answer
+# with usage, which still proves the host is up and mux ran. So any answer
 # from mux means the far side is alive and the failure was ABOUT THE SESSION,
 # while a transport-level code means the connection itself is gone too.
 _remote_alive() {
@@ -700,7 +715,7 @@ _remote_can_attach_only() {
     # Also an answer, and the one this was built for.
     _remote_attach_only=no ;;
   *)
-    # COULD NOT ASK -- the transport failed, which says nothing
+    # COULD NOT ASK: the transport failed, which says nothing
     # whatever about the remote's version. Caching `no` here would
     # record a network outage as a capability verdict and keep it for
     # the life of the run, so this stays UNDECIDED and asks again
@@ -717,7 +732,7 @@ _remote_can_attach_only() {
 #
 # It assigns rather than prints, and that is not a style choice. `_cmd=$(...)`
 # runs the function in a SUBSHELL, so every variable it sets is discarded when
-# the substitution ends -- which silently threw away the negotiation cache on
+# the substitution ends, which silently threw away the negotiation cache on
 # every single retry. latch re-queried the remote each time while its own
 # comments and the man page both claimed "negotiated once, lazily". The
 # mutation test is what found it: corrupting the cache changed NOTHING, because
@@ -725,12 +740,12 @@ _remote_can_attach_only() {
 #
 # Keyed on ATTEMPTS, not on loop iterations. `_tries` counts trips round the
 # state machine, and a `blocked` wait is one of those without ever touching the
-# transport -- so using it here made the very first attach ask for attach-only
+# transport, so using it here made the very first attach ask for attach-only
 # after any wait at all, which is precisely the case that must CREATE.
 #
 # WITH NO SESSION NAMED, the command is `mux resume`, NOT a `go` at some guessed
 # name. It used to fall back to the HOSTNAME, so `mux latch northgate` asked
-# the far side for a session literally called `northgate` -- which succeeds,
+# the far side for a session literally called `northgate`, which succeeds,
 # hands you a session that is not yours, and on retry asks attach-only for a
 # name that never existed and reports `gone`. A wrong answer that looks like a
 # right one.
@@ -748,7 +763,7 @@ _remote_cmd() {   # -> sets $_cmd
   # that takes one: every other verb acts on whatever the far side's own
   # context resolved, which for a login shell is its default. So naming a
   # partition selects the resume form, and attach-only does not apply to
-  # it -- deliberately, because resume is already the verb that invents
+  # it, deliberately, because resume is already the verb that invents
   # nothing. A focus SESSION it does not hold exits 3 there, which the
   # classifier reads as `gone`, so the loud failure comes from the far
   # side's own contract rather than from a flag negotiated here.
@@ -820,7 +835,7 @@ _wait() {   # <seconds> <state> <why>
 }
 
 # The transport's operative complaint: its LAST non-empty stderr line, not its
-# first. `head -1` looked obvious and was wrong on the very first live run --
+# first. `head -1` looked obvious and was wrong on the very first live run:
 # `ssh -t` from a non-tty leads with "Pseudo-terminal will not be allocated
 # because stdin is not a terminal.", so every report named a harmless warning
 # and buried "Could not resolve hostname" underneath it. The same would have hit
@@ -876,7 +891,7 @@ while :; do
   fi
 
   # Reachability, ONLY if someone supplied a probe. NO PROBE MEANS NO
-  # OPINION, and the attempt itself becomes the probe -- which has to be
+  # OPINION, and the attempt itself becomes the probe, which has to be
   # tested here rather than inferred from _ask, because _ask answers 2 both
   # for "no hook configured" and for "the hook ran and could not tell".
   # Those are opposite instructions: the first says proceed, the second
@@ -919,7 +934,7 @@ while :; do
   #
   # It is worth reporting because the silence is real and can be long. A
   # reboot of the far side on 2026-09-24 produced attempts bounded at 10s by
-  # ConnectTimeout, and then ONE that ran 5m42s with nothing on screen --
+  # ConnectTimeout, and then ONE that ran 5m42s with nothing on screen:
   # neither timeout covers the gap after the banner and before a session
   # exists. Saying so afterwards at least turns a dead-looking terminal into
   # a number.
@@ -955,7 +970,7 @@ while :; do
   # tmux dying with ssh never sends its teardown, so the terminal is left
   # in tmux's mode: cursor hidden, mouse reporting on (moving the mouse
   # then types control characters at your shell), alternate screen still
-  # up. `stty sane` cannot fix that -- those modes live in the terminal
+  # up. `stty sane` cannot fix that: those modes live in the terminal
   # EMULATOR, not the kernel's line discipline.
   #
   # First, not last, for two reasons. The human is sitting in front of a
@@ -983,7 +998,7 @@ while :; do
     # WHAT THE FAR SIDE SAID COMES FIRST, ALWAYS. An earlier version
     # of this replaced that message with a guess at the cause ("its
     # tmux server went away") whenever stderr carried no `mux:`
-    # prefix -- and tmux's own messages carry none. So a `mux resume`
+    # prefix, and tmux's own messages carry none. So a `mux resume`
     # that could not attach printed "open terminal failed: not a
     # terminal", which is the entire answer, and latch threw it away
     # to report `gone` about a host with five healthy sessions.
@@ -1016,7 +1031,7 @@ while :; do
     # state. latch cannot observe authorized_keys being fixed, which
     # is true and is the reason this one stops; it CAN observe a host
     # key being fixed, so claiming otherwise was advice that could
-    # not come true -- the same defect this project already recorded
+    # not come true: the same defect this project already recorded
     # in `mux agent-doctor`'s remedy text.
     _say denied "this needs a human: latch cannot see when a" \
       "credential is fixed, so it stops rather than retrying" \
@@ -1026,8 +1041,8 @@ while :; do
     # THE FAR SIDE IS NOT WHO WE HAVE ON FILE. Two causes, and from
     # here they are the same bytes: something is interfering with the
     # path, or the host legitimately changed its key. So retry a
-    # bounded number of times -- which costs nothing, since the
-    # refusal lands before any credential is offered -- and only then
+    # bounded number of times (which costs nothing, since the
+    # refusal lands before any credential is offered), and only then
     # call it permanent.
     _untrusted=$((_untrusted + 1))
     if [ "$_untrusted" -le "$UNTRUSTED_TRIES" ]; then
@@ -1037,7 +1052,7 @@ while :; do
       # first one. It printed "the far side's identity does".
       # Accumulated into a variable rather than continued
       # across lines, so each half is a line a mutation can
-      # target -- a line-continuation backslash cannot be a
+      # target: a line-continuation backslash cannot be a
       # corpus anchor.
       _uw="the far side's identity does not match what is"
       _uw="$_uw on file; something may be intercepting, or"
@@ -1053,7 +1068,7 @@ while :; do
     # failed.") is the least informative part of it, while the
     # fingerprint, the offending file and line, and the exact remedy
     # command sit above. mux must not learn ssh's wording to pick
-    # those out -- so it quotes the lot, bounded, and lets the
+    # those out, so it quotes the lot, bounded, and lets the
     # transport explain itself.
     _say untrusted "unchanged after $_untrusted attempts, so this" \
       "is not interference in the path: treat it as the far" \

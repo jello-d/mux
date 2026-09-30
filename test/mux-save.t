@@ -46,7 +46,7 @@ TMUXLOG=$T/log; PROJDIR=$T/proj; WINDOWS=$T/win; PANES=$T/panes; THEMEF=$T/theme
 export TMUXLOG PROJDIR WINDOWS PANES THEMEF
 PATH=$T/bin:$PATH; export PATH
 printf '0 main\n' >"$WINDOWS"
-# index|bottom|agent|command -- the middle pane is the agent, the last the
+# index|bottom|agent|command: the middle pane is the agent, the last the
 # full-width bottom, i.e. exactly the shipped default arrangement.
 {
   printf '0|||bash\n'
@@ -76,7 +76,7 @@ esac
 [ ! -e "$T/conf/layouts/proj.layout" ] || fail "a redundant layout was written"
 [ -z "$(row)" ] || fail "a redundant row was written: [$(row)]"
 
-# --- a theme that is NOT the hashed one is a real deviation, so it is kept --
+# --- a theme that is NOT the hashed one is a real deviation, so it is kept:
 printf 'red\n' >"$THEMEF"
 _o=$(save) || fail "save with a theme failed: $_o"
 case "$(row)" in *theme=red*) ;; *) fail "an explicit theme was dropped" ;; esac

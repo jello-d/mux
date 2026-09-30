@@ -40,7 +40,7 @@ _beat=${3:-4}
 say() { printf '  %s\n' "$*"; }
 hook() { mux agent-hook "$1" >/dev/null 2>&1 || true; }
 
-printf '\n  [demo] %s -- a pretend agent, driving mux through real hooks\n' \
+printf '\n  [demo] %s: a pretend agent, driving mux through real hooks\n' \
   "$_label"
 printf '  [demo] nothing here touches your real sessions: its own\n'
 printf '  [demo] tmux server and its own agent-state namespace.\n\n'

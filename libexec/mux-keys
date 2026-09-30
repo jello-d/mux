@@ -13,7 +13,7 @@
 # asserts both directions between the two files, so a binding added without a
 # description fails, and so does a description for a key nothing binds. mux has
 # already paid for a hand-written key list that stopped growing with the
-# features -- `mux check` asserted `( ) b r R` while the fragment had also bound
+# features: `mux check` asserted `( ) b r R` while the fragment had also bound
 # `u` and `E`, and reported a green check against a server missing both.
 #
 # THE PREFIX IS READ FROM THE SERVER rather than assumed to be C-b. A user who

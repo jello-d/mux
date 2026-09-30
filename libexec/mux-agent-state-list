@@ -25,7 +25,7 @@
 # transport carries a number that is already an answer.
 #
 # Sessions are derived from the state FILES, not from `tmux list-sessions`, so
-# this answers headless -- from a tray daemon, over ssh, at boot, with no tmux
+# this answers headless: from a tray daemon, over ssh, at boot, with no tmux
 # client and no server attached. That is the whole point: the intended caller is
 # `ssh <host> mux agent-list`.
 #
@@ -37,7 +37,7 @@
 # "this host has no agents" from "I could not reach this host". No agents is an
 # empty list and exit 0. This command has no failure of its own, so a non-zero
 # exit can only have come from the transport (ssh unreachable, mux not on the
-# remote PATH, a dead box) -- and a multi-host presenter MUST render that as
+# remote PATH, a dead box), and a multi-host presenter MUST render that as
 # unknown rather than as calm. An unreachable host that reads as idle is how you
 # stop checking a machine that needed you.
 set -eu
@@ -47,7 +47,7 @@ _lib=$(dirname "$0")
 . "$_lib/mux-agent-state_lib"
 
 # No NS given: resolve the caller's partition rather than guessing a name. The
-# same resolution agent-summary does, and for the same reason -- this is a
+# same resolution agent-summary does, and for the same reason: this is a
 # headless caller with no $TMUX to take a namespace from, and the hardcoded
 # fallback it used to have went stale and silently reported nothing.
 _ns=${1:-}

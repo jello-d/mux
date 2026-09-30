@@ -25,7 +25,7 @@ command -v python3 >/dev/null 2>&1 || {
 
 . "$HERE/libexec/mux-json_lib"
 
-# rt LABEL VALUE -- emit VALUE as JSON, parse it, and require the parsed value
+# rt LABEL VALUE: emit VALUE as JSON, parse it, and require the parsed value
 # to be byte-identical to what went in.
 rt() {
   _l=$1; _v=$2
@@ -91,7 +91,7 @@ eq() { [ "$2" = "$3" ] || fail "$1: got [$2] want [$3]"; }
 eq num-int    "$(mux_json_num 5)"    '5'
 eq num-zero   "$(mux_json_num 0)"    '0'
 eq num-neg    "$(mux_json_num -3)"   '-3'
-# NULL, NOT ZERO. A count mux could not determine is not a count of none --
+# NULL, NOT ZERO. A count mux could not determine is not a count of none:
 # the same conflation "empty is exit 0" exists to prevent one level up, where
 # a quiet host and an unreachable one must not draw the same tile.
 eq num-empty  "$(mux_json_num '')"   'null'
@@ -108,7 +108,7 @@ eq arr-two   "$(printf '{"a":1}\n{"b":2}\n' | mux_json_array)" \
   '[{"a":1},{"b":2}]'
 eq arr-one   "$(printf '{"a":1}\n' | mux_json_array)"          '[{"a":1}]'
 # EMPTY IS `[]`, NOT NOTHING. A consumer parses one document either way, so a
-# host with no sessions answers the same SHAPE as one with five -- which is
+# host with no sessions answers the same SHAPE as one with five, which is
 # the JSON form of "empty is exit 0".
 eq arr-empty "$(printf '' | mux_json_array)"                   '[]'
 eq arr-blank "$(printf '\n\n' | mux_json_array)"               '[]'

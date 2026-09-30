@@ -1,4 +1,4 @@
-"""render.py -- the owned tray glyphs, which had no test at all.
+"""render.py: the owned tray glyphs, which had no test at all.
 
 render.py is the ONLY place the indicator's visual identity lives, and every
 mistake it can make is a QUIET one: the tray shows a picture, nobody diffs a
@@ -9,7 +9,7 @@ The three that matter most:
 
   THE BYTE ORDER. IconPixmap is ARGB32 in NETWORK (big-endian) order per the
   StatusNotifierItem spec, and PIL hands out RGBA. Getting that permutation
-  wrong does not crash -- it silently swaps the channels, so the icon renders in
+  wrong does not crash: it silently swaps the channels, so the icon renders in
   believable but wrong colours, and on some hosts the alpha lands in a colour
   channel and the whole tile goes opaque black.
 
@@ -18,7 +18,7 @@ The three that matter most:
   would pass every structural check and destroy the feature.
 
   IT MUST NOT RAISE on a state it has never heard of. The state comes from
-  `mux agent-summary` -- soon from a REMOTE one, over ssh, possibly a different
+  `mux agent-summary`: soon from a REMOTE one, over ssh, possibly a different
   version. An unknown word must fall back, not take the daemon down.
 """
 import unittest
@@ -101,7 +101,7 @@ class StatesAreDistinct(unittest.TestCase):
 class CountIsIgnoredWhereItShouldBe(unittest.TestCase):
     """idle draws a check and none draws no badge, so neither shows a number.
 
-    Pinned because the natural refactor -- "just always draw the count" -- is
+    Pinned because the natural refactor ("just always draw the count") is
     invisible in code review and produces a tray icon claiming `idle 4`, which
     reads as four things needing attention when the truth is the opposite.
     """
@@ -119,7 +119,7 @@ class CountIsIgnoredWhereItShouldBe(unittest.TestCase):
 
         idle looks the same with or without a count (keyed on STATE), while
         blocked does not (keyed on its count). If check-vs-number were keyed on
-        `count is None` -- as it was -- then blocked WITH NO COUNT would draw
+        `count is None` (as it was), then blocked WITH NO COUNT would draw
         idle's check: the calmest glyph there is, on the loudest state. `_parse`
         yields None for a `-` or non-numeric count, so that was reachable.
         """
@@ -140,7 +140,7 @@ class UnreachableIsNotCalm(unittest.TestCase):
     and drew a quiet grey tile, asserting the one thing we do not know. A tray
     confidently reporting a machine it cannot see is worse than no tray at all,
     and preventing exactly that is why the cross-machine design pins "empty is
-    exit 0" -- so a quiet host and an unreachable one can never collapse into
+    exit 0", so a quiet host and an unreachable one can never collapse into
     one answer.
     """
 
@@ -159,7 +159,7 @@ class UnreachableIsNotCalm(unittest.TestCase):
         two halves of unknown's look cover for each other. Mutation testing
         showed it: delete the frame row and the tile STILL differs from `none`,
         because the badge row alone is enough to make the pixels differ. Two
-        properties, one assertion, and neither individually killable -- so each
+        properties, one assertion, and neither individually killable, so each
         gets its own. What matters here is that an unreachable host does not
         wear the agentless colour."""
         self.assertIn("unknown", STATE_FRAME)
@@ -167,12 +167,12 @@ class UnreachableIsNotCalm(unittest.TestCase):
 
     def test_unknown_has_a_BADGE_and_none_does_not(self):
         """The other half. `none` deliberately has no badge, so a badge is what
-        carries "I have something to say about this host" -- here, a `?`."""
+        carries "I have something to say about this host": here, a `?`."""
         self.assertIn("unknown", STATE_BADGE)
         self.assertNotIn("none", STATE_BADGE)
 
     def test_unknown_ignores_a_count(self):
-        """There is no count to draw -- that is what unknown MEANS. A number
+        """There is no count to draw: that is what unknown MEANS. A number
         here would be a quantity we invented."""
         self.assertEqual(icon_pixmap("unknown", None)[0][2],
                          icon_pixmap("unknown", 4)[0][2])
@@ -208,7 +208,7 @@ class HostIdentity(unittest.TestCase):
     """The host colour pair, which answers "WHICH machine is this?" at a glance.
 
     The pair comes from `mux host-color`, so the same rule that paints a host's
-    status-bar chip paints its tray item -- otherwise the two disagree about
+    status-bar chip paints its tray item: otherwise the two disagree about
     which machine is which and neither looks broken. The bg becomes the screen
     and the fg paints the `>_`, which is what each colour is FOR: the pair
     exists so fg is legible on bg, so that legibility comes for free instead of
@@ -216,8 +216,8 @@ class HostIdentity(unittest.TestCase):
 
     THE INVARIANT THAT MATTERS MOST is the last test: host colour must never be
     able to make one state look like another. Identity and state are separate
-    dimensions -- frame and badge carry state, screen and prompt carry identity
-    -- and a change that let them collide would quietly cost the icon its job.
+    dimensions (frame and badge carry state, screen and prompt carry identity
+    and a change that let them collide would quietly cost the icon its job.
     """
 
     def test_parses_the_pair(self):
@@ -242,7 +242,7 @@ class HostIdentity(unittest.TestCase):
         self.assertNotEqual(a, b)
 
     def test_a_host_differs_from_the_neutral_look(self):
-        """Otherwise the pair is being parsed and then ignored -- which would
+        """Otherwise the pair is being parsed and then ignored, which would
         pass every "it renders" check while the feature did nothing."""
         self.assertNotEqual(
             icon_pixmap("idle", None, host=parse_pair(GREY))[0][2],
@@ -250,7 +250,7 @@ class HostIdentity(unittest.TestCase):
 
     # THE NEXT TWO ARE SPLIT ON PURPOSE, and the tile-level assertion above is
     # why they have to be. The host pair reaches the glyph through TWO
-    # independent places -- the screen takes its bg, the prompt takes its fg --
+    # independent places (the screen takes its bg, the prompt takes its fg),
     # and either one alone is enough to make the whole tile differ from neutral.
     # So a single tile-level check kills NEITHER: delete one and the other still
     # carries it. Measured, not guessed, one commit after the same shape
@@ -262,7 +262,7 @@ class HostIdentity(unittest.TestCase):
                             _screen("idle"))
 
     def test_the_PROMPT_takes_the_hosts_foreground(self):
-        """And exactly the fg, not a lift of it -- the pair exists so fg is
+        """And exactly the fg, not a lift of it: the pair exists so fg is
         legible on bg, so pairing them here gets that legibility for free
         instead of re-deriving it and risking a pale host colour."""
         fg, _bg = parse_pair(GREY)
@@ -278,7 +278,7 @@ class HostIdentity(unittest.TestCase):
         """The invariant. Identity tints the screen and the prompt; STATE owns
         the frame and the badge. If a host colour could collapse two states the
         icon would stop answering the question it exists for, and it would do so
-        silently -- on one host only, which is the hardest kind to notice."""
+        silently: on one host only, which is the hardest kind to notice."""
         for pair in (GREY, CREAM):
             host = parse_pair(pair)
             seen = {}
@@ -290,7 +290,7 @@ class HostIdentity(unittest.TestCase):
                 seen[key] = state
 
     def test_unreachable_keeps_its_host_colour(self):
-        """`unknown` still has to say WHICH host is unreachable -- that is the
+        """`unknown` still has to say WHICH host is unreachable: that is the
         one moment identity matters most. It also stays distinct from the
         reachable states on the same host."""
         host = parse_pair(GREY)
@@ -303,8 +303,8 @@ class HostMark(unittest.TestCase):
     """The three-character mark, which is what actually makes two hosts tell
     apart. COLOUR CANNOT DO IT: mux derives one of eight pairs by hashing, and
     with only three machines `northgate` and `northwood` already collide. No
-    wider palette fixes that either -- the birthday paradox beats you long
-    before the colours run out -- so identity needs a channel that is not a hue.
+    wider palette fixes that either (the birthday paradox beats you long
+    before the colours run out), so identity needs a channel that is not a hue.
     """
 
     def test_the_tail_is_what_distinguishes(self):
@@ -334,7 +334,7 @@ class HostMark(unittest.TestCase):
     def test_it_is_derived_from_the_NAME_alone(self):
         """Never from the set on screen. A set-aware rule could guarantee
         uniqueness, but the mark would then change when you latched somewhere
-        new -- and a label that moves is worse than one that rarely collides,
+        new, and a label that moves is worse than one that rarely collides,
         because you stop trusting any of them."""
         self.assertEqual(host_mark("northwood"), "NWD")   # same answer, always
 
@@ -360,7 +360,7 @@ class MarkOnTheTile(unittest.TestCase):
     def test_no_mark_ink_is_a_state_colour(self):
         """None of them may read as a state. A state-coloured mark was tried
         and rejected: it was the most legible option of all, and it made host
-        identity flicker as the agent worked -- the one thing identity may not
+        identity flicker as the agent worked: the one thing identity may not
         do. Widening the palette is the way that creeps back in, one plausible
         hue at a time, so every slot is checked rather than the first one."""
         for c in (MARK_LOCAL_INK,) + tuple(MARK_PALETTE):
@@ -413,7 +413,7 @@ class MarkOnTheTile(unittest.TestCase):
 
     def test_the_STRIP_itself_is_drawn(self):
         """Separate from the letters, because either alone makes a marked tile
-        differ from an unmarked one -- so a single "they differ" assertion
+        differ from an unmarked one, so a single "they differ" assertion
         kills NEITHER. Same shape as unknown's frame-vs-badge and the host
         pair's screen-vs-prompt: when a feature reaches the output through more
         than one path, assert each path.
@@ -434,7 +434,7 @@ class MarkOnTheTile(unittest.TestCase):
 
     def test_the_mark_is_sized_by_HEIGHT_not_width(self):
         """The one choice that made it legible. Fitting the glyph to a narrow
-        column gave a 7px capital on a 32px tile -- present, unreadable, and
+        column gave a 7px capital on a 32px tile: present, unreadable, and
         indistinguishable between hosts at the size a tray actually draws. The
         letters are sized to a third of the tile and allowed to be as wide as
         they need, because the strip beneath them means width costs nothing.
@@ -519,7 +519,7 @@ class PartitionLetter(unittest.TestCase):
     """The A-Z badge that says WHICH partition an item speaks for.
 
     It exists because one host can now publish several items, and the host mark
-    cannot tell them apart -- they are the same machine, so it is the same
+    cannot tell them apart: they are the same machine, so it is the same
     three letters and the same colour. The letter is the only channel left.
 
     IT TAKES THE `_` CURSOR'S SLOT rather than sitting beside it. There is
@@ -571,7 +571,7 @@ class PartitionLetter(unittest.TestCase):
     def test_it_BLINKS_on_the_cursor_phase(self):
         """The user's framing, and the reason it reads as the cursor rather
         than as a fourth thing on the tile. On the OFF frame there is no
-        cursor, so there is no letter either -- and the off frame is then
+        cursor, so there is no letter either, and the off frame is then
         byte-identical to an unlettered one, which is what proves the letter
         is drawn on that phase and nowhere else."""
         for st in STATES:
@@ -584,7 +584,7 @@ class PartitionLetter(unittest.TestCase):
         """The mark's own confinement test asserts the strip changes nothing
         outside its band; this is the other direction. The letter is drawn
         BEFORE the strip, so an oversized one would simply vanish underneath
-        it -- silently, and only on the multi-host tray, which is exactly the
+        it: silently, and only on the multi-host tray, which is exactly the
         case the letter exists for.
         """
         from mux_indicator.render import _mark_metrics, _tile
@@ -610,7 +610,7 @@ class PartitionLetter(unittest.TestCase):
         EXACT, because _PART_INK is unique on the tile. It used to be
         byte-identical to the badge's ink, which forced this to be a DELTA
         against an unlettered tile and still undercounted wherever the letter
-        overlapped `idle`'s check -- two overlays sharing an ink cannot be
+        overlapped `idle`'s check: two overlays sharing an ink cannot be
         told apart by any pixel assertion. Giving the letter its own value
         made the measurement honest instead of clever.
 
@@ -717,7 +717,7 @@ class PartitionLetter(unittest.TestCase):
         """A state that draws a badge keeps EVERY pixel of its letter.
 
         The letter is drawn after the badge, and that ordering is what removed
-        the size ceiling rather than negotiating with it -- the same move the
+        the size ceiling rather than negotiating with it: the same move the
         host mark made in 0.47. Drawn before it instead, a 0.46 letter loses
         about 45% of its ink to the badge's overhang on every state that has
         one, so an equality here separates the two placements outright.
@@ -738,7 +738,7 @@ class PartitionLetter(unittest.TestCase):
 
         Measured before it was clamped: `W` started 7px inside the strip on a
         32px tile, at every size. The clamp shrinks the glyph rather than
-        moving it, and it only bites on a marked tile -- height stays the
+        moving it, and it only bites on a marked tile: height stays the
         primary rule, because fitting a glyph to a column is what made 0.44
         unreadable.
         """
@@ -807,7 +807,7 @@ class FontFallback(unittest.TestCase):
     def test_the_cap_font_loop_TERMINATES_on_a_default_font(self):
         """_cap_font walks sizes down looking for one whose cap height fits.
         A bitmap default font ignores the requested size, so the loop can run
-        to the bottom -- it must return the floor rather than fall off."""
+        to the bottom: it must return the floor rather than fall off."""
         import mux_indicator.render as R
         old = R._COND
         R._COND = ("/nonexistent/NotAFont.ttf",)

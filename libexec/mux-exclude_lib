@@ -1,6 +1,6 @@
 #!/bin/sh
 # mux-exclude_lib - shared paths for per-client session hiding (mux hide/show).
-# A tmux client -- one attachment, keyed by its client_name (its tty) -- hides
+# A tmux client, one attachment, keyed by its client_name (its tty), hides
 # sessions from its own status strip and ( / ) cycling. client_name is unique
 # per attachment, so it alone keys the set; no socket namespace is needed. The
 # set lives under XDG_RUNTIME_DIR, so it clears on reboot. Sourced by the mux
@@ -14,7 +14,7 @@ mux_exclude_file() {
 }
 
 # The only delimiter safe for a set of session names. A name MAY contain a
-# space -- tmux accepts `my project` and reports it intact -- so a space-joined
+# space (tmux accepts `my project` and reports it intact), so a space-joined
 # set cannot be searched for one member without finding its words. A newline
 # cannot appear: tmux's own -F output is line oriented and escapes one (a name
 # built with a literal newline comes back as `a\nb`), so every name mux ever
@@ -37,7 +37,7 @@ mux_excluded() {
 # `project`. Measured, with exactly one session hidden.
 #
 # Takes the SET rather than the client so a caller reads the file once and then
-# tests every session against it -- the status strip does this on every redraw.
+# tests every session against it: the status strip does this on every redraw.
 mux_excluded_has() {
   case "$MUX_EXCL_NL$1$MUX_EXCL_NL" in
   *"$MUX_EXCL_NL$2$MUX_EXCL_NL"*) return 0 ;;

@@ -21,7 +21,7 @@ _name=mux-kill
 mkdir -p "$T/bin" "$T/conf/partitions" "$T/proj"
 
 # The stub records every destructive call, so a test can assert one did NOT
-# happen -- the point of most cases here.
+# happen: the point of most cases here.
 LIVE=$T/live
 KILLED=$T/killed
 export LIVE KILLED

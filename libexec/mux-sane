@@ -8,8 +8,8 @@
 # run it by hand after any wedged session, including one latch never touched.
 #
 # IT LIVES IN libexec, NOT share/latch, and the distinction is the point. The
-# hooks under share/latch encode TRANSPORT-specific knowledge -- ssh's exit
-# codes, ssh's credential model -- and exist so a mosh or Eternal Terminal user
+# hooks under share/latch encode TRANSPORT-specific knowledge (ssh's exit
+# codes, ssh's credential model), and exist so a mosh or Eternal Terminal user
 # can replace them. A wedged terminal is the same wedged terminal whatever
 # carried the bytes, so this is mux's own helper with a verb of its own, and
 # latch merely points its seam at it.
@@ -24,11 +24,11 @@
 # WHY `stty sane` DOES NOT FIX IT, which is the crux. There are two separate
 # pieces of state and stty only touches one:
 #
-#   the TTY LINE DISCIPLINE, in the kernel -- echo, canonical mode, signal
+#   the TTY LINE DISCIPLINE, in the kernel: echo, canonical mode, signal
 #   characters. `stty sane` fixes this, and it is why stty helps a little.
 #
 #   the TERMINAL EMULATOR's modes, set by escape sequences and held by the
-#   emulator itself -- alternate screen, cursor visibility, mouse reporting,
+#   emulator itself: alternate screen, cursor visibility, mouse reporting,
 #   bracketed paste. The kernel has never heard of these, so no stty can
 #   restore them. Only sending the matching escape sequences can.
 #
@@ -45,8 +45,8 @@
 #
 # ONE DELIBERATE OMISSION. tmux clears the screen (ESC[H ESC[J) just BEFORE
 # leaving the alternate screen. Replaying that would be actively harmful here:
-# if the terminal is NOT in the alternate screen -- ssh died early, or something
-# already tidied up -- the clear would wipe the user's real screen instead of a
+# if the terminal is NOT in the alternate screen (ssh died early, or something
+# already tidied up), the clear would wipe the user's real screen instead of a
 # scratch buffer. It is also redundant, since leaving the alternate screen
 # discards its contents anyway. Being wrong in that direction destroys work, so
 # the clear is dropped and everything else is kept.

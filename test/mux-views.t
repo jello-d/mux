@@ -4,7 +4,7 @@
 # tmux sizes a window to ONE client, so with two attached at different
 # dimensions there is no size that suits both. By default the window follows
 # whichever client used it last, which means every window resizes as you cycle
-# sessions and every mux layout is re-pinned each time -- the "why did that
+# sessions and every mux layout is re-pinned each time: the "why did that
 # redraw" that turned out to be a forgotten ssh window still attached at a
 # different height.
 #
@@ -48,7 +48,7 @@ printf '161x64 161x63' >"$WINSZ"
 
 # One client per line: NAME WxH SESSION ACTIVITY(epoch)
 # calm: nothing else is on THIS client's session (alpha). The second client
-# differs in size but sits on bravo, so it contends over nothing -- tmux sizes
+# differs in size but sits on bravo, so it contends over nothing: tmux sizes
 # a window from the clients attached to ITS session, not from every client.
 calm() { printf '/dev/pts/0 161x64 alpha 100\n/dev/pts/1 161x56 bravo 100\n' \
   >"$CLIENTS"; }
@@ -73,7 +73,7 @@ _o=$(views); has "$_o" "2 sizes attached" "server-wide sizes not reported"
 
 # --- the chip is ALWAYS drawn ----------------------------------------------
 # Fixed furniture at the right edge: the bar must not change width as tension
-# comes and goes, and the MODE stays legible when nothing is contending -- a
+# comes and goes, and the MODE stays legible when nothing is contending: a
 # floor pinned last week and forgotten is otherwise invisible until it
 # surprises you.
 calm
@@ -103,7 +103,7 @@ printf 'latest\n' >"$OPT"
 # Four states, four colours, and the shape must not move between them: that
 # separation is the whole design.
 style() { views --chip /dev/pts/0 | grep -o 'fg=colour[0-9]*' | head -1; }
-# calm is NOT "no other client" -- it is "nothing contends for THIS window".
+# calm is NOT "no other client": it is "nothing contends for THIS window".
 # The second client here is a different size, and irrelevant, because it sits
 # on another session: tmux sizes a window from the clients attached to ITS
 # session. Testing server-wide while colouring per-window made the chip report
@@ -127,17 +127,17 @@ no_has "$(views --chip /dev/pts/0)" "bg=colour202" \
 printf '161x56 161x63' >"$WINSZ"          # window BIGGER: content off screen
 _c=$(views --chip /dev/pts/0)
 has "$_c" "bg=colour202" \
-  "clipped must wear the caution colour -- it is the one that costs you"
+  "clipped must wear the caution colour: it is the one that costs you"
 # The FOREGROUND is the half that makes it read as an alarm rather than a
 # label, and it is deliberately not the near-black the blocked chip uses on
-# this same orange -- the two must not be confusable at a glance.
+# this same orange: the two must not be confusable at a glance.
 has "$_c" "fg=colour226" "clipped lost its hazard-yellow glyph"
 [ "$(glyph)" = "✱" ] || fail "clipped changed the SHAPE; only colour may move"
 printf '161x64 161x63' >"$WINSZ"
 
 # A client's HEIGHT includes its status line(s), and the window gets what is
 # left. Comparing against the RAW height made every view read as one row of
-# slack -- including the client actually setting the size -- which is invisible
+# slack (including the client actually setting the size), which is invisible
 # until two differently-sized clients are put side by side and both come back
 # the same.
 tense

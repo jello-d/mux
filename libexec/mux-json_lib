@@ -7,7 +7,7 @@
 # emits: a consumer gets types and structure instead of a field order it has
 # to agree about out of band. What JSON needs that TSV does not is correct
 # ESCAPING, and hand-rolled quoting is the exact class of bug this codebase
-# keeps finding -- a comma that truncated a tmux format loop, a session name
+# keeps finding: a comma that truncated a tmux format loop, a session name
 # that word-split in three places, a backslash that doubled a spinner.
 #
 # So the escaping is done ONCE, here, and proved against a real parser rather
@@ -29,7 +29,7 @@
 #
 # LC_ALL=C SO AWK WORKS IN BYTES. Every byte of a UTF-8 sequence is >= 0x80,
 # which is above the control range, so a multibyte character passes through
-# untouched and arrives in the output as the same bytes it came in as -- which
+# untouched and arrives in the output as the same bytes it came in as, which
 # is what JSON wants, since a JSON string is UTF-8 and needs no \u for
 # anything above 0x1F. Left to a UTF-8 locale, awk implementations disagree
 # about whether substr counts characters or bytes, and disagreeing is worse
@@ -47,7 +47,7 @@
 # not a style choice: awk processes ESCAPE SEQUENCES in a -v assignment, so a
 # backslash in the input is consumed by awk before this code ever sees it.
 # Measured on the second hand-check ever run against this function: `a \ b`
-# came back as `a  b`, silently, with the backslash gone -- data loss in the
+# came back as `a  b`, silently, with the backslash gone: data loss in the
 # one function whose entire job is not losing characters. ENVIRON is bytes.
 mux_json_str() {
   MUX_JSON_V="${1-}" LC_ALL=C awk '
@@ -73,7 +73,7 @@ mux_json_str() {
 
 # mux_json_num VALUE -> the number, or `null` when it is not one.
 #
-# NULL RATHER THAN A GUESS. A count mux could not determine is not 0 -- that
+# NULL RATHER THAN A GUESS. A count mux could not determine is not 0: that
 # is the same conflation "empty is exit 0" exists to prevent one level up,
 # where a quiet host and an unreachable one must not draw the same tile. And
 # emitting an unvalidated value would let one bad field make the whole
@@ -88,7 +88,7 @@ mux_json_num() {
   esac
 }
 
-# mux_json_array -- reads one JSON value per line on stdin, prints the array.
+# mux_json_array: reads one JSON value per line on stdin, prints the array.
 #
 # THE SEPARATOR IS THE WHOLE POINT. Assembling `[a,b,c]` by hand is how a
 # trailing comma ships, and a trailing comma is a document no parser accepts:

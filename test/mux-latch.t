@@ -118,7 +118,7 @@ esac
 # --- A REJECTED CREDENTIAL IS TERMINAL, NOT RETRIED --------------------
 # The load-bearing assertion, and the one that separated `denied` from
 # `blocked`. Here the credential IS live, so pre-flight passes and the attempt
-# happens -- and the far side refuses it. latch cannot observe a human fixing
+# happens, and the far side refuses it. latch cannot observe a human fixing
 # authorized_keys, so there is no condition on which to retry: looping would be
 # the prompt storm wearing a backoff.
 printf '255 jello@box: Permission denied (publickey,password).\n' >"$SCRIPT"
@@ -136,7 +136,7 @@ esac
 # --- PROGRESS RESETS THE BACKOFF --------------------------------------
 # `_delay` was set once and only ever doubled, making it a RATCHET: the first
 # disruption in a latch's life pinned it at BACKOFF_MAX for the rest of the
-# process. Found in a live log, not here -- a 35-hour-old latch opened a fresh
+# process. Found in a live log, not here: a 35-hour-old latch opened a fresh
 # outage with "retrying in 60s" where a reset would have said 2s. The harm is
 # worst for a SHORT blip, where five seconds of lost wifi costs a minute of
 # downtime, which on a roaming laptop is the common case.
@@ -187,9 +187,9 @@ esac
 
 # --- A HOST KEY REFUSAL IS BOUNDED, NOT IMMEDIATELY TERMINAL ----------
 # It was `denied` until 0.71, on the reasoning that it is the same refusal
-# pointing the other way. The original finding stands -- ssh exits 255 saying
+# pointing the other way. The original finding stands (ssh exits 255 saying
 # nothing about "denied", so it classified as retryable and latch spun forever
-# on a problem only a human can fix -- but "the handling is identical" was
+# on a problem only a human can fix), but "the handling is identical" was
 # wrong on the axis that decides terminality. MEASURED: the refusal lands
 # during key exchange, before user authentication, so no credential is offered
 # and nothing is spent. And latch CAN observe it being fixed: the next attempt
@@ -210,7 +210,7 @@ rejected credential and it is not terminal on the first sighting:
 esac
 
 # IT IS RETRIED, AND BOUNDED, IN ONE EXACT COUNT. Asserted as a number because
-# "reports untrusted" was true of the terminal version too -- and as an EQUALITY
+# "reports untrusted" was true of the terminal version too, and as an EQUALITY
 # rather than two inequalities in two blocks, which is what the first draft had:
 # with `= 3` here, a separate `<= 3` block cannot be killed on its own, so it
 # was belt-and-braces measuring as untestable. The global cap (MAXT) is above
@@ -224,7 +224,7 @@ design correctly refused."
 
 # THE TRANSPORT'S OWN REPORT IS HANDED OVER, not paraphrased. ssh writes the
 # fingerprint, the offending file and line, and the exact remedy command, then
-# ends with its least informative line -- and `_errline` takes the last line,
+# ends with its least informative line, and `_errline` takes the last line,
 # which is right for a tool that warns before it fails and wrong for one that
 # writes a report. Without this the human is told "Host key verification
 # failed." and left to find the rest themselves.
@@ -288,7 +288,7 @@ grep -q 'or its key really changed' "$_err" \
 \$3 only, so the reason must be ONE argument. Got:
 $(cat "$_err")"
 
-# --- pre-flight blocked WAITS, and leaves by itself when a key appears --
+# --- pre-flight blocked WAITS, and leaves by itself when a key appears.
 # This is what makes blocked a waiting state rather than a dead end: no prompt
 # while it waits, and no human babysitting to get it moving again.
 printf '1\n' >"$T_AUTH"
@@ -397,13 +397,13 @@ esac
 # --- EXIT 3 IS THE UNKNOWN-NAME CODE, AND IT BEATS THE STRING --------
 # mux returns 3 for "the name is not known here", from any verb. That is what
 # lets the classifier decide on a NUMBER rather than grepping stderr for "no
-# such session" -- which made the wording of a message on one machine
+# such session", which made the wording of a message on one machine
 # load-bearing for a decision on another, and needed a test to hold the
 # sentence still.
 #
 # There is NO string fallback. Two mechanisms for one fact is two things to
 # test and two ways to drift, so a remote older than the code reports `refused`
-# with its own message -- worse, but not silent, and the fix is to upgrade it.
+# with its own message: worse, but not silent, and the fix is to upgrade it.
 printf '3\n' >"$SCRIPT"
 _rc=$(latch box proj)
 [ "$_rc" = 1 ] || fail "an unknown name should exit non-zero, got $_rc"
@@ -434,7 +434,7 @@ esac
 # --- THE TMUX SERVER WENT AWAY UNDER THE ATTACH ----------------------
 # The one exit 1 latch cannot read. tmux writes "lost server" to the TERMINAL,
 # not to stderr, so all latch sees is the transport's generic goodbye
-# ("Connection to host closed.") -- indistinguishable from any other exit 1, and
+# ("Connection to host closed."): indistinguishable from any other exit 1, and
 # reported as a bare `refused` that told the operator nothing.
 #
 # So latch ASKS, with one read-only query, and only on this already-terminal
@@ -458,7 +458,7 @@ chmod +x "$T/bin/ambig"
 
 # Every caller needs `|| true`: latch exits 1 on all of these (they are terminal
 # states, correctly), and under `set -e` a failing command substitution takes
-# the whole test file down SILENTLY -- exit 1, no message, nothing to read.
+# the whole test file down SILENTLY: exit 1, no message, nothing to read.
 amb() {   # -> stderr of a run with the given env
   : >"$ASKED"
   # INTENTIONAL and in this order: `2>&1 >/dev/null` points stderr at the
@@ -479,7 +479,7 @@ amb() {   # -> stderr of a run with the given env
 # regression that mattered: an earlier version reported `gone -- its tmux server
 # went away` whenever stderr carried no `mux:` prefix, and tmux's own messages
 # carry none. A `mux resume` that could not attach said "open terminal failed:
-# not a terminal" -- the entire answer -- and latch threw it away to make a
+# not a terminal" (the entire answer), and latch threw it away to make a
 # confident claim about a host with five healthy sessions.
 _o=$(A_ALIVE=1 A_MSG='open terminal failed: not a terminal' amb || true)
 case "$_o" in
@@ -554,7 +554,7 @@ esac
   || fail "latch made a liveness query for an exit 1 that already carried a
 mux message. The query exists for the case mux said nothing about."
 
-# An unknown name is exit 3 now, and needs no query either -- the CODE is
+# An unknown name is exit 3 now, and needs no query either: the CODE is
 # conclusive, which is the whole reason it replaced the phrase.
 _o=$(A_ALIVE=1 A_XRC=3 A_MSG='mux: no such session: k' amb || true)
 case "$_o" in
@@ -601,7 +601,7 @@ _rc=$(latch)
 # --- %c ARRIVES AS ONE ARGV ELEMENT ----------------------------------
 # The whole reason the transport stopped being a string. The default template is
 # `ssh -t %h sh -lc %q`, and if the command splits, the inner shell gets `mux`
-# as its -c string with `go` as $0 -- which silently runs the bare session
+# as its -c string with `go` as $0, which silently runs the bare session
 # PICKER instead of the session you asked for. Measured against a real ssh
 # before it was believed.
 #
@@ -658,7 +658,7 @@ _err=$T/hookerr
 _rc=0
 # BOUNDED, because the assertion is that it exits 2 BEFORE doing anything. If
 # the guard is ever removed, latch falls through into the retry loop, and with
-# the defaults that is forever with real sleeps -- which hangs the runner
+# the defaults that is forever with real sleeps, which hangs the runner
 # instead of failing it. A test whose failure mode is a hang teaches nothing.
 printf '0\n' >"$SCRIPT"
 env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
@@ -703,7 +703,7 @@ rm -rf "$T/conf/latch"
 #
 # ORDER IS THE ASSERTION, not merely that it happens. The human is sitting in
 # front of a wedged terminal right now, and latch's own messages go to that same
-# terminal -- printing "probing, retrying in 8s" into a hidden-cursor alternate
+# terminal: printing "probing, retrying in 8s" into a hidden-cursor alternate
 # screen is how a reconnect looks like a hang. Repairing after the report, or
 # after the backoff, would be most of the bug still present.
 ORDER=$T/order; export ORDER
@@ -816,7 +816,7 @@ yours and looks like it worked."
 #
 # THE COMPOSED COMMAND IS THE ASSERTION, not "it attached". Every form attaches
 # successfully against a stub, and latch has shipped a default that attached to
-# the wrong thing and looked like it worked -- which is exactly what a
+# the wrong thing and looked like it worked, which is exactly what a
 # did-it-attach assertion cannot see.
 [ "$(sent box work:)" = 'mux resume work' ] \
   || fail "a trailing colon in the SECOND argument names a partition and no
@@ -831,7 +831,7 @@ session, sent as 'mux resume work': got [$(sent box work:)]"
   || fail "a LEADING colon says 'the default partition' out loud and must mean
 the same as a bare session, got [$(sent box :api)]"
 # Everything after the FIRST colon is the session, so a session name may contain
-# one and latch never has to decide what a partition may hold -- the far side
+# one and latch never has to decide what a partition may hold: the far side
 # does, and answers 3.
 [ "$(sent box work:a:b)" = 'mux resume work a:b' ] \
   || fail "only the FIRST colon splits partition from session, got
@@ -840,7 +840,7 @@ the same as a bare session, got [$(sent box :api)]"
 # --- THE OLD SPELLING IS REFUSED, NOT REINTERPRETED ------------------------
 # `box:work` meant partition `work` until 0.84. Under the new grammar its tail
 # is not a port, and the dangerous outcome would be dialling a host called `box`
-# on a port called `work` -- or worse, silently dropping it. It exits 2 and says
+# on a port called `work`, or worse, silently dropping it. It exits 2 and says
 # where the partition went, which is the only version of this that helps someone
 # with muscle memory.
 _orc=0
@@ -922,7 +922,7 @@ env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
 #
 # But only if the far side HAS it. A remote too old answers exit 2 with a usage
 # block, so using the flag blind would make latch work perfectly until the first
-# drop and then break -- the exact discover-by-failure the capability handshake
+# drop and then break: the exact discover-by-failure the capability handshake
 # exists to end. Verified live against northwood on 0.30, which declares
 # `attach-only no` and must therefore keep getting the creating form.
 cat >"$T/bin/negotiate" <<'EOF'
@@ -1078,7 +1078,7 @@ MAXT=1 env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
 # THE PATH IT READ IS THE ASSERTION, and it carries the SESSION:
 # `hostwith_part_sess`, not `hostwith_part`. The session left the target string
 # in 0.56, so a lock keyed on the target alone would make two latches to one
-# box collide -- `box api` and `box web` were distinct targets a release ago,
+# box collide: `box api` and `box web` were distinct targets a release ago,
 # and the second would now refuse as a duplicate of the first. Checked here
 # rather than after the run, because the trap removes the file on the way out.
 [ -s "$T/seen.lock" ] || fail "no lock existed at hostwith_part_sess.lock while
@@ -1109,7 +1109,7 @@ poll."
 # --- single flight still holds with two lines ------------------------------
 # THE TRAP THIS GUARDS: reading the pid with `$(cat)` folds both lines into one
 # string, and the numeric test then rejects a perfectly live pid because a
-# newline is not a digit. Single-flight would stop holding SILENTLY -- a flap
+# newline is not a digit. Single-flight would stop holding SILENTLY: a flap
 # would again mean N loops and N credential prompts against one target, which is
 # the storm the lock exists to prevent. `read -r` takes the first line only.
 mkdir -p "$T/run/mux-latch"
@@ -1118,7 +1118,7 @@ printf '%s\n%s\n' "$$" 'heldhost' >"$_held"   # $$ is live: this test itself
 _rc=$(MAXT=1 latch heldhost)
 # THE LOCK FILE IS THE EVIDENCE, NOT THE EXIT CODE, and that order is the point.
 # Mutating `read` back to `cat` leaves the exit code at 1 ANYWAY: the intruding
-# run fails for its own unrelated reason and returns 1 by coincidence -- so an
+# run fails for its own unrelated reason and returns 1 by coincidence, so an
 # exit-code assertion passes while single flight is completely broken. What
 # actually happens is worse than "it did not refuse": the intruder runs, and its
 # own EXIT trap then deletes the HOLDER's lock, so the surviving latch is left
@@ -1138,7 +1138,7 @@ rm -f "$_held"
 #
 # `-V` WAS THE WORSE ONE, and shows why this is not a cosmetic fix: `ssh -V`
 # SUCCEEDS, so the transport exited cleanly, which latch reads as the human
-# having detached -- so it reported SUCCESS and exit 0 for a session that never
+# having detached, so it reported SUCCESS and exit 0 for a session that never
 # existed. Not an error; something plausible.
 _rc=0
 env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
@@ -1163,7 +1163,7 @@ done
 # NOTHING reaped a stale lock before this. The trap covers every exit path the
 # process controls, but a SIGKILL, a reboot mid-latch or an OOM kill leaves the
 # file, and the reclaim only overwrites the lock for the target being latched
-# RIGHT NOW -- so a lock for a host you never latch to again simply stays. That
+# RIGHT NOW, so a lock for a host you never latch to again simply stays. That
 # is how a `--help.lock` from the bug above was still present weeks later.
 #
 # It matters more than tidiness: the tray indicator reads this directory to
@@ -1203,7 +1203,7 @@ rm -f "$T/run/mux-latch"/*.lock "$T/run/mux-latch/notalock.txt"
 # which renders as a corrupt terminal, and is what "the text garbles and writes
 # on top of itself" turned out to be. NOT hypothetical: found in a real incident
 # (the far side rebooting, 2026-09-24) sitting in 17 lines of the live log,
-# where it is equally wrong -- a log is not a terminal and a control character
+# where it is equally wrong: a log is not a terminal and a control character
 # in one is just damage.
 #
 # ASSERTED ON LATCH'S OWN STDERR, which is the stream that reaches the terminal,
@@ -1227,7 +1227,7 @@ _e=$(saymsg "1 boom$(printf '\r')")   # a CRLF-terminated line
 case $_e in
 *"$(printf '\r')"*) fail "a carriage return from the transport reached a
 message. It moves the cursor to column 0, so whatever follows overwrites the
-line -- and it lands in the log as damage too." ;;
+line, and it lands in the log as damage too." ;;
 esac
 case $_e in
 *boom*) ;;
@@ -1250,7 +1250,7 @@ esac
 # a screenful of escape sequences.
 #
 # EXIT 255, NOT 1, AND A BACKOFF WORTH ANIMATING. An earlier version of this
-# used the refused case, which EXITS without ever calling _wait -- so it
+# used the refused case, which EXITS without ever calling _wait, so it
 # asserted "no escapes" about output that never had the chance to contain any,
 # and a mutation removing the tty gate sailed straight through it. A vacuous
 # assertion is worse than none: it reads as coverage. 255 classifies as
@@ -1270,8 +1270,8 @@ esac
 # --- the ANIMATION itself, which needs a real tty -----------------------
 # `_tick` was found DARK by the 2026-09-26 coverage sweep: every assertion
 # above runs with stderr on a pipe, so `_TTY` is 0 and the whole spinner is
-# skipped. It had already shipped a bug for exactly that reason -- `'\\'` in
-# single quotes is TWO backslashes in POSIX sh, so it drew `\\` -- caught by a
+# skipped. It had already shipped a bug for exactly that reason (`'\\'` in
+# single quotes is TWO backslashes in POSIX sh, so it drew `\\`), caught by a
 # live run and shellcheck rather than by this file.
 #
 # A pty is the only way in, the same device the `help palette` test needs, and

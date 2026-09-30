@@ -52,7 +52,7 @@ grep -q 'split-window -v -f' "$TMUXLOG" \
 grep -q 'attach-session -t =proj' "$TMUXLOG" \
   || fail "mux did not attach the session it built"
 
-# An explicit PROFILE that does not exist must still fail loud -- building from
+# An explicit PROFILE that does not exist must still fail loud: building from
 # defaults is for the NO-profile case, it must not paper over a typo.
 if ( cd "$T/proj" && env -u MUX_SHARE -u TMUX MUX_DIR="$T/emptyconf" \
   MUX_CACHE="$T/cache" "$HERE/bin/mux" go proj nosuchprofile \

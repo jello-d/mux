@@ -9,8 +9,8 @@ present, for testing without live sessions.
 
 N ITEMS FROM ONE PROCESS, and it has to be a CONNECTION EACH. A single
 connection can own several bus names, but `RegisterStatusNotifierItem` takes a
-service NAME and nothing else -- the watcher then looks for /StatusNotifierItem
-on it -- so two names on one connection resolve to the same exported object and
+service NAME and nothing else (the watcher then looks for /StatusNotifierItem
+on it), so two names on one connection resolve to the same exported object and
 you get the same item twice. Measured against a live waybar: two connections
 from one pid registered as two items and drew as two. The `-1` in
 `org.kde.StatusNotifierItem-<pid>-1` is a per-process item INDEX, so the naming
@@ -28,7 +28,7 @@ import shlex
 # DECORATOR (imported below) which shadows it, so `signal.SIGKILL` raises
 # AttributeError. That is not caught by the OSError/ProcessLookupError guard at
 # the call site, so it would have escaped _query, killed that host's poll task,
-# and frozen its icon -- on the TIMEOUT path, meaning it would only ever have
+# and frozen its icon: on the TIMEOUT path, meaning it would only ever have
 # fired the moment a host became unreachable.
 from signal import SIGKILL
 
@@ -47,7 +47,7 @@ ITEM_PATH = "/StatusNotifierItem"
 # State feed. MUX runs `mux agent-summary` ("<state> <count>") as the live
 # source, polled every POLL seconds. CTL is an OPT-IN manual override file for
 # testing: set MUX_INDICATOR_CTL to a path and write "<state> <count>" into it
-# to force a value. UNSET by default -- so the deployed service reads ONLY the
+# to force a value. UNSET by default, so the deployed service reads ONLY the
 # live feed and no stray /tmp file can silently pin it.
 MUX = os.environ.get("MUX_BIN", "mux")
 # 5s, not the 1.5s of the single-local-host days: a source may be an ssh round
@@ -55,7 +55,7 @@ MUX = os.environ.get("MUX_BIN", "mux")
 # changes on human timescales.
 POLL = float(os.environ.get("MUX_INDICATOR_POLL", "5"))
 # A SOURCE THAT HANGS MUST STILL ANSWER. ssh into a blackholed host does not
-# fail, it SLEEPS -- so without a deadline that item would freeze on its last
+# fail, it SLEEPS, so without a deadline that item would freeze on its last
 # value forever, showing a calm icon for a machine that fell off the network.
 # That is the precise failure this indicator exists to prevent, so the timeout
 # is not a nicety; it is what makes `unknown` reachable.
@@ -83,8 +83,8 @@ class Indicator(ServiceInterface):
         # cannot change while the daemon runs, and re-querying it per poll would
         # be a subprocess per host per tick for an answer that never moves.
         self._host = host
-        # Whether this item speaks for THIS box. Fixed for the item's life --
-        # a host does not stop being local -- and needed at construction
+        # Whether this item speaks for THIS box. Fixed for the item's life (
+        # a host does not stop being local), and needed at construction
         # because Id is read the moment a tray host sees the item.
         self._local = local
         # The three-character host mark, or None for the single-host look.
@@ -195,7 +195,7 @@ class Indicator(ServiceInterface):
     @dbus_property(access=PropertyAccess.READ)
     def ToolTip(self) -> "(sa(iiay)ss)":
         # The TITLE carries the host, because with several items in a tray
-        # "mux" alone identifies nothing -- the one thing you want on hover is
+        # "mux" alone identifies nothing: the one thing you want on hover is
         # WHICH machine this is.
         if self._state == "unknown":
             body = "cannot reach this host"
@@ -219,7 +219,7 @@ class Indicator(ServiceInterface):
 
         FIRE AND FORGET. Activate is a D-Bus method and the tray host is
         waiting on it, so anything that touches the network has to be handed
-        to the loop rather than awaited here -- an unreachable box would
+        to the loop rather than awaited here: an unreachable box would
         otherwise hang the bar, which is precisely the failure this whole
         feature exists to make visible.
         """
@@ -273,9 +273,9 @@ def parse_all(text):
     """`mux agent status` -> {partition: (state, count)}, or None.
 
     THE MACHINE CONTRACT, not the human one. It answers for every partition in
-    ONE round trip -- a reader on another box cannot know the partition names
-    to ask for, and over a transport N partitions must not mean N connections
-    -- and it answers as JSON, so this reader gets types and structure instead
+    ONE round trip (a reader on another box cannot know the partition names
+    to ask for, and over a transport N partitions must not mean N connections),
+    and it answers as JSON, so this reader gets types and structure instead
     of a field order it has to agree about out of band. The count arrives as a
     number rather than as a string that has to be re-parsed, and the escaping
     of a session name or a partition is mux's problem rather than a delimiter
@@ -284,7 +284,7 @@ def parse_all(text):
     NONE MEANS DO NOT TRUST THIS ANSWER, which is a distinction the
     tab-separated form could not make: a document that does not parse, or one
     whose `status` is not `ok`, is a host that said something other than an
-    answer. That is `unknown` territory, not an empty one -- the caller must
+    answer. That is `unknown` territory, not an empty one: the caller must
     not read it as "this host has no partitions".
 
     A ROW IS STILL DROPPED if its partition is not a DNS label: these names
@@ -353,7 +353,7 @@ def item_key(host, part, solo):
     """The identity of one tray item: `host`, or `host:partition`.
 
     THE SOLO FORM IS THE OLD ONE, unchanged, which is what keeps a
-    single-partition host publishing exactly the item it always did -- same
+    single-partition host publishing exactly the item it always did: same
     Id, same tooltip, same everything. The colon grammar matches `mux latch`'s
     own target, so the two read the same way.
     """
@@ -375,13 +375,13 @@ def part_of(key):
 
 def _read_override():
     """The opt-in override file (MUX_INDICATOR_CTL) if set + parseable, else
-    None -- so with the env unset the live feed is the only source."""
+    None, so with the env unset the live feed is the only source."""
     if not CTL:
         return None
     try:
         # `with` rather than `open(CTL).read()`. On CPython the bare form is
-        # not a leak -- refcounting closes the handle the moment .read()
-        # returns -- so the ResourceWarning the test run surfaced was about
+        # not a leak, refcounting closes the handle the moment .read()
+        # returns, so the ResourceWarning the test run surfaced was about
         # DEPENDING on that, not about descriptors piling up. Worth fixing
         # anyway, since this runs on every poll and the guarantee is an
         # implementation detail rather than a language one, but it was never
@@ -397,7 +397,7 @@ UNKNOWN = ("unknown", None)
 # not told us about that host, so it is UNKNOWN rather than whatever the
 # renderer happens to fall back to.
 #
-# NOT PARANOIA -- measured. A mis-quoted ssh source ran the bare session PICKER
+# NOT PARANOIA: measured. A mis-quoted ssh source ran the bare session PICKER
 # on the far side (ssh concatenates its args and the remote shell re-splits, so
 # `sh -lc` `mux agent-summary` became `sh -lc mux` with `agent-summary` as $0).
 # Its output parsed to the state `1)`, which the renderer draws with the `none`
@@ -413,7 +413,7 @@ async def _query(argv):
     THE EXIT CODE IS THE WHOLE POINT, and ignoring it was the bug this replaces.
     `mux agent-summary` prints `none 0` and exits 0 on a host with no agents, so
     EMPTY IS EXIT 0 and a quiet host is a real answer. A non-zero exit therefore
-    has no meaning of its own -- it can only be the transport -- so it must
+    has no meaning of its own (it can only be the transport), so it must
     draw as UNKNOWN, never as calm.
 
     The old version read stdout and ignored the status: a failed ssh gave empty
@@ -431,7 +431,7 @@ async def _query(argv):
             # A SESSION OF ITS OWN, so a timeout can kill the whole GROUP.
             # Measured: killing just the direct child leaves a grandchild
             # holding the stdout pipe, and `proc.wait()` then blocks until that
-            # grandchild exits -- 30s against a `sh -c "sleep 30"` source, with
+            # grandchild exits: 30s against a `sh -c "sleep 30"` source, with
             # the timeout itself firing correctly at 0.3s. That stalls this
             # host's poll loop for the grandchild's whole life, which is the
             # very freeze the timeout exists to prevent, reintroduced through
@@ -473,7 +473,7 @@ async def _query_all(argv):
     NONE MEANS COULD NOT ASK, and it is a different answer from an empty dict.
     A host that answered with no partitions is quiet; a host that could not be
     reached is UNKNOWN, and every item it owns must say so. Collapsing the two
-    is the original sin this feature keeps having to avoid -- it is what left
+    is the original sin this feature keeps having to avoid: it is what left
     an unreachable box showing whatever it last said, forever.
 
     Shares `_query`'s subprocess rules by calling it? No: it needs the whole
@@ -486,7 +486,7 @@ async def _query_all(argv):
             *argv,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
-            # The PAIR -- see _query. Neither line may be simplified without
+            # The PAIR: see _query. Neither line may be simplified without
             # the other, and the failure mode is a daemon that vanishes
             # whenever the network does.
             start_new_session=True)
@@ -510,8 +510,8 @@ class Feed:
     must not mean N ssh connections. The items do not poll; they wait on this
     and read their own row out of the result.
 
-    IT ALSO DISCOVERS. The set of partitions is not knowable from here -- it
-    lives on the other machine -- so the same answer that repaints the items
+    IT ALSO DISCOVERS. The set of partitions is not knowable from here (it
+    lives on the other machine), so the same answer that repaints the items
     is what tells the supervisor which items should exist at all. Two
     mechanisms for one fact is how a tray starts disagreeing with itself.
     """
@@ -523,7 +523,7 @@ class Feed:
         self.rows = None
         # Whether a query has COMPLETED, either way. Not the same question as
         # `rows is None`, which is also true of a host that answered and could
-        # not be reached -- and the difference decides whether an item paints
+        # not be reached, and the difference decides whether an item paints
         # `unknown` or waits. Without it every item flashed unknown for one
         # tick at startup, before its host had been asked even once.
         self.asked = False
@@ -533,7 +533,7 @@ class Feed:
         """The partitions this host reported, or None if it has not
         answered. The supervisor keeps the LAST known set when this is None,
         because an unreachable host must keep its items and draw them
-        `unknown` -- withdrawing them would empty the tray at the exact moment
+        `unknown`: withdrawing them would empty the tray at the exact moment
         it has something to say."""
         return None if self.rows is None else sorted(self.rows)
 
@@ -548,7 +548,7 @@ class Feed:
             return UNKNOWN
         if part is None:
             # The solo form: one partition, whichever it is called. Named
-            # rather than positional would be better and is not available --
+            # rather than positional would be better and is not available:
             # the key deliberately does not carry it, so that a host gaining
             # a second partition re-keys its item rather than mutating it.
             if len(self.rows) != 1:
@@ -576,7 +576,7 @@ async def _host_colors(label):
     shortcut: the colour derives from the NAME by hashing, so the box you are
     sitting at can colour a remote host correctly with nothing shared and
     nothing configured. Asking the remote would need it reachable just to pick a
-    colour -- so an unreachable host would lose its identity at the exact moment
+    colour, so an unreachable host would lose its identity at the exact moment
     the `unknown` glyph needs to say WHICH host is unreachable.
 
     None on any failure, including the deliberate refusal for colours 0-15.
@@ -602,7 +602,7 @@ async def _reap(proc):
     """Kill a timed-out child AND everything it spawned.
 
     ONE COPY, because there are two callers now (a poll and a click) and the
-    rules below were learned the hard way -- a second copy is a second place
+    rules below were learned the hard way: a second copy is a second place
     for them to rot. It also stopped the mutation corpus naming which one it
     meant: the duplicated killpg made an existing record's anchor ambiguous
     and the rider said so.
@@ -613,7 +613,7 @@ async def _reap(proc):
         # and process-group LEADER, so pgid == pid by definition.
         #
         # `os.getpgid(proc.pid)` raises ProcessLookupError the moment the
-        # direct child has exited and been reaped -- which is EXACTLY the case
+        # direct child has exited and been reaped, which is EXACTLY the case
         # this exists for: a wrapper that backgrounds its work and returns is
         # reaped by asyncio's child watcher within milliseconds, long before a
         # timeout fires. The group kill was then skipped entirely and the
@@ -643,7 +643,7 @@ async def activate(label):
 
     TWO HALVES, and only the first is mux's. Switching the client is what mux
     legitimately owns and works over the same transport the item is already
-    polled with -- a tray item EXISTS only because a latch does, so there is a
+    polled with: a tray item EXISTS only because a latch does, so there is a
     client attached and a human looking at it.
 
     Raising the terminal that shows it is NOT mux's: that means knowing about
@@ -665,7 +665,7 @@ async def activate(label):
     if hook:
         # THE HOST, NOT THE KEY, as the hook's first argument. The shipped
         # examples match a terminal title against `[host]`, which is what mux
-        # itself puts there -- a `host:partition` key would match nothing and
+        # itself puts there: a `host:partition` key would match nothing and
         # the click would silently stop raising the window. The partition
         # follows as a second argument, which an existing hook ignores and a
         # new one can use.
@@ -682,7 +682,7 @@ async def _fire(argv, what):
 
     The same reaping rules as _query, for the same reason: an arbitrary
     command may spawn a child that holds the pipe, so it gets its own session
-    and the whole GROUP is killed by pid -- see _query for why the pid and not
+    and the whole GROUP is killed by pid: see _query for why the pid and not
     getpgid. A click that hangs would wedge the poll loop it shares.
     """
     try:
@@ -715,7 +715,7 @@ def item_set(hosts, feeds, known):
     decided.
 
     AN UNREACHABLE HOST KEEPS ITS ITEMS. The partition set lives on the other
-    machine, so a failed query means "could not ask", never "it has none" --
+    machine, so a failed query means "could not ask", never "it has none",
     and withdrawing the items would empty the tray at the exact moment it has
     something to say. They stay, and the feed draws them `unknown`, which is
     the whole promise of the cross-machine design. `known` carries the last
@@ -766,7 +766,7 @@ def reconcile(want, live):
 # LOCAL SORTS FIRST, and a hyphen is the only prefix that reliably does it.
 # Most trays alpha-sort by Id and offer no way to say otherwise, so position is
 # bought in the string or not at all. In ASCII `-` is 0x2D, BELOW the digits
-# (0x30), the uppercase letters (0x41) and the lowercase ones (0x61) -- so it
+# (0x30), the uppercase letters (0x41) and the lowercase ones (0x61), so it
 # beats any legal hostname. `_` (0x5F) does not: it loses to `7bravo` and to
 # every capitalised name. A leading digit loses to a lower digit. Measured
 # rather than assumed, because the obvious two both look fine against a set of
@@ -792,7 +792,7 @@ def item_bus_name(pid, index):
 
     ONE-BASED, matching the convention every other SNI producer uses, and the
     `-1` suffix in `org.kde.StatusNotifierItem-<pid>-1` is a per-process item
-    INDEX -- which is what makes several items from one process legal at all.
+    INDEX, which is what makes several items from one process legal at all.
     """
     return f"org.kde.StatusNotifierItem-{pid}-{index}"
 
@@ -818,7 +818,7 @@ def mark_plan(labels, local, slots):
     every test stubbed the seam around them.
 
     ONE HOST NEEDS NO MARK. It exists to tell several apart, so a single-host
-    tray -- the common case, and every new user's first impression -- keeps
+    tray (the common case, and every new user's first impression) keeps
     exactly the look it always had, tint and all.
 
     COUNTED IN HOSTS, NOT ITEMS, which is the 0.56 correction. One host with
@@ -847,7 +847,7 @@ async def _watch(item, feed, part=None, label=""):
     IT WAITS ON THE FEED rather than sleeping POLL of its own. Two items on
     one host would otherwise drift out of phase with the answer they share and
     with each other, so a change would reach one tile up to a whole tick
-    before the other -- on the same machine, from the same query.
+    before the other: on the same machine, from the same query.
     """
     last = None
     while True:
@@ -939,7 +939,7 @@ async def _supervise():
     edited per machine.
 
     WITHDRAWING IS DISCONNECTING. A tray host drops an item when its bus name
-    goes away, so closing the connection is the withdrawal -- there is no
+    goes away, so closing the connection is the withdrawal: there is no
     "unregister" in the SNI spec. Verified against a live waybar.
 
     THE BUS NAME INDEX ONLY EVER GOES UP. Reusing the index of a departed host
@@ -1009,14 +1009,14 @@ async def _supervise():
             try:
                 live[label] = await _publish(index, label, _feed, _part)
             except Exception as e:
-                # One host that cannot be published must not cost the others --
+                # One host that cannot be published must not cost the others,
                 # and the others are exactly where its absence would show.
                 print(f"mux-indicator: could not publish {label}: {e}",
                       flush=True)
 
         # AFTER publishing, not before: a host joining is the tick that turns
         # the marks ON, and marking only the previously-live items would leave
-        # the newcomer blank until the next pass -- the one item you are
+        # the newcomer blank until the next pass: the one item you are
         # looking at precisely because it just appeared.
         plan = mark_plan(live, local_label(), _slots)
         for _label, (_b, _t, _item) in live.items():

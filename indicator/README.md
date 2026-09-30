@@ -1,11 +1,11 @@
 # mux-indicator
 
 An **optional** system-tray indicator for mux's agent-session state. It shows,
-from anywhere, whether a session is waiting on you -- a single aggregate glyph
+from anywhere, whether a session is waiting on you: a single aggregate glyph
 (a session waiting > a session working > all done) in the notification tray.
 
 It is a StatusNotifierItem (the freedesktop tray standard), so it shows in
-waybar's tray and in any desktop's -- nothing here is waybar-specific. It reads
+waybar's tray and in any desktop's: nothing here is waybar-specific. It reads
 mux's own per-session state; the state model stays in mux, this is presentation.
 
 It is a **separate, opt-in component**: mux itself stays POSIX shell with no
@@ -69,7 +69,7 @@ One command, all userspace (no sudo):
 It builds an isolated environment (a venv, so no system-package or
 externally-managed-environment friction), puts the `mux-indicator` command on
 `~/.local/bin`, and installs + enables the systemd **user** service so it starts
-with your graphical session. It is idempotent -- re-run it any time to update.
+with your graphical session. It is idempotent: re-run it any time to update.
 
 Dependencies (`dbus-next`, a pure-Python D-Bus so no PyGObject/gobject-
 introspection system dep, and `Pillow`) come from `pyproject.toml` and are
@@ -85,7 +85,7 @@ pulled in automatically. Sub-commands:
 Requires: `python3`, a systemd **user** manager (for the service), a running
 StatusNotifierItem host (waybar's tray, or any desktop's), and `mux` on `PATH`
 (the daemon polls `mux agent status`). Prefer `pipx`? `pipx
-install .` then `./setup.sh service` works too -- both land the command at the
+install .` then `./setup.sh service` works too: both land the command at the
 same
 `~/.local/bin/mux-indicator` the unit runs.
 
@@ -94,10 +94,10 @@ the package match what is INSTALLED, and does the RUNNING daemon predate what
 is installed. A long-lived process is a third copy, and a daemon that was
 never restarted after an install passes every presence marker while drawing
 last week's icon. `setup.sh service` says which of `RESTARTED`, "starts at the
-next login" (no user manager here) and `RESTART FAILED` actually happened --
+next login" (no user manager here) and `RESTART FAILED` actually happened;
 it used to print the same sentence for all three.
 
-The feed is **`mux agent status`** -- mux's machine contract, which answers
+The feed is **`mux agent status`**: mux's machine contract, which answers
 JSON for every partition a human is watching. The tray is a program, so it
 reads the surface that promises a stable shape; `mux agent-summary` stays free
 to change for whoever reads it in a terminal. Polled every
@@ -147,11 +147,11 @@ does not: it loses to `7bravo` and to anything capitalised. The `mux-` prefix a
 bar's `order` array keys on is unaffected.
 
 The remote command is composed from a template, so ssh is a default and not a
-law -- set `indicator-transport` in `$MUX_DIR/config` (or
+law: set `indicator-transport` in `$MUX_DIR/config` (or
 `MUX_INDICATOR_TRANSPORT`) to anything that carries a command to a host:
 
 ```
-indicator-transport   kubectl exec %h -- %q
+indicator-transport   kubectl exec %h: %q
 ```
 
 `%h` is the host and `%q` the remote command as **one** argument. That matters:
@@ -172,21 +172,21 @@ set of sessions, its own agent state), and each gets **its own tray item**:
 already encodes; locally it is a client attached to that partition's server, so
 the poll asks `--attached` and a partition running behind a closed window gets
 no item. Detach from everything and the tray empties, which supersedes the
-older "the local host is always present" rule -- that was written when a host
+older "the local host is always present" rule: that was written when a host
 had one partition and presence *was* the question.
 
 One query answers for all of them. `mux agent status` returns one JSON object
 per partition, so a host with three partitions still costs **one** ssh
-connection per poll -- that is the whole
+connection per poll: that is the whole
 reason the verb exists, since a reader on another machine cannot know the
 partition names to ask for in the first place.
 
 **The letter stands in for the cursor.** Each item carries an A-Z letter set
 into the bottom-right corner, drawn *over* the badge and blinking on the
-cursor's phase -- the `_` is not drawn when a letter is, so there is one
+cursor's phase: the `_` is not drawn when a letter is, so there is one
 blinking glyph, not two. `global` is the reserved baseline partition and is
 always **A**; everything else follows alphabetically. Past Z there is no letter
-rather than a second alphabet -- 27 partitions is a different problem, and
+rather than a second alphabet: 27 partitions is a different problem, and
 drawing `AA` would make it look solved.
 
 It is **chartreuse**, not white, and that was measured rather than picked:
@@ -201,7 +201,7 @@ Being boxed in on three sides capped it at 0.30 of the tile; moving it into the
 corner and drawing it after the badge removed the ceiling instead of
 negotiating with it, which is the same move the host mark made in 0.47. It is
 0.46 of the tile now, and on a multi-host tray it shrinks only as far as the
-mark strip requires -- the mark is the host's identity and the letter is drawn
+mark strip requires: the mark is the host's identity and the letter is drawn
 on top of it, so a wide capital is clamped rather than allowed to cover it.
 
 **One partition gets no letter at all**, the same rule as the host mark: a
@@ -210,19 +210,19 @@ keeps the icon it has always had, byte for byte.
 
 **And the host mark is counted in hosts, not items.** Two partitions on one box
 get no mark, because marking them would put the same three letters and the same
-colour on both -- they *are* the same machine. With a second host present both
+colour on both: they *are* the same machine. With a second host present both
 of that host's items wear the *same* mark and the *same* palette slot, or the
 tray would be saying there are three machines.
 
 **A click carries the partition**: `mux next-blocked --partition work`. Without
-it every item on a host does the same thing -- the far side's login shell
+it every item on a host does the same thing: the far side's login shell
 resolves its own default and jumps there, landing on a real session that is not
 the one you clicked. The focus hook still gets the **host** as its first
 argument (the shipped examples match a terminal title against `[host]`), with
 the partition as a second one it may ignore.
 
 **An unreachable host keeps its items.** The partition set lives on the other
-machine, so a failed query means "could not ask", never "it has none" --
+machine, so a failed query means "could not ask", never "it has none":
 withdrawing them would empty the tray at the exact moment it has something to
 say. They stay and draw `unknown`.
 
@@ -230,7 +230,7 @@ say. They stay and draw `unknown`.
 
 **With one item in the tray**, it wears its host's identity colours: the host's
 **background** tints the screen, its **foreground** paints the `>_`. Those come
-from `mux host-color`, so the tray and the status bar agree -- one rule, one
+from `mux host-color`, so the tray and the status bar agree: one rule, one
 owner. The pair exists so fg is legible on bg, so using each half for its actual
 purpose gets that legibility for free.
 
@@ -239,8 +239,8 @@ collide: nothing about a host's colour can make a blocked agent look calm.
 
 **With several items** the tint steps aside and the host mark below becomes the
 only host channel. Carrying both would put two independent host colours on one
-tile that do not agree with each other -- a salmon mark on a dark green screen
-says two different things about one machine -- and the mark is the better
+tile that do not agree with each other (a salmon mark on a dark green screen
+says two different things about one machine), and the mark is the better
 channel, since it survives being small and the letters already name the host.
 
 ### Telling hosts apart
@@ -329,16 +329,16 @@ northgate  fg=colour230,bg=#5f3a1a
 
 `$MUX_DIR/hosts` is per-machine, so a host pinned on one box and derived on
 another gets two different colours. If you rely on the colours, share `$MUX_DIR`
-(it is designed to be shareable -- everything machine-local lives in `MUX_CACHE`
+(it is designed to be shareable: everything machine-local lives in `MUX_CACHE`
 and `MUX_STATE`).
 
-If `mux host-color` refuses -- colours 0-15 have no fixed hex, since every theme
-remaps them -- the item draws host-neutral rather than guessing.
+If `mux host-color` refuses (colours 0-15 have no fixed hex, since every theme
+remaps them), the item draws host-neutral rather than guessing.
 
 **Quote the remote command as one argument.** `ssh` concatenates its remaining
 arguments into a single string and the remote shell re-splits it, so
 `ssh host sh -lc "mux agent-summary"` arrives as `sh -lc mux` with
-`agent-summary` as `$0` -- which runs mux's bare session picker. It fails by
+`agent-summary` as `$0`, which runs mux's bare session picker. It fails by
 doing something plausible rather than erroring, so it is worth getting right
 once. The nested form above is correct. `sh -lc` is needed because sshd runs a
 remote command without a login shell, so `~/.local/bin` is not on `PATH`.
@@ -347,7 +347,7 @@ remote command without a login shell, so `~/.local/bin` is not on `PATH`.
 exits 0 and prints `none 0` on a quiet host, so empty *is* an answer and a
 non-zero exit can only be the transport. A source that fails, times out, or
 answers something mux would never emit gets its own slate-blue glyph with a `?`
-badge -- visually distinct from `none` (agentless) and from `idle`, because
+badge: visually distinct from `none` (agentless) and from `idle`, because
 drawing either of those would assert the one thing we do not know.
 
 ## Status
@@ -358,7 +358,7 @@ count, or a check when idle), reads state from `mux agent-summary`, and blinks
 the cursor on a change.
 
 Multi-host is live: N items from one process (a D-Bus connection each, which is
-required -- `RegisterStatusNotifierItem` takes only a service name, so two names
+required. `RegisterStatusNotifierItem` takes only a service name, so two names
 on one connection resolve to the same object and you get the same item twice).
 Verified against a live waybar.
 

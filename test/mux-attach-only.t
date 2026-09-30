@@ -4,7 +4,7 @@
 #
 # WHO ASKS FOR THIS AND WHY. `mux latch` holds a remote attachment open across
 # drops. Its first attempt may create, since you asked to latch onto something,
-# but a REattach that finds nothing means the far side rebooted -- and building
+# but a REattach that finds nothing means the far side rebooted, and building
 # a fresh empty session where your work used to be is the worst answer
 # available. It looks like success, it is indistinguishable from success on the
 # status bar, and the work is gone.

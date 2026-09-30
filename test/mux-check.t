@@ -3,11 +3,11 @@
 #
 # It is the thing you run to find out whether mux is coherently installed, so
 # it being wrong is worse than most bugs: it does not merely fail, it tells you
-# everything is fine. Its contract is small and exact --
+# everything is fine. Its contract is small and exact:
 #
 #   one [OK]/[WARN]/[FAIL] line per check, and a NON-ZERO exit on any [FAIL]
-#
-# -- and the second half is the part with teeth, because anything gating on
+#,
+# and the second half is the part with teeth, because anything gating on
 # mux check reads the exit code, not the text. A check that could print [FAIL]
 # without setting it made the auditor itself assert something untrue.
 #
@@ -43,8 +43,8 @@ exit 0
 EOF
 chmod +x "$T/bin/tmux"
 printf '#!/bin/sh\nexit 0\n' >"$T/bin/mux";  chmod +x "$T/bin/mux"
-# Everything mux-check shells out to. A reduced PATH is the point -- the
-# notification checks below turn backends on and off by their PRESENCE -- so
+# Everything mux-check shells out to. A reduced PATH is the point (the
+# notification checks below turn backends on and off by their PRESENCE), so
 # the ordinary tools have to be put back explicitly.
 for _c in sed awk grep cut tr head tail wc cat ls id date find sort \
     basename dirname mktemp rm mkdir cp mv readlink; do
@@ -84,7 +84,7 @@ has "agent instructions assemble" "the skill was not checked"
 
 # --- A PARTIAL SKILL INSTALL IS A FAIL, not an OK -------------------------
 # The document is a body plus a frontmatter file, and a skill emitted WITHOUT
-# the frontmatter installs cleanly, errors nothing and then never triggers --
+# the frontmatter installs cleanly, errors nothing and then never triggers,
 # so `share/skills` being present is not the question. This is the case a
 # presence check passes and the reason the marker runs the thing.
 mv "$T/share/skills/mux-agent/frontmatter.yaml" "$T/fm.stash"
@@ -157,7 +157,7 @@ printf 'scan %s/src 2\n' "$T" >"$T/conf/partitions/probe.partition"
 
 # --- notifications are reported in TWO halves ----------------------------
 # Raising and clearing can be separately absent, and a box that raises but
-# cannot clear accumulates dead banners -- the failure the old mako-only
+# cannot clear accumulates dead banners: the failure the old mako-only
 # close produced everywhere that was not mako.
 printf '#!/bin/sh\nexit 0\n' >"$T/bin/notify-send"
 chmod +x "$T/bin/notify-send"
@@ -181,8 +181,8 @@ has "together, or neither" "half an override was not called out"
 
 # --- the product WORKING, not merely installed ----------------------------
 # Everything above is a presence check: files exist, commands resolve, config
-# parses. Asked the only question that matters -- what would this say about a
-# box that is fully installed and fully BROKEN? -- the answer used to be [OK]
+# parses. Asked the only question that matters (what would this say about a
+# box that is fully installed and fully BROKEN?), the answer used to be [OK]
 # to every line. That is not a thought experiment: a box ran for days with the
 # strip wrong about six of seven sessions while this audit reported clean.
 #
@@ -208,7 +208,7 @@ has "status-right is empty" "an empty status-right was not reported"
 
 # Broken bindings must fail the audit ON THEIR OWN. Asserting a non-zero exit
 # while status-right was ALSO broken proved nothing about the bindings: either
-# failure set it. Caught by mutation -- downgrading the binding [FAIL] to a
+# failure set it. Caught by mutation: downgrading the binding [FAIL] to a
 # [WARN] left the suite green, because the other failure was carrying the exit
 # code. So here status-right is CORRECT and the bindings are the only fault.
 printf '#(mux agent-render #S #{client_name})\n' >"$SROPT"
@@ -232,11 +232,11 @@ has "status-right is not mux's renderer" "a foreign status-right passed"
 # BUILT FROM share/mux.tmux, not typed. A hand-written fixture here is the
 # same mistake the check itself was making: this file listed ( ) b r R while
 # the fragment had also bound u and E, so the test would have gone on passing
-# a server missing both -- asserting a green check against a stale idea of
+# a server missing both: asserting a green check against a stale idea of
 # what green means.
 # ANY bind whose command mentions mux, matching what the check now derives.
 # The narrower `run-shell` pattern missed `prefix ?` (a `display-popup`) the day
-# it was added, on BOTH sides -- so the check stopped expecting it and this
+# it was added, on BOTH sides, so the check stopped expecting it and this
 # fixture stopped providing it, and the two agreed with each other about a key
 # neither was looking at. Both patterns move together or the agreement is
 # worthless.
@@ -290,7 +290,7 @@ looks exactly like a plain shell"
 has "mux setup" "the WARN did not name the command that fixes it; a gap named
 without a remedy invites two different fixes"
 no_has "[FAIL]" "an unwired agent must not FAIL the check, which a provisioner
-reads as drift its apply can repair -- and it cannot"
+reads as drift its apply can repair, and it cannot"
 
 # ... and the healthy case SAYS SO, because a check that is silent on success
 # cannot be told from one that never ran. (No marker, so mux started no agent.)
@@ -319,7 +319,7 @@ _healthy_keys
 # The common case by far is a LIVE server whose tmux.conf already sources the
 # fragment but which started before a binding existed: sourcing a file does not
 # reload a running server. Telling that user "the fragment is not sourced" is
-# advice that CANNOT COME TRUE -- the line is already there -- and a provisioner
+# advice that CANNOT COME TRUE (the line is already there), and a provisioner
 # reading it loops forever applying a fix that changes nothing. tackup reported
 # exactly that after `prefix ?` was added: "APPLY DID NOT FIX ... a fix owed by
 # another repo".
@@ -352,7 +352,7 @@ printf '#(mux agent-render #S #{client_name})\n' >"$SROPT"
 # The failure that was invisible for two releases: installing mux.tmux does
 # NOT reload a running server, so a tmux up since before a feature landed
 # keeps running without its hooks while every other marker stays green.
-# Measured live on 2026-09-27 -- `prefix u` and the whole
+# Measured live on 2026-09-27: `prefix u` and the whole
 # window-layout-changed set were absent and this check said nothing.
 grep -v '^window-layout-changed' "$HOOKS" >"$HOOKS.t"; mv "$HOOKS.t" "$HOOKS"
 check >/dev/null
@@ -375,7 +375,7 @@ no_has "[FAIL]" "a cosmetic status-left was escalated to a failure"
 printf '#(mux style #S #{pane_pid})#[bold]#S\n' >"$SLOPT"
 
 # NO server is a healthy state (a fresh boot, a headless box), so it must not
-# fail -- but it is said OUT LOUD, because a check that silently skips its only
+# fail, but it is said OUT LOUD, because a check that silently skips its only
 # functional assertions is precisely the check this section replaces.
 rm -f "$KEYS"
 check >/dev/null

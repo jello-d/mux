@@ -3,7 +3,7 @@
 #
 # THE SECURITY PROPERTY IS "THE GOVERNED PARTY CANNOT GRANT ITSELF THE
 # PERMISSION", and every assertion here exists to hold that down. mux runs as
-# the agent's own user, so a policy that user can write is not a policy -- and
+# the agent's own user, so a policy that user can write is not a policy, and
 # the failure would be silent and total: the agent edits one line and mux
 # starts typing into panes that are waiting on a human.
 #
@@ -22,14 +22,14 @@ MUX_SEND_POLICY_FILE=$POL; export MUX_SEND_POLICY_FILE
 
 # The suite cannot make a file root-owned without sudo, so "not writable by
 # this user" is produced with mode bits instead. That is the same question the
-# code asks -- `[ -w ]` -- so the fixture exercises the real predicate rather
+# code asks (`[ -w ]`), so the fixture exercises the real predicate rather
 # than a stand-in for it.
 seal() { chmod 0444 "$POL"; chmod 0555 "$T/etc"; }
 unseal() { chmod 0755 "$T/etc"; chmod 0644 "$POL"; }
 t_trap 'chmod 0755 "$T/etc" 2>/dev/null || true'
 
 # CLASS DEFAULTS TO `agent` in these helpers, because a human-controlled pane
-# never reaches this file at all -- `send` refuses it before the policy is
+# never reaches this file at all: `send` refuses it before the policy is
 # consulted, so "never" is structural rather than a token an operator has to
 # remember. That gate is asserted in test/mux-agent.t, where it lives.
 allow() { mux_send_allowed "$2" "$3" "$4" "$5" "${6:-agent}"; }
@@ -42,8 +42,8 @@ no()  { ! allow "$@" || fail "$1: should have been REFUSED"; }
 no no-file blocked global api reviewer
 [ -n "$(mux_send_policy_why)" ] || fail "no policy, but nothing said why"
 
-# AND IT IS SILENT ABOUT IT. Missing is the common case -- it is every box
-# where nobody has thought about this -- so the check must not spew `cannot
+# AND IT IS SILENT ABOUT IT. Missing is the common case (it is every box
+# where nobody has thought about this), so the check must not spew `cannot
 # open` on stderr each time. Asserted with the directory SEALED, so the
 # existence test is the only guard that can produce the refusal and its
 # removal is visible rather than covered by the writability checks.
@@ -59,7 +59,7 @@ chmod 0755 "$T/etc"
 # granted itself.
 # THE DIRECTORY IS SEALED FOR THIS CASE, so only the FILE check can produce
 # the refusal. Left writable, the directory check covers for it and removing
-# the file check entirely still passes -- two guards for one condition, which
+# the file check entirely still passes: two guards for one condition, which
 # means neither is individually killable. Mutation said so: deleting the line
 # that makes this whole mechanism work changed nothing.
 printf 'send-blocked *\n' >"$POL"

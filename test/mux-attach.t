@@ -2,13 +2,13 @@
 # test/mux-attach.t - mux must NEVER build a session inside a pane.
 #
 # mux_attach answers two independent questions:
-#   1. am I genuinely in a live tmux pane?   (tty test -- $TMUX LEAKS into any
+#   1. am I genuinely in a live tmux pane?   (tty test: $TMUX LEAKS into any
 #      terminal spawned from a pane, so it cannot answer this)
 #   2. is the target on the socket I am already on?
 #
 # They used to be one test: the tty check was nested inside the socket
 # comparison, so a CROSS-socket target skipped it, fell through to the fresh
-# attach path -- and that path deliberately unsets $TMUX, which is exactly what
+# attach path, and that path deliberately unsets $TMUX, which is exactly what
 # defeats tmux's own "sessions should be nested with care" guard. The result
 # was a session nested inside a pane. It went unnoticed while the only other
 # socket was a work one you seldom crossed, and became routine the moment the
@@ -71,12 +71,12 @@ did 'attach-session' && fail "same socket attached (would nest) instead"
 # attach from inside a pane nests, so there is no safe move: say so.
 _rc=$(go otherpart)
 [ "$_rc" = 0 ] && fail "a cross-socket target from a pane should refuse"
-did 'attach-session' && fail "cross-socket ATTACHED from a pane -- nests"
+did 'attach-session' && fail "cross-socket ATTACHED from a pane: it nests"
 grep -q 'would nest' "$T/out" || fail "no explanation: $(cat "$T/out")"
 grep -q 'Detach first' "$T/out" || fail "refusal offers no way forward"
 
 # --- NOT in a pane: $TMUX is leaked from a terminal spawned by one ----------
-# The tty will not match, so this must attach normally rather than refuse --
+# The tty will not match, so this must attach normally rather than refuse:
 # it is the case that makes a leaked $TMUX harmless.
 printf '%s-not-mine\n' "$_mine" >"$PANETTY"
 _rc=$(go global)

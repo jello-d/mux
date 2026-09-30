@@ -4,7 +4,7 @@
 #
 # THE SHEBANG IS FOR THE LINTER, not for execution: this file is sourced and
 # never run. It was the ONLY sourced shell file in the tree without one, and
-# that made it the only one a shebang-based selector could not see -- which is
+# that made it the only one a shebang-based selector could not see, which is
 # how it silently dropped out of `test/lint.t` the moment that selector stopped
 # keying on `.sh`. Every lib under libexec/ already carries one.
 #
@@ -22,7 +22,7 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT INT TERM
 
-# t_trap 'COMMAND' -- a test's OWN cleanup, composed with the scratch removal
+# t_trap 'COMMAND': a test's OWN cleanup, composed with the scratch removal
 # above instead of replacing it.
 #
 # SIX TESTS HAD REPLACED IT, and POSIX sh has no trap stack, so each of them
@@ -32,7 +32,7 @@ trap 'rm -rf "$T"' EXIT INT TERM
 # suite already fixed once: the litter was uniform, so nobody could see it.
 #
 # test/lint.t refuses a bare `trap ... EXIT` in a test now, so the next one
-# cannot reintroduce it -- the rule rather than the vigilance.
+# cannot reintroduce it: the rule rather than the vigilance.
 t_trap() {
   trap "$1"'; rm -rf "$T"' EXIT INT TERM
 }
@@ -52,7 +52,7 @@ t_trap() {
 # ever derive, including ones nobody has written yet, which is the only version
 # of this that cannot rot. A test that needs a real path still has $HERE.
 # The REAL home, captured before the pin. A test that needs to READ something
-# optional the user installed -- the indicator's venv, say -- has no other way
+# optional the user installed (the indicator's venv, say) has no other way
 # to find it once HOME points into T. Reading is all it is for: the pin's
 # guarantee is that nothing is WRITTEN outside T, and that still holds.
 HOME_REAL=$HOME
@@ -65,7 +65,7 @@ mkdir -p "$HOME"
 # the one location mux reaches that is NOT $HOME-relative. tmux derives it from
 # TMUX_TMPDIR (default /tmp), so a test that writes a scratch tmux.conf and then
 # causes anything to run `tmux source-file` reaches THE DEVELOPER'S OWN LIVE
-# SERVER on the default socket -- sourcing a config from a directory that is
+# SERVER on the default socket: sourcing a config from a directory that is
 # about to be deleted. That became reachable the moment `setup.sh install`
 # learned to reload live servers, and setup.t writes exactly such a conf.
 #
@@ -79,14 +79,14 @@ chmod 700 "$TMUX_TMPDIR"
 
 # AND `TMUX` HAS TO GO, which is the half that pinning a directory does not
 # cover and the half that actually bit. A tmux CLIENT takes its socket from
-# `$TMUX` when that is set and ignores TMUX_TMPDIR entirely -- and the suite is
+# `$TMUX` when that is set and ignores TMUX_TMPDIR entirely, and the suite is
 # normally run BY A HUMAN INSIDE tmux, so every `tmux` a test invokes was
 # talking to the developer's own live server. Proven the hard way while adding
 # the reload case below: a test's `tmux new-session -d -s reloadme` created a
 # real session on the live server, `set-option -g status-right` overwrote the
 # real status bar, and the assertions then passed by reading that server back.
 # The mutation SURVIVED, because the leftover session made the second run skip
-# the whole block -- a test that pollutes real state also stops testing.
+# the whole block: a test that pollutes real state also stops testing.
 #
 # Same rule as the HOME pin one paragraph up, with the lesson that a derived
 # path is not the only way out of the sandbox: an inherited HANDLE is another.
@@ -109,7 +109,7 @@ _name=${_name:-$(basename -- "$0")}
 fail() { MUX_T_SAID=1; printf 'FAIL %s: %s\n' "$_name" "$1" >&2; exit 1; }
 pass() { MUX_T_SAID=1; printf 'ok   %s\n' "$_name"; exit 0; }
 
-# agent_rec FILE STATE PANE EPOCH SESSION [NOTIF] -- write ONE per-pane
+# agent_rec FILE STATE PANE EPOCH SESSION [NOTIF]: write ONE per-pane
 # agent-state record, in the current format, to FILE.
 #
 #     state window pane epoch notif SESSION
@@ -123,7 +123,7 @@ pass() { MUX_T_SAID=1; printf 'ok   %s\n' "$_name"; exit 0; }
 # field, the fixtures were hand-written in four test files and two were missed.
 # One went red on main and stayed red; the other kept PASSING, because its
 # stale record parsed as a session literally named `x` and the assertion only
-# counted sessions -- so it agreed with a format it no longer used. A fixture
+# counted sessions, so it agreed with a format it no longer used. A fixture
 # that encodes the format independently of the code is a test that can drift
 # without going red, which is the failure this whole suite exists to prevent.
 # One writer here means the next format change breaks compilation, not silence.
@@ -158,7 +158,7 @@ tmux_fresh_socket() {   # [prefix]
   printf '%s' "$_tmux_sock_last"
 }
 
-# tmux_drop_socket [NAME] -- kill that server AND remove the socket file.
+# tmux_drop_socket [NAME]: kill that server AND remove the socket file.
 #
 # THE FILE OUTLIVES THE SERVER, which is the same fact that forced fresh names
 # in the first place: `kill-server` returns before the server is gone and the

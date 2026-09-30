@@ -2,9 +2,9 @@
 # test/mux-agent-rank.t - libexec/mux-agent-state_lib, the SINGLE SOURCE of the
 # state ranking and the state glyphs.
 #
-# WHY IT GETS ITS OWN FILE. Seven programs source this lib -- the session
+# WHY IT GETS ITS OWN FILE. Seven programs source this lib (the session
 # picker, `mux ls`, the status strip, agent-summary, agent-list, next-blocked
-# and the doctor -- and every one of them asks it the same question: which of
+# and the doctor), and every one of them asks it the same question: which of
 # these agents is the worst. So a silent change to the ranking does not break
 # one consumer, it makes all seven AGREE ON THE WRONG ANSWER, which is the
 # shape of bug nobody notices: the bar, the tray and the picker all say the
@@ -12,7 +12,7 @@
 #
 # Coverage said this file ran. Mutation said otherwise: with the ranking table
 # guarded for the first time on 2026-09-26, two mutations SURVIVED the whole
-# suite -- `working` demoted below `idle`, and an unknown word promoted above
+# suite: `working` demoted below `idle`, and an unknown word promoted above
 # everything. Both are tested below, and both are the reason for this file.
 #
 # Sourced directly, like test/mux-sessions.t does: the lib is functions and
@@ -48,7 +48,7 @@ the other end of a transport would hijack the summary for every session"
 # table can be right while the loop that consults it takes the first record, or
 # the last, or the wrong field. Each pairing is asserted in BOTH glob orders,
 # since the loop walks the directory and a comparison bug shows up in only one
-# of them -- `-ge` instead of `-gt` keeps the LAST equal record and looks
+# of them: `-ge` instead of `-gt` keeps the LAST equal record and looks
 # correct until two panes tie.
 D=$T/state
 mkdir -p "$D"

@@ -47,7 +47,7 @@ _out=$(mig --apply) || fail "apply failed"
 [ -f "$T/conf/proj.layout.bak" ] || fail "no .bak kept for proj"
 [ ! -f "$T/conf/proj.layout" ] || fail "the original was left in place"
 
-# proj: theme carried, root dropped -- it is the repo's own basename, so the
+# proj: theme carried, root dropped: it is the repo's own basename, so the
 # name derives from it and config never restates what mux works out.
 case "$(row proj)" in
 *theme=purple*) ;; *) fail "proj lost its theme: [$(row proj)]" ;;

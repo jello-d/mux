@@ -14,7 +14,7 @@ ck() {
   [ "$_got" = "$_exp" ] || fail "$1: got [$_got] want [$_exp]"
 }
 
-# hex colours -- a # NOT preceded by whitespace -- MUST survive (the trap).
+# hex colours (a # NOT preceded by whitespace) MUST survive (the trap).
 ck hex-preserved  'bar bg=#3f5f00 fg=#c8f0a0\n' 'bar bg=#3f5f00 fg=#c8f0a0'
 # a # inside a token (no leading space) is kept, not read as a comment.
 ck hash-in-token  'pane echo a#b\n'             'pane echo a#b'
@@ -23,7 +23,7 @@ ck inline-space   'theme slate  # my note\n'    'theme slate'
 ck inline-tab     'theme cyan\t# note\n'        'theme cyan'
 # full-line comments (indented or not) are dropped.
 ck full-line      '# top\n  # indented\ntheme cyan\n' 'theme cyan'
-# trailing whitespace trimmed -- the latent bug: "slate " != the name "slate".
+# trailing whitespace trimmed; the latent bug: "slate " != the name "slate".
 ck trailing-ws    'theme slate   \n'            'theme slate'
 # a trailing CR (CRLF from another editor) is stripped.
 ck crlf           'theme red\r\n'               'theme red'

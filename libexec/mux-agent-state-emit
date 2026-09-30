@@ -14,13 +14,13 @@ while [ $# -gt 0 ]; do
   --beat) _beat=1 ;;
   # --unless-working: this state is an ASSERTION OF IGNORANCE, not an
   # observation. It means "an agent has just appeared here and knows of no
-  # turn in progress", which is true at a startup, a resume or a clear --
+  # turn in progress", which is true at a startup, a resume or a clear,
   # and FALSE at a context COMPACTION, where the agent that just announced
   # itself is the same one, still mid-turn. See the table in
   # mux-agent-hook for which event carries it.
   --unless-working) _unless_working=1 ;;
   # --source NAME: which hook is speaking. OPTIONAL, and mux never
-  # requires it -- an integrator that does not pass one is not broken,
+  # requires it: an integrator that does not pass one is not broken,
   # it is just quieter. THE CONTRACT IS MUX'S TO OWN: this defines the
   # shape of the answer now, so wiring it later is a plugin edit and not
   # a negotiation.
@@ -55,13 +55,13 @@ done
 _lib=$(dirname "$0")
 . "$_lib/mux-agent-state_lib"
 . "$_lib/mux-notify_lib"
-# mux_log, for TRANSITIONS only -- see the write below. A beat that merely
+# mux_log, for TRANSITIONS only: see the write below. A beat that merely
 # refreshes an unchanged state is not a change and is not logged, or a busy
 # session would fill the log with "still working" at tool-call rate.
 . "$_lib/mux-log_lib"
 
 # The state dir, namespaced by tmux socket so a work session and a personal one
-# -- separate tmux servers sharing this runtime dir -- never collide on pane
+# (separate tmux servers sharing this runtime dir), never collide on pane
 # ids. Derived by mux_agent_dir rather than open-coded here: this file used to
 # compute the namespace itself, with its own `default` fallback, which is a
 # second place for the baseline partition's name to be written down and so a
@@ -81,7 +81,7 @@ file=$dir/$key
 _pstate= _pepoch= _pnotif=
 if [ -f "$file" ]; then
   # Same field order as the write below: session LAST. Read in the
-  # old order, _pnotif became the SESSION NAME -- so the next
+  # old order, _pnotif became the SESSION NAME, so the next
   # transition tried to close a notification whose id was `alpha`.
   read -r _pstate _pw _pp _pepoch _pnotif _ps \
     < "$file" 2>/dev/null || _pstate=
@@ -119,7 +119,7 @@ fi
 # The two are distinguishable without guessing at clocks. A straggler is ONE
 # event arriving after the turn ended and then silence; an agent actually
 # working keeps calling tools. So a beat over `idle` does not promote on its
-# own -- it leaves a mark, and a SECOND beat within the window corroborates it.
+# own: it leaves a mark, and a SECOND beat within the window corroborates it.
 #
 # The mark is a sidecar, not a new record field: the record's format is read by
 # a single `read -r` in several programs and widening it has already cost this
@@ -142,7 +142,7 @@ if [ -n "$_beat" ] && [ "$_pstate" = idle ]; then
   # The no-mark case is handled FIRST and on its own, rather than folded
   # into the window test below. Folded, it was redundant: an absent mark
   # reads as 0 in the arithmetic, so the age comes out enormous and the
-  # window test already rejects it -- which made the guard impossible to
+  # window test already rejects it, which made the guard impossible to
   # kill, the corpus said so, and belt-and-braces that measures as
   # untestable is the shape this codebase deletes rather than defends.
   if [ -z "$_bfirst" ]; then
@@ -170,7 +170,7 @@ fi
 # again while it is still working. Correlated against this box's own logs on
 # 2026-09-29: FOUR of four compact boundaries produced a `working -> idle`
 # transition in the same second, in two different sessions, and one of them
-# names the mechanism outright -- `bootique working -> idle via SessionStart`.
+# names the mechanism outright: `bootique working -> idle via SessionStart`.
 # The other 97 idles in that window were genuine turn ends.
 #
 # THE COST WAS THE WHOLE SIGNAL. A busy agent read `done` on the strip and in
@@ -180,7 +180,7 @@ fi
 # straggler guard deliberately refuses to let ONE beat promote, and two beats
 # rarely land inside the window before the human gives up and types. Reported
 # by the user twice in a day, from two different boxes, which is exactly the
-# wrong way round -- the human noticing is the failure.
+# wrong way round: the human noticing is the failure.
 #
 # WHY A FLAG AND NOT THE SOURCE. `--source` is a BREADCRUMB: mux never
 # requires it and an integrator that omits one is not broken, so a rule keyed
@@ -195,8 +195,8 @@ fi
 #
 # WHAT IT COSTS, said plainly: a pane whose previous agent died mid-turn keeps
 # its stale `working` until the first real event instead of being cleared by
-# the new agent's start. That window is bounded by the human's first prompt --
-# they just started an agent -- and `mux agent-doctor --repair` exists for the
+# the new agent's start. That window is bounded by the human's first prompt (
+# they just started an agent), and `mux agent-doctor --repair` exists for the
 # unbounded version. The measured bug is guaranteed on every compaction; this
 # one needs an agent to die mid-turn first.
 if [ -n "$_unless_working" ] && [ "$_pstate" = working ]; then
@@ -208,7 +208,7 @@ fi
 # Claude Code fires Notification for TWO things: a permission prompt (mid-work),
 # and the "waiting for your input" nudge a few seconds after a turn ends. Both
 # arrive here as `blocked`. A permission prompt only happens while working, so a
-# `blocked` that lands while the agent is already idle is the waiting nudge --
+# `blocked` that lands while the agent is already idle is the waiting nudge:
 # keep it idle, so a finished turn stays a check (done), not a bell (needs you).
 if [ "$state" = blocked ] && [ "$_pstate" = idle ]; then
   state=idle
@@ -226,7 +226,7 @@ fi
 # Resolve session and window once, at emit time, so the renderer never has
 # to call back into tmux per entry. If tmux is gone, degrade gracefully.
 # Window FIRST, session LAST, because a session name may contain spaces and a
-# window index never can. Asking for them the other way round -- as this did --
+# window index never can. Asking for them the other way round (as this did)
 # made `#{session_name} #{window_index}` unsplittable for a session called
 # `my project`, and every field after it shifted.
 loc=$(tmux display-message -p -t "$TMUX_PANE" \
@@ -236,7 +236,7 @@ _win=${loc%% *}
 _sess=${loc#* }
 
 # Clear a notification we raised for THIS pane once the agent leaves the state
-# that raised it -- you answered, restarted, or the turn moved on -- so a
+# that raised it (you answered, restarted, or the turn moved on), so a
 # "needs you" does not sit stale for manual dismissal. Carry the id across
 # same-state re-emits; on any real change drop it, closing any live one first.
 # mux_notify_close is best effort on every platform and cannot fail.
@@ -277,8 +277,8 @@ fi
 # Push notification when the agent stops needing the CPU and starts needing YOU:
 # a real transition FROM working INTO blocked (permission) or idle (finished).
 # Not on same-state re-emits, not on ->working (that is you starting it). And
-# not when you are already looking at this pane -- it is the active pane of the
-# active window of an attached session -- since the bar already shows it; a
+# not when you are already looking at this pane (it is the active pane of the
+# active window of an attached session), since the bar already shows it; a
 # session opts out with the `notify always` layout directive
 # (@mux-notify-always). mux_notify_send keeps the id so the block above can
 # clear it later, and no-ops on a box with no daemon.
@@ -293,7 +293,7 @@ if [ "$_pstate" = working ] && [ "$state" != working ]; then
     # in mako and dunst alike means "never expire": the banner
     # outlived the prompt it announced and had to be dismissed by
     # hand, every time. Urgency is not how mux says which state
-    # this is -- the summary line says it, and the strip and the
+    # this is: the summary line says it, and the strip and the
     # tray hold it persistently. See mux-notify_lib.
     #
     # $_sess is the one computed at the top, deliberately NOT
@@ -301,7 +301,7 @@ if [ "$_pstate" = working ] && [ "$state" != working ]; then
     # ${loc%% *}, correct back when the probe asked for
     # `#{session_name} #{window_index}`. Flipping that order
     # fixed the top copy and left this one reading the WINDOW
-    # INDEX -- so raising a notification overwrote $_sess with
+    # INDEX, so raising a notification overwrote $_sess with
     # `0` and the record written below named a session `0`.
     # The session then had NO state on the strip (it looked
     # idle while the agent worked) and the banner said
@@ -319,8 +319,8 @@ fi
 # Fields: state session window pane epoch notif-id. Space separated, one line.
 #
 # Written through a temp and MOVED, so a reader never sees a half-written
-# record. Several hooks can fire close together -- a tool finishing while a
-# turn ends -- and a plain redirect truncates before it writes, so a render
+# record. Several hooks can fire close together (a tool finishing while a
+# turn ends), and a plain redirect truncates before it writes, so a render
 # landing in that gap reads an empty or partial line and reports a session as
 # having no agent at all. rename(2) is atomic within a directory, so a reader
 # sees either the old record or the new one.
@@ -328,7 +328,7 @@ fi
 # This does NOT order the writers: if Stop lands after PostToolUse, idle wins,
 # which is the shape of the stale-idle bug. Atomicity keeps the record intact;
 # ordering is the hooks' to decide.
-# Fields: state window pane epoch notif SESSION -- the session LAST so a name
+# Fields: state window pane epoch notif SESSION: the session LAST so a name
 # containing spaces is read back whole as "the rest of the line". A session
 # called `my project` previously produced a record nothing could parse: it got
 # no agent chip at all, and a session actually named `my` picked up its state.
@@ -359,7 +359,7 @@ printf '%s %s %s %s %s %s\n' \
   >"$_tmp" && mv -f "$_tmp" "$file" || rm -f "$_tmp"
 
 # An opt-in breadcrumb: with MUX_EMIT_LOG set, every transition is appended, so
-# a state that gets stuck can be traced to the hook that last wrote it -- or to
+# a state that gets stuck can be traced to the hook that last wrote it, or to
 # the hook that never fired. The hooks send stderr to /dev/null and end in
 # `|| true` (a failing hook must never break the agent), which is correct and
 # also means a silently broken emit looks exactly like a working one.
