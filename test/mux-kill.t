@@ -74,7 +74,8 @@ recorded() { cut -f1 "$T/state/sessions.global" 2>/dev/null | tr '\n' ' '; }
 # acceptable outcome is that all three sessions are still there afterwards.
 for _no in "" "n" "no" "NO" "nope" "yes please" "Y E S" "1" "q"; do
   reset
-  _o=$(mux "$_no" kill --all)
+  _o=$(mux "$_no" kill --all) || fail "answer [$_no]: kill --all exited
+non-zero, which the abort path must not do. mux said: $_o"
   case $_o in
   *aborted*|*"no sessions"*) ;;
   *) fail "answer [$_no]: expected an abort, got: $_o" ;;
@@ -90,7 +91,8 @@ done
 # --- it shows you WHAT you are about to lose, before asking ---------------
 # A confirmation you cannot audit is a reflex, not a decision.
 reset
-_o=$(mux no kill --all)
+_o=$(mux no kill --all) || fail "a declined kill --all exited non-zero:
+$_o"
 for _s in alpha bravo charlie; do
   printf '%s\n' "$_o" | grep -q "$_s" \
     || fail "the prompt did not name session $_s: $_o"
@@ -109,7 +111,8 @@ esac
 # rebuilds from, so a set left intact would resurrect everything you just
 # deliberately destroyed.
 reset
-_o=$(mux yes kill --all)
+_o=$(mux yes kill --all) || fail "a confirmed kill --all failed:
+$_o"
 printf '%s\n' "$(killed)" | grep -qx 'kill-server' \
   || fail "a confirmed kill --all did not kill the server: [$(killed)]"
 [ -z "$(live)" ] || fail "sessions survived a confirmed kill: [$(live)]"
@@ -123,14 +126,16 @@ printf '%s\n' "$(killed)" | grep -qx 'kill-server' \
 # match the prompt would be a deliberate change, and this test would say so.
 for _yes in yes YES y Y; do
   reset
-  mux "$_yes" kill --all >/dev/null
+  _o=$(mux "$_yes" kill --all) \
+    || fail "answer [$_yes]: kill --all failed: $_o"
   printf '%s\n' "$(killed)" | grep -qx 'kill-server' \
     || fail "answer [$_yes] did not confirm: [$(killed)]"
 done
 
 # --- no sessions at all is not an error, and kills nothing ---------------
 : >"$LIVE"; : >"$KILLED"
-_o=$(mux yes kill --all)
+_o=$(mux yes kill --all) || fail "an empty context is not an error, so this
+must exit 0. mux said: $_o"
 case $_o in
 *"no sessions"*) ;;
 *) fail "an empty context should say so: $_o" ;;
@@ -143,7 +148,7 @@ esac
 reset
 printf 'api\napi-old\n' >"$LIVE"
 : >"$KILLED"
-mux "" kill api >/dev/null
+_o=$(mux "" kill api) || fail "killing one session by name failed: $_o"
 printf '%s\n' "$(killed)" | grep -qx 'kill-session api' \
   || fail "kill api did not kill api: [$(killed)]"
 printf '%s\n' "$(killed)" | grep -q 'api-old' \

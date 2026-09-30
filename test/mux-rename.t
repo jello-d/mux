@@ -70,7 +70,7 @@ reset() {
 # The bug. Without this the set still names the OLD session, so resume rebuilds
 # a session you renamed away and loses the one you kept.
 reset
-mux rename alpha zulu >/dev/null
+_o=$(mux rename alpha zulu) || fail "rename failed: $_o"
 [ "$(live)" = "zulu " ] || fail "the live session was not renamed: [$(live)]"
 [ "$(recorded)" = "zulu " ] \
   || fail "the recorded set did not follow the rename: [$(recorded)]"
@@ -78,7 +78,8 @@ mux rename alpha zulu >/dev/null
 [ "$(root_of zulu)" = "$T/proj" ] \
   || fail "the renamed entry lost its root: [$(root_of zulu)]"
 # ... and `resume --list` is the surface that actually shows it.
-_l=$(mux resume --list | tr '\n' ' ')
+_l=$(mux resume --list | tr '\n' ' ') \
+  || fail "resume --list exited non-zero after a rename: [$_l]"
 [ "$_l" = "zulu " ] || fail "resume --list still reports the old name: [$_l]"
 
 # --- a rename must not CLOBBER an existing profile ------------------------
@@ -87,7 +88,7 @@ _l=$(mux resume --list | tr '\n' ' ')
 reset
 printf 'old settings\n' >"$T/conf/alpha.profile"
 printf 'KEEP ME\n' >"$T/conf/zulu.profile"
-mux rename alpha zulu >/dev/null
+_o=$(mux rename alpha zulu) || fail "rename failed: $_o"
 grep -qx 'KEEP ME' "$T/conf/zulu.profile" \
   || fail "rename clobbered an existing profile"
 [ -f "$T/conf/alpha.profile" ] \
@@ -96,7 +97,7 @@ grep -qx 'KEEP ME' "$T/conf/zulu.profile" \
 # --- ... but it DOES follow when the target is free ----------------------
 reset
 printf 'old settings\n' >"$T/conf/alpha.profile"
-_o=$(mux rename alpha zulu)
+_o=$(mux rename alpha zulu) || fail "rename failed: $_o"
 [ -f "$T/conf/zulu.profile" ] || fail "the profile did not follow the rename"
 [ ! -f "$T/conf/alpha.profile" ] || fail "the old profile was left behind"
 grep -qx 'old settings' "$T/conf/zulu.profile" \
@@ -110,7 +111,8 @@ esac
 # `:` and `.` are tmux's window/pane separators in a target, so a session named
 # with them cannot be addressed as `=NAME` afterwards.
 reset
-mux rename alpha 'a:b.c' >/dev/null
+_o=$(mux rename alpha 'a:b.c') \
+  || fail "renaming to a name with tmux metacharacters failed: $_o"
 [ "$(live)" = "a-b-c " ] || fail "':' and '.' were not folded: [$(live)]"
 [ "$(recorded)" = "a-b-c " ] \
   || fail "the recorded set kept the unfolded name: [$(recorded)]"
@@ -127,7 +129,8 @@ case $_o in *"no such session"*) ;; *) fail "unhelpful refusal: $_o" ;; esac
 # --- exact match: renaming `api` must not catch `api-old` ---------------
 printf 'api\napi-old\n' >"$LIVE"
 printf 'api\t%s/proj\napi-old\t%s/proj\n' "$T" "$T" >"$SET"
-mux rename api renamed >/dev/null
+_o=$(mux rename api renamed) \
+  || fail "renaming a profiled session failed: $_o"
 [ "$(live)" = "api-old renamed " ] \
   || fail "rename hit the wrong session: [$(live)]"
 [ "$(recorded)" = "api-old renamed " ] \
