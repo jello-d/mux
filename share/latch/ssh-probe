@@ -34,6 +34,18 @@ _host=${1:-}
 [ -n "$_host" ] || exit 78
 command -v ssh >/dev/null 2>&1 || exit 78
 
+# THE PORT IS THE SECOND ARGUMENT, since 0.84, because the target carries it
+# (`mux latch box:2222`). Absent, ssh uses its own default and whatever
+# ssh_config says -- so this is an addition to the hook contract and not a
+# change to it: a probe written before 0.84 ignores $2 and still works.
+_port=${2:-}
+set --
+case ${_port:-} in
+'') ;;
+*[!0-9]*) ;;                 # not a port; let ssh decide rather than pass junk
+*) set -- -p "$_port" ;;
+esac
+
 # An established control master IS the answer, and costs nothing: the connection
 # is already up, so reachability is not in question.
 ssh -O check "$_host" >/dev/null 2>&1 && exit 0
@@ -87,7 +99,8 @@ _bound() {
 
 _e=$(mktemp) || exit 78
 _rc=0
-_bound ssh -o BatchMode=yes -o ConnectTimeout=5 "$_host" true 2>"$_e" || _rc=$?
+_bound ssh "$@" -o BatchMode=yes -o ConnectTimeout=5 "$_host" true \
+  2>"$_e" || _rc=$?
 _out=$(cat "$_e" 2>/dev/null || true)
 rm -f "$_e"
 

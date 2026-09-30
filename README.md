@@ -589,16 +589,29 @@ owns the state machine and the attach semantics, and ssh, mosh, Eternal Terminal
 or anything else supplies the pipe. latch never carries a keystroke and knows
 nothing about hosts, addresses or MTUs.
 
-The first field is always the host and the colon is optional; everything after
-the first colon is the **partition**, and the session is a separate second
-argument. What that asks the far side to run:
+Two arguments, each `primary[:qualifier]`, and each colon is spent on the field
+that could not otherwise be reached: `HOST[:PORT] [[PARTITION:]SESSION]`. A bare
+second argument is a **session**. What that asks the far side to run:
 
 ```
-mux latch box             ->  mux resume            what that box had
-mux latch box api         ->  mux go api            that session specifically
-mux latch box:work        ->  mux resume work       another partition's set
-mux latch box:work api    ->  mux resume work api   ... landing on `api`
+mux latch box              ->  mux resume            what that box had
+mux latch box api          ->  mux go api            that session specifically
+mux latch box work:        ->  mux resume work       another partition's set
+mux latch box work:api     ->  mux resume work api   ... landing on `api`
+mux latch box :api         ->  mux go api            default partition, aloud
+mux latch box:2222 api     ->  mux go api            over port 2222
+mux latch [::1]:2222 api   ->  mux go api            IPv6 needs the brackets
 ```
+
+**The port lives in the target** (0.84), because every seam needs it: before
+that, a nonstandard port could only go in the transport template or
+`ssh_config`, so a *per-host* port was inexpressible in one line, and ET's probe
+had to be told separately. latch parses it once and hands it to the template as
+`%p` and to the probe as its second argument. An IPv6 literal is never split;
+use
+brackets when you want a port with one. And `mux latch box:work`, the pre-0.84
+spelling, exits 2 and says where partitions went rather than dialling a host
+`box` on a port `work`.
 
 **The colon held the session until 0.56**, so `mux latch box:api` changed
 meaning. The partition took the slot because it is the field a remote command
@@ -649,7 +662,7 @@ that means no opinion, so latch proceeds.
 **Eternal Terminal is supported as data, not code.** Two lines:
 
 ```
-latch-transport  et %h --command %c
+latch-transport  et %h --port %p:2022 --command %c
 latch-classify   et-classify
 latch-probe      et-probe
 ```
