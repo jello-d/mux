@@ -37,8 +37,37 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 # messages, which is what turned the macOS log from an inference into a
 # measurement. Pin the ROOT the paths derive from, the same lesson HOME=$T/home
 # and TMUX_TMPDIR already record here.
-T=$(CDPATH= cd -- "$(mktemp -d)" && pwd -P)
-trap 'rm -rf "$T"' EXIT INT TERM
+#
+# AND IT IS CHECKED BEFORE THE TRAP IS ARMED, because getting this wrong DELETED
+# THIS REPOSITORY on 2026-09-30. The canonicalisation above introduced the
+# failure: `T=$(mktemp -d)` leaves T EMPTY when mktemp fails, so the trap's
+# `rm -rf ""` was harmless, while `cd -- "$(mktemp -d)" && pwd -P` turns that
+# same empty string into `cd ""` (which stays put) and `pwd -P` then answers
+# THE CURRENT DIRECTORY. The trap therefore did `rm -rf <cwd>`, and the cwd was
+# a working tree.
+#
+# Reached by running the suite with TMPDIR pointing somewhere that does not
+# exist, which is not exotic: it is one stale export, one unmounted tmpfs, or
+# one probe of another platform's TMPDIR value, which is how it happened.
+#
+# SO EACH STEP IS CHECKED RATHER THAN TRUSTED, and the `!= $PWD` line is the one
+# that would have saved the tree. A harness that can delete the thing under test
+# is worse than no harness: mux's own rule about a check that damages what it
+# inspects, met in the one place nobody had applied it.
+_t=$(mktemp -d) || _t=
+[ -n "$_t" ] && [ -d "$_t" ] || {
+  echo "harness: mktemp -d failed (TMPDIR=${TMPDIR:-unset}); refusing to" >&2
+  echo "harness: guess a scratch dir: the EXIT trap would remove it" >&2
+  exit 1; }
+T=$(CDPATH= cd -- "$_t" && pwd -P) || T=
+[ -n "$T" ] && [ -d "$T" ] && [ "$T" != "$PWD" ] && [ "$T" != / ] || {
+  echo "harness: refusing to use [$T] as the scratch dir: it is empty, the" >&2
+  echo "harness: current directory, or /. The EXIT trap would rm -rf it." >&2
+  exit 1; }
+# TMUX_TMPDIR goes with it (set below, and OUTSIDE $T because of a socket path
+# length limit: see there). Guarded with `:+` so a death before that line
+# cannot turn this into `rm -rf ""`.
+trap 'rm -rf "$T" ${TMUX_TMPDIR:+"$TMUX_TMPDIR"}' EXIT INT TERM
 
 # t_trap 'COMMAND': a test's OWN cleanup, composed with the scratch removal
 # above instead of replacing it.
@@ -52,7 +81,7 @@ trap 'rm -rf "$T"' EXIT INT TERM
 # test/lint.t refuses a bare `trap ... EXIT` in a test now, so the next one
 # cannot reintroduce it: the rule rather than the vigilance.
 t_trap() {
-  trap "$1"'; rm -rf "$T"' EXIT INT TERM
+  trap "$1"'; rm -rf "$T" ${TMUX_TMPDIR:+"$TMUX_TMPDIR"}' EXIT INT TERM
 }
 
 # HOME IS PINNED INSIDE T, and that one line is what makes the claim above
@@ -90,9 +119,25 @@ mkdir -p "$HOME"
 # It also stops the three tests that drive a real tmux leaving anything behind
 # in the shared /tmp/tmux-$(id -u), where 123 dead sockets once accumulated from
 # a single day of runs.
-TMUX_TMPDIR=$T/tmux
+#
+# IT IS NOT INSIDE $T, AND THAT IS A LENGTH LIMIT RATHER THAN A PREFERENCE. A
+# unix socket path is capped by `sun_path`: 104 bytes on macOS, 108 on Linux.
+# macOS `$TMPDIR` is already ~50 of them
+# (/private/var/folders/36/<24 chars>/T/), so `$T/tmux/tmux-501/<socket>` came
+# to 105 and tmux answered `File name too long`, which surfaced as
+# `mux: demo: could not start a tmux server`. One byte over, on one platform,
+# and only for the tests that drive a real server.
+#
+# MEASURED BOTH WAYS rather than reasoned about: the runner's path is 105, and a
+# deliberately over-long TMUX_TMPDIR here (124 bytes) reproduces tmux's own
+# `File name too long` exactly.
+#
+# SO THE BASE IS SHORT AND FIXED, not derived from $TMPDIR, which is the only
+# thing that makes the length independent of whose machine it is. It is removed
+# by the same traps that remove $T, so nothing is left behind and the socket
+# litter property is unchanged.
+TMUX_TMPDIR=$(mktemp -d /tmp/muxt.XXXXXX)
 export TMUX_TMPDIR
-mkdir -p "$TMUX_TMPDIR"
 chmod 700 "$TMUX_TMPDIR"
 
 # AND `TMUX` HAS TO GO, which is the half that pinning a directory does not

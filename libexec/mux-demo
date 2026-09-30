@@ -93,9 +93,15 @@ else
   # `-x`/`-y` because a detached server has no client to size from, and the
   # first client then resizes everything anyway. 200x50 keeps the strip wide
   # enough to show every session at full width on the first draw.
-  _tx new-session -d -s api -x 200 -y 50 \
-    "$MUX_SHARE/demo/fake-agent api blocked" 2>/dev/null \
-    || _die "could not start a tmux server on socket '$SOCK'"
+  # TMUX'S OWN MESSAGE HERE TOO, for the reason the source-file failure below
+  # already records: every cause of "could not start a server" looks identical
+  # from outside. This is the line that actually fired on macOS CI, where the
+  # answer was `File name too long` (a socket path over the 104-byte cap), and
+  # the old message named the socket and swallowed the diagnosis.
+  _srv_err=$(_tx new-session -d -s api -x 200 -y 50 \
+    "$MUX_SHARE/demo/fake-agent api blocked" 2>&1) \
+    || _die "could not start a tmux server on socket '$SOCK'.
+tmux said: ${_srv_err:-<nothing>}"
   _tx new-session -d -s web -x 200 -y 50 \
     "$MUX_SHARE/demo/fake-agent web cycle 3"
   _tx new-session -d -s docs -x 200 -y 50 \
