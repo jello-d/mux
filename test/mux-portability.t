@@ -16,11 +16,31 @@
 # "missing (incomplete install)", blaming the install rather than the missing
 # tool.
 #
-# WHAT IS DELIBERATELY NOT HERE: bash-3.2 differences (mux is POSIX sh under
-# dash, so the version macOS ships cannot matter), and anything needing a real
-# Darwin kernel. Those belong on a macOS CI runner, which is what
-# .github/workflows/test.yml is for. This file covers what a stub can honestly
-# reach.
+# WHAT IS DELIBERATELY NOT HERE: anything needing a real Darwin kernel. That
+# belongs on the macOS CI runner, which is what .github/workflows/test.yml is
+# for. This file covers what a stub can honestly reach.
+#
+# AND ONE CLAIM THAT USED TO BE HERE WAS FALSE, corrected 2026-09-30 rather
+# than deleted, because the reasoning is the instructive part. It said
+# bash-3.2 differences "cannot matter, mux is POSIX sh under dash". Being
+# POSIX sh is exactly what does not save you: bash 3.2 FAILS TO PARSE valid
+# POSIX sh, because it ends a `$( )` by counting parentheses and an
+# unparenthesised `case` pattern closes it early. `libexec/mux-agent` did not
+# parse on any Mac for that reason, so the entire `mux agent` contract was
+# dead there while every check on both Linux boxes read green.
+#
+# macOS `/bin/sh` IS bash 3.2.57 and always will be (Apple froze it at
+# GPLv2), so the version it ships is not an academic question: it is the
+# interpreter every `#!/bin/sh` file in this package runs under on that
+# platform. `test/lint.t` parses every file with `/bin/sh` for that reason,
+# which needs no new tool on any box, since the check is "does the shell you
+# actually have accept this".
+#
+# A stub CANNOT reach that class, which is why it is not here: a parse failure
+# is a property of the interpreter, and no amount of faking a tool changes
+# which shell reads the file. Building bash 3.2 locally does reach it (about
+# three minutes; the recipe is in these notes), but that is a diagnostic on
+# the developer's box and deliberately not a dependency of this suite.
 set -eu
 _name=mux-portability
 . "$(dirname "$0")/harness_lib"
