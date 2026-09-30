@@ -24,6 +24,21 @@ command -v tmux >/dev/null 2>&1 || {
 XDG_RUNTIME_DIR=$T/run; export XDG_RUNTIME_DIR
 mkdir -p "$XDG_RUNTIME_DIR"
 SOCK=$(tmux_fresh_socket mux.demotest)
+
+# THE FRAGMENT RESOLVES `mux` ON PATH, and it must be THIS CHECKOUT's. Two
+# top-level `run-shell` lines in share/mux.tmux (`mux themes load` and `mux
+# status-banner`) execute at SOURCE time rather than being registered like the
+# hooks around them, so `source-file` returns non-zero when they cannot find
+# the command.
+#
+# WITHOUT THIS PIN THE TEST HAD TWO OUTCOMES AND NEITHER WAS THE ONE INTENDED:
+# on a machine with mux installed it passed against the INSTALLED copy, testing
+# a tree other than the one under test; on ubuntu-latest, where the suite runs
+# before the install step, it failed with `could not source ... into the demo
+# server`, which read as a demo bug. CI found it precisely because a runner has
+# no ambient mux.
+PATH=$HERE/bin:$PATH; export PATH
+
 demo() { env -u MUX_SHARE MUX_DEMO_SOCKET="$SOCK" "$HERE/bin/mux" demo "$@"; }
 cleanup() { tmux_drop_socket "$SOCK"; }
 t_trap 'cleanup'

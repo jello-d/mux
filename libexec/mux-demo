@@ -106,8 +106,23 @@ else
   # THE REAL FRAGMENT, not a copy of its settings. This is what gives the demo
   # mux's actual bindings, the actual strip and the actual palette; a demo that
   # configured its own would be demonstrating itself.
-  _tx source-file "$_frag" \
-    || _die "could not source $_frag into the demo server"
+  #
+  # TMUX'S OWN MESSAGE IS QUOTED, never swallowed, because the old message said
+  # only THAT the fragment had not loaded and every cause looks the same from
+  # outside. It earned itself immediately: CI failed here and the first run with
+  # this line said `'mux status-banner' returned 127`, which named the cause
+  # outright and falsified the tmux-version theory I had started on.
+  #
+  # BOTH CAUSES ARE NAMED because they are not distinguishable without tmux's
+  # text, and the first one bites hardest: the fragment's two TOP-LEVEL
+  # `run-shell` lines execute at source time, so they need `mux` resolvable
+  # INSIDE the server, which a bare runner does not have.
+  _frag_err=$(_tx source-file "$_frag" 2>&1) \
+    || _die "could not source $_frag into the demo server.
+tmux said: ${_frag_err:-<nothing>}
+That applies to a real session too: this is the same fragment that draws the
+bar, the strip and the bindings. The usual causes are \`mux\` not being on PATH
+inside the tmux server, and a directive this tmux ($(tmux -V)) rejects."
 fi
 
 cat <<EOF
