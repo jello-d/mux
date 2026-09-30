@@ -125,7 +125,7 @@ mux stderr: $(cat "$T/err" 2>/dev/null || true)"; }
 _read() { run read "$@"; }
 
 # --- the happy answer -----------------------------------------------------
-WATCHED=global run status
+WATCHED=global run status; unset WATCHED
 eq status-rc "$RC" 0
 eq status-ok "$(jq 'd["status"]')" ok
 eq status-parts "$(jq 'len(d["partitions"])')" 1
@@ -146,18 +146,18 @@ eq status-count "$(jq 'd["partitions"][0]["count"] + 1')" 2
 # partitions, which was true only because nothing was scoping. A flag that
 # parses and does nothing is worse than a missing one, because the caller
 # believes it asked for something.
-WATCHED=global run status --any
+WATCHED=global run status --any; unset WATCHED
 eq scoped-default "$(jq 'len(d["partitions"])')" 1
 eq scoped-is-mine "$(jq 'd["partitions"][0]["partition"]')" global
 
 # --all WIDENS, which is the direction the tray depends on: a reader on
 # another box cannot know the partition names to ask for.
-WATCHED=global run status --all --any
+WATCHED=global run status --all --any; unset WATCHED
 eq all-widens "$(jq 'len(d["partitions"])')" 2
 
 # --partition SELECTS one that is not mine, and is the flag the skill
 # documents and the verb did not parse at all.
-WATCHED=global run status --partition work --any
+WATCHED=global run status --partition work --any; unset WATCHED
 eq part-selects "$(jq 'len(d["partitions"])')" 1
 eq part-is-named "$(jq 'd["partitions"][0]["partition"]')" work
 # `run` captures the status into $RC, so `$?` here reads the WRAPPER and is 0
@@ -172,16 +172,16 @@ eq part-needs-a-name-says "$(jq 'd["status"]')" usage
 # going on wants the answer a human would see. Asserted IN SCOPE, so it cannot
 # be confused with the scoping above: the caller's own partition, with and
 # without a client attached to it.
-WATCHED=global run status
+WATCHED=global run status; unset WATCHED
 eq default-hides-unwatched "$(jq 'len(d["partitions"])')" 1
-WATCHED= run status --any
+WATCHED= run status --any; unset WATCHED
 eq any-shows-unattached "$(jq 'len(d["partitions"])')" 1
 
 # --- NOTHING WATCHED IS AN EMPTY ARRAY, NOT AN ERROR ----------------------
 # The JSON form of "empty is exit 0": a box where nobody is attached answers
 # the same SHAPE as one with five partitions, so a consumer never has to tell
 # a quiet answer from a broken one by looking at the exit code alone.
-WATCHED= run status
+WATCHED= run status; unset WATCHED
 eq empty-rc "$RC" 0
 eq empty-ok "$(jq 'd["status"]')" ok
 eq empty-arr "$(jq 'len(d["partitions"])')" 0
@@ -249,7 +249,7 @@ eq peers-age-is-age \
 # --- peers reports WHO CONTROLS each pane ---------------------------------
 # So a caller can see the classification without attempting a send and reading
 # the refusal. One tmux query per PARTITION rather than per peer.
-CLASS2=agent run peers
+CLASS2=agent run peers; unset CLASS2
 eq peers-class-default \
   "$(jq '[p["control"] for p in d["peers"] if p["session"]=="alpha"][0]')" \
   human
@@ -261,7 +261,7 @@ eq peers-class-agent \
 # reachable (a remote `peers` at boot, which this verb is designed for),
 # every pane would otherwise report as human-controlled: plausible, and wrong.
 # peers still ANSWERS, because it derives its sessions from the state files.
-NOSERVER=1 run peers
+NOSERVER=1 run peers; unset NOSERVER
 eq peers-headless-rc "$RC" 0
 eq peers-headless-n "$(jq 'len(d["peers"])')" 4
 eq peers-headless-null "$(jq 'all(p["control"] is None for p in d["peers"])')" \
@@ -275,7 +275,7 @@ eq peers-headless-state \
 # A PANE THAT IS GONE but whose record is not: the class is unknowable, which
 # is null rather than the default. `wsess` records pane %3, which the stub
 # does not list.
-CLASS2=agent run peers --partition work
+CLASS2=agent run peers --partition work; unset CLASS2
 # STATUS BEFORE PAYLOAD, at the FIRST use of the flag. This is the rule the
 # contract gives a consumer, and it is what makes a failure legible: a mutation
 # that removed the `--partition` arm answers `{"status":"usage"}` (valid JSON
@@ -497,7 +497,7 @@ eq blk-ack-override "$(jq 'd["override"]')" none
 
 # --- an AGENT-CONTROLLED pane, with no policy -----------------------------
 # The class alone is not permission either. Both halves are required.
-CLASS=agent run send alpha 'y' --answer-prompt
+CLASS=agent run send alpha 'y' --answer-prompt; unset CLASS
 eq agent-nopol-rc "$RC" 1
 eq agent-nopol-override "$(jq 'd["override"]')" none
 
@@ -506,14 +506,14 @@ eq agent-nopol-override "$(jq 'd["override"]')" none
 # that does know passes the flag up front and pays nothing. That signal is why
 # there is no standing always-open grant.
 pol 'send-blocked control:agent'
-CLASS=agent run send alpha 'y'
+CLASS=agent run send alpha 'y'; unset CLASS
 eq grant-rc "$RC" 1
 eq grant-override "$(jq 'd["override"]')" available
 eq grant-msg "$(jq '"--answer-prompt" in d["message"]')" True
 
 # ... and WITH the acknowledgement it goes through.
 : >"$CAPLOG"
-CLASS=agent run send alpha 'y' --answer-prompt
+CLASS=agent run send alpha 'y' --answer-prompt; unset CLASS
 eq grant-ack-rc "$RC" 0
 eq grant-ack-status "$(jq 'd["status"]')" ok
 grep -q 'paste-buffer' "$CAPLOG" || fail "the override did not send"
@@ -529,11 +529,11 @@ eq human-star-override "$(jq 'd["override"]')" none
 # HYBRID IS ITS OWN CLASS and is NOT covered by an agent grant: folding it
 # into either neighbour was the wrong answer in both directions.
 pol 'send-blocked control:agent'
-CLASS=hybrid run send alpha 'y' --answer-prompt
+CLASS=hybrid run send alpha 'y' --answer-prompt; unset CLASS
 eq hybrid-rc "$RC" 1
 eq hybrid-override "$(jq 'd["override"]')" none
 pol 'send-blocked control:hybrid'
-CLASS=hybrid run send alpha 'y' --answer-prompt
+CLASS=hybrid run send alpha 'y' --answer-prompt; unset CLASS
 eq hybrid-granted-rc "$RC" 0
 
 # --- the two acknowledgements are SEPARATE --------------------------------
@@ -542,7 +542,7 @@ eq hybrid-granted-rc "$RC" 0
 agent_rec "$XDG_RUNTIME_DIR/agent-state/global/p7" weirdstate %7 100 odd x
 printf 'odd\t/srv/odd\n' >>"$MUX_STATE/sessions.global"
 pol 'send-blocked control:agent'
-CLASS=agent run send odd 'x' --answer-prompt
+CLASS=agent run send odd 'x' --answer-prompt; unset CLASS
 eq unk-rc "$RC" 1
 eq unk-reason "$(jq 'd["reason"]')" unknown
 eq unk-override "$(jq 'd["override"]')" none
@@ -551,11 +551,11 @@ eq unk-override "$(jq 'd["override"]')" none
 # the ack check and neither is individually killable, which is exactly what
 # mutation reported here.
 pol 'send-unknown control:agent'
-CLASS=agent run send odd 'x'
+CLASS=agent run send odd 'x'; unset CLASS
 eq unk-noack-rc "$RC" 1
 eq unk-noack-override "$(jq 'd["override"]')" available
 eq unk-noack-msg "$(jq '"--blind" in d["message"]')" True
-CLASS=agent run send odd 'x' --blind
+CLASS=agent run send odd 'x' --blind; unset CLASS
 eq unk-granted-rc "$RC" 0
 
 # --- every send that lands is LOGGED --------------------------------------
@@ -598,7 +598,7 @@ eq noverb-status "$(jq 'd["status"]')" usage
 for _case in 'nosuchverb usage 2' 'status ok 0'; do
   # shellcheck disable=SC2086   # three words per entry, split on purpose
   set -- $_case
-  WATCHED=global run "$1"
+  WATCHED=global run "$1"; unset WATCHED
   eq "agree-$1-rc" "$RC" "$3"
   eq "agree-$1-status" "$(jq 'd["status"]')" "$2"
 done
@@ -610,7 +610,7 @@ done
 # never emits them.
 for _args in 'status' 'nosuchverb' 'status --nope' ''; do
   # shellcheck disable=SC2086   # deliberate word split
-  WATCHED=global run $_args
+  WATCHED=global run $_args; unset WATCHED
   case $RC in
   0|1|2|3) ;;
   *) fail "\`mux agent $_args\` exited $RC, outside mux's four codes.

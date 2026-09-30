@@ -104,7 +104,7 @@ tool failing in a way it did not anticipate has not answered"
 # connecting, so waiting costs nothing and raises no prompt. A hook that
 # connected would make the poll the very storm it prevents.
 : >"$SSHLOG"
-OCHECK=1 ADDRC=1 ask "$AUTH" box >/dev/null
+OCHECK=1 ADDRC=1 ask "$AUTH" box >/dev/null; unset OCHECK ADDRC
 while IFS= read -r _l; do
   case $_l in
   *"-O check"*|"ssh-add "*) ;;
@@ -146,7 +146,7 @@ grep -q 'ConnectTimeout' "$PROBE" \
 silent peer gives up in 5s, without it ssh was still waiting after 40s, and
 ServerAliveInterval does not help because it only starts once a session exists."
 : >"$SSHLOG"
-SSHRC=124 ask "$PROBE" box >/dev/null
+SSHRC=124 ask "$PROBE" box >/dev/null; unset SSHRC
 [ "$(SSHRC=124 ask "$PROBE" box)" = 1 ] \
   || fail "timeout(1)'s own code (124) means the host took longer than a
 probe is allowed to take. That is a definite 'not usable right now', not a

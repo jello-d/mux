@@ -306,7 +306,7 @@ _n=$(cut -d' ' -f5 <"$T/run/agent-state/global/40")
 # The window is configurable, and the boundary is respected.
 printf 'idle 0 %%40 %s 522 charon\n' "$((_now - 10))" \
   >"$T/run/agent-state/global/40"
-MUX_NOTIF_TTL=5 ttlemit working
+MUX_NOTIF_TTL=5 ttlemit working; unset MUX_NOTIF_TTL
 [ ! -s "$CLOSELOG" ] \
   || fail "MUX_NOTIF_TTL was ignored: [$(cat "$CLOSELOG")]"
 

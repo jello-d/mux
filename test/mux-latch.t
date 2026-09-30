@@ -322,7 +322,7 @@ printf '0\n' >"$T_AUTH"
 # latch does not make the attempt that would raise the prompt.
 printf '1\n' >"$T_AUTH"
 : >"$SCRIPT"
-MAXT=3 latch box proj >/dev/null
+MAXT=3 latch box proj >/dev/null; unset MAXT
 [ "$(n_tries)" = 0 ] \
   || fail "latch attempted $(n_tries) times without a live credential"
 printf '0\n' >"$T_AUTH"
@@ -332,7 +332,7 @@ printf '0\n' >"$T_AUTH"
 # rather than attempt, and must not report the target as reachable.
 printf '78\n' >"$T_PROBE"
 : >"$SCRIPT"
-MAXT=3 latch box proj >/dev/null
+MAXT=3 latch box proj >/dev/null; unset MAXT
 [ "$(n_tries)" = 0 ] \
   || fail "a probe that could not answer was treated as usable"
 case "$(seq_of)" in
@@ -342,7 +342,7 @@ esac
 # ... and an unrecognised hook exit is also "cannot tell", not a verdict.
 printf '42\n' >"$T_PROBE"
 : >"$SCRIPT"
-MAXT=3 latch box proj >/dev/null
+MAXT=3 latch box proj >/dev/null; unset MAXT
 [ "$(n_tries)" = 0 ] || fail "an unexpected probe exit was treated as usable"
 printf '0\n' >"$T_PROBE"
 
@@ -378,7 +378,7 @@ no probe means no opinion, so the attempt itself is the probe"
 # --- an unusable target is retried, not escalated ----------------------
 printf '1\n' >"$T_PROBE"
 : >"$SCRIPT"
-MAXT=3 latch box proj >/dev/null
+MAXT=3 latch box proj >/dev/null; unset MAXT
 [ "$(n_tries)" = 0 ] || fail "latch attempted against an unusable target"
 case "$(seq_of)" in
 *probing*) ;;
