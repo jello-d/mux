@@ -356,7 +356,10 @@ _saveprobe=$T/bin/probe
 printf '0\n' >"$SCRIPT"
 : >"$STATES"; : >"$TRIES"
 _lr=0
-env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" \
+# CAPTURED RATHER THAN DISCARDED. `>/dev/null 2>&1` threw away the only thing
+# that can say WHY latch refused, and this case has been failing on macOS with
+# nothing but an exit code to go on.
+_lo=$(env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" \
   MUX_SHARE="$HERE/share" \
   STATES="$STATES" TRIES="$TRIES" SCRIPT="$SCRIPT" \
   MUX_LATCH_TRANSPORT="$T/bin/transport %h %s" \
@@ -364,9 +367,10 @@ env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" \
   MUX_LATCH_STATUS="$T/bin/status" \
   MUX_LATCH_SLEEP="$T/bin/nosleep" \
   MUX_LATCH_BACKOFF=1 MUX_LATCH_MAX_TRIES=3 \
-  "$HERE/libexec/mux-latch" box proj >/dev/null 2>&1 || _lr=$?
+  "$HERE/libexec/mux-latch" box proj 2>&1) || _lr=$?
 [ "$_lr" = 0 ] || fail "with no probe configured latch should just attempt and
-report the session ending; got exit $_lr and states [$(seq_of)]"
+report the session ending; got exit $_lr and states [$(seq_of)]
+latch said: ${_lo:-<nothing>}"
 [ "$(n_tries)" = 1 ] \
   || fail "with no probe configured latch attempted $(n_tries) times;
 no probe means no opinion, so the attempt itself is the probe"

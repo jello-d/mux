@@ -111,15 +111,19 @@ chmod +x "$T/bin/et"
 
 mkdir -p "$T/conf" "$T/run"
 _stub_line=$T/bin/et${_line#et}
-env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
+# CAPTURED, for the reason mux-latch.t records at its own no-probe case: if
+# latch refuses before attempting, its message is the only thing that says why,
+# and `>/dev/null 2>&1` is where that went.
+_eo=$(env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
   ETLOG="$T/argv" \
   MUX_LATCH_TRANSPORT="$_stub_line" \
   MUX_LATCH_CLASSIFY=et-classify \
   MUX_LATCH_AUTH=/bin/true MUX_LATCH_MAX_TRIES=1 \
-  "$HERE/libexec/mux-latch" box proj >/dev/null 2>&1 || true
+  "$HERE/libexec/mux-latch" box proj 2>&1) || true
 _got=$(cat "$T/argv" 2>/dev/null || true)
 [ -n "$_got" ] || fail "the stubbed et was never invoked, so the argv assertion
-below would prove nothing. latch may have refused before attempting."
+below would prove nothing. latch may have refused before attempting.
+latch said: ${_eo:-<nothing>}"
 case $_got in
 *'last=[mux go proj]') ;;
 *) fail "the ET transport did not hand the command over as one unquoted
