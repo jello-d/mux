@@ -29,8 +29,29 @@ if [ -n "$_silent" ]; then
   printf '\nNO VERDICT from:%s\n' "$_silent"
   printf 'Each exited without printing ok/skip/FAIL, so it neither\n'
   printf 'passed nor reported why. The usual cause is `set -e` plus an\n'
-  printf 'unguarded $(...) around a command that now exits non-zero --\n'
+  printf 'unguarded $(...) around a command that now exits non-zero:\n'
   printf 'add `|| true` where the output is what is wanted.\n'
+  # AND THEN IT SAYS WHERE, by re-running the test under `sh -x` and printing
+  # the tail of the trace. Naming the file was the old fix and it is only half
+  # of one: under `set -e` the shell dies with no output at all, so "mux-kill
+  # went quiet" is where the investigation STARTS and there is nothing to go on.
+  #
+  # THE REASON THIS IS WORTH THE RE-RUN: the deaths that matter are the ones you
+  # cannot reproduce, and every one so far has been on a machine somebody else
+  # owns. macOS CI has reported two silent tests for days, and the trace is the
+  # difference between a guess about BSD tools and the failing command.
+  #
+  # ONE FILE'S INSTRUMENTATION DOES NOT SCALE, which is the other half. This
+  # suite already carries a hand-rolled `stage` tracker in mux-undo-pane.t for
+  # exactly this problem; `sh -x` gives every test the same thing for free and
+  # keeps working on tests nobody has thought about yet.
+  #
+  # ONLY ON THE FAILURE PATH, so a green run pays nothing.
+  for _n in $_silent; do
+    printf '\n--- %s, last 15 lines of `sh -x` -------------------------\n' \
+      "$_n"
+    sh -x "$_dir/$_n.t" 2>&1 | tail -15
+  done
 fi
 if [ "$_rc" -ne 0 ]; then
   # A FAILURE SUMMARY AT THE END, because the per-test lines scroll and a
