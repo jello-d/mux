@@ -113,16 +113,29 @@ case $_o in
 *) fail "reload did not report what it did: [$_o]" ;;
 esac
 
-# --- reload with no tmux.conf refuses, loudly --------------------------
+# --- reload NO LONGER needs a tmux.conf, and still does the work -------
+# INVERTED ON PURPOSE (R10). The old assertion required a refusal here, and
+# the refusal was the defect: reload depended on a file mux does not ship.
+#
+# TWO ASSERTIONS, because the first one alone is satisfied by a verb that
+# exits 0 and does NOTHING, which would be worse than the refusal it replaced.
+# The second is the load-bearing one: it still reached the servers.
 rm -f "$T/conf/tmux/tmux.conf"
+: >"$SRC"
 _rc=0; _o=$( cd "$T/proj" && env -u MUX_SHARE -u TMUX PATH="$T/bin:$PATH" \
   XDG_CONFIG_HOME="$T/conf" XDG_RUNTIME_DIR="$T/run" \
   MUX_DIR="$T/conf" MUX_CACHE="$T/cache" "$HERE/bin/mux" reload 2>&1 ) \
   || _rc=$?
-[ "$_rc" -ne 0 ] || fail "reload with no tmux.conf exited 0"
+[ "$_rc" -eq 0 ] || fail "reload with no tmux.conf must succeed now that mux
+ships its own wiring: rc=$_rc [$_o]"
+grep -qx 'source other' "$SRC" || fail "reload exited 0 having sourced
+NOTHING, which passes an exit-code check while leaving every server unwired:
+[$(cat "$SRC")]"
 case $_o in
-*"no tmux.conf"*) ;;
-*) fail "the refusal did not name the missing file: [$_o]" ;;
+*"no tmux.conf"*)
+  fail "reload still names a missing tmux.conf as a refusal" ;;
+*reloaded*) ;;
+*) fail "reload did not report what it did: [$_o]" ;;
 esac
 
 pass

@@ -130,12 +130,26 @@ t mux-theme
 +     [ "$_idx" -eq 0 ] && _j=1 || _j=$((_idx % _n + 2))
 m next from aaa
 
-= reload-accepts-missing-conf
+= wire-sources-the-fragment
 f bin/mux
-t mux-ls
--   [ -f "$TMUX_CONF" ] || {
-+   true || {
-m exited 0
+t mux-wire
+-   if ! tm source-file "$MUX_SHARE/mux.tmux" 2>/dev/null; then
++   if ! true 2>/dev/null; then
+m did not install mux's key bindings
+
+= wire-marker-is-versioned
+f bin/mux
+t mux-wire
+-   [ "$_wv" = "$MUX_VERSION" ] && return 0
++   [ -n "$_wv" ] && return 0
+m did not re-source a server whose marker
+
+= reload-sources-the-fragment
+f bin/mux
+t mux-wire
+-     tmux "$@" source-file "$MUX_SHARE/mux.tmux" 2>/dev/null || return 1
++     true 2>/dev/null || return 1
+m reload exited 0 without sourcing mux's fragment
 
 = style-quiet-leaks-banner
 f libexec/mux-style
@@ -179,12 +193,12 @@ t mux-exit
 +   *) echo "mux: unknown verb: $cmd" >&2; exit 0 ;;
 m an unknown verb
 
-= exit-reload-refusal-silent
+= wire-failure-is-loud
 f bin/mux
-t mux-exit
--     echo "mux: no tmux.conf at $TMUX_CONF" >&2; exit 1; }
-+     echo "" >&2; exit 1; }
-m did not name the missing file
+t mux-wire
+-     echo "mux: could not source $MUX_SHARE/mux.tmux into this server," >&2
++     echo "" >&2
+m failed SILENTLY
 
 = caps-omission-guard-off
 f bin/mux
