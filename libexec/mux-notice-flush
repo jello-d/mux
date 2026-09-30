@@ -1,0 +1,26 @@
+#!/bin/sh
+# mux-notice-flush - deliver queued notices to the terminal being handed back.
+#
+# Called from `share/mux.tmux`'s client-detached hook with the tty that was
+# recorded at attach, because `#{client_tty}` is EMPTY inside client-detached:
+# the client is gone by the time the hook body runs. See mux-notice_lib for
+# the measurement and for why the queue is durable rather than per-invocation.
+#
+# SILENT WHEN THERE IS NOTHING TO SAY, which is most detaches. This runs on
+# every single one, so it must cost nothing and print nothing in the ordinary
+# case; a detach that ends with mux clearing its throat would be worse than no
+# mechanism at all.
+#
+# IT NEVER FAILS THE HOOK. A notice is a courtesy; a broken one must not make
+# tmux report an error as the human walks away. The library's writes are all
+# best effort for the same reason.
+set -eu
+_self=$(command -v -- "$0" 2>/dev/null || printf '%s' "$0")
+_self=$(readlink -f -- "$_self" 2>/dev/null || printf '%s' "$_self")
+_lib=${_self%/*}
+. "$_lib/mux-paths_lib"
+. "$_lib/mux-notice_lib"
+
+[ -n "${1:-}" ] || exit 0
+mux_notice_flush "$1" || true
+exit 0

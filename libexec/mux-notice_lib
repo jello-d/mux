@@ -1,0 +1,193 @@
+#!/bin/sh
+# mux-notice_lib: telling the human something they will actually read.
+#
+# THE PROBLEM, and it is not "stderr does not work". Measured: a line mux
+# writes before it attaches DOES survive a detach, because tmux uses the
+# ALTERNATE screen (`?1049h`, and `?1049l` on teardown) and the terminal
+# restores the primary screen underneath, so the line reappears just above
+# tmux's own `[detached]` notice.
+#
+# IT IS STILL THE WRONG PLACE, for two reasons that have nothing to do with
+# being erased:
+#
+#   - IT IS HOURS OLD BY THEN. The human typed `mux go` and then worked in
+#     the session for a day. A line printed before the attach sits above a
+#     prompt they stopped looking at, competing with tmux's own detach
+#     message for the same glance.
+#   - AND IT IS GENUINELY LOST on any path that clears or resets the terminal
+#     rather than merely leaving the alternate screen. mux has those paths:
+#     `mux sane` exists precisely because a dead tmux leaves a terminal
+#     something has to repair, and latch repairs before it reports.
+#
+# SO A NOTICE GOES OUT TWICE, which is the user's design (2026-09-30):
+#
+#   NOW, to stderr, where it may be seen, may be missed, may be wiped.
+#   AGAIN as the terminal is handed back, so it is the thing under the cursor
+#        when the human returns to their shell.
+#
+# ---------------------------------------------------------------------------
+# THE HANDBACK IS TWO TMUX HOOKS, AND THAT WAS MEASURED, NOT ASSUMED
+#
+# The obvious single hook does not work. `client-detached` FIRES, but
+# `#{client_tty}` and `#{client_name}` both resolve EMPTY inside it: by the
+# time the hook body runs the client is gone, so the hook cannot address the
+# terminal it should write to. Same shape as the note this package already
+# carries about `run-shell -t` exporting no pane to its child.
+#
+# TWO HOOKS DO WORK, and the ordering is the part that had to be checked:
+#
+#     client-attached   record #{client_tty}, which IS available there
+#     client-detached   write to the tty recorded at attach
+#
+#     6 of 6 runs: the bytes land AFTER `?1049l`
+#
+# so the text is on the REAL terminal rather than on the alternate screen
+# that is about to be discarded. Had it landed before, this whole approach
+# would have been silently useless, which is why it was measured over several
+# runs rather than once.
+#
+# WHAT THIS BUYS over mux flushing the queue itself: mux keeps its deliberate
+# `exec` of the tmux client, so no shell lingers per attached session, AND a
+# detach mux never saw (a plain `tmux detach-client`, a `prefix d`) still
+# delivers. mux is not the only way out of a session, so a mechanism that only
+# works on mux's own exit path would miss the common case.
+#
+# TWO COSTS, both real and neither hidden:
+#
+#   - THE QUEUE MUST BE DURABLE, because the hook runs in the SERVER's
+#     context and cannot see a temp file owned by a mux that has since been
+#     replaced by exec. So it is a file at a known path, and a crash between
+#     write and flush leaves notices for the next detach on that terminal to
+#     print. See the staleness note below, which is the interesting half.
+#   - ONE TTY PER SERVER OPTION. With two clients attached, the second attach
+#     overwrites the first's record, and a detach then prints on whichever was
+#     recorded last. tmux offers no per-client storage and `client-detached`
+#     knows no client identity, so this cannot be resolved from here. The
+#     consequence is a notice appearing in the wrong terminal, which is
+#     confusing rather than harmful, and mux's common case is one client.
+#
+# ---------------------------------------------------------------------------
+# AGE IS NOT STALENESS, which is the user's correction to an earlier design
+# here and is worth stating because the instinct it corrects is a strong one.
+#
+# The first version dropped a notice past an age, by analogy with
+# MUX_NOTIF_TTL dropping a stale notification id. That analogy is wrong. A
+# freedesktop id goes stale because the THING IT NAMES is reassigned to
+# somebody else's banner, so an old id is actively misleading. An environment
+# notice names a FACT: "WAYLAND_DISPLAY was withheld because nothing is
+# listening on it". That fact does not expire because an hour passed; it is
+# very likely still true, and throwing it away loses the only record that mux
+# withheld anything.
+#
+# SO NOTHING IS DROPPED BY AGE. Each notice carries WHEN and IN WHAT PHASE it
+# arose, and the reader judges. That is this package's "names rather than
+# counts" instinct applied to time: do not discard information, attribute it.
+
+# WHERE THE QUEUE LIVES: $MUX_STATE, not $MUX_CACHE, by this package's own
+# does-it-rebuild test. A notice cannot be recomputed. The moment that made it
+# true is gone, which is the same argument that moved the session set and the
+# indicator's colour slots.
+#
+# KEYED BY TTY, because that is what the handback can resolve. The hook knows
+# the tty it recorded at attach and nothing else about who is waiting.
+mux_notice_file() {   # [tty] -> the queue for that terminal
+  _nfd=$(mux_state_dir)/notices
+  _nft=${1:-}
+  # `tty` PRINTS "not a tty" ON STDOUT and exits non-zero, so
+  # `$(tty || echo unknown)` yields BOTH strings concatenated, and the key
+  # became `not_a_tty_unknown`. Capture first, then decide: a fallback that
+  # appends to a failed command's own output is not a fallback. Found by
+  # running this from a shell with no controlling terminal, which is exactly
+  # where an agent or a cron job lives.
+  if [ -z "$_nft" ]; then
+    _nft=$(tty 2>/dev/null) || _nft=
+    case ${_nft:-} in
+    /dev/*) ;;
+    *) _nft=unknown ;;
+    esac
+  fi
+  # The same sanitiser the undo-pane record uses. Lossless enough here: only
+  # `/` is replaced, and two distinct ttys cannot collide after it.
+  printf '%s/%s' "$_nfd" \
+    "$(printf '%s' "$_nft" | tr -c 'A-Za-z0-9_.-' '_')"
+}
+
+# Say something now AND keep it for the handback.
+#
+# STDERR IMMEDIATELY, not only at the end, because the end may never come: a
+# `mux go` that is killed still owes the human the reason something was
+# withheld at the moment it happened.
+#
+# THE PHASE IS THE CALLER'S WORD for what it was doing, so a notice read an
+# hour later is attributable without mux guessing. TAB-separated, because a
+# notice text is prose and will contain spaces; the same reason the agent
+# record is tab-separated.
+mux_notice() {   # <phase> <text...>
+  _nph=$1; shift
+  printf 'mux: %s\n' "$*" >&2
+  _nqf=$(mux_notice_file)
+  mkdir -p "${_nqf%/*}" 2>/dev/null || return 0
+  # `2>/dev/null` FIRST, which is not cosmetic: redirections apply left to
+  # right, so with the order reversed a failing OPEN of the queue happens
+  # while stderr is still the terminal and the SHELL prints the complaint
+  # before this command ever runs. test/lint.t refuses the wrong order, and
+  # caught this very line.
+  printf '%s\t%s\t%s\n' "$(date +%s 2>/dev/null || echo 0)" "$_nph" "$*" \
+    2>/dev/null >>"$_nqf" || true
+}
+
+# --- the handback ----------------------------------------------------------
+# Called by the client-detached hook with the tty recorded at attach. Prints
+# to that tty and REMOVES the queue, so a notice is delivered once.
+#
+# EACH LINE CARRIES ITS OWN AGE, per the correction above: nothing is dropped,
+# so a notice from a run that died is still delivered and still says when it
+# happened rather than pretending to be current.
+mux_notice_flush() {   # <tty>
+  _nft=${1:-}
+  [ -n "$_nft" ] || return 0
+  _nqf=$(mux_notice_file "$_nft")
+  [ -s "$_nqf" ] || return 0
+  _nnow=$(date +%s 2>/dev/null || echo 0)
+  {
+    # A blank line first: tmux has just written `[detached (from session X)]`
+    # and two unrelated messages on adjacent lines read as one.
+    printf '\n'
+    printf 'mux noticed:\n'
+    while IFS='	' read -r _nwhen _nphase _ntext; do
+      [ -n "$_ntext" ] || continue
+      _nage=
+      case ${_nwhen:-0} in
+      ''|*[!0-9]*) ;;
+      *) if [ "$_nnow" -gt "$_nwhen" ] 2>/dev/null; then
+           _nage=$(( _nnow - _nwhen ))
+           if   [ "$_nage" -lt 90 ];   then _nage="${_nage}s ago"
+           elif [ "$_nage" -lt 5400 ]; then _nage="$(( _nage / 60 ))m ago"
+           else _nage="$(( _nage / 3600 ))h ago"
+           fi
+         fi ;;
+      esac
+      printf '  %s%s: %s\n' "$_nphase" "${_nage:+, $_nage}" "$_ntext"
+    done <"$_nqf"
+    # `2>/dev/null` BEFORE the redirect, and this one is the reason the rule
+    # exists. With `>"$_nft" 2>/dev/null` a tty that has been released prints
+    # `cannot create /dev/pts/21: Permission denied` straight into whatever
+    # stderr still points at, which during a detach hook is the tmux server's
+    # log. Observed exactly that while building this.
+  } 2>/dev/null >"$_nft" || {
+    # DELIVERY FAILED, SO THE QUEUE SURVIVES. The first version removed it
+    # unconditionally and lost the notice: found by an end-to-end test where
+    # the tty had already been released (`cannot create /dev/pts/21:
+    # Permission denied`) and the queue was gone afterwards anyway. A notice
+    # that could not be delivered is exactly the one worth keeping, and the
+    # next detach on that terminal will carry it with its age attached, which
+    # is why nothing here is dropped for being old.
+    return 1
+  }
+  # THE LITERAL IS RECORDED BEFORE THE REMOVAL, per the standing rule in
+  # ~/src/CLAUDE.md: expand first, check what it is, then remove exactly that.
+  # An absolute path under the state dir, or nothing happens.
+  case $_nqf in
+  /*) rm -f "$_nqf" 2>/dev/null || true ;;
+  esac
+}

@@ -244,6 +244,7 @@ click internal
 cycle internal
 migrate-profiles internal
 next-blocked internal
+notice-flush internal
 pin internal
 refresh internal
 scan internal
@@ -366,6 +367,10 @@ agent-doctor)  shift; exec "$LIBEXEC/mux-agent-doctor" "$@" ;;
 latch)         shift; exec "$LIBEXEC/mux-latch" "$@" ;;
 sane)          shift; exec "$LIBEXEC/mux-sane" "$@" ;;
 agent-hook)    shift; exec "$LIBEXEC/mux-agent-hook" "$@" ;;
+# Called only from the client-detached hook in share/mux.tmux, with the tty
+# that hook recorded at attach time. Silent when there is nothing queued,
+# which is most detaches.
+notice-flush)  shift; exec "$LIBEXEC/mux-notice-flush" "$@" ;;
 # THE MACHINE CONTRACT, and a MODE SWITCH rather than a verb: everything under
 # `mux agent` answers JSON on stdout, always, including on failure. The
 # hyphenated `agent-*` verbs above are mux's own plumbing (called by tmux
