@@ -135,11 +135,11 @@ printf 'label WORK\n' >"$T/conf/contexts/work.context"
 # --- set_opt writes only when the value CHANGES ------------------------
 # status-left re-runs this every tick; an unconditional set redraws the bar.
 reset
-CTX_TOKEN=work style -q proj $$ >/dev/null
+CTX_TOKEN=work style -q proj $$ >/dev/null; unset CTX_TOKEN
 _first=$(sets)
 [ "$_first" -gt 0 ] || fail "the first run set nothing at all"
 : >"$SETLOG"
-CTX_TOKEN=work style -q proj $$ >/dev/null
+CTX_TOKEN=work style -q proj $$ >/dev/null; unset CTX_TOKEN
 [ "$(sets)" -eq 0 ] \
   || fail "a second identical run still wrote $(sets) option(s)"
 
@@ -184,7 +184,7 @@ printf 'label WORK\n' >"$T/conf/contexts/work.context"
 # that two copies of one guess agree, and the first attempt did exactly that,
 # indexing the SESSION id instead of tpgid and "failing" against correct code.
 reset
-CTX_TOKEN=work style -q proj $$ >/dev/null
+CTX_TOKEN=work style -q proj $$ >/dev/null; unset CTX_TOKEN
 _asked=$(head -1 "$PIDLOG")
 _tp=$(ps -o tpgid= -p $$ 2>/dev/null | tr -d ' ')
 case ${_tp:-} in

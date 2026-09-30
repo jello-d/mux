@@ -105,10 +105,11 @@ lower this floor in the same commit so the next shrink is still visible"
 # file and the line. The fix is the POSIX `(pat)` form, verified identical in
 # dash, bash 3.2, bash 5 and ksh.
 #
-# `test/conventions.t` also parses with `dash -n` and `bash -n`. This is not a
-# duplicate of that: its `bash -n` runs bash in BASH mode, while a `#!/bin/sh`
-# file runs in SH mode, and it is a vendored file that is mux's to use and not
-# to fix. A check for a class mux shipped belongs in mux.
+# `test/conventions.t` also parses with `dash -n` and `bash -n`, and this is not
+# a duplicate of that. Its `bash -n` runs bash in BASH mode, while a `#!/bin/sh`
+# file runs in SH mode, and it is a VENDORED file: a rule only reaches it
+# through the canonical copy and a re-seed of fourteen repos. A check for a
+# class mux shipped belongs in mux, where it lands the same day.
 _perr=$T/parse
 : >"$_perr"
 while IFS= read -r _f; do
@@ -269,10 +270,11 @@ fi
 # Bake the literal in when ARMING it (`_C="'$T'"; trap "rm -rf $_C" EXIT`), so
 # `trap` prints exactly what will run and no later assignment can move it.
 #
-# test/conventions.t IS EXCLUDED BY NAME, not forgiven: it is vendored
-# byte-identical from ~/src/shared-notes/_conventions.t and carries the same
-# shape, so the fix belongs in the canonical copy and is reported there. Editing
-# the vendored copy would reach no other repo and the drift check would say so.
+# test/conventions.t WAS EXCLUDED BY NAME and no longer needs to be: it carried
+# the identical shape, vendored into fourteen repos, so the fix went into the
+# canonical ~/src/shared-notes/_conventions.t and came back here as a re-seed.
+# That is the only sanctioned direction, and it means this rule now covers every
+# file in the tree with no exception but its own checker.
 # THE DISCRIMINATOR IS THE QUOTING, which the first version of this rule got
 # wrong by flagging any trap mentioning `rm -rf` and a `$`: that is also the
 # CORRECT form, where the variable already holds a literal expanded at arm time.
@@ -286,13 +288,97 @@ _trp=$T/traps
 ( cd "$HERE" && grep -rnE "trap '[^']*rm -rf[^']*\\\$" \
   bin libexec test share setup.sh indicator 2>/dev/null \
   | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' \
-  | grep -vE '^test/(conventions|lint)\.t:' ) >"$_trp" || true
+  | grep -vE '^test/lint\.t:' ) >"$_trp" || true
 if [ -s "$_trp" ]; then
   printf 'FAIL %s: a destructive trap defers its expansion:\n' "$_name" >&2
   sed 's/^/  /' "$_trp" >&2
   printf 'Bake the literal in at ARM time: _C="'"'"'$DIR'"'"'"; ' >&2
   printf 'trap "rm -rf $_C" EXIT\n' >&2
   printf 'This shape deleted this repository once.\n' >&2
+  exit 1
+fi
+
+# --- A VARIABLE ASSIGNMENT ON A FUNCTION CALL IS UNSPECIFIED ---------------
+# `VAR=x somefunc` does NOT mean the same thing in every shell, and POSIX says
+# so: for a FUNCTION (unlike an external command) whether the assignment
+# survives the call is unspecified. MEASURED, all five shells this tree meets:
+#
+#     dash                 does NOT persist
+#     bash 5 (sh or bash)  does NOT persist
+#     bash 3.2 as sh       PERSISTS      <- macOS /bin/sh
+#     ksh                  PERSISTS      <- the login shell on these boxes
+#
+# SO IT LEAKS INTO THE NEXT CALL on exactly the two shells nobody develops in.
+# test/mux-agent.t had twenty of these and the leak produced a real failure:
+# `CLASS=agent run send ...` left CLASS set, so the NEXT case, which exists to
+# prove that a human's pane is never granted, ran against a pane classified
+# `agent` and was granted. It reported `human-star-rc: got [0] want [1]` on
+# macOS and passed here, and the assertion it defeated is a SECURITY one.
+#
+# THE FIX IS `; unset VAR` ON THE SAME LINE, which is why this rule can be
+# mechanical: it keeps the concise call style, it is a no-op in the shells that
+# already scope it, and having it on the same line means the reader sees the
+# whole lifetime at once.
+#
+# SCOPED TO A LINE-LEADING PREFIX, deliberately. Inside `$( )` the command runs
+# in a SUBSHELL, so a leak dies with it and needs nothing; every dangerous site
+# in this tree was a bare call at line start and every safe one was a
+# substitution, so the distinction is not a guess.
+#
+# AND ONLY FOR A FUNCTION DEFINED IN THAT FILE. `VAR=x /some/program` is
+# perfectly well specified and used all over this suite; the whole hazard is
+# the function case. That check is what the naming rule bought elsewhere: it
+# needs the list of function names, so the program reads each file twice.
+cat >"$T/prefix.awk" <<'AWK'
+# pass 1: the functions this file defines. pass 2: line-leading assignment
+# prefixes calling one of them with no `unset` on the line.
+NR == FNR {
+  if ($0 ~ /^[A-Za-z_][A-Za-z_0-9]*\(\)[ \t]*\{/) {
+    nm = $0; sub(/\(\).*/, "", nm); fn[nm] = 1
+  }
+  next
+}
+/^[ \t]*#/ { next }
+/unset/ { next }
+{
+  s = $0
+  sub(/^[ \t]+/, "", s)
+  k = 0
+  more = 1
+  while (more) {
+    more = 0
+    # a value is a single-quoted run, a double-quoted run, or a blank-free
+    # run that carries no `;` (a separate command), no substitution, and no
+    # `)`. THE PAREN IS WHAT KEEPS A CASE ARM OUT: `fg=*) _sgr_color ...` in
+    # bin/mux reads as an assignment of `*)` otherwise, and the first two
+    # things this rule reported were exactly that.
+    if (match(s, /^[A-Za-z_][A-Za-z_0-9]*='[^']*'[ \t]+/) \
+     || match(s, /^[A-Za-z_][A-Za-z_0-9]*="[^"]*"[ \t]+/) \
+     || match(s, /^[A-Za-z_][A-Za-z_0-9]*=[^ \t;`"'\''$()]*[ \t]+/)) {
+      s = substr(s, RLENGTH + 1)
+      k++
+      more = 1
+    }
+  }
+  if (k > 0) {
+    split(s, w, /[ \t]/)
+    if (w[1] in fn) printf "%s:%d: %s\n", FILENAME, FNR, $0
+  }
+}
+AWK
+_pfx=$T/prefix
+: >"$_pfx"
+while IFS= read -r _f; do
+  [ -n "$_f" ] || continue
+  awk -f "$T/prefix.awk" "$_f" "$_f" >>"$_pfx" || true
+done <"$_list"
+if [ -s "$_pfx" ]; then
+  printf 'FAIL %s: a variable assignment prefixes a FUNCTION call:\n' \
+    "$_name" >&2
+  sed 's|^'"$HERE"'/||' "$_pfx" >&2
+  printf '\nWhether that assignment survives the call is UNSPECIFIED: it\n' >&2
+  printf 'persists in bash 3.2 (macOS /bin/sh) and in ksh, and not in\n' >&2
+  printf 'dash or bash 5. Append `; unset VAR` on the same line.\n' >&2
   exit 1
 fi
 

@@ -82,7 +82,21 @@ trap >"$T/traps"
 below proves nothing"
 grep -q 'rm -rf' "$T/traps" || fail "no cleanup trap is armed at all:
 $(cat "$T/traps")"
-if grep 'rm -rf' "$T/traps" | grep -q '\$'; then
+# AN EXPANSION, NOT A DOLLAR SIGN, and the difference is a real one that only
+# a third shell exposed. The first version grepped the trap text for any `$`
+# and reported a DEFERRED EXPANSION under ksh against a trap holding perfect
+# literals, because ksh renders a trap with ANSI-C quoting (the marker below
+# is because this is ksh's OWN output, quoted verbatim):
+#
+#     trap -- $'rm -rf \'/tmp/x\'' EXIT   # conventions: allow --
+#
+# That `$` belongs to the QUOTING STYLE, so the assertion was about the
+# shell's rendering rather than about the trap. Matching the three real
+# expansion shapes (`$NAME`, `${`, `$(`) says what it means. ksh is not an
+# interpreter this suite runs under, so nothing was broken; an assertion one
+# quoting style away from lying is worth fixing anyway.
+if grep 'rm -rf' "$T/traps" \
+  | grep -qE '\$[A-Za-z_{(]'; then
   fail "the cleanup trap DEFERS AN EXPANSION:
 $(grep 'rm -rf' "$T/traps")
 It must hold the literal path, baked in when the trap was armed, so \`trap\`

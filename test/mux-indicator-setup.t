@@ -150,7 +150,8 @@ $OUT"
 # install cannot start anything, the unit is enabled, and it comes up at the
 # next login. That case is the reason the call was wrapped in `|| true` at
 # all; the mistake was letting it silence every other case too.
-SCTL_FAIL='Failed to connect to bus: No medium found' run service
+SCTL_FAIL='Failed to connect to bus: No medium found'
+run service; unset SCTL_FAIL
 [ "$RC" = 0 ] || fail "no user manager is not an error, got $RC"
 has "next login" "a headless install did not say when it would start"
 case $OUT in
@@ -159,7 +160,7 @@ esac
 
 # ... and anything else is loud and non-zero, because a service that will not
 # start is drift the provisioner has to see.
-SCTL_FAIL='Job for mux-indicator.service failed' run service
+SCTL_FAIL='Job for mux-indicator.service failed' run service; unset SCTL_FAIL
 [ "$RC" = 1 ] || fail "a failed restart must exit non-zero, got $RC"
 has "RESTART FAILED" "a failed restart was not reported as one"
 has "OLD code" "the failure did not say what it means for the running daemon"
@@ -277,7 +278,7 @@ for _f in "$HERE"/indicator/mux_indicator/*.py; do cp "$_f" "$SITE/"; done
 if [ -d "/proc/$$" ]; then
   # NOT RUNNING is not stale: there is no process to be wrong about, and a
   # headless box with no graphical session is a healthy version of this.
-  SCTL_PID=0 run check
+  SCTL_PID=0 run check; unset SCTL_PID
   has "not running" "a stopped unit was not reported as such"
   case $OUT in
   *"RUNNING daemon started BEFORE"*) fail "a unit that is not running was
@@ -286,14 +287,14 @@ called stale; there is no process there to be stale" ;;
 
   # Code the daemon could have loaded: everything predates it.
   find "$SITE" -name '*.py' -exec touch -t 197001020000 {} +
-  SCTL_PID=$$ run check
+  SCTL_PID=$$ run check; unset SCTL_PID
   has "running daemon is on the installed code" \
     "code older than the process was called stale"
 
   # ... and now an install lands UNDER a daemon that is still running: the
   # file is newer than the process, so the process cannot be running it.
   touch "$SITE/render.py"
-  SCTL_PID=$$ run check
+  SCTL_PID=$$ run check; unset SCTL_PID
   has "RUNNING daemon started BEFORE" \
     "a daemon older than its own code was not reported"
   has "render.py" "the stale-process report did not name the file"
