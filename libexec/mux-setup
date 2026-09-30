@@ -81,8 +81,10 @@ done
 [ -n "$_agent" ] || { _usage >&2; exit 2; }
 # VALIDATED BEFORE IT IS A PATH, the same rule `mux skill` follows: the name
 # picks a file, so a traversal must be refused as a usage error and not read.
+# ENUMERATED RATHER THAN `[a-z]`, for the reason mux_ctx_valid records: a range
+# is a collation range, and macOS let `UPPER` through one.
 case $_agent in
-''|*[!a-z0-9-]*|-*|*-)
+''|*[!abcdefghijklmnopqrstuvwxyz0123456789-]*|-*|*-)
   echo "mux: setup: not an agent name: $_agent" >&2; exit 2 ;;
 esac
 if ! _known | grep -qxF -- "$_agent"; then

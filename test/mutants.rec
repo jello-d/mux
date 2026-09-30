@@ -1792,8 +1792,8 @@ m peers-stale-pane
 = skill-name-is-a-path
 f libexec/mux-skill
 t mux-skill
-- ''|*[!a-z0-9-]*|-*|*-) echo "mux: skill: not a skill name: $_name" >&2
-+ '') echo
+- ''|*[!abcdefghijklmnopqrstuvwxyz0123456789-]*|-*|*-)
++ '')
 m should be a usage error
 
 = skill-missing-lists-nothing

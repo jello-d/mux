@@ -51,9 +51,22 @@ MUX_THEME_FALLBACK=purple
 # where mux writes. Invalid is an ERROR, never a silent fall back to global:
 # a typo'd token quietly becoming the baseline would put work sessions in the
 # personal partition.
+# THE CLASS IS ENUMERATED, NOT A RANGE, and that is a portability fix rather
+# than a style one. `[a-z]` is a COLLATION range, so what it matches depends on
+# the locale: on macOS, `mux_ctx_valid Work` ACCEPTED, measured on the CI runner
+# (`FAIL mux-context: validator accepted [Work]`), because the range spans the
+# case-interleaved order there. A class (`[:lower:]`) fixes the case half and
+# opens another: in a UTF-8 locale it admits non-ASCII lowercase, and a DNS
+# label is ASCII by definition. Thirty-seven characters said outright cannot
+# drift with anybody's locale.
+#
+# WHAT IT COST ON macOS was not a traversal (`.` and `/` are in no letter
+# range), it was IDENTITY: the token becomes a socket name and a state
+# directory, the default filesystem there is case-INSENSITIVE, so `Work` and
+# `work` are two partitions to mux and one directory to the OS.
 mux_ctx_valid() {       # <token>
   case $1 in
-  ''|*[!a-z0-9-]*|-*|*-) return 1 ;;
+  ''|*[!abcdefghijklmnopqrstuvwxyz0123456789-]*|-*|*-) return 1 ;;
   esac
   [ "${#1}" -le 63 ]
 }

@@ -74,8 +74,11 @@ esac
 # A NAME THAT IS NOT A NAME IS A USAGE ERROR, checked before it becomes a
 # path. The value ends up in a filename, so `../../etc/passwd` would otherwise
 # be a readable file this happily printed.
+# ENUMERATED RATHER THAN `[a-z]`, because a range is a COLLATION range and
+# macOS accepted `UPPER` through one: see mux_ctx_valid for the measurement.
 case $_name in
-''|*[!a-z0-9-]*|-*|*-) echo "mux: skill: not a skill name: $_name" >&2
+''|*[!abcdefghijklmnopqrstuvwxyz0123456789-]*|-*|*-)
+  echo "mux: skill: not a skill name: $_name" >&2
   exit 2 ;;
 esac
 
