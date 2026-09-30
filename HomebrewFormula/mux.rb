@@ -28,8 +28,8 @@ class Mux < Formula
   # this version of `MUX_VERSION` -- so a release that forgets this file turns
   # the suite red instead of leaving Homebrew users on an old mux forever.
   url "https://github.com/jello-d/mux.git",
-      tag:      "v0.83",
-      revision: "6d43e403aa6cd3116448fd339fa3e2ecfc8c7e5a"
+      tag:      "v0.84",
+      revision: "6f15576edb3544e64dbf4888149fb2450a2ea91c"
   license "Apache-2.0"
   head "https://github.com/jello-d/mux.git", branch: "main"
 
