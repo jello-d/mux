@@ -260,14 +260,34 @@ fi
 # `mux agent-render` PRUNES state files it believes orphaned, and run against
 # the wrong socket it deletes every agent's state, which has happened. A
 # check must never be able to damage what it inspects.
-_keys=$(_vt list-keys -T prefix 2>/dev/null || true)
-if [ -z "$_keys" ]; then
+# THE PROBE MUST NOT BE ABLE TO CREATE WHAT IT IS LOOKING FOR, and the obvious
+# one does. `tmux list-keys` STARTS A SERVER when none is running and then
+# answers out of tmux's DEFAULTS: measured, 93 lines from a socket that did not
+# exist a moment earlier. So keying the guard on its output meant three things
+# at once, all of them wrong:
+#
+#   `mux check` SPAWNED a tmux server as a side effect, three lines below this
+#       file's own comment that a check must never damage what it inspects;
+#   the no-server branch below could NEVER fire, so its honest "state unchecked"
+#       line had never once been printed on a serverless box;
+#   and the pristine server it had just started then failed five assertions,
+#       so a fresh install reported a wall of red about a server the user never
+#       started, and exited non-zero.
+#
+# Found on ubuntu-latest, which is a bare box and therefore the only place in
+# this project's history where the serverless path was ever taken.
+#
+# `list-sessions` IS THE PROBE: it errors instead of spawning (measured both
+# ways), and a server with no sessions does not exist, since tmux exits when the
+# last one goes.
+if ! _vt list-sessions >/dev/null 2>&1; then
   # No server for this partition. A perfectly healthy state (a fresh boot,
   # a headless box), so it is not a WARN, but it is said out loud, because
   # a check that silently skips its only functional assertions is exactly
   # the check this section exists to replace.
   ok "no tmux server for '${MUX_CTX_PARTITION:-global}': tmux state unchecked"
 else
+  _keys=$(_vt list-keys -T prefix 2>/dev/null || true)
   # share/mux.tmux carries no paths: every binding reaches a helper as
   # `mux <verb>`. So a binding that exists but does not mention mux is a
   # binding tmux kept from some other config, not mux's.
