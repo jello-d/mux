@@ -2,7 +2,7 @@
 # mux-refresh: unstick the layout.
 #
 #   (no arg)  even out the top row's pane WIDTHS, then perturb the mux bottom
-#             pane and re-pin its HEIGHT -- the CLI equivalent of dragging a
+#             pane and re-pin its HEIGHT: the CLI equivalent of dragging a
 #             border and letting it snap back. Clears the classic "half-height
 #             pane" wedge, a proportional-resize GEOMETRY glitch that mux-pin
 #             alone will not fix when it thinks the size is already right, and
@@ -11,7 +11,7 @@
 #   --force   REBUILD the bottom pane: break it out and rejoin it full-width,
 #             forcing tmux to re-lay-out and re-emit that border's cells from
 #             SCRATCH. This clears a stuck RENDER state that a repaint or a
-#             perturb cannot -- e.g. tmux 3.5a drawing a full-width horizontal
+#             perturb cannot: e.g. tmux 3.5a drawing a full-width horizontal
 #             border in reverse video (bg/fg swapped) with no reverse anywhere
 #             in the config. Pane content is preserved; focus is restored. The
 #             bigger hammer for when prefix+r is not enough. Bound to prefix+R.

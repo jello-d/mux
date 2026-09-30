@@ -34,7 +34,7 @@ case "$*" in
   shift 2; _n=$1; shift; _v=$*
   printf 'set %s\n' "$_n" >>"$LOG"
   # An exact FIELD compare, not a grep pattern: the real option name here
-  # is `status-format[0]`, and [0] is a regex character class -- so a
+  # is `status-format[0]`, and [0] is a regex character class, so a
   # grep-based removal silently kept the old line and every read returned
   # the stale first match. A stub that models the tool wrongly is worse
   # than no test; this one produced a confident false failure.

@@ -3,7 +3,7 @@
 #
 # It used to only re-pin the BOTTOM pane's height. But tmux redistributes width
 # proportionally on every resize, and the rounding means a window resized a few
-# times drifts off an even split and STAYS there -- 79|81 in a 161-column
+# times drifts off an even split and STAYS there: 79|81 in a 161-column
 # window that should be 80|80. mux builds a row with `select-layout
 # even-horizontal`, so even IS the canonical state and nothing in a layout can
 # ask for anything else; there was simply nothing that restored it. With

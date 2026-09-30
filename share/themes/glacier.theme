@@ -1,4 +1,4 @@
-# glacier: a pale, icy steel-blue -- the one LIGHT theme in the set. Truecolor
+# glacier: a pale, icy steel-blue: the one LIGHT theme in the set. Truecolor
 # hex. The bar is kept clearly tinted (not near-white) so the constant white
 # current-session chip in the strip still reads against it.
 bar     bg=#a8c8de fg=#1c3040

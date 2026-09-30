@@ -21,7 +21,7 @@ case "$*" in
 *list-sessions*)    printf 'alpha\nbravo\ncharlie\nworksess\n' ;;
 # ORDER MATTERS, and it bit: the list-clients FORMAT contains
 # `#{client_name}`, so a `*client_name*` arm placed first swallows it and
-# returns a single tty -- the headless case then looked like it could not
+# returns a single tty: the headless case then looked like it could not
 # resolve a client when the code was fine. Most specific arm first.
 *list-clients*)     [ -n "${MUX_NB_NOCLIENTS:-}" ] && exit 0
                     printf '100 /dev/pts/1\n900 /dev/pts/9\n300 /dev/pts/3\n' ;;
@@ -51,7 +51,7 @@ run() {
   cat "$TMUXLOG"
 }
 
-# bravo blocked since epoch 200, charlie since 100 -- charlie has waited
+# bravo blocked since epoch 200, charlie since 100: charlie has waited
 # LONGER, so charlie is the jump. (alpha is the client's own session.)
 agent_rec "$T/rt/agent-state/default/p1" blocked %1 200 bravo x
 agent_rec "$T/rt/agent-state/default/p2" blocked %2 100 charlie x
@@ -72,7 +72,7 @@ _got=$(run '/dev/pts/7')
 _exp='SWITCH switch-client -c /dev/pts/7 -t =bravo'
 [ "$_got" = "$_exp" ] || fail "next in order: got [$_got] want [$_exp]"
 
-# Nothing blocked: no jump, and SILENCE -- it runs from a key binding, whose
+# Nothing blocked: no jump, and SILENCE; it runs from a key binding, whose
 # stdout tmux would pop in a view-mode buffer over the pane.
 rm -f "$T/rt/agent-state/default/p1"
 _got=$(run '/dev/pts/7')
@@ -81,7 +81,7 @@ _got=$(run '/dev/pts/7')
 # No client and NOTHING ATTACHED to resolve one from: fail loud, non-zero.
 #
 # This used to read "no session to resolve one from", because outside tmux the
-# verb refused outright. It does not any more -- a remote caller arriving over
+# verb refused outright. It does not any more: a remote caller arriving over
 # a transport has no pane and never will, and a tray item exists only when a
 # latch does, so there IS a client. The refusal now turns on whether anything
 # is ATTACHED, which is the fact that actually decides whether a switch is
@@ -95,13 +95,13 @@ fi
 # The tray indicator reaches a latched host over the same transport it polls
 # with, so there is no pane to resolve a client from. That used to exit 1 and
 # say "must run in a session", which made the whole cross-machine click
-# impossible -- and a tray item exists ONLY when a latch does, so a client is
+# impossible, and a tray item exists ONLY when a latch does, so a client is
 # by definition attached.
 #
 # The partition is `default` here, matching the namespace the records above
 # were written under: headless, the socket comes from MUX_CTX_PARTITION rather
 # than from $TMUX, and pointing it elsewhere finds an empty state dir and
-# correctly does nothing -- which reads exactly like a broken client lookup.
+# correctly does nothing, which reads exactly like a broken client lookup.
 #
 # MOST RECENTLY ACTIVE wins. Asserted with the busiest client deliberately NOT
 # first in the list, so an implementation that just takes the first line fails
@@ -120,13 +120,13 @@ env -u MUX_SHARE -u TMUX MUX_CTX_PARTITION=default \
 case "$(cat "$TMUXLOG")" in
 *"/dev/pts/9"*) ;;
 *) fail "headless did not pick the most recently active client: got
-[$(cat "$TMUXLOG")] -- wanted the one with the highest client_activity" ;;
+[$(cat "$TMUXLOG")]; wanted the one with the highest client_activity" ;;
 esac
 
 # --- --partition SCOPES THE WHOLE RUN --------------------------------------
 # One host publishes one tray item per partition now, so a click on the `work`
 # item has to jump to WORK's blocked session. Without this every item on a
-# host did the same thing -- and did it plausibly, landing on a real session
+# host did the same thing, and did it plausibly, landing on a real session
 # that simply was not the one you clicked.
 #
 # BOTH HALVES ARE ASSERTED, because they resolve from different places and
@@ -145,12 +145,12 @@ env -u MUX_SHARE -u TMUX MUX_CTX_PARTITION=default \
 case "$(cat "$TMUXLOG")" in
 *"=worksess"*) ;;
 *) fail "--partition did not reach the partition's STATE: got
-[$(cat "$TMUXLOG")] -- it read another partition's records" ;;
+[$(cat "$TMUXLOG")]; it read another partition's records" ;;
 esac
 case "$(cat "$TMUXLOG")" in
 *"-L work"*) ;;
 *) fail "--partition did not reach the partition's SERVER: got
-[$(cat "$TMUXLOG")] -- the switch went to whichever socket was default" ;;
+[$(cat "$TMUXLOG")]; the switch went to whichever socket was default" ;;
 esac
 
 # A bare --partition is a usage error, not a silent fall back to the caller's

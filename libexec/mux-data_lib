@@ -17,7 +17,7 @@
 # overlay the README and man page both promise did not exist at all). One
 # resolver, so the sites cannot disagree again.
 #
-# KIND is a subdirectory of the data root -- `themes`, `agents`, `shapes` -- or
+# KIND is a subdirectory of the data root (`themes`, `agents`, `shapes`), or
 # EMPTY for the root itself, where layouts live. EXT is the file extension
 # including its dot, or empty for an extensionless file (themes/defaults).
 

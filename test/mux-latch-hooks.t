@@ -11,12 +11,12 @@
 # and `blocked` exists to make the credential-prompt storm impossible: every
 # attempt against a host with no live credential is a password prompt or a
 # hardware-key touch. So the two ways it can be wrong are both bad and not
-# symmetric --
+# symmetric:
 #
 #   answering 0 with no credential live  -> latch attempts, and the storm is on
 #   answering 1 with a credential live   -> latch waits forever for nothing
-#
-# -- and 78 ("cannot tell") exists so neither has to be guessed. None of that
+#,
+# and 78 ("cannot tell") exists so neither has to be guessed. None of that
 # was verified by anything until now.
 #
 # ssh and ssh-add are STUBBED ON PATH, which is the only way to drive the three
@@ -70,7 +70,7 @@ tried() { grep -c . "$SSHLOG" 2>/dev/null || true; }
 
 # --- ssh-auth: a LIVE CONTROL MASTER is the strongest yes ---------------
 # It means the connection is already authenticated, so no credential is needed
-# at all. Cheapest check, so it goes first -- and it must SHORT-CIRCUIT: asking
+# at all. Cheapest check, so it goes first, and it must SHORT-CIRCUIT: asking
 # ssh-add afterwards could answer 1 on an empty agent and turn a working
 # connection into `blocked`.
 [ "$(OCHECK=0 ADDRC=1 ask "$AUTH" box)" = 0 ] \

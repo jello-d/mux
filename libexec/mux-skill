@@ -5,14 +5,14 @@
 #   mux skill --agents-md [NAME]   the AGENTS.md form: the body alone
 #
 # An API agents do not know about does not get used, which is the whole reason
-# this ships. The verbs, the JSON contract and -- the part that matters -- the
+# this ships. The verbs, the JSON contract and (the part that matters) the
 # rule about never answering another agent's permission prompt are no use
 # living only in a man page an agent will not read.
 #
 # TWO CONVENTIONS, ONE DOCUMENT. `AGENTS.md` is the vendor-neutral file a
 # repository carries for whatever agent turns up; a `SKILL.md` with YAML
 # frontmatter is one harness's on-demand form. They want the same words, so
-# there is ONE body -- `skills/<name>/AGENTS.md` -- and the frontmatter is data
+# there is ONE body (`skills/<name>/AGENTS.md`), and the frontmatter is data
 # beside it, assembled here. A second copy of the text would drift, and it
 # would drift in the direction where the two answers disagree about what mux
 # refuses.
@@ -34,13 +34,13 @@
 #
 # NOT `mux agent skill`, deliberately. Everything under `mux agent` promises
 # ONE JSON OBJECT on stdout, including on failure, and a verb printing markdown
-# would make that promise a convention with an exception -- which is not a
+# would make that promise a convention with an exception, which is not a
 # contract. This is for a human or a provisioner to run, once, so it lives
 # outside that surface.
 #
 # IT PRINTS AND DOES NOT INSTALL. Where either file belongs is somebody else's
-# business -- `~/.claude/skills/<name>/SKILL.md` for one harness, the root of
-# the repo you are working in for the other -- and mux does not learn the
+# business (`~/.claude/skills/<name>/SKILL.md` for one harness, the root of
+# the repo you are working in for the other), and mux does not learn the
 # layout of another program's config directory, the same seam it already holds
 # by taking indicator SOURCES as commands and never learning what ssh is:
 #
@@ -101,8 +101,8 @@ if [ "$_form" = agents ]; then
 fi
 
 # A MISSING FRONTMATTER IS FATAL, not an omission. A SKILL.md without it
-# installs fine, errors nothing, and never triggers -- the worst failure
-# available to a file whose only job is to be matched -- so a partial install
+# installs fine, errors nothing, and never triggers (the worst failure
+# available to a file whose only job is to be matched), so a partial install
 # has to say so here rather than emit a document that can never fire.
 _front=$_dir/frontmatter.yaml
 if [ ! -r "$_front" ]; then

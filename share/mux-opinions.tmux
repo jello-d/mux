@@ -1,4 +1,4 @@
-# mux-opinions.tmux -- mux's OPTIONAL ergonomic defaults, distinct from the
+# mux-opinions.tmux: mux's OPTIONAL ergonomic defaults, distinct from the
 # required feature wiring in mux.tmux. Pure tmux preference (mouse, scroll
 # routing, navigation) that suits an agent-heavy, many-session workflow but is
 # not needed for mux's features to work. `source-file` it for a good out-of-the-
@@ -6,7 +6,7 @@
 
 # Mouse on: tmux owns the mouse, so a drag-select is confined to the pane under
 # the cursor (into copy-mode) instead of the terminal selecting a band across
-# the whole window. This works over ssh -- mouse events are escape sequences
+# the whole window. This works over ssh: mouse events are escape sequences
 # travelling in the same stream as keystrokes, interpreted by the (possibly
 # remote) tmux. Hold Shift while dragging to bypass tmux for a raw selection.
 # It also enables the status-bar chip click bound in mux.tmux.
@@ -38,7 +38,7 @@ bind -n WheelDownPane if -F '#{mouse_any_flag}' 'send -M' \
 # session/window pickers.
 bind Space choose-tree -Z
 
-# Tab = cycle this session's tabs (windows) -- the linear "next thing in this
+# Tab = cycle this session's tabs (windows): the linear "next thing in this
 # context". Repeatable so you can tap Tab, Tab, Tab; n / p keep working as
 # aliases.
 bind -r Tab  next-window

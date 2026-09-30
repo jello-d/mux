@@ -8,7 +8,7 @@
 # and has its own file.
 #
 # THE OUTPUT IS PARSED, NEVER GREPPED. A contract checked with `grep status`
-# passes on a document no parser accepts -- which is precisely the failure the
+# passes on a document no parser accepts, which is precisely the failure the
 # JSON emitter exists to prevent, so a test that could not see it would be
 # asserting the wrong thing. python3 is the parser; without it this skips
 # rather than pretending.
@@ -35,13 +35,13 @@ agent_rec "$XDG_RUNTIME_DIR/agent-state/work/p1"   idle    %3 300 wsess x
 cat >"$T/bin/tmux" <<'EOF'
 #!/bin/sh
 # ONE STUB, DEFINED ONCE. There were two definitions of this file for a while,
-# the fuller one written further down -- so every assertion ABOVE it silently
+# the fuller one written further down, so every assertion ABOVE it silently
 # ran against a weaker tmux, and `peers` read a null class for a pane the test
 # had just classified. A second definition of a fixture is a second tool, and
 # which one a case gets depends on where it happens to sit.
 #
 # ONE ARM PER QUESTION. The client check used to run for EVERY call, and with
-# $WATCHED empty its pattern `*" "*` matched `"  "` -- so a capture-pane call
+# $WATCHED empty its pattern `*" "*` matched `"  "`, so a capture-pane call
 # got `/dev/pts/1` prepended to the pane text. A stub looser than the tool
 # fails in the direction that wastes most time: the text was right and one
 # line off, which reads as a bug in the verb.
@@ -87,7 +87,7 @@ run() {   # <args...> -> stdout in $OUT, exit in $RC
     "$HERE/bin/mux" agent "$@" 2>"$T/err") || RC=$?
 }
 
-# jq EXPR -- evaluate a python expression over the parsed document in $OUT.
+# jq EXPR: evaluate a python expression over the parsed document in $OUT.
 # `d` is the document. Prints the result, or fails loudly if it did not parse.
 jq() {
   printf '%s' "$OUT" >"$T/doc"
@@ -105,7 +105,7 @@ PY
 }
 eq() { [ "$2" = "$3" ] || fail "$1: got [$2] want [$3]"; }
 
-# `read` is a mux VERB here, not the shell builtin -- but shellcheck sees the
+# `read` is a mux VERB here, not the shell builtin, but shellcheck sees the
 # word after a wrapper function and assumes the builtin, at every call site.
 # One helper carries the suppression so a real `read` anywhere else in this
 # file still fails, which is this project's rule for an intentional-but-rare
@@ -127,7 +127,7 @@ eq status-count "$(jq 'd["partitions"][0]["count"] + 1')" 2
 # --- SCOPED TO THE CALLER'S PARTITION BY DEFAULT --------------------------
 # `_all` was PARSED AND NEVER READ until 0.73, so every caller got every
 # partition and the flag was decoration. The shipped skill says the opposite,
-# one sentence after calling a partition an isolation boundary -- so an agent
+# one sentence after calling a partition an isolation boundary, so an agent
 # in `work` reading `status` was told it was seeing its own partition while
 # being handed `global`'s state and counts.
 #
@@ -150,7 +150,7 @@ WATCHED=global run status --partition work --any
 eq part-selects "$(jq 'len(d["partitions"])')" 1
 eq part-is-named "$(jq 'd["partitions"][0]["partition"]')" work
 # `run` captures the status into $RC, so `$?` here reads the WRAPPER and is 0
-# whatever the verb did -- the same shape as the vacuous assertions this suite
+# whatever the verb did: the same shape as the vacuous assertions this suite
 # has been bitten by before.
 run status --partition
 eq part-needs-a-name "$RC" 2
@@ -176,12 +176,12 @@ eq empty-ok "$(jq 'd["status"]')" ok
 eq empty-arr "$(jq 'len(d["partitions"])')" 0
 
 # --- peers: every session, and what it is doing ---------------------------
-# The verb an agent reaches for first. HEADLESS by construction -- sessions
-# come from the state FILES and roots from the session set -- so it answers
+# The verb an agent reaches for first. HEADLESS by construction (sessions
+# come from the state FILES and roots from the session set), so it answers
 # over a transport, at boot, with no tmux client and no server attached.
 # $MUX_STATE, which harness_lib already pins and exports for exactly this. Two
-# wrong guesses first, and both failed the same silent way -- an empty root,
-# no error -- which is why the assertion below is on the root and not merely
+# wrong guesses first, and both failed the same silent way (an empty root,
+# no error), which is why the assertion below is on the root and not merely
 # on the peer being present: XDG_STATE_HOME (which `run` does not pass
 # through) and $HOME/.local/state/mux (which MUX_STATE overrides).
 printf 'alpha	/srv/alpha
@@ -200,7 +200,7 @@ eq peers-state \
   "$(jq '[p["state"] for p in d["peers"] if p["session"]=="alpha"][0]')" \
   blocked
 # THE ROOT COMES FROM THE SESSION SET, which is a different source from the
-# state files -- and sourcing mux-sessions_lib without mux-paths_lib gave every
+# state files, and sourcing mux-sessions_lib without mux-paths_lib gave every
 # peer an empty root plus six `mux_state_path: not found` lines on stderr. A
 # plausible answer, silently wrong: exactly the lib-needs-a-lib trap.
 eq peers-root \
@@ -215,7 +215,7 @@ eq peers-root \
 # ASSERTED WITH A FRESH RECORD, because the fixtures above use epoch 100 and
 # would make a leaked epoch and a genuine 55-year age indistinguishable. This
 # one was written just now, so an age is single digits and an epoch is 1.7
-# billion -- no threshold to tune, and the two cannot be confused.
+# billion: no threshold to tune, and the two cannot be confused.
 agent_rec "$XDG_RUNTIME_DIR/agent-state/global/p9" idle %9 "$(date +%s)" fresh x
 printf 'fresh	/srv/fresh
 ' >>"$MUX_STATE/sessions.global"
@@ -247,7 +247,7 @@ eq peers-class-agent \
   agent
 
 # NULL IS NOT `human`, and that distinction is the point. With no server
-# reachable -- a remote `peers` at boot, which this verb is designed for --
+# reachable (a remote `peers` at boot, which this verb is designed for),
 # every pane would otherwise report as human-controlled: plausible, and wrong.
 # peers still ANSWERS, because it derives its sessions from the state files.
 NOSERVER=1 run peers
@@ -267,8 +267,8 @@ eq peers-headless-state \
 CLASS2=agent run peers --partition work
 # STATUS BEFORE PAYLOAD, at the FIRST use of the flag. This is the rule the
 # contract gives a consumer, and it is what makes a failure legible: a mutation
-# that removed the `--partition` arm answers `{"status":"usage"}` -- valid JSON
-# with no `peers` key -- so every assertion below raises inside the helper and
+# that removed the `--partition` arm answers `{"status":"usage"}` (valid JSON
+# with no `peers` key), so every assertion below raises inside the helper and
 # the kill lands on "the answer did not parse: Traceback" rather than on
 # anything named. Guarding only the later use was not enough, because this one
 # runs first; the full corpus said so both times.
@@ -284,8 +284,8 @@ eq peers-scoped "$(jq 'set(p["partition"] for p in d["peers"])')" "{'global'}"
 run peers --partition work
 # STATUS FIRST, THEN THE PAYLOAD, which is the rule the contract itself gives a
 # consumer and the reason this assertion exists: a mutation that removed the
-# `--partition` arm answered `{"status":"usage"}` -- valid JSON with no `peers`
-# key -- so the helper raised and the kill landed on "the answer did not parse:
+# `--partition` arm answered `{"status":"usage"}` (valid JSON with no `peers`
+# key), so the helper raised and the kill landed on "the answer did not parse:
 # Traceback" rather than on anything named. The full corpus reported it as a
 # record dying for the wrong reason, which is the driver doing its job.
 eq peers-other-status "$(jq 'd["status"]')" ok
@@ -409,12 +409,12 @@ eq wait-badt-rc "$RC" 2
 
 # --- send: the hook a higher layer needs ----------------------------------
 # mux already knows which pane is the agent's, which partition it is in, and
-# -- the part only mux knows -- whether it is BLOCKED. Without this verb an
+# (the part only mux knows) whether it is BLOCKED. Without this verb an
 # orchestrator reaches around mux to `tmux send-keys`, re-derives pane
 # resolution, and inherits none of the guards below.
 mkdir -p "$T/etc"
 seal_pol() { chmod 0444 "$T/etc/send-policy"; chmod 0555 "$T/etc"; }
-# pol LINE -- replace the policy and seal it, which four cases below do.
+# pol LINE: replace the policy and seal it, which four cases below do.
 pol() { unseal_pol; printf '%s\n' "$1" >"$T/etc/send-policy"; seal_pol; }
 unseal_pol() { chmod 0755 "$T/etc" 2>/dev/null || true
   chmod 0644 "$T/etc/send-policy" 2>/dev/null || true; }
@@ -442,7 +442,7 @@ grep -q 'paste-buffer .*-d ' "$CAPLOG" \
 grep -q 'send-keys .*Enter' "$CAPLOG" || fail "Enter was never sent"
 
 # EVERY tmux CALL NAMES THE PARTITION'S SOCKET. A bare `tmux` asks the DEFAULT
-# one, which is not where a partition's server lives -- so `send` read an
+# one, which is not where a partition's server lives, so `send` read an
 # empty class for a pane plainly marked `agent` and refused it as a human's,
 # and `read` captured nothing. Both looked like correct refusals, which is why
 # only a REAL server caught it. Third time this repo has paid for it, after
@@ -467,7 +467,7 @@ case $_o in
 esac
 
 # --- BLOCKED: mux will not answer a prompt on a human's behalf ------------
-# `alpha` is blocked. With no class set the pane is a HUMAN's -- the safe
+# `alpha` is blocked. With no class set the pane is a HUMAN's: the safe
 # answer is the one you get by saying nothing.
 run send alpha 'y'
 eq blk-rc "$RC" 1
@@ -515,7 +515,7 @@ run send alpha 'y' --answer-prompt
 eq human-star-rc "$RC" 1
 eq human-star-override "$(jq 'd["override"]')" none
 
-# HYBRID IS ITS OWN CLASS and is NOT covered by an agent grant -- folding it
+# HYBRID IS ITS OWN CLASS and is NOT covered by an agent grant: folding it
 # into either neighbour was the wrong answer in both directions.
 pol 'send-blocked control:agent'
 CLASS=hybrid run send alpha 'y' --answer-prompt
@@ -537,7 +537,7 @@ eq unk-reason "$(jq 'd["reason"]')" unknown
 eq unk-override "$(jq 'd["override"]')" none
 # ... and with the `unknown` grant in force, the ACKNOWLEDGEMENT is still
 # required. Asserted separately from the grant, or the policy check covers for
-# the ack check and neither is individually killable -- which is exactly what
+# the ack check and neither is individually killable, which is exactly what
 # mutation reported here.
 pol 'send-unknown control:agent'
 CLASS=agent run send odd 'x'
@@ -581,7 +581,7 @@ eq noverb-rc "$RC" 2
 eq noverb-status "$(jq 'd["status"]')" usage
 
 # --- the status word AGREES with the exit code ----------------------------
-# Several statuses may share a code -- that is why both exist -- but a status
+# Several statuses may share a code (that is why both exist), but a status
 # must not be able to mean two different exits, or a reader that switches on
 # one will disagree with a shell that switches on the other.
 for _case in 'nosuchverb usage 2' 'status ok 0'; do
@@ -602,7 +602,7 @@ for _args in 'status' 'nosuchverb' 'status --nope' ''; do
   WATCHED=global run $_args
   case $RC in
   0|1|2|3) ;;
-  *) fail "\`mux agent $_args\` exited $RC, outside mux's four codes --
+  *) fail "\`mux agent $_args\` exited $RC, outside mux's four codes.
 126, 127 and 255 must stay attributable to the shell and to ssh" ;;
   esac
 done

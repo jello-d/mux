@@ -12,7 +12,7 @@
 #
 # WHY MUX DOES NOT DO THIS ITSELF. Raising a window means knowing about a
 # compositor, and mux manages sessions inside terminals with no opinion about
-# where a terminal sits -- the same boundary that put window placement in
+# where a terminal sits: the same boundary that put window placement in
 # usher rather than in mux. Every mechanism here is yours to replace.
 #
 # REQUIRES `allow_remote_control yes` in kitty.conf (or `--listen-on`).
@@ -23,7 +23,7 @@
 #
 #     set-titles-string '#{@mux-prefix}#S:#W....[#{host_short}]'
 #
-# so every mux window's title ends in the host in SQUARE BRACKETS -- and
+# so every mux window's title ends in the host in SQUARE BRACKETS, and
 # host_short is the tmux SERVER's hostname, so a latched session advertises
 # the REMOTE's name in the terminal in front of you. That is exactly the label
 # the indicator hands this hook.

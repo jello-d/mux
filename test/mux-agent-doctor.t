@@ -3,7 +3,7 @@
 #
 # The status strip reports state from per-pane files written by an agent's
 # lifecycle hooks. When a hook does not fire the file keeps saying whatever it
-# last said, and the bar reports a finished session that is busy -- observed
+# last said, and the bar reports a finished session that is busy: observed
 # live, twice, on two different machines. Nothing on the bar can contradict it,
 # because the bar IS the file. So this verb asks the other side: is an agent
 # process under that pane actually burning CPU?
@@ -34,7 +34,7 @@ mkdir -p "$T/bin" "$T/run/agent-state/global" "$T/proc" "$T/share/agents"
 # process) without every other case inheriting it.
 PSTAB=$T/pstab; PANES=$T/panes; export PSTAB PANES
 printf '  100     1 ksh\n  101   100 claude\n  200     1 ksh\n' >"$PSTAB"
-# pane id, pane pid, then the SESSION -- session last, as everywhere else, so a
+# pane id, pane pid, then the SESSION: session last, as everywhere else, so a
 # name with a space survives.
 printf '%%1 100 alpha\n%%2 200 beta\n' >"$PANES"
 cat >"$T/bin/ps" <<'EOF'
@@ -98,7 +98,7 @@ no_has "$_o" "DRIFT" "an idle agent's timer tick was called working"
 # Between clearly-idle and clearly-working is a band CPU alone cannot settle.
 # Calling it DRIFT would cry wolf; hiding it would lose the signal.
 setcpu 101 0
-burn 101 3           # 3% -- above suspect, at the working threshold
+burn 101 3           # 3%: above suspect, at the working threshold
 _rc=0; _o=$(doc) || _rc=$?
 has "$_o" "suspect" "the middle band was not surfaced"
 no_has "$_o" "DRIFT" "the middle band was counted as drift"
@@ -132,7 +132,7 @@ _after=$(ls "$T/run/agent-state/global" | LC_ALL=C sort | tr '\n' ' ')
 # saying `working` after the turn ENDED looks identical from CPU alone.
 #
 # It is not hypothetical: seen twice in one day on two machines. A session that
-# looks BUSY is one you deliberately leave alone, so the wait is unbounded --
+# looks BUSY is one you deliberately leave alone, so the wait is unbounded:
 # worse than the reverse direction, where a finished-looking session at least
 # invites a glance.
 #
@@ -216,7 +216,7 @@ _sum=$(md5sum <"$SFILE")
 _rc=0; _o=$(doc) || _rc=$?
 # The BYTES are checked before the verdict string, deliberately. A repair that
 # ran unconditionally would also change the verdict from STALE to REPAIRED, so
-# asserting the verdict first reports "no stale record" -- which reads as a
+# asserting the verdict first reports "no stale record", which reads as a
 # broken fixture and sends you to the wrong end of the file.
 [ "$_sum" = "$(md5sum <"$SFILE")" ] \
   || fail "a plain run rewrote a stale record. Read-only is the DEFAULT:
@@ -258,7 +258,7 @@ _got=$(cat "$SFILE")
 # misbehaved, and a repair that only says "fixed" invites the same bug forever.
 has "$_o" "--beat" "the repair did not name the cause it is papering over"
 has "$_o" "at session start" "the repair did not mention hooks being resolved
-once -- the reason a plugin update does not reach a running session, which is
+once, the reason a plugin update does not reach a running session, which is
 how this bug survived two provisions"
 
 # Twice is once: nothing left to repair, and no complaint about it.
@@ -270,7 +270,7 @@ no_has "$_o" "REPAIRED" "a second repair claimed to fix an already-fixed record"
 
 # --- --repair REFUSES the other two verdicts -----------------------------
 # DRIFT: recorded idle, agent working. It heals on the next tool call, and the
-# repair would be to write `working` -- making a finished session look busy,
+# repair would be to write `working`, making a finished session look busy,
 # which is the direction that leaves you waiting on nothing.
 agent_rec "$SFILE" idle %1 1234 alpha
 setcpu 101 0
@@ -287,14 +287,14 @@ direction, and this one heals itself anyway."
 # after the section that establishes orphans are detected at all. Order matters
 # between those two: this case presupposes detection works, so if detection
 # breaks it must be the DETECTION test that goes red. Sitting here, it fired
-# first and took the blame for a mutation aimed at the other one -- which
+# first and took the blame for a mutation aimed at the other one, which
 # test/mutate caught and refused to count as coverage.
 
 # --- the compare-and-swap ------------------------------------------------
 # The sample is taken BEFORE a multi-second CPU window, which is long enough for
 # a real hook to fire. A record that moved in the meantime is the hooks' truth
 # and this verdict is the stale one, so overwriting it would be exactly
-# backwards -- and would clobber a genuine `working` with `idle`, the inversion
+# backwards, and would clobber a genuine `working` with `idle`, the inversion
 # this whole file exists to prevent.
 agent_rec "$SFILE" working %1 1234 alpha 777
 setcpu 101 0
@@ -328,9 +328,9 @@ printf 'some output\n  auto mode on . esc to interrupt . for agents\n' \
 # invisible, and the summary said "recorded state agrees with every agent".
 #
 # That is not a hypothetical reading of the code. On a live box five of seven
-# sessions had a running agent and no state file -- the strip drew them as
+# sessions had a running agent and no state file (the strip drew them as
 # having no agent at all, which looks exactly like a session you never started
-# one in -- and this verb called the box clean.
+# one in), and this verb called the box clean.
 #
 # It is the more damaging direction: a stale record shows the WRONG state but
 # shows something, so the eye catches it. A missing record shows nothing, and
@@ -377,7 +377,7 @@ has "$_o" "ORPHAN" "--repair hid an orphan finding"
 copy, so any value it wrote would be a guess dressed up as a reading."
 [ "$_rc" -ne 0 ] || fail "an unrepaired orphan must still exit non-zero"
 
-# Recording it clears the finding -- the verb must be satisfiable.
+# Recording it clears the finding: the verb must be satisfiable.
 agent_rec "$T/run/agent-state/global/3" idle %3 1 gamma
 _rc=0; _o=$(doc) || _rc=$?
 no_has "$_o" "ORPHAN" "a recorded agent was still called an orphan"
@@ -393,7 +393,7 @@ agent_rec "$T/run/agent-state/global/2" working %2 1 beta
 
 # --- a pane tmux cannot resolve is not an excuse to guess ----------------
 # With no pane list at all there is no agent to find, so nothing can be called
-# drift -- the failure mode is silence, not a confident wrong answer.
+# drift: the failure mode is silence, not a confident wrong answer.
 cat >"$T/bin/tmux" <<'EOF'
 #!/bin/sh
 echo "error connecting to /tmp/tmux-1000/default" >&2

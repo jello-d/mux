@@ -1,9 +1,9 @@
-"""Owned tray glyphs -- no emoji font, no SVG raster dep. Drawn per size so they
+"""Owned tray glyphs: no emoji font, no SVG raster dep. Drawn per size so they
 stay crisp at any tray scale.
 
 The icon is a terminal (mux is a terminal thing): a near-black rounded tile with
 a big, tall `>_` prompt as the hero, drawn in a light grey LIFTED off the screen
-(ornamental, but present -- attention still belongs to the frame and badge). Its
+(ornamental, but present: attention still belongs to the frame and badge). Its
 brightness tracks the screen so it reads the same on every state's tint. The `_`
 cursor is BLINKABLE (render with cursor=False for the off frame). STATE is the
 frame colour + a subtle
@@ -22,12 +22,12 @@ from PIL import Image, ImageDraw, ImageFont
 
 # Frame colour + tint hue per state, keyed off mux's agent-state chips.
 STATE_FRAME = {
-    "blocked": (0xFF, 0xB0, 0x20, 0xFF),   # amber-gold -- warm, off the purple
+    "blocked": (0xFF, 0xB0, 0x20, 0xFF),   # amber-gold; warm, off the purple
     "working": (0xFF, 0x8C, 0xE6, 0xFF),   # bright magenta/pink border
     "idle":    (0x34, 0xC9, 0x4A, 0xFF),   # green (= the badge green)
     "none":    (0x88, 0x88, 0x8E, 0xFF),   # grey (agentless)
     # UNKNOWN IS NOT CALM, and this row is the whole reason it exists. A source
-    # that could not be reached says NOTHING about that host -- it may be idle,
+    # that could not be reached says NOTHING about that host: it may be idle,
     # it may have six blocked agents. Falling back to `none` (which is what an
     # unrecognised state used to do) would draw a quiet grey tile and assert the
     # one thing we do not know. Slate blue, deliberately outside the
@@ -35,18 +35,18 @@ STATE_FRAME = {
     # all, because it is a statement about the CONNECTION.
     "unknown": (0x6C, 0x7A, 0x9C, 0xFF),   # slate blue (unreachable)
 }
-# Badge colour per state -- related to the frame, distinct from it. `none` is
+# Badge colour per state: related to the frame, distinct from it. `none` is
 # absent -> no badge. idle's badge holds a white check, not a number.
 STATE_BADGE = {
-    "blocked": (0xC0, 0x18, 0x28, 0xFF),   # bold red -- urgent, less black
+    "blocked": (0xC0, 0x18, 0x28, 0xFF),   # bold red; urgent, less black
     "working": (0x5F, 0x00, 0xD7, 0xFF),   # mux chip bg colour56 (purple)
     "idle":    (0x25, 0xA8, 0x3A, 0xFF),   # green, a drop darker for contrast
     # A badge, because `none` has none: that difference is what stops "no agents
     # here" and "cannot see this host" drawing the same tile. It holds a `?`
-    # rather than a count -- there is no count to hold.
+    # rather than a count: there is no count to hold.
     "unknown": (0x3A, 0x44, 0x5C, 0xFF),   # dark slate, same family as frame
 }
-# Number/check colour per state -- chosen for contrast on the badge, echoing the
+# Number/check colour per state: chosen for contrast on the badge, echoing the
 # frame hue: amber (= frame) on the dark-red block badge, deep purple on the
 # bright-pink work badge, white for the idle check.
 STATE_INK = {
@@ -56,7 +56,7 @@ STATE_INK = {
     "unknown": (0xC8, 0xD2, 0xE8, 0xFF),   # pale slate, reads on the dark badge
 }
 # THE HOST MARK'S INK. It answers "WHICH machine", so it never changes as the
-# agent works: a state-coloured mark was tried and rejected for exactly that --
+# agent works: a state-coloured mark was tried and rejected for exactly that;
 # it was the most legible option of the lot, and it made host identity flicker
 # with state, which is the one thing identity may not do.
 #
@@ -70,7 +70,7 @@ MARK_LOCAL_INK = (0xF4, 0xF6, 0xFA, 0xFF)
 # STATE already owns red, amber, green, purple and slate blue across the frame
 # and the badge, so a warm mark reads as `blocked` and a green one as `idle`.
 # What is left is the cool and magenta side of the wheel. Five was measured at
-# 22px and 32px rather than chosen -- see mark_ink() for what happens past it.
+# 22px and 32px rather than chosen: see mark_ink() for what happens past it.
 #
 # Every one of them sits on the black strip, never on the screen, so contrast
 # is a property of the strip and not of the hue. That is what lets the palette
@@ -84,8 +84,8 @@ MARK_PALETTE = (
 )
 _MARK_BACK = (0x00, 0x00, 0x00, 0xFF)   # the strip the letters sit on
 _MARK_CAP = 0.86     # cap height as a fraction of the third of the tile
-# The partition letter. It stands in for the `_` cursor -- the underscore is
-# not drawn when a letter is -- but it does NOT sit in the cursor's slot: it is
+# The partition letter. It stands in for the `_` cursor (the underscore is
+# not drawn when a letter is), but it does NOT sit in the cursor's slot: it is
 # set into the bottom-right corner, where there is room to be read.
 #
 # Every number here was settled by rendering at 22, 32 and 48 and LOOKING, not
@@ -97,7 +97,7 @@ _MARK_CAP = 0.86     # cap height as a fraction of the third of the tile
 # 0.65 of the tile, the mark strip owns the left edge, the screen ends below)
 # and 0.30 was its ceiling: at 0.34 the glyph began disappearing under the
 # badge. Moving into the corner AND drawing after the badge removes the
-# ceiling rather than negotiating with it -- the same move the host mark made
+# ceiling rather than negotiating with it: the same move the host mark made
 # in 0.47, for the same reason.
 #
 # 0.54 IS THE NEW CEILING and 0.46 is the chosen value: at 0.54 a wide capital
@@ -148,8 +148,8 @@ _BADGE_F = 0.65    # badge diameter (overhangs the corner)
 _MARGIN = 0.0      # tile inset as a fraction; 0 = frame fills the tile
 _NUM = 1.10        # badge number, blown up to fill / clip the round badge
 _TINT = 0.14       # how much state hue bleeds into the near-black screen
-# The host's bg is a STATUS-BAR chip colour, picked to sit behind text on a bar
-# -- so at full strength it would make a bright tray tile that reads as a
+# The host's bg is a STATUS-BAR chip colour, picked to sit behind text on a bar,
+# so at full strength it would make a bright tray tile that reads as a
 # different application, not a different host. Mixed well into the near-black
 # base instead: unmistakable side by side, still obviously a terminal.
 _HOST_TINT = 0.55
@@ -192,7 +192,7 @@ def host_mark(name):
 
     FIRST CHARACTER, THEN THE LAST TWO CONSONANTS of what follows. Colour alone
     cannot carry identity: mux derives one of eight pairs by hashing, and with
-    only three machines `manifestor` and `manifold` already collide -- and no
+    only three machines `manifestor` and `manifold` already collide, and no
     palette fixes that, because the birthday paradox beats you long before the
     colours run out.
 
@@ -208,7 +208,7 @@ def host_mark(name):
 
     DERIVED FROM THE NAME ALONE, never from the set of hosts on screen. A
     set-aware rule could guarantee uniqueness, but the mark would then change
-    when you latched somewhere new -- and a label that moves is worse than one
+    when you latched somewhere new, and a label that moves is worse than one
     that occasionally collides, because you stop trusting any of them.
     """
     alnum = [c for c in (name or "") if c.isalnum()]
@@ -239,7 +239,7 @@ def _cap_font(maxh):
 
     SIZED BY HEIGHT, NOT WIDTH, and that one choice is what makes the mark
     readable. Fitting it to a narrow column instead gave a 7px capital on a
-    32px tile -- present, but impossible to tell MLD from MTR at the size a
+    32px tile: present, but impossible to tell MLD from MTR at the size a
     tray actually draws. The letters are allowed to be as WIDE as they need
     because they are allowed to cover what is beneath them.
 
@@ -274,8 +274,8 @@ def _mark_strip(d, s, text):
 
     A FIXED BACKDROP rather than an outline on each glyph. An outline works,
     but its contrast depends on what happens to be behind that particular
-    letter -- the frame in one place, the screen in another, the chevron in a
-    third -- so legibility varies down the word. A strip makes every letter
+    letter (the frame in one place, the screen in another, the chevron in a
+    third), so legibility varies down the word. A strip makes every letter
     the same problem.
 
     Its left corners follow the tile's radius so it reads as part of the icon
@@ -307,8 +307,8 @@ def parse_pair(text):
     which `mux style` also uses) and this only converts.
 
     None on anything unexpected, INCLUDING the refusal. `mux host-color` exits 1
-    for colours 0-15 -- the terminal's own sixteen, which every theme remaps, so
-    there is no correct hex -- and the right answer to that is to draw the
+    for colours 0-15 (the terminal's own sixteen, which every theme remaps, so
+    there is no correct hex), and the right answer to that is to draw the
     host-neutral look, not to guess a colour for the thing whose whole job is
     identifying a machine.
     """
@@ -329,7 +329,7 @@ def parse_pair(text):
 
 def _screen(state, host=None):
     """The tile's screen. WITH a host pair this is the host's BACKGROUND, which
-    is literally what that colour is for -- so identity reads at a glance while
+    is literally what that colour is for, so identity reads at a glance while
     STATE keeps the frame and the badge. The two dimensions never collide:
     nothing about the host can make a blocked agent look calm.
 
@@ -415,7 +415,7 @@ def _part_font(s, text, room):
     THE CLAMP ONLY BITES ON A MARKED TILE. Height is the primary rule, as it
     is for the mark, because fitting a glyph to a column is what made 0.44
     unreadable. But right-aligning a WIDE capital into the corner walks it
-    left into the mark strip -- measured, at every size: `W` starts 7px inside
+    left into the mark strip; measured, at every size: `W` starts 7px inside
     the strip on a 32px tile, and it is drawn after the mark's letters, so it
     would cover the host's identity with the partition's. A is not the
     problem; 26 partitions are reachable and W is.
@@ -437,7 +437,7 @@ def _part_letter(d, s, text, avoid=0):
     DRAWN LAST, over the badge, exactly as the host mark's letters are drawn
     over the chevron and for the same reason: an overlay that negotiates for
     space loses, and what it loses is legibility. The corner is the one part
-    of the tile nothing else claims -- the badge overhangs the top right, the
+    of the tile nothing else claims: the badge overhangs the top right, the
     prompt sits mid-left, and `avoid` keeps it clear of the mark strip.
 
     RIGHT-ALIGNED to the inner edge of the frame rather than to a fixed x, so
@@ -472,17 +472,17 @@ def _badge(img, s, fill, ink, count, check=False, mark=None):
     # difference is not academic. This used to read `if count is None`, which
     # made two silent mistakes possible:
     #
-    #   `idle` WITH a count drew the NUMBER -- a tray icon reading `idle 4`,
+    #   `idle` WITH a count drew the NUMBER: a tray icon reading `idle 4`,
     #   which looks like four things needing attention when the truth is the
     #   opposite. It never happened only because _parse() normalises idle's
     #   count away, so the invariant lived in the PARSER rather than here.
     #
     #   `blocked` with an UNREADABLE count (`_parse` yields None for `-` or a
-    #   non-numeric field) drew the CHECK -- the calmest glyph there is, on the
+    #   non-numeric field) drew the CHECK: the calmest glyph there is, on the
     #   loudest state.
     #
     # Now: idle draws the check because it is idle. Any other state draws its
-    # number when it has one, and a BARE badge when it does not -- honest about
+    # number when it has one, and a BARE badge when it does not: honest about
     # "something is happening, how much is unknown" rather than claiming calm.
     if check:
         r = bd
@@ -492,7 +492,7 @@ def _badge(img, s, fill, ink, count, check=False, mark=None):
                fill=ink, width=max(2, s // 9), joint="curve")
     elif mark is not None:
         # A literal glyph (`?` for unknown), drawn through the same centring
-        # path as a count so it lands identically -- the badge geometry has one
+        # path as a count so it lands identically: the badge geometry has one
         # owner, not two.
         _number(d, box, mark, _font(_SANS, int(bd * _NUM)), ink)
     elif count is not None:
@@ -575,7 +575,7 @@ def icon_pixmap(state, count, sizes=(22, 32, 48), cursor=True, host=None,
     """SNI IconPixmap for a state + count. idle/none draw no badge. cursor=False
     renders the blink OFF frame (the `_` cursor hidden).
 
-    `host` is an (fg, bg) RGBA pair from parse_pair() -- the host's identity
+    `host` is an (fg, bg) RGBA pair from parse_pair(): the host's identity
     colours, which tint the screen and paint the `>_`. None draws the
     host-neutral look, which is both the single-host default and the honest
     answer when `mux host-color` refuses.

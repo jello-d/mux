@@ -1,5 +1,5 @@
 #!/bin/sh
-# mux-context_lib -- the mux CONTEXT seam. Sourced (functions only).
+# mux-context_lib: the mux CONTEXT seam. Sourced (functions only).
 #
 # mux core knows nothing about any particular notion of "context" (a
 # work/personal split, a k8s namespace, a git host, ...). It asks an OPTIONAL
@@ -16,7 +16,7 @@
 #     context-command   severance current
 #
 # It prints one line: a token. Empty output or a non-zero exit means `global`.
-# No sockets, no styles, no themes, no path classification -- the integrator
+# No sockets, no styles, no themes, no path classification: the integrator
 # reports IDENTITY, mux decides presentation and isolation. That is deliberate:
 # the previous contract made the integrator supply a tmux style string for the
 # banner (so a missing style silently removed a safety reminder) while
@@ -24,11 +24,11 @@
 #
 # SETTINGS resolve in three levels, merged in order, last wins per key:
 #
-#   1. built-in defaults below -- BEHAVIOUR ONLY, never a location. That is
+#   1. built-in defaults below: BEHAVIOUR ONLY, never a location. That is
 #      what keeps `scan` from leaking between partitions, and it is a decision
 #      about data rather than a branch in this resolver.
-#   2. partitions/<partition>.partition -- what this partition shares
-#   3. contexts/<token>.context         -- what is unique to this context
+#   2. partitions/<partition>.partition: what this partition shares
+#   3. contexts/<token>.context:          what is unique to this context
 #
 # The same key set is legal in either file: where you put a key IS the
 # statement of its scope, so there is no per-key classification to learn.
@@ -39,7 +39,7 @@
 MUX_CTX_TOKEN=global
 MUX_CTX_PARTITION=global
 # The theme when nothing at all has an opinion: no profile, no context, and
-# derivation switched off. A last resort, not a default -- MUX_CFG_theme is
+# derivation switched off. A last resort, not a default. MUX_CFG_theme is
 # deliberately EMPTY by default so that "a context set a theme" is
 # distinguishable from "nobody did", which is what lets an explicit context
 # theme beat the name hash.
@@ -48,7 +48,7 @@ MUX_THEME_FALLBACK=purple
 # A token becomes a socket name and a path component, so it is validated as a
 # DNS label before use: lowercase alphanumeric and hyphens, not leading or
 # trailing, 63 max. An integrator returning `../..` would otherwise choose
-# where mux writes. Invalid is an ERROR, never a silent fall back to global --
+# where mux writes. Invalid is an ERROR, never a silent fall back to global:
 # a typo'd token quietly becoming the baseline would put work sessions in the
 # personal partition.
 mux_ctx_valid() {       # <token>
@@ -85,7 +85,7 @@ _mux_ctx_merge() {      # <file>
     host-chip) MUX_CFG_host_chip=$_v ;;
     scan)
       # Repeatable WITHIN a file, but a file REPLACES the list
-      # from earlier levels -- last wins per key, where the
+      # from earlier levels: last wins per key, where the
       # key's value is the whole list. So a context can drop
       # its partition's roots rather than only add to them.
       if [ "$_first_scan" = 1 ]; then
@@ -98,7 +98,7 @@ $_v"
       # Same multiplicity rule as `scan`, deliberately: this
       # file format already had ONE answer for "a key that is
       # a list", and a second convention (CSV, say) would be
-      # a second thing to remember -- and would break on a
+      # a second thing to remember, and would break on a
       # path containing a comma. Repeatable within a file;
       # a file that sets it REPLACES the inherited list, so a
       # context can drop its partition's ignores rather than
@@ -119,7 +119,7 @@ EOF
 # Resolve the context for PID (default: this process) and merge its settings.
 # Sets MUX_CTX_TOKEN, MUX_CTX_PARTITION and every MUX_CFG_*.
 mux_ctx_resolve() {     # [PID]
-  # 1. built-in defaults. BEHAVIOUR ONLY -- no scan, no label.
+  # 1. built-in defaults. BEHAVIOUR ONLY: no scan, no label.
   MUX_CFG_partition=
   MUX_CFG_label=
   MUX_CFG_theme=
@@ -197,7 +197,7 @@ mux_ctx_resolve() {     # [PID]
   MUX_CTX_PARTITION=$MUX_CFG_partition
 
   # Neither file: nothing knows this context. The caller decides whether
-  # to warn (never from here -- the status bar calls this every tick).
+  # to warn (never from here: the status bar calls this every tick).
   MUX_CTX_UNKNOWN=0
   [ -z "$_partf" ] && [ -z "$_ctxf" ] && MUX_CTX_UNKNOWN=1
   return 0
@@ -229,7 +229,7 @@ mux_ctx_partitions() {
 }
 
 # The tmux -L name for a partition. An implementation detail of the partition:
-# nobody outside mux names a socket, and `global` is an ordinary name here --
+# nobody outside mux names a socket, and `global` is an ordinary name here:
 # it gets its own socket like any other, so the isolation story has no
 # exception in it.
 mux_ctx_socket() {      # [partition]

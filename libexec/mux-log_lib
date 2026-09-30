@@ -10,7 +10,7 @@
 # worst imaginable place to keep a post-mortem.
 #
 # ALWAYS ON, and that is the whole point. A log you have to switch on before the
-# incident cannot help with an incident you cannot reproduce -- and a network
+# incident cannot help with an incident you cannot reproduce, and a network
 # outage is exactly that. `MUX_EMIT_LOG` is opt-in because it fires on every
 # tool call; this one is always on because it is rare by construction:
 #
@@ -23,7 +23,7 @@
 # deleting files: all IN. When adding a call, ask which of the two it is; if it
 # is neither, it does not belong here.
 #
-# WHERE. $MUX_STATE, because a log cannot be REBUILT -- the test mux-paths_lib
+# WHERE. $MUX_STATE, because a log cannot be REBUILT: the test mux-paths_lib
 # makes the whole design. The XDG spec independently agrees, naming logs as
 # $XDG_STATE_HOME content. Derived with the plain one-line default rather than
 # through mux_state_path: that function's value is its ADOPTION rule (migrating
@@ -40,7 +40,7 @@
 #   <path>  that file
 #
 # BEST EFFORT, DELIBERATELY. A failed log write must never break the thing being
-# logged -- latch must not die because a disk filled. That does conflict with
+# logged: latch must not die because a disk filled. That does conflict with
 # "fail loud, never silent", so the resolution is at the READER: `mux log`
 # reports an unwritable or missing log, so the breakage surfaces at the moment
 # you go looking for it rather than never.
@@ -60,7 +60,7 @@ mux_log_path() {
 # CAPPED, NOT ROTATED. The same argument mux-agent-state-emit's breadcrumb
 # makes: an
 # unbounded file is its own bug. Truncation is safe here only BECAUSE of the
-# rule above -- at mutations-and-failures volume the default cap holds years of
+# rule above: at mutations-and-failures volume the default cap holds years of
 # incidents, so in practice it never fires. If it starts firing, something is
 # logging routine activity and that is the bug to fix, not the cap to raise.
 #

@@ -20,7 +20,7 @@
 #   - THE REASON IS RIGHT. Nothing dropped: et never connected. latch says so.
 #   - NO FALSE `attaching`. Without the probe latch announces an attach that
 #     cannot happen, once per cycle, in the log and on the terminal.
-#   - 17x CHEAPER PER CYCLE, because it never starts et at all -- et brings up
+#   - 17x CHEAPER PER CYCLE, because it never starts et at all: et brings up
 #     sentry and a crash handler and writes log files on every invocation. On a
 #     host that is fully down rather than merely serviceless, the gap widens to
 #     whatever et's connect timeout is.
@@ -31,7 +31,7 @@
 #
 # WHY ET NEEDS THIS MORE THAN ssh DOES. Over ssh a failure explains itself: ssh
 # writes to stderr, latch captures stderr, and the classifier reads the reason.
-# ET does neither -- measured against et 7.0.0, it writes "Could not reach the
+# ET does neither: measured against et 7.0.0, it writes "Could not reach the
 # ET server: host:port" to STDOUT, where a CLASSIFY hook handed a STDERR file
 # cannot see it, and it propagates no remote exit status. So over ET the
 # classifier has only the exit code to work with, and this hook is the only
@@ -39,7 +39,7 @@
 #
 # WHAT IT ASKS: can this box open a TCP connection to the etserver port. That is
 # precisely what et must do after its ssh handshake, so a negative answer is a
-# real "not now" -- a booting box, a stopped service, a firewall -- and all of
+# real "not now" (a booting box, a stopped service, a firewall), and all of
 # them heal without a human or are fixed and then heal. It says nothing about
 # sshd, because ET's bootstrap failing there is ssh's story and `ssh-auth` and
 # the classifier already tell it.
@@ -48,7 +48,7 @@
 # target: `mux latch box:2022` tells the transport and this hook the same thing
 # once. Before that the port lived only in the transport line, and a probe that
 # could not see it tested 2022, found nothing, and parked latch in a backoff
-# about a service that was running -- the one way to hold a working transport
+# about a service that was running: the one way to hold a working transport
 # with this wired. `MUX_ET_PORT` and a `latch-et-port` config line still work,
 # for a target written without a port, and the argument wins over both.
 set -eu
@@ -80,7 +80,7 @@ esac
 
 # NO TOOL MEANS NO OPINION, AND THAT IS NOT THE SAME CALL ssh-probe MAKES.
 # There, a missing `ssh` is answered 78 ("cannot tell"), which latch treats as
-# WAIT -- correct, because with no ssh the ssh transport cannot work either, so
+# WAIT: correct, because with no ssh the ssh transport cannot work either, so
 # nothing is being held up that would otherwise run. Here a missing `nc` says
 # NOTHING about whether et works: answering 78 would park a perfectly good
 # transport in a backoff forever, which is the shape of the bug latch's own
@@ -94,7 +94,7 @@ command -v nc >/dev/null 2>&1 || exit 0
 # BOUNDED BY CONTRACT, not by whichever flag happens to enforce it. `nc -w`
 # bounds the connect, and timeout(1) bounds nc, because a probe that has not
 # answered in ten seconds has already answered. `timeout` is GNU-only and macOS
-# does not ship it, so it is asked for rather than assumed -- the same rule the
+# does not ship it, so it is asked for rather than assumed: the same rule the
 # rest of the package follows and test/mux-portability.t enforces.
 _PROBE_MAX=${MUX_ET_PROBE_TIMEOUT:-10}
 _CONNECT=${MUX_ET_PROBE_CONNECT:-3}

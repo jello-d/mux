@@ -5,7 +5,7 @@
 #
 # THE HARDEST PART OF MUX IS THE FIRST TEN MINUTES, and it is this. A new user
 # installs mux, starts a session, and sees a status strip full of "no agent"
-# glyphs -- because nothing has told their agent to report anything. The reward
+# glyphs, because nothing has told their agent to report anything. The reward
 # the README promises is on the far side of the one step nobody wants to do by
 # hand, so they reasonably conclude mux does not work.
 #
@@ -23,7 +23,7 @@
 #
 # IDEMPOTENT BY CONSTRUCTION: the entries are keyed by event name and replaced
 # wholesale, so running it twice is running it once, and an upgrade that changes
-# the command rewrites rather than appends. That matters more than it sounds --
+# the command rewrites rather than appends. That matters more than it sounds:
 # a hook appended twice fires twice, and the second `working` after a turn ends
 # is exactly the straggler this project spent two releases learning to discard.
 #
@@ -35,7 +35,7 @@
 # PYTHON FOR THE JSON, and only here. mux ships a JSON emitter and no parser
 # (three functions to write it, a parser to read it), and editing a user's
 # settings file safely means reading what is already in it. This verb is a
-# one-shot, interactive, human-speed command -- not a hot path -- so the
+# one-shot, interactive, human-speed command (not a hot path), so the
 # dependency is acceptable where it would not be in the status bar. With no
 # python3 it degrades to printing the block and saying where it goes, which is
 # worse but not silent.
@@ -122,7 +122,7 @@ command -v python3 >/dev/null 2>&1 || {
 
 # RUN DIRECTLY, not as `python3 "$_impl"`. Dropping the suffix is only half the
 # job: the point is that the implementation language stops leaking out of the
-# file, and a hardcoded interpreter at the call site leaks it just as loudly --
+# file, and a hardcoded interpreter at the call site leaks it just as loudly:
 # rewriting this in any other language would still break the caller. The file
 # carries its own `#!/usr/bin/env python3`.
 _impl=$_lib/mux-setup-claude

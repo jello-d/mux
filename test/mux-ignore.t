@@ -3,7 +3,7 @@
 # can stop being ambiguous without renaming either of them.
 #
 # The shape that forced it: a work tree holding both ~/src/manifest/ManifestOS
-# and ~/src/manifest/athena-repos/ManifestOS. An alias does not resolve that --
+# and ~/src/manifest/athena-repos/ManifestOS. An alias does not resolve that:
 # both roots keep the basename, so `mux go ManifestOS` stays ambiguous forever.
 # Dropping one from the map does.
 #
@@ -99,7 +99,7 @@ has "$_o" "matched NOTHING" "typo: no warning"
 
 # --- DISCOVERY only: an explicit path still reaches an ignored repo --------
 # A path you typed is evidence. ignore governs what mux VOLUNTEERS, never what
-# you can ask for by name -- otherwise mux is arguing with you.
+# you can ask for by name: otherwise mux is arguing with you.
 part 'ignore */nested/*'
 run "$T" scan >/dev/null 2>&1
 _o=$(run "$T" why "$T/src/nested/dup")

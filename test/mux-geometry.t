@@ -2,8 +2,8 @@
 # test/mux-geometry.t - a session must be BUILT at the size it will be shown at.
 #
 # tmux creates a detached session at `default-size`, which is 80x24. Every split
-# is then sized against 24 rows -- a `bottom 5-10` pane takes 10 of them, 42% of
-# the window -- and when the session is finally shown at a real terminal size
+# is then sized against 24 rows (a `bottom 5-10` pane takes 10 of them, 42% of
+# the window), and when the session is finally shown at a real terminal size
 # tmux rescales every pane PROPORTIONALLY. A 10-row bottom becomes 22.
 #
 # `mux pin` exists to undo that, but it only ran from client-attached and
@@ -11,7 +11,7 @@
 # session built detached: client-attached does not (the client was attached all
 # along), client-resized does not (the CLIENT did not change size, the session
 # did). That is `mux go NAME` from inside a session, and every session but the
-# first after `mux resume` -- so those came up mis-proportioned and stayed that
+# first after `mux resume`, so those came up mis-proportioned and stayed that
 # way until re-pinned by hand.
 #
 # Two fixes, and this pins the first: build at the right size, so there is no
@@ -42,7 +42,7 @@ PATH=$T/bin:$PATH; export PATH
 
 # go [ENV=VAL ...] : build in $T/proj and return the new-session command line.
 # TMUX is scrubbed unconditionally and re-set only by a caller that wants the
-# in-tmux path -- otherwise the suite's own environment decides which branch is
+# in-tmux path: otherwise the suite's own environment decides which branch is
 # under test, and running the tests inside tmux silently tests the wrong one.
 go() {
   : >"$TMUXLOG"
@@ -65,7 +65,7 @@ go_headless() {
 
 # --- inside tmux: the current window's size, used EXACTLY -----------------
 # tmux has already subtracted this client's status lines from window_height,
-# so it needs no adjusting -- and guessing at it would reintroduce the bug at
+# so it needs no adjusting, and guessing at it would reintroduce the bug at
 # one row instead of twenty.
 _o=$(go TMUX=/tmp/fake/global,1,0 FAKE_WH="200 49")
 case $_o in
@@ -73,7 +73,7 @@ case $_o in
 *) fail "in-tmux build did not carry the window size: [$_o]" ;;
 esac
 
-# A different client size must produce a different build size -- i.e. it is
+# A different client size must produce a different build size: i.e. it is
 # really being read, not hardcoded.
 _o=$(go TMUX=/tmp/fake/global,1,0 FAKE_WH="100 30")
 case $_o in

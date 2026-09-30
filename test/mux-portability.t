@@ -8,7 +8,7 @@
 #
 # IT FOUND A REAL BUG THE FIRST TIME IT WAS RUN. `bin/mux` resolved its own
 # location with `readlink -f ... || echo "$_self"`, and macOS had no
-# `readlink -f` until 12.3 -- so on any older Mac the fallback was silently
+# `readlink -f` until 12.3, so on any older Mac the fallback was silently
 # WRONG rather than merely unresolved. Through the install symlink
 # (~/.local/bin/mux -> the clone) an unresolved $0 puts the prefix at ~/.local,
 # so LIBEXEC became ~/.local/libexec while setup.sh installs the NAMESPACED
@@ -97,11 +97,11 @@ case $_o in mux\ *) ;; *) fail "relative: [$_o]" ;; esac
 # asserted, and the first version of this file asserted it VACUOUSLY: a symlink
 # loop cannot be EXECUTED (the kernel refuses with ELOOP before mux starts)
 # so `$0` can never be one, and the test timed a command that never reached
-# the resolver. Mutation said so -- removing the bound changed nothing.
+# the resolver. Mutation said so: removing the bound changed nothing.
 #
 # The bound stays: it is one comparison, and the cost of being wrong about
 # reachability is a hung status bar. But no record claims it is covered, because
-# a vacuous assertion is worse than an absent one -- it reads as coverage.
+# a vacuous assertion is worse than an absent one: it reads as coverage.
 
 # --- the theme hash works with no `sha256sum` --------------------------
 # macOS ships `shasum` and NO `sha256sum`, and themes load on every new tmux
@@ -148,7 +148,7 @@ fi
 # of these is a flag BSD does not have, so one appearing in a shipped file is a
 # macOS break waiting for its first user. Kept as a list because the tree is
 # clean today and the point is that it stays that way.
-# COMMENTS ARE EXCLUDED, or this check fails on the prose explaining it -- and
+# COMMENTS ARE EXCLUDED, or this check fails on the prose explaining it, and
 # a note saying "BSD has no `xargs -r`" is the opposite of a violation.
 _gnuisms='grep[^|]*-[a-zA-Z]*P |sed -i|stat -c|date -r |date -d |ps --'
 _gnuisms=$_gnuisms'|pgrep |xargs -r|realpath |nproc'
@@ -183,7 +183,7 @@ $_hits"
 
 # `timeout` IS GNU AND IS ALLOWED, guarded. It has no BSD equivalent and mux
 # uses it only as a backstop, so the rule is that any shipped file reaching for
-# it must also ASK for it first -- which share/latch/ssh-probe already does.
+# it must also ASK for it first, which share/latch/ssh-probe already does.
 # TWO TOOLS ARE ALLOWED IF ASKED FOR FIRST. `timeout` has no BSD equivalent and
 # mux uses it only as a backstop; `sha256sum` has one under another name. Either
 # way the rule is the same: a shipped file may reach for it only if that same

@@ -10,13 +10,13 @@
 #
 # Sessions are derived from the per-pane state FILES in the namespace dir, NOT
 # from `tmux list-sessions`, so this answers headless (from a tray daemon, over
-# ssh, at boot) with no tmux client. NS is the namespace -- a PARTITION name;
+# ssh, at boot) with no tmux client. NS is the namespace: a PARTITION name;
 # with none it resolves the caller's context, exactly as the front end does.
 #
 # That resolution matters precisely BECAUSE this is the headless caller. Every
 # other consumer of mux-agent-state_lib (the status strip, next-blocked) runs
 # inside tmux and gets its namespace from $TMUX. This one has no $TMUX, so it
-# used to fall back to a hardcoded 'default' -- the old tmux socket basename.
+# used to fall back to a hardcoded 'default': the old tmux socket basename.
 # When the personal partition became `global` that name stopped existing, and
 # the tray indicator silently read an empty directory and reported "none 0"
 # forever.
@@ -31,27 +31,27 @@ _lib=$(dirname "$0")
 #   (none)      the caller's own partition, as "<state> <count>"
 #   NS          that partition, same shape
 #   --all       EVERY partition that has agent state, as
-#               "<partition> <state> <count>" -- one line each.
+#               "<partition> <state> <count>": one line each.
 #   --attached  with --all: only partitions SOMEONE IS LOOKING AT, meaning a
 #               client is attached to that partition's tmux server.
 #
 # --all EXISTS FOR ONE ROUND TRIP. The tray indicator polls a remote host over
 # ssh, and asking per partition would multiply that cost by the number of
-# partitions on every tick -- for a signal that changes on human timescales
+# partitions on every tick: for a signal that changes on human timescales
 # and whose poll was deliberately slowed to 5s for exactly this reason. One
 # question, one answer, however many partitions.
 #
 # --attached IS THE TRAY'S QUESTION, and it is a different one from "what
 # state is everything in". A tray item means A HUMAN IS LOOKING AT THIS: for a
 # remote host that is exactly what a latch already means (the notes say it
-# outright -- an item exists only because a latch does, and the latch IS the
+# outright: an item exists only because a latch does, and the latch IS the
 # human's live view of that box), and the local equivalent is an attached
 # client. Without it a partition with a live server and no terminal window
 # showing it published an item nobody could act on: reported live, where a
 # second local partition sat in the tray with nothing on screen behind it.
 #
 # IT IS A FLAG AND NOT THE DEFAULT, because the bare verb's contract is that
-# it answers HEADLESS -- from a tray daemon, over ssh, at boot, with no tmux
+# it answers HEADLESS: from a tray daemon, over ssh, at boot, with no tmux
 # client anywhere. Filtering on clients by default would quietly delete that
 # promise for every other consumer. The tray asks the narrower question
 # explicitly; everyone else keeps the state report.

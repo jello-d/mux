@@ -68,7 +68,7 @@ esac
 #
 # NOT A RESTART, which is the part worth asserting: restarting would not help,
 # because what is stale is the daemon's own code rather than anything it caches
-# from core -- it re-execs `mux` every poll. And not an install, which is a pip
+# from core: it re-execs `mux` every poll. And not an install, which is a pip
 # operation wanting a network that core deliberately has no part of.
 #
 # SILENT WITH NO INDICATOR INSTALLED, first, because an optional sub-package
@@ -101,7 +101,7 @@ rm -f "$T/bin/mux-indicator"
 # now correctly fails on a stale server.
 #
 # THE DEFAULT SOCKET IS WHAT `mux reload` FRESHENS, so this drives that rather
-# than a fresh named one -- which is safe ONLY because harness_lib pins
+# than a fresh named one, which is safe ONLY because harness_lib pins
 # TMUX_TMPDIR inside $T. Without that pin this case would source a
 # scratch config into the developer's own live server.
 if command -v tmux >/dev/null 2>&1; then

@@ -19,7 +19,7 @@ excluded=$(mux_excluded "$client")
 # Visible sessions in tmux name order (the same order the status strip uses).
 # Read LINE by line, not word by word. `for _s in $(tmux list-sessions ...)`
 # splits on whitespace, so a session named `my project` became two phantom ring
-# entries and the real one was never reachable -- and since the target uses
+# entries and the real one was never reachable, and since the target uses
 # tmux's exact-match `=`, the switch failed silently and these bindings simply
 # went dead. A here-doc, not a pipe: a pipe would run this loop in a subshell
 # and the ring built with `set --` would be discarded at `done`.

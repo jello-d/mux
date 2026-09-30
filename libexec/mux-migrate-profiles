@@ -1,6 +1,6 @@
 #!/bin/sh
 # mux-migrate-profiles: convert a pre-rename $MUX_DIR to the profile/layout
-# split. Idempotent, and a dry run by default -- it prints exactly what it would
+# split. Idempotent, and a dry run by default: it prints exactly what it would
 # do and changes nothing until you pass --apply.
 #
 #   mux migrate-profiles            show the plan

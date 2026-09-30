@@ -8,7 +8,7 @@
 #
 #   -q PRINTS NOTHING. The attach/create hooks run it quietly. tmux run-shell
 #   displays a command's stdout in a VIEW-MODE buffer over the pane, freezing it
-#   on a [0/0] snapshot until a key is pressed -- so a banner escaping under -q
+#   on a [0/0] snapshot until a key is pressed, so a banner escaping under -q
 #   does not merely look wrong, it wedges the pane the instant a marked session
 #   attaches. That is a bug this file's own header records having shipped.
 #
@@ -181,7 +181,7 @@ printf 'label WORK\n' >"$T/conf/contexts/work.context"
 #
 # The truth comes from ps, which knows tpgid without this test re-parsing
 # /proc at all. Re-implementing the same field arithmetic here would only prove
-# that two copies of one guess agree -- and the first attempt did exactly that,
+# that two copies of one guess agree, and the first attempt did exactly that,
 # indexing the SESSION id instead of tpgid and "failing" against correct code.
 reset
 CTX_TOKEN=work style -q proj $$ >/dev/null
@@ -199,7 +199,7 @@ esac
 
 # With a KNOWN foreground group, the right field is read. MUX_STYLE_PROC exists
 # for this: a test shell has no controlling terminal, so the real tpgid is -1,
-# the non-numeric guard fires and $6 is never reached -- which means a wrong
+# the non-numeric guard fires and $6 is never reached, which means a wrong
 # field index passes unnoticed. It did: mutating $6 to $4 left this file green
 # until the seam was added.
 #

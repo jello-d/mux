@@ -1,11 +1,11 @@
 #!/bin/sh
 # mux-agent-state-render: the tmux status-right session strip. One token per
 # session
-# on this server, in tmux's OWN session order -- so the strip reads the same way
+# on this server, in tmux's OWN session order, so the strip reads the same way
 # switch-client -n/-p walks it: prev is to the left, next is to the right. The
 # attached session wears a fixed "current" chip (constant on every theme),
 # in accent brackets, so "where am I" is obvious. State reads from the glyph;
-# non-current sessions colour their chip by state -- glyph carries state,
+# non-current sessions colour their chip by state: glyph carries state,
 # colour marks current.
 #
 # Agent state lives in per-pane files (see mux-agent-state-emit), namespaced by
@@ -23,12 +23,12 @@
 #
 # GRACEFUL REDUCTION: the strip is measured against status-right-length and,
 # when the full chips overflow, degrades in tiers rather than letting tmux
-# truncate it blind -- drop the age field, then fold runs of agentless sessions
+# truncate it blind: drop the age field, then fold runs of agentless sessions
 # into a ·N· cluster, then window around the current session with ‹N / N› edge
 # counts, then a bare "needs-you count · total". The order is ALWAYS tmux's (so
 # ( / ) still reads left-to-right); reduction only compresses low-signal
-# sessions. Invariant: a blocked (needs-you) session is never silently dropped
-# -- it stays a chip, or becomes a caution-marked edge/summary count. Below the
+# sessions. Invariant: a blocked (needs-you) session is never silently dropped;
+# it stays a chip, or becomes a caution-marked edge/summary count. Below the
 # threshold the output is byte-for-byte the un-reduced strip.
 set -eu
 
@@ -37,7 +37,7 @@ _lib=$(dirname "$0")
 
 # The state GLYPHS (MUX_GLYPH_*) and the state reader (mux_agent_state) live in
 # a shared lib, so the strip and the mux picker map state the same way and
-# cannot drift. The bar's COLOUR knobs (styles, accents) stay below -- they are
+# cannot drift. The bar's COLOUR knobs (styles, accents) stay below: they are
 # the strip's own look, which the picker does not share.
 . "$_lib/mux-agent-state_lib"
 
@@ -49,21 +49,21 @@ _lib=$(dirname "$0")
 # The view indicator lives at the RIGHT END of this strip, so its width has to
 # come out of the same budget the reduction tiers spend. It is drawn from here
 # rather than as its own status-left segment precisely so that arithmetic
-# happens in ONE place -- a second #() appended by tmux would be invisible to
+# happens in ONE place: a second #() appended by tmux would be invisible to
 # the tiers and would silently push the strip past status-right-length.
 . "$_lib/mux-views_lib"
 
 # ---------------------------------------------------------------------------
-# LOOK & FEEL -- every colour knob for the strip in one place. Colours are tmux
+# LOOK & FEEL: every colour knob for the strip in one place. Colours are tmux
 # colour names (colour0-255) or truecolor #rrggbb. The render logic below reads
-# ONLY these (and the shared glyphs) -- tweak here, nowhere else.
+# ONLY these (and the shared glyphs): tweak here, nowhere else.
 # ---------------------------------------------------------------------------
 
 # Per-state chip: a STYLE and an ACCENT (the glyph comes from the shared lib).
 # The style pairs fg AND bg so it reads on any bar theme; NONE (agentless) and
 # UNKNOWN keep a bare dim fg (no bg), so they recede. The ACCENT is the state's
 # one signature hue, drawn on the current session's white chip frame (see CUR_*
-# below) -- so the accent must read on white, which is why it tracks the state's
+# below), so the accent must read on white, which is why it tracks the state's
 # VIVID field (the pink working fg, the green/orange/red bg), not the chip text.
 STY_WORKING='fg=colour211,bg=colour56,bold'
 # bg stays an INDEXED colour on purpose: the palette's green-cube shift happens
@@ -84,7 +84,7 @@ ACC_NONE=colour250       # gray, agentless recedes
 ACC_UNKNOWN=colour250
 
 # blocked ESCALATES the longer it waits: fresh -> warm -> hot, gated on the
-# seconds blocked -- the louder the wait, the louder the chip (and the accent).
+# seconds blocked: the louder the wait, the louder the chip (and the accent).
 BLOCK_WARM_S=120 ; BLOCK_HOT_S=600
 STY_BLOCK_FRESH='fg=colour232,bg=colour202,bold'   # orange
 STY_BLOCK_WARM='fg=colour232,bg=colour196,bold'    # red
@@ -94,8 +94,8 @@ ACC_BLOCK_WARM=colour196    # red
 ACC_BLOCK_HOT=colour196     # red
 
 # Current-session chip: a black-on-white BODY, CONSTANT on every theme, so
-# "where am I" never rides on a hue. Its FRAME -- the [ ] brackets AND the
-# underline rule (us= colours the rule alone; the text stays black) -- takes the
+# "where am I" never rides on a hue. Its FRAME, the [ ] brackets AND the
+# underline rule (us= colours the rule alone; the text stays black), takes the
 # agent-state ACCENT (ACC_* above), so the active chip's edge echoes its own
 # glyph: green idle, pink working, orange->red blocked, gray agentless. The body
 # stays white either way, so location never depends on reading the state hue.
@@ -113,7 +113,7 @@ dir=$(mux_agent_dir)
 # ONE QUERY, TWO ANSWERS: the pane ids for the prune, and which sessions mux
 # STARTED AN AGENT IN. A second `list-panes` would be a second round trip on
 # the hottest path mux has (this runs per client every status-interval), and
-# the round trip is the cost -- parsing what came back is not.
+# the round trip is the cost: parsing what came back is not.
 #
 # THE SESSION NAME IS LAST because it may contain a space, and tab-separated
 # because tmux escapes a real tab in a value as the two characters `\t`, so it
@@ -121,7 +121,7 @@ dir=$(mux_agent_dir)
 _panes=$(tmux list-panes -a \
   -F '#{pane_id}	#{@mux-agent}	#{session_name}' 2>/dev/null || true)
 # EMPTY MUST STAY EMPTY. `printf '%s\n' ""` emits a NEWLINE, which `tr` turns
-# into a space, which makes `live` non-empty -- and the prune below is guarded
+# into a space, which makes `live` non-empty, and the prune below is guarded
 # on exactly that emptiness, because an empty pane list means the QUERY FAILED
 # rather than that every pane died. Piping the substitution through printf
 # broke that guard, and the existing prune assertion caught it.
@@ -145,11 +145,11 @@ $1
 }
 
 # Prune phantoms once: drop any state file whose pane is gone, closing any
-# notification it still holds -- so a pane killed while blocked leaves no stale
+# notification it still holds, so a pane killed while blocked leaves no stale
 # "needs you" behind (best effort on any platform; see mux-notify_lib).
 #
 # ONLY when the pane list is non-empty. An empty one does not mean every pane
-# died -- it means the QUERY failed, and the commonest way is a socket
+# died: it means the QUERY failed, and the commonest way is a socket
 # mismatch: this uses a bare `tmux`, so it inherits the server from $TMUX, and
 # run from a shell that has none (over ssh, from a cron, by hand to see what
 # the strip says) it asks tmux's DEFAULT socket instead. That socket usually
@@ -162,7 +162,7 @@ $1
 # ssh. Destroying state on a failed read is the worst available response to an
 # incoherent answer, so the answer is refused instead. The cost of refusing is
 # that a genuinely dead pane's file survives until the next render that CAN
-# see the server -- a stale chip, which the next real render clears.
+# see the server: a stale chip, which the next real render clears.
 if [ -d "$dir" ] && [ -n "${live# }" ]; then
   for f in "$dir"/*; do
     [ -e "$f" ] || continue
@@ -187,7 +187,7 @@ fmt_age() {
 current=${1:-}
 
 # The bar's client, passed as $2 (#{client_name}). Sessions this client has
-# hidden (mux hide) drop off ITS strip -- per client, so each monitor differs.
+# hidden (mux hide) drop off ITS strip: per client, so each monitor differs.
 client=${2:-}
 excluded=
 if [ -r "$_lib/mux-exclude_lib" ]; then
@@ -200,7 +200,7 @@ fi
 # never empty). Written to a file so the strip's WIDTH can be measured before it
 # is drawn: the graceful-reduction tiers below choose a layout that fits inside
 # status-right-length, instead of letting tmux truncate the strip blind and drop
-# whatever fell off the right -- possibly a session that needs you.
+# whatever fell off the right: possibly a session that needs you.
 tmpf=$(mktemp); recs=$(mktemp)
 trap 'rm -f "$tmpf" "$recs"' EXIT
 tmux list-sessions -F '#{session_name}' 2>/dev/null >"$tmpf" || true
@@ -213,7 +213,7 @@ while read -r sess; do
   _st=${_pair%% *}; _ep=${_pair##* }
   # NO RECORD AT ALL, and mux started an agent here: the wiring never
   # fired. A wired agent emits on SessionStart, so the absence of ANY
-  # record is the signal -- and it is a better one than asking whether an
+  # record is the signal, and it is a better one than asking whether an
   # agent process is alive right now, which would call an agent that ran
   # and exited "no agent" and hide the very thing that is wrong.
   # (Measured, and the reason this is not a process check: tmux reports
@@ -242,7 +242,7 @@ budget=$((budget - 1))
 # Reserve the view indicator: the separator plus the glyph, no padding. Taken
 # off the top so every
 # tier below lays out inside what is left, and the indicator is never the thing
-# that overflows -- it is fixed furniture, not a chip that may be dropped.
+# that overflows: it is fixed furniture, not a chip that may be dropped.
 VIEW_TAIL_W=$((MUX_VIEW_W + 1))
 budget=$((budget - VIEW_TAIL_W))
 [ "$budget" -ge 1 ] || budget=1
@@ -353,7 +353,7 @@ build_collapse() {       # no age, runs of agentless sessions folded to ·N·
     _emit_session "$_c" "$_s" "$_a" "$_nm" 0
   done <"$recs"
   # if/then, NOT `[ ... ] && ...`: this is the function's LAST statement,
-  # so a false test would make build_collapse RETURN 1 -- and its caller
+  # so a false test would make build_collapse RETURN 1, and its caller
   # is `[ fits ] || build_collapse`, where a non-zero final command trips
   # set -e and kills the render. The status bar then goes BLANK for the
   # whole client, which is what happened whenever the strip had to
@@ -440,7 +440,7 @@ build_summary() {        # the floor: too narrow even to window; show a count
 
 # Pick the leanest layout that fits, cheapest first: the FULL strip (same as
 # before), then drop the age field, then fold agentless runs, then a window
-# around the current session, then -- at a width too small even for that -- a
+# around the current session, then (at a width too small even for that) a
 # bare "needs-you count · total". A blocked session is never silently dropped:
 # it survives as a chip, a caution-marked edge count, or that summary count.
 build_plain 1
@@ -449,7 +449,7 @@ build_plain 1
 [ "$BW" -le "$budget" ] || build_window
 [ "$BW" -le "$budget" ] || build_summary
 
-# The view indicator, always, after a separator: two dimensions in one cell --
+# The view indicator, always, after a separator: two dimensions in one cell;
 # SHAPE is the mode you chose, COLOUR is what is happening to this view. Fixed
 # furniture at the right edge, so the bar never changes width as tension comes
 # and goes, and the mode stays legible even when nothing is contending.

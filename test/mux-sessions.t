@@ -48,7 +48,7 @@ eq idempotent "$(mux_sess_list $K | tr '\n' ' ')" "alpha bravo charlie "
 mux_sess_drop bravo $K
 eq dropped "$(mux_sess_list $K | tr '\n' ' ')" "alpha charlie "
 eq dropped-root "$(mux_sess_root bravo $K)" ""
-# The others keep their roots -- a drop rewrites the file, so this is the
+# The others keep their roots: a drop rewrites the file, so this is the
 # check that it rewrites it correctly.
 eq drop-keeps "$(mux_sess_root charlie $K)" "$T/c"
 mux_sess_drop nosuch $K
@@ -77,7 +77,7 @@ eq spaced-name "$(mux_sess_list $K | tr '\n' ' ')" "spacey "
 # `grep -qxF "$1"` parses a leading-dash pattern as FLAGS: the match silently
 # fails and grep prints a usage block to stderr. The consequence here is the
 # worst of the seven places this shape appeared, because mux_sess_add consults
-# mux_sess_has for idempotence -- so such a name is re-appended on EVERY
+# mux_sess_has for idempotence, so such a name is re-appended on EVERY
 # attach and the recorded set grows without bound, taking `mux resume` with it.
 #
 # tmux refuses to CREATE such a session (checked: rename-session reads it as a
@@ -100,7 +100,7 @@ mux_sess_drop "-n" dashkey
 # --- membership is NOT "has a root" -------------------------------------
 # mux_sess_has answers whether a name is RECORDED. A record may legitimately
 # carry an EMPTY root (tmux could not report session_path when it was added),
-# so a non-empty-root test silently misses those entries -- and the caller
+# so a non-empty-root test silently misses those entries, and the caller
 # that needs this is `mux kill`, deciding whether there is a record to forget.
 # Getting it wrong there makes exactly those entries unforgettable.
 mux_sess_has spacey $K || fail "has: a recorded name reads as absent"
@@ -117,7 +117,7 @@ mux_sess_has "" $K && fail "has: an empty name reads as present"
 # --- IT LIVES IN $MUX_STATE, NOT $MUX_CACHE ---------------------------
 # Nothing rebuilds this file: the set accumulates one `mux go` at a time. In
 # ~/.cache it was one `rm -rf ~/.cache` away from gone, and the only moment you
-# would notice is the `mux resume` after a reboot -- exactly when you cannot
+# would notice is the `mux resume` after a reboot, exactly when you cannot
 # reconstruct it.
 case "$(mux_sess_file probe)" in
 "$MUX_STATE"/sessions.probe) ;;

@@ -5,10 +5,10 @@
 #   mux agent-doctor [--repair] [NS]
 #
 # The status strip reports state from per-pane files written by an agent's
-# lifecycle hooks (see mux-agent-state-emit). When a hook does not fire -- a
+# lifecycle hooks (see mux-agent-state-emit). When a hook does not fire (a
 # turn
 # that ends without a Stop, a long generation with no tool call to trigger
-# PostToolUse, a hook that failed silently -- the file keeps saying whatever it
+# PostToolUse, a hook that failed silently), the file keeps saying whatever it
 # last said while the agent moves on. The strip then reports a finished session
 # that is busy, or a busy one that finished, and nothing on the bar can tell
 # you which because the bar IS the file.
@@ -18,7 +18,7 @@
 #
 # READ-ONLY BY DEFAULT, and deliberately so. The renderer prunes state files it
 # believes are orphaned, which makes it destructive when it cannot see the
-# server -- one diagnostic run of `mux agent-render` over ssh deleted four of
+# server: one diagnostic run of `mux agent-render` over ssh deleted four of
 # five live state files on another machine. Reaching for a renderer to inspect
 # state was the mistake; this exists so there is something safe to reach for. A
 # plain run writes nothing, removes nothing, and never touches a notification.
@@ -28,14 +28,14 @@
 # that nothing ever writes. It repairs exactly ONE verdict, STALE, and refuses
 # the others on purpose:
 #
-#   STALE   repaired. It provably does not self-heal -- the turn is over, so no
+#   STALE   repaired. It provably does not self-heal: the turn is over, so no
 #           further hook fires until a human starts a new one, and until then
 #           the session draws BUSY while sitting at a prompt. It is also the
 #           best-evidenced verdict: the agent's own declared busy marker says
 #           no turn is running AND the process is below the idle threshold, and
 #           three separate paths refuse to guess rather than assert either.
 #   DRIFT   left alone. Recovery is a turn START (a new prompt) or sustained
-#           tool calls -- NOT a single tool call, which is what this said
+#           tool calls, NOT a single tool call, which is what this said
 #           until 2026-09-27: `--beat` discards one beat over `idle`. The
 #           repair would be to write `working`, the direction that makes a
 #           finished session look busy, which is the worse failure.
@@ -52,7 +52,7 @@ _lib=$(dirname "$0")
 # mux-conf_lib for mux_conf_clean: the `busy` marker is read through the same
 # comment-and-whitespace cleaner every other mux config file uses, rather
 # than a private parser. Omitting it made _busy_pat silently return nothing,
-# which degraded to the old verdict instead of failing loudly -- a graceful
+# which degraded to the old verdict instead of failing loudly: a graceful
 # fallback hiding a missing dependency.
 # mux-log_lib for mux_log: --repair MUTATES a record, and a mutation nobody can
 # see afterwards is exactly what made the original bug expensive to find.
@@ -64,7 +64,7 @@ do
   . "$_lib/$_l"
 done
 
-# The namespace: an explicit argument, else this caller's resolved partition --
+# The namespace: an explicit argument, else this caller's resolved partition;
 # the same derivation agent-summary uses, so a headless run answers about the
 # partition it is in rather than guessing a name.
 MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
@@ -89,8 +89,8 @@ fi
 _ns=${_ns:-global}
 
 # tmux, addressed at the right SERVER. Inside a session $TMUX names it; outside
-# one there is nothing to inherit, and a bare tmux would ask the DEFAULT socket
-# -- which is exactly how the renderer came to believe every pane was dead.
+# one there is nothing to inherit, and a bare tmux would ask the DEFAULT socket,
+# which is exactly how the renderer came to believe every pane was dead.
 _dt() {
   if [ -n "${TMUX:-}" ]; then tmux "$@"; else tmux -L "$_ns" "$@"; fi
 }
@@ -141,7 +141,7 @@ _agent_pid() {
 
 # Jiffies of CPU a pid has used (user + system), or empty when it is gone.
 # MUX_DOCTOR_PROC relocates /proc so the banding above can be exercised against
-# a fabricated process whose CPU moves on cue -- the alternative being to test
+# a fabricated process whose CPU moves on cue: the alternative being to test
 # the thresholds by running something busy and hoping, which pins nothing.
 _cpu() {
   _pr=${MUX_DOCTOR_PROC:-/proc}
@@ -193,7 +193,7 @@ for _f in "$_dir"/*; do
   # 2>/dev/null BEFORE the input redirect: redirections apply left to
   # right, so with <"$_f" first a file pruned between the glob and this
   # read fails the OPEN while stderr is still the terminal, and the
-  # shell prints "cannot open" itself -- read never runs, so read's own
+  # shell prints "cannot open" itself: read never runs, so read's own
   # 2>/dev/null cannot cover it. That race is routine here: the doctor
   # reads the same dir the renderer prunes.
   read -r _st _win _pane _ep _notif _sess 2>/dev/null <"$_f" || continue
@@ -222,13 +222,13 @@ done
 # The reverse question, and the one this tool could not ask: everything above
 # audits a RECORD against reality, so it only ever sees a record that went
 # wrong. An agent with no record is invisible to it, and the summary then says
-# "recorded state agrees with every agent" -- which it did on a box where five
+# "recorded state agrees with every agent", which it did on a box where five
 # of seven sessions showed no agent on the strip while all seven had one
 # running. A clean bill of health is the worst possible answer there.
 #
 # This is the more damaging direction of the two. A stale record shows the
 # WRONG state and at least shows something; a missing record shows NO state,
-# which the strip draws identically to a session that has no agent -- so
+# which the strip draws identically to a session that has no agent, so
 # nothing looks broken and the eye slides past it.
 #
 # Fed by a here-doc, not a pipe: a `while` behind a pipe runs in a subshell and
@@ -252,16 +252,16 @@ _rows="$_rows$_orph"
 
 # How long to watch, and how busy counts as busy. Both measured rather than
 # guessed: sampled across six live agents, a genuinely idle one sits at 0.1% of
-# a core while agents mid-turn ran 3.7% to 9.8%. A short window is noisy -- over
+# a core while agents mid-turn ran 3.7% to 9.8%. A short window is noisy (over
 # two seconds an idle agent's timers can spend a jiffy or two and look like
-# work -- so the window is seconds, not milliseconds, and the verdict is a
+# work), so the window is seconds, not milliseconds, and the verdict is a
 # PERCENTAGE of it.
 #
 # Three bands, not two, because the middle one is real: between "clearly idle"
 # and "clearly working" sits a band this cannot call from CPU alone, and
 # reporting it as DRIFT would cry wolf. It is shown and not counted.
 _win=${MUX_DOCTOR_WINDOW:-3}
-_busy_pct=${MUX_DOCTOR_BUSY_PCT:-3}     # above this: working -- and so, drift
+_busy_pct=${MUX_DOCTOR_BUSY_PCT:-3}     # above this: working, and so, drift
 # above _susp_pct: worth a look, but not a verdict
 _susp_pct=${MUX_DOCTOR_SUSPECT_PCT:-1}
 _hz=$(getconf CLK_TCK 2>/dev/null || echo 100)
@@ -291,7 +291,7 @@ _fix() {   # <pane id> <epoch sampled before the window>
   read -r _fs _fw _fp _fe _fn _fsess 2>/dev/null <"$_ff" || return 1
   # The compare-and-swap. Either field having moved means a real hook
   # fired during the window, so the record is now the hooks' truth and
-  # this sample is stale -- exactly backwards to overwrite it.
+  # this sample is stale, exactly backwards to overwrite it.
   [ "$_fs" = working ] && [ "$_fe" = "$2" ] || return 1
   _ft=$_ff.$$
   printf '%s %s %s %s %s %s\n' \
@@ -321,7 +321,7 @@ printf '%s' "$_rows" \
     fi
   fi
   # The verdicts, in the order they matter:
-  #   DRIFT   the reported bug -- the bar says finished, the agent is not
+  #   DRIFT   the reported bug: the bar says finished, the agent is not
   #   gone    recorded working, but no agent process is there at all
   #   quiet   recorded working with the agent present but not on CPU. NOT
   #           drift: an agent waiting on the model or on a slow tool is
@@ -339,7 +339,7 @@ printf '%s' "$_rows" \
       # running and this record outlived the turn it described.
       # Reported as DRIFT because a session that looks BUSY is
       # one you deliberately leave alone, so the wait is
-      # unbounded -- worse than the reverse.
+      # unbounded: worse than the reverse.
       _v="*** STALE: reports working, agent is at a prompt ***"
       if [ "$_repair" -eq 1 ]; then
         # A refused swap is NOT a repair failure: the
@@ -370,7 +370,7 @@ printf '%s' "$_rows" \
 done
 
 # The count crosses back out of the pipeline through a file, because the while
-# above runs in a subshell and an exit code set inside it would be discarded --
+# above runs in a subshell and an exit code set inside it would be discarded:
 # the same trap that let `mux check` print [FAIL] and exit 0.
 _orphans=0
 if [ -f "$_dir/.doctor.$$" ]; then
@@ -387,7 +387,7 @@ echo
 if [ "$_drift" -gt 0 ]; then
   printf 'mux: %s session(s) report a finished agent that is working.\n' \
     "$_drift" >&2
-  echo "mux: the state file is stale -- a lifecycle hook did not fire." >&2
+  echo "mux: the state file is stale: a lifecycle hook did not fire." >&2
   # THIS ADVICE WAS WRONG FOR TWO RELEASES, and wrong in the direction
   # that makes you wait: it said "self-heals on the agent's next tool
   # call (PostToolUse)", which held only while PostToolUse sent a bare
@@ -396,7 +396,7 @@ if [ "$_drift" -gt 0 ]; then
   # it, so a single tool call heals nothing. Telling someone to wait for
   # an event that cannot arrive is worse than saying nothing.
   echo "mux: recovery needs a turn START, which only a new prompt" >&2
-  echo "mux:   sends -- or SUSTAINED tool calls, since two beats" >&2
+  echo "mux:   sends, or SUSTAINED tool calls, since two beats" >&2
   echo "mux:   inside the window corroborate each other." >&2
 fi
 # The OPPOSITE cause, and so the opposite recovery. Reusing the message above
@@ -407,7 +407,7 @@ if [ "$_stale" -gt 0 ]; then
   printf 'mux: %s session(s) report working after the turn ENDED.\n' \
     "$_stale" >&2
   echo "mux: a late event re-asserted working once the turn was over." >&2
-  echo "mux: it does NOT self-heal -- nothing fires until you start a" >&2
+  echo "mux: it does NOT self-heal: nothing fires until you start a" >&2
   echo "mux: new turn there, so the session looks busy until you do." >&2
   echo "mux: the fix is the agent hook passing --beat (see agent-emit);" >&2
   echo "mux: a hook that only witnesses activity must not promote." >&2
@@ -415,7 +415,7 @@ if [ "$_stale" -gt 0 ]; then
 fi
 # Reported on stdout, not stderr, and it does NOT set the exit status: a repair
 # that did what it was asked is a success. The finding is still WORTH SAYING,
-# because the record being wrong at all means a hook is misbehaving -- so the
+# because the record being wrong at all means a hook is misbehaving, so the
 # cause is named alongside the cure rather than quietly swallowed by it.
 if [ "$_fixed" -gt 0 ]; then
   printf 'mux: repaired %s record(s): working -> idle.\n' "$_fixed"
@@ -423,14 +423,14 @@ if [ "$_fixed" -gt 0 ]; then
   echo "mux: hook promoted after the turn ended, so check the agent's"
   echo "mux: hooks pass --beat for events that merely witness activity."
   echo "mux: a plugin updated while a session is RUNNING does not take"
-  echo "mux: effect there -- hooks are resolved once, at session start."
+  echo "mux: effect there: hooks are resolved once, at session start."
 fi
 if [ "$_orphans" -gt 0 ]; then
   printf 'mux: %s agent(s) are running with NO state recorded.\n' \
     "$_orphans" >&2
   echo "mux: those sessions draw as having no agent at all, which is" >&2
   echo "mux: indistinguishable from a session you never started one in." >&2
-  echo "mux: each heals on its agent's next lifecycle hook -- but one" >&2
+  echo "mux: each heals on its agent's next lifecycle hook, but one" >&2
   echo "mux: idle for days fires none until you interact with it." >&2
 fi
 if [ "$_drift" -gt 0 ] || [ "$_stale" -gt 0 ] || [ "$_orphans" -gt 0 ]; then

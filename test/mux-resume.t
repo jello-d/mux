@@ -4,7 +4,7 @@
 # recording, the resolution and the rebuild are all exercised.
 #
 # The stub models a server whose live set lives in a file, so "reboot" is just
-# truncating it while the cache survives -- which is exactly the situation the
+# truncating it while the cache survives, which is exactly the situation the
 # feature exists for, and the one a snapshot-based design would break.
 set -eu
 _name=mux-resume
@@ -95,7 +95,7 @@ mux "$T/elsewhere" resume >/dev/null || fail "resume after kill failed"
 # --- resume addresses each session by its ROOT, the public form ------------
 # Not by a private path through the resolver: `mux go <dir>` is a command
 # anyone can type, so resume is a loop over it. Proven by a session whose root
-# is a repo SUBDIRECTORY -- addressing it by name alone could not distinguish
+# is a repo SUBDIRECTORY: addressing it by name alone could not distinguish
 # it from its enclosing repo.
 mkdir -p "$T/tree/bravo/inner"
 printf 'inner       root=%s/tree/bravo/inner\n' "$T" >"$T/conf/profiles"
@@ -141,7 +141,7 @@ case $_o in *"no such session"*) ;; *) fail "unhelpful refusal: [$_o]" ;; esac
 
 # --- a recorded name containing a SPACE is rebuilt whole --------------------
 # `for n in $set` word-split the recorded names, so a session called
-# `my project` was rebuilt as two phantoms -- `my` and `project` -- and the
+# `my project` was rebuilt as two phantoms (`my` and `project`), and the
 # real one never came back. The set is newline separated for exactly this
 # reason: a session name may contain a space, never a newline.
 rm -f "$T"/state/sessions.*
@@ -176,7 +176,7 @@ esac
 # reboot, when "did my sessions come back?" is the only question anyone has, and
 # the terminal that answered it has usually scrolled away or been closed by the
 # time the question is asked. A set surviving intact while sessions are simply
-# absent is indistinguishable, afterwards, from resume never having been run --
+# absent is indistinguishable, afterwards, from resume never having been run,
 # which is exactly the ambiguity this removes.
 MUX_LOG=$T/resume.log; export MUX_LOG
 rm -f "$T"/state/sessions.*
@@ -239,13 +239,13 @@ unset MUX_LOG
 
 # --- the optional PARTITION and SESSION (0.56) ----------------------------
 # `mux resume` grew two optional positional arguments. The first is ALWAYS
-# the partition -- never "whichever of these names one" -- because that magic
+# the partition (never "whichever of these names one"), because that magic
 # changes meaning the day you add a partition, and a session sharing a name
 # with one would silently resume the wrong set. mux latch has already shipped
 # a default that succeeded at the wrong thing and said nothing.
 
 # An unknown partition is exit 3, mux's cross-cutting "the name is not known
-# here". NOT an empty resume reporting "no sessions recorded" -- that reads as
+# here". NOT an empty resume reporting "no sessions recorded": that reads as
 # data loss when the truth is a typo.
 _rc=0
 mux "$T/elsewhere" resume nosuchpartition >"$T/out" 2>&1 || _rc=$?
@@ -259,7 +259,7 @@ grep -q "known:" "$T/out" || fail "it did not list the known partitions"
 # reported as success with a footnote.
 #
 # SEEDED FIRST. The cases above end with an EMPTY set, and the empty-set
-# refusal (exit 1) fires before the focus check is ever reached -- so without
+# refusal (exit 1) fires before the focus check is ever reached, so without
 # a seed this passes or fails for a reason that has nothing to do with the
 # focus target, while reading exactly like the case it claims to be.
 mkdir -p "$T/tree/focus"

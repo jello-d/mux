@@ -7,7 +7,7 @@
 #   - the draft path is DETERMINISTIC, so recovering a botched edit needs no
 #     argument to be remembered or typed;
 #   - a COMMENT (or a value with a space) cannot live in a one-line row, so it
-#     is what promotes the entry to a breakout file -- the breakout happens
+#     is what promotes the entry to a breakout file: the breakout happens
 #     when you actually need it, never on a rule you have to remember;
 #   - an unparseable draft is KEPT and reported, so a failed save hands your
 #     work back rather than eating it.

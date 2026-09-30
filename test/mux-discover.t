@@ -108,7 +108,7 @@ mux "$T/elsewhere" go alpha2 >/dev/null || fail "go alpha2 (via the row) failed"
 [ "$(rooted)" = "$T/tree/nested/alpha" ] \
   || fail "row lookup: rooted at [$(rooted)]"
 # Bare `mux go` in that directory must resolve to the ALIAS, not to the name
-# the directory would otherwise derive -- else you get two sessions on one dir.
+# the directory would otherwise derive: else you get two sessions on one dir.
 : >"$TMUXLOG"
 mux "$T/tree/nested/alpha" go >/dev/null \
   || fail "bare go in the alias dir failed"
@@ -122,7 +122,7 @@ fails new-dup "already has a profile" "$T/tree/solo" new alpha2
 # "I never looked" and "I looked and did not find it" are different failures,
 # and offering a spelling correction when discovery is off is misleading.
 #
-# Modelled with a partition that has no file ANYWHERE -- moving the user's
+# Modelled with a partition that has no file ANYWHERE: moving the user's
 # global.partition aside would not do it, because the SHIPPED one overlays in.
 # That is also the real case: an unconfigured non-global partition, exactly
 # what a work context looks like before anyone sets it up.
@@ -237,7 +237,7 @@ The alternative to skipping is deleting files based on an empty list."
 
 # 2. AN ORACLE THAT ANSWERS NOTHING. A different failure: the function is there
 #    and returned empty. mux_ctx_partitions always includes the one we are in,
-#    so this should be impossible -- which is exactly why it must not be trusted
+#    so this should be impossible, which is exactly why it must not be trusted
 #    to be. An empty list means "no partition exists", and acting on it deletes
 #    every map on the box.
 (

@@ -7,7 +7,7 @@
 # imported the SOURCE copy, compared every file against ITSELF and reported
 # agreement whatever the venv held. The provisioner was unaffected (it runs
 # `sh <path>/setup.sh` from elsewhere), so this only ever lied to a human
-# iterating on the code -- precisely when a false [OK] costs the most.
+# iterating on the code, precisely when a false [OK] costs the most.
 #
 # Driven against a STUB venv, so no real Python install is needed: the stub is
 # the seam, and it answers the one question setup.sh asks the interpreter.
@@ -21,7 +21,7 @@ SETUP=$HERE/indicator/setup.sh
 #
 # IT MODELS sys.path's CURRENT-DIRECTORY-FIRST RULE, which is the whole point:
 # a stub that simply echoed a fixed path could not exhibit the bug at all, and
-# the mutation proved it -- deleting the `cd /` left the corpus green. The one
+# the mutation proved it: deleting the `cd /` left the corpus green. The one
 # behaviour this check depends on is that a package in the CWD shadows the
 # installed one, so that is the behaviour the stub reproduces and nothing else.
 mkdir -p "$T/venv/bin"

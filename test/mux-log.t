@@ -16,7 +16,7 @@
 #   2. THE READER MUST DISTINGUISH ITS SILENCES. "logging is off", "nothing has
 #      happened yet", "the file is empty" and "no entries for that subsystem"
 #      are four different answers, and showing all four as no output would make
-#      the log useless exactly when it is consulted -- after an incident, when
+#      the log useless exactly when it is consulted, after an incident, when
 #      you cannot tell "nothing went wrong" from "nothing was recorded".
 #   3. IT IS CAPPED. An unbounded always-on file is its own bug.
 set -eu
@@ -27,7 +27,7 @@ LIB=$HERE/libexec/mux-log_lib
 [ -r "$LIB" ] || fail "libexec/mux-log_lib is missing"
 
 L=$T/state/mux.log
-lg() {   # <subsys> <msg...> -- through the real lib, never by hand
+lg() {   # <subsys> <msg...>: through the real lib, never by hand
   ( . "$LIB"; MUX_STATE="$T/state" mux_log "$@" )
 }
 rd() {   # [args...] -> reader stdout+stderr
@@ -60,7 +60,7 @@ has "$_o" "OFF" "MUX_LOG=none must be reported as OFF, not as an empty log"
 ( . "$LIB"; MUX_LOG=none MUX_STATE="$T/untouched" mux_log latch 'x' )
 [ ! -e "$T/untouched" ] || fail "MUX_LOG=none created $T/untouched"
 
-# --- MUX_LOG is three-valued, and the middle value is the interesting one --
+# --- MUX_LOG is three-valued, and the middle value is the interesting one:
 # unset / none / a path. Collapsing "unset" with "off" is a mistake this
 # codebase paid for once already (the _ask seam in mux-latch returned 2 for both
 # "no hook configured" and "the hook cannot tell", and the caller waited
@@ -85,7 +85,7 @@ esac
 #
 # Proved with a genuinely SEPARATE process, which is the only way to prove it.
 # `( . "$LIB"; mux_log ... )` is a subshell, and a POSIX subshell inherits $$
-# from its parent -- so every entry lg() writes carries the TEST's pid, and an
+# from its parent, so every entry lg() writes carries the TEST's pid, and an
 # assertion comparing against $$ would pass whether the field tracked the writer
 # or were hardcoded. A child `sh -c` has a pid of its own.
 _kid=$(sh -c '. "$1"; MUX_STATE="$2" mux_log latch "from a child process"; \
@@ -94,7 +94,7 @@ _got=$(grep 'from a child process' "$L" | sed 's/.*latch\[\([0-9]*\)\].*/\1/')
 [ "$_got" = "$_kid" ] || fail "the pid field does not track the WRITER:
   the child's pid was [$_kid], the log recorded [$_got]"
 [ "$_got" != "$$" ] || fail "the child logged the test's pid, so the field is
-not the writer's -- two concurrent latches would be indistinguishable"
+not the writer's: two concurrent latches would be indistinguishable"
 
 # --- an empty message is not an entry ------------------------------------
 # A bare subsystem with nothing to say would append a line carrying only a
@@ -111,7 +111,7 @@ lg latch ''
 # and `set -e` in this file means a non-zero return takes the run down.
 #
 # THREE CASES BECAUSE THERE ARE TWO GUARDS, and which case reaches which is not
-# obvious -- mutation testing is what showed it. The first two have a dirname
+# obvious: mutation testing is what showed it. The first two have a dirname
 # that does not exist, so they fail at the `mkdir -p` refusal and never attempt
 # the write at all. Only the third has an existing-but-unwritable directory,
 # which skips mkdir and reaches the append. Both refusals are load-bearing and

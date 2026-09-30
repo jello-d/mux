@@ -15,7 +15,7 @@
 # AND THERE ARE TWO CONVENTIONS OVER ONE DOCUMENT: the vendor-neutral
 # `AGENTS.md` a repository carries, and one harness's `SKILL.md` with YAML
 # frontmatter. A second copy of the text would drift, so the body is the file
-# and the frontmatter is data beside it -- which is asserted here, because a
+# and the frontmatter is data beside it, which is asserted here, because a
 # single source is only worth anything if something notices when it stops
 # being single.
 set -eu
@@ -34,7 +34,7 @@ esac
 printf '%s\n' "$_o" | grep -q '^name: mux-agent$' \
   || fail "the frontmatter has no name:"
 printf '%s\n' "$_o" | grep -q '^description:' \
-  || fail "the frontmatter has no description: -- which is what an agent
+  || fail "the frontmatter has no description, which is what an agent
 harness matches on to decide the skill is relevant, so without it the file is
 installed and never triggers"
 
@@ -91,7 +91,7 @@ so an agent in a repo with no tmux reads it as instructions anyway"
 
 # --- A MISSING FRONTMATTER IS FATAL, NOT AN OMISSION ----------------------
 # A SKILL.md with no frontmatter installs fine, errors nothing, and never
-# triggers -- the worst failure available to a file whose only job is to be
+# triggers: the worst failure available to a file whose only job is to be
 # matched. Splitting the document is what made that partial install possible,
 # so it has to be refused here rather than emitted.
 mkdir -p "$T/share/skills/bare"
@@ -102,7 +102,7 @@ _rc=0; bare skill bare >"$T/out" 2>"$T/err" || _rc=$?
 
 # STDOUT AND STDERR ARE ASSERTED SEPARATELY, because the obvious single
 # assertion is VACUOUS and was: with the guard deleted, `cat` fails on the
-# missing file, prints a message CONTAINING the path -- so any test grepping
+# missing file, prints a message CONTAINING the path, so any test grepping
 # the combined output for "frontmatter" passes, and exit 1 comes free from
 # `set -e`. Mutation said so. What actually differs is that the guard emits
 # NOTHING on stdout, where its absence emits a truncated document.
@@ -189,7 +189,7 @@ done
 
 # THE SCOPE CLAIM IS CHECKED PER VERB, because the flag sweep above cannot.
 # It asserts a flag is parsed SOMEWHERE in the dispatcher, so `--partition`
-# passed while `mux agent status` rejected it outright -- and `--all` was parsed
+# passed while `mux agent status` rejected it outright, and `--all` was parsed
 # by status and then never read, which no name-based check can see at all. The
 # skill says both verbs take both flags, in the same breath as calling a
 # partition an isolation boundary, so that sentence is asserted against the
@@ -214,8 +214,8 @@ for _st in blocked working idle; do
 done
 
 # THE EXIT CODES IT DOCUMENTS ARE MUX'S FOUR. The absence of every other one
-# is load-bearing -- latch attributes 126, 127 and 255 to the shell and to ssh
-# precisely because mux never emits them -- so a skill teaching a fifth would
+# is load-bearing (latch attributes 126, 127 and 255 to the shell and to ssh
+# precisely because mux never emits them), so a skill teaching a fifth would
 # be teaching a caller to mis-attribute a transport failure.
 for _s in ok refused timed-out usage no-such-name; do
   printf '%s\n' "$_skill" | grep -q "$_s" \

@@ -5,7 +5,7 @@
 #
 # Exists for the TRAY. A per-host tray item has to be the same colour as that
 # host's status-bar chip, or the two disagree about which machine is which and
-# neither looks broken -- so the answer comes from mux rather than being derived
+# neither looks broken, so the answer comes from mux rather than being derived
 # a second time by whoever is drawing.
 #
 # HEX, NOT A TMUX STYLE, because a style is tmux's dialect: `bg=colour236` is a
@@ -47,7 +47,7 @@ _h=${1:-$(mux_host_name)}
 [ -n "$_h" ] || { echo "mux: host-color: no host to answer for" >&2; exit 1; }
 
 _pair=$(mux_host_hex "$_h")
-# Empty means a half-resolvable pair -- a 0-15 colour, which is the terminal's
+# Empty means a half-resolvable pair: a 0-15 colour, which is the terminal's
 # own and has no fixed value, or a style with no fg/bg. Refused rather than
 # guessed: a caller drawing ink with no fill is worse off than one that drew
 # nothing, and it would have no way to tell.

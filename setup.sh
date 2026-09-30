@@ -71,7 +71,7 @@ _tmux_confs() {
 }
 # A HERE-DOC, NOT A PIPELINE, and the first version got this wrong in the
 # direction that suppresses a warning: a `while` loop fed by a pipe runs in a
-# SUBSHELL, so a `return` inside it cannot answer for this function -- and a
+# SUBSHELL, so a `return` inside it cannot answer for this function, and a
 # loop that runs ZERO times (no tmux.conf at all, which is every fresh box)
 # exits 0, i.e. "found". The notice then never fired for the one user who needs
 # it. Caught by test/setup.t on the first run.
@@ -94,10 +94,10 @@ EOF
 # leaving a correct install that behaves like a broken one.
 #
 # IT ALSO CLOSES A PROVISIONER'S LOOP. A provisioner runs `apply` only when
-# `check` FAILS, and mux's check now correctly FAILS on a stale server -- so
+# `check` FAILS, and mux's check now correctly FAILS on a stale server, so
 # without this the drift is reported forever by a pin whose install already
-# ran ("APPLY DID NOT FIX: mux -- failing before AND after", observed
-# 2026-09-29). Prevention belongs here, in the step that made the file new.
+# ran ("APPLY DID NOT FIX", observed 2026-09-29). Prevention belongs here,
+# in the step that made the file new.
 #
 # NOT THE SAME CALL AS THE TWO NOTICES BELOW, and the line between them is
 # ownership rather than caution. A tmux.conf is the user's own FILE and an
@@ -108,14 +108,14 @@ EOF
 #
 # GUARDED ON THE LIVE CONFIG NAMING THIS INSTALL, which is what keeps it honest:
 # if nothing sources THIS prefix's fragment then these servers are not running
-# this install and reloading them would push an unrelated config -- and in a
+# this install and reloading them would push an unrelated config, and in a
 # test sandbox it would reach the developer's real server. `mux reload` itself
 # never STARTS a server and says so when there was nothing up.
 # A TILDE IS THE FORM PEOPLE ACTUALLY WRITE, and checking only the expanded
 # path made this whole function inert on the one box it was written for: the
 # real config says `source-file ~/.local/share/mux/mux.tmux`, tmux expands the
 # `~` itself, and a textual guard looking for `/home/<user>/...` never matched.
-# Correct-looking, silent, and wrong -- the same shape as the bug above it.
+# Correct-looking, silent, and wrong: the same shape as the bug above it.
 _reload_live() {
   command -v tmux >/dev/null 2>&1 || return 0
   # Each form on its own LINE, so the corpus can mutate either: an anchor that
@@ -174,7 +174,7 @@ _tmux_conf_notice() {
 # contract keeps polling and simply publishes fewer items, which reads as "that
 # partition is gone" rather than as a version problem.
 #
-# A NOTICE AND NOT A RESTART, deliberately. Restarting would not help -- what is
+# A NOTICE AND NOT A RESTART, deliberately. Restarting would not help: what is
 # stale is the daemon's OWN code, not anything it caches from core, since it
 # re-execs `mux` on every poll. And not an install either: that is a pip
 # operation wanting a network, and keeping core free of that is the whole reason
@@ -182,7 +182,7 @@ _tmux_conf_notice() {
 #
 # CONTENT, NOT VERSION: it asks the indicator's own check, which compares the
 # package to what is installed and what is RUNNING. Never fatal, and silent
-# when no indicator is installed -- an optional sub-package must not make the
+# when no indicator is installed: an optional sub-package must not make the
 # core install noisy for everyone who does not use it.
 _indicator_notice() {
   [ -e "$_bin/mux-indicator" ] || return 0

@@ -38,7 +38,7 @@ eq overlay-only   "$(mux_data_find themes neon .theme)" \
       "$MUX_DIR/themes/neon.theme"
 eq missing-empty  "$(mux_data_find themes nosuch .theme)" ""
 
-# An EMPTY kind is the data root, where layouts live -- no doubled slash, and
+# An EMPTY kind is the data root, where layouts live: no doubled slash, and
 # the shipped default.layout resolves (a fresh install's `mux go` depends on
 # it) while a user layout of its own name still wins.
 eq layout-shipped "$(mux_data_find '' default .layout)" \
@@ -52,7 +52,7 @@ eq noext          "$(mux_data_find themes defaults '')" \
       "$MUX_SHARE/themes/defaults"
 
 # --- mux_data_stems: the union, sorted, with no name listed twice -----------
-# purple exists in BOTH roots and must appear ONCE -- an override is the same
+# purple exists in BOTH roots and must appear ONCE: an override is the same
 # name, not a second theme.
 eq stems-union "$(mux_data_stems themes .theme | tr '\n' ' ')" \
          "cyan neon purple "

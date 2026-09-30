@@ -30,7 +30,7 @@ HOOK=$HERE/libexec/mux-sane
 # --- WITH NO TERMINAL IT MUST BE COMPLETELY SILENT ----------------------
 # The dangerous failure, and the reason this assertion comes first. Escape
 # sequences written into a pipe corrupt whatever is reading it, and latch runs
-# this on EVERY transport return -- including in scripts and in this suite.
+# this on EVERY transport return, including in scripts and in this suite.
 _out=$T/quiet
 _rc=0
 "$HOOK" >"$_out" 2>&1 </dev/null || _rc=$?
@@ -56,7 +56,7 @@ _seen=$(cat -v "$_raw")
 for _m in \
   '1049l:the alternate screen, so your own scrollback comes back' \
   '25h:the cursor, which is invisible until this is sent' \
-  '1000l:mouse reporting (X10) -- the control characters' \
+  '1000l:mouse reporting (X10), the control characters' \
   '1002l:mouse reporting (button-event)' \
   '1003l:mouse reporting (any-event)' \
   '1006l:mouse reporting (SGR), the protocol tmux actually uses' \
@@ -66,7 +66,7 @@ do
   _code=${_m%%:*}; _why=${_m#*:}
   case $_seen in
   *"^[[?$_code"*) ;;
-  *) fail "mux sane never reset ?$_code -- $_why
+  *) fail "mux sane never reset ?$_code: $_why
 What it emitted:
 $_seen" ;;
   esac
@@ -82,7 +82,7 @@ discipline (echo, canonical mode, signal characters) is left as tmux set it"
 # alternate screen, which is safe for tmux because it knows it is on that
 # screen. This program does NOT know: ssh may have died before tmux ever
 # switched, or something may have tidied up already. Replaying the clear would
-# then wipe the user's real screen while claiming to repair it -- destroying
+# then wipe the user's real screen while claiming to repair it: destroying
 # work in the name of fixing it. It is also redundant, since leaving the
 # alternate screen discards its contents anyway.
 case $_seen in

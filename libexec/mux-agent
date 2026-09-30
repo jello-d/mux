@@ -17,7 +17,7 @@
 #      whether today's answer is a document or a sentence.
 #
 #   2. A SYMBOLIC `status`, alongside the numeric exit. mux uses exactly four
-#      exit codes and the ABSENCE of every other one is load-bearing -- latch
+#      exit codes and the ABSENCE of every other one is load-bearing: latch
 #      attributes 126, 127 and 255 to the shell and to ssh precisely because
 #      mux never emits them. So richer outcomes go in the PAYLOAD, where they
 #      cost nothing: the exit code stays for the shell, the enumeration is for
@@ -40,7 +40,7 @@ _lib=$(dirname "$0")
 
 # THE STATUS ENUMERATION, and its one rule: each value maps to exactly one of
 # mux's four exit codes, never the reverse. Several statuses may share a code
-# -- that is the point of having both -- but a status must not be able to mean
+# (that is the point of having both), but a status must not be able to mean
 # two different exits.
 #
 #   ok            0   the answer follows
@@ -49,7 +49,7 @@ _lib=$(dirname "$0")
 #   no-such-name  3   mux's cross-cutting "the name is not known here"
 #
 # ALWAYS A MESSAGE. The no-message branch this used to carry was unreachable
-# -- every failure has a reason -- and an unreachable branch is a mutation
+# (every failure has a reason), and an unreachable branch is a mutation
 # nothing can kill, which this corpus treats as a signal to delete rather than
 # to test harder. Belt-and-braces reads as safety and measures as untestable.
 _out() {   # <status> <exit> <message>
@@ -71,7 +71,7 @@ status|peers|read|wait|send) ;;
 *) _out usage 2 "unknown agent verb: $_verb" ;;
 esac
 
-# _resolve TARGET -- sets $_rp (partition), $_rd (state dir) and checks the
+# _resolve TARGET: sets $_rp (partition), $_rd (state dir) and checks the
 # session is one mux knows. Shared by read and wait, because "that session is
 # not here" must be the same answer and the same exit from both.
 _resolve() {   # <session> <partition-or-empty>
@@ -89,7 +89,7 @@ _resolve() {   # <session> <partition-or-empty>
 }
 
 # EVERY tmux CALL GOES THROUGH THIS. A bare `tmux` asks the DEFAULT socket,
-# which is not where a partition's server lives -- so `read` captured nothing
+# which is not where a partition's server lives, so `read` captured nothing
 # and `send` read an empty class (defaulting to `human`) for a pane that was
 # plainly marked `agent`. Both looked like correct refusals, which is why a
 # stub could not have caught it and a real server did on the first try.
@@ -115,8 +115,8 @@ if [ "$_verb" = read ]; then
   # wrong pane is the plausible-wrong-answer shape this codebase keeps
   # meeting. Resolving it here also means `peers` need not carry one.
   # AN OPTION IS AN OPTION WHEREVER IT SITS. The front end stops parsing
-  # options at the first positional -- so `mux resume work --list` reads
-  # `--list` as a session name -- and that edge is tolerable for a human
+  # options at the first positional (so `mux resume work --list` reads
+  # `--list` as a session name), and that edge is tolerable for a human
   # who can see the result. It is not for a caller composing argv
   # programmatically, where argument ORDER becomes a rule nobody wrote
   # down. `mux agent read mux -n 5` failed exactly that way once.
@@ -252,8 +252,8 @@ if [ "$_verb" = send ]; then
   # --- send ----------------------------------------------------------
   # Type into an agent's pane. THE HOOK A HIGHER LAYER NEEDS, and the
   # reason it belongs here rather than in that layer: mux already knows
-  # which pane is the agent's, which partition it is in, and -- the part
-  # only mux knows -- whether it is BLOCKED. Without this verb an
+  # which pane is the agent's, which partition it is in, and (the part
+  # only mux knows) whether it is BLOCKED. Without this verb an
   # orchestrator reaches around mux to `tmux send-keys`, re-derives pane
   # resolution, and inherits none of the guards below.
   #
@@ -308,7 +308,7 @@ if [ "$_verb" = send ]; then
   *) _sclass=human ;;
   esac
 
-  # _refuse WHAT ACK -- the target needs an override. Reports whether one
+  # _refuse WHAT ACK: the target needs an override. Reports whether one
   # is AVAILABLE, which is the whole point of answering rather than just
   # refusing: a caller that does not know discovers the capability in one
   # round trip and decides; one that does know passes the flag up front
@@ -413,7 +413,7 @@ if [ "$_verb" = peers ]; then
   #
   # NO PANE FIELD, deliberately. `read` and `send` resolve a target to a
   # pane at the moment they act, which is more correct than a caller
-  # caching an id that can change under it -- and it keeps this verb from
+  # caching an id that can change under it, and it keeps this verb from
   # needing tmux at all.
   _pa=0
   _part=
@@ -433,7 +433,7 @@ if [ "$_verb" = peers ]; then
   # mux-paths_lib FIRST: mux-sessions_lib calls mux_state_path, and a lib
   # that needs another does not say so by itself. Sourcing sessions alone
   # gave six `mux_state_path: not found` lines on stderr and an empty
-  # root for every peer -- a plausible answer, silently wrong, which is
+  # root for every peer: a plausible answer, silently wrong, which is
   # the trap these notes already record for mux-scan and mux-sessions.t.
   . "$_lib/mux-paths_lib"
   . "$_lib/mux-agent-state_lib"
@@ -466,13 +466,13 @@ if [ "$_verb" = peers ]; then
       # different answers: unreachable reports null, while
       # reached-with-no-option reports `human`, the default
       # class. Collapsing them would make a remote `peers` at
-      # boot call every pane human-controlled -- plausible,
+      # boot call every pane human-controlled: plausible,
       # and wrong.
       #
       # EMPTY IS UNREACHABLE, with no separate success flag.
       # One was written first and proved unkillable, because
       # a failed query leaves $_ctl empty anyway and a tmux
-      # server with zero panes does not exist -- it exits. An
+      # server with zero panes does not exist: it exits. An
       # unkillable guard here is redundant code rather than a
       # missing test, so it went.
       _ctl=$(tmux -L "$_p" list-panes -a \
@@ -486,7 +486,7 @@ if [ "$_verb" = peers ]; then
         [ -n "$_st" ] || continue
         # A record with no usable epoch still has a
         # real STATE, so its age is null rather than a
-        # fabricated 0 -- which would assert it just
+        # fabricated 0, which would assert it just
         # changed, a claim there is no evidence for.
         case ${_ep:-} in
         ''|*[!0-9]*) _ag= ;;
@@ -561,7 +561,7 @@ done
 
 # SCOPED TO THE CALLER'S PARTITION UNLESS ASKED OTHERWISE, the same rule
 # `peers` already follows. `_all` was parsed and never read, so every caller
-# got every partition -- and the shipped skill tells an agent the opposite,
+# got every partition, and the shipped skill tells an agent the opposite,
 # one sentence after calling a partition an isolation boundary. A flag that
 # parses and does nothing is worse than a missing one: the caller believes it
 # asked for something.

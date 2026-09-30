@@ -8,7 +8,7 @@
 #
 # TERMINAL-NEUTRAL where focus-kitty is not: it asks the COMPOSITOR to raise
 # whatever window carries the title, so it works for any terminal. It needs
-# wayfire's IPC socket, which is a plugin you must enable -- so the two
+# wayfire's IPC socket, which is a plugin you must enable, so the two
 # samples trade different requirements, which is the point of shipping both.
 set -eu
 

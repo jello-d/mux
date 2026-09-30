@@ -5,7 +5,7 @@ decisions and each one is answering a complaint about the other two:
 
 - SEEDED BY NAME, because a purely first-come rule makes the colour depend on
   the order you happened to latch. Walk to the other machine, latch in a
-  different order, and the same host is a different colour -- which is exactly
+  different order, and the same host is a different colour, which is exactly
   the property that makes you stop trusting the hint. Seeding means that on any
   box where your hosts do not collide, every host is the same colour on every
   box, with nothing shared and nothing to sync.
@@ -57,7 +57,7 @@ def _load(path):
         with open(path, "r", encoding="utf-8", errors="replace") as fh:
             for line in fh:
                 # SLOT FIRST, NAME LAST, so a name containing a space reads
-                # back whole -- the same field order, for the same reason, as
+                # back whole: the same field order, for the same reason, as
                 # mux's per-pane agent record.
                 bits = line.rstrip("\n").split(None, 1)
                 if len(bits) != 2 or not bits[0].isdigit():

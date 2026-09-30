@@ -4,8 +4,8 @@
 #   mux agent-hook <EventName>
 #
 # THE MAPPING IS MUX'S, WHICH IS THE WHOLE POINT. Until now an integrator's
-# hooks.json spelled out mux's own vocabulary -- which event means `working`,
-# which means `idle`, which is only a `--beat` -- so the state machine was
+# hooks.json spelled out mux's own vocabulary (which event means `working`,
+# which means `idle`, which is only a `--beat`), so the state machine was
 # written down in somebody else's repo and mux could not change it without a
 # coordinated release. Here the wiring says only WHAT HAPPENED and mux decides
 # what that means, which is the direction already settled for this contract:

@@ -10,7 +10,7 @@
 # no new dependency), because they assert things only Python can reach: the
 # ARGB byte permutation, that two states never render alike, that an unknown
 # state word cannot kill the daemon. This file exists so `sh test/run` is still
-# the ONE entry point -- a second command to remember is a command that stops
+# the ONE entry point: a second command to remember is a command that stops
 # being run.
 #
 # IT SKIPS RATHER THAN FAILS when the deps are absent, matching test/lint.t

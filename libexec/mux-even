@@ -2,7 +2,7 @@
 # mux-even: put the panes back to the shape the layout asked for.
 #
 #   (no arg)  this window
-#   --all     every window on the server -- the point of the verb, because the
+#   --all     every window on the server: the point of the verb, because the
 #             drift you actually NOTICE is between sessions: borders jump as
 #             you cycle, and a window is only ever wrong compared to another.
 #
@@ -30,7 +30,7 @@
 # declines to mangle an arrangement it cannot model. So one lost option freezes
 # the whole window, silently and permanently. Measured on a live session.
 #
-# Inventing a height would be wrong -- it would cement whatever drift is there.
+# Inventing a height would be wrong: it would cement whatever drift is there.
 # But this verb's whole question is "what do the other windows agree on", and
 # the answer is sitting on every other bottom pane on the server. Adopting the
 # server's most common spec IS restoring uniformity, and it is reported rather
@@ -40,7 +40,7 @@ set -eu
 
 _lib=$(dirname "$0")
 
-# ONE NAMESPACE, COMPUTED ONCE -- the same repair next-blocked needed, and for
+# ONE NAMESPACE, COMPUTED ONCE: the same repair next-blocked needed, and for
 # the same reason. Every tmux call here was bare, which is right INSIDE tmux
 # ($TMUX names the socket) and silently wrong outside it: a bare call reaches
 # the DEFAULT socket, so `mux even --all` from a shell found no windows and
@@ -48,7 +48,7 @@ _lib=$(dirname "$0")
 # hid behind the case that works.
 #
 # SCOPED TO ONE PARTITION deliberately. `--all` means every window on THIS
-# partition's server, not every partition -- a partition is an isolation
+# partition's server, not every partition: a partition is an isolation
 # boundary, and reaching across one to resize somebody else's windows is not
 # what a key labelled "tidy this up" should do.
 _ns=
@@ -65,7 +65,7 @@ case "${1:-}" in
 *) echo "usage: mux even [--all]" >&2; exit 2 ;;
 esac
 
-# Even out the widths of one window's TOP ROW -- every pane that is not the
+# Even out the widths of one window's TOP ROW: every pane that is not the
 # mux bottom pane.
 #
 # mux builds a row with `split-window -h` then `select-layout even-horizontal`,
@@ -108,7 +108,7 @@ _balance() {   # <window id>
 }
 
 # A window whose bottom pane lost @mux-bottom: full width, lowest on screen,
-# and unmarked. Reported by NAME because it is actionable -- that window's
+# and unmarked. Reported by NAME because it is actionable: that window's
 # height cannot be held by `mux pin` and never will be until the option is
 # back. Empty when the window is fine.
 _unpinned() {   # <window id> -> the window's name, or nothing

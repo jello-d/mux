@@ -1,8 +1,8 @@
-# mux.tmux -- the REQUIRED mux tmux integration: the status bar (context
+# mux.tmux; the REQUIRED mux tmux integration: the status bar (context
 # banner, per-host chip, agent-state strip), the feature key bindings, and the
 # layout/resize hooks. `source-file` this from your tmux.conf.
 #
-# Every helper is reached as `mux <verb>` -- the single entry point on PATH, so
+# Every helper is reached as `mux <verb>`: the single entry point on PATH, so
 # this file carries NO path to mux's internals (mux self-locates its libexec).
 # It just needs `mux` on PATH when tmux starts. The mouse chip-click binding
 # only fires when `mouse on` is set (mux-opinions.tmux does that, or your own
@@ -20,9 +20,9 @@ bind ) run-shell "mux cycle next '#{client_name}' '#{client_session}'"
 
 # A there-and-back session pair:
 #   prefix b : jump to the session whose agent has been blocked (needs you)
-#              LONGEST -- the loudest chip on the strip (mux-next-blocked).
+#              LONGEST: the loudest chip on the strip (mux-next-blocked).
 #              Repeat to walk down the urgency order.
-#   prefix B : toggle back to the last session (switch-client -l) -- so b takes
+#   prefix B : toggle back to the last session (switch-client -l), so b takes
 #              you to the alert, B brings you home.
 bind b run-shell "mux next-blocked '#{client_name}'"
 bind B switch-client -l
@@ -32,7 +32,7 @@ bind B switch-client -l
 # #[range=user|s:NAME],
 # so a click hands mux-click that tag; a hidden session has no chip, no range,
 # no press. Anything else on the bar (the window list on the left) keeps the
-# default -- switch to the target under the mouse. Needs `mouse on`.
+# default: switch to the target under the mouse. Needs `mouse on`.
 bind -n MouseDown1Status {
   if -F '#{||:#{m:s:*,#{mouse_status_range}},#{m:v:*,#{mouse_status_range}}}' {
     run-shell "mux click '#{mouse_status_range}' '#{client_name}'"
@@ -43,15 +43,15 @@ bind -n MouseDown1Status {
 
 # prefix+r = refresh: unstick a layout that tmux's proportional resize wedged at
 # the wrong size (the "half-height pane" glitch). Runs mux-refresh (perturb the
-# bottom pane, then re-pin) -- the keyboard replacement for the old drag-the-
+# bottom pane, then re-pin): the keyboard replacement for the old drag-the-
 # border fix now that pane-resize drag is unbound, and a home for future
 # refresh-style fixes as new glitches surface.
 # prefix+R = the bigger hammer: REBUILD the bottom pane (break out + rejoin) to
-# clear a stuck RENDER state a perturb cannot -- e.g. tmux drawing a border in
+# clear a stuck RENDER state a perturb cannot: e.g. tmux drawing a border in
 # reverse video. Content preserved, focus restored.
 # prefix u: UNDO the pane you just closed. Restores it at its old index, at the
 # size it actually had (manual resizes included), running what it was running.
-# Its scrollback is gone -- tmux frees a dead pane's history -- but every
+# Its scrollback is gone (tmux frees a dead pane's history), but every
 # SURVIVING pane is left untouched, which is what makes this better than
 # rebuilding the window by hand.
 bind u run-shell "mux undo-pane"
@@ -86,7 +86,7 @@ bind ? display-popup -E -w 62 -h 18 "mux keys; read -r _"
 # --- colour themes ---------------------------------------------------------
 # THE COLOUR IS NOT THE BOUNDARY (see mux-style). It is cosmetic: a default that
 # any session may override with a `theme` directive in its layout. A theme names
-# up to six styles -- the bar (status-style/message-style), the current-window
+# up to six styles: the bar (status-style/message-style), the current-window
 # chip (window-status-current-style), the ACTIVE pane border (pane-active-
 # border-style), the INACTIVE pane borders (pane-border-style), the copy-mode
 # selection (mode-style), and the command prompt (message-command-style). Only
@@ -114,9 +114,9 @@ set -g message-command-style       'bg=colour54 fg=colour189'
 
 # --- the context reminder (the SIGNAL; the colour is not) ------------------
 # When a pane's process is in a MARKED context (via the optional $MUX_DIR/
-# context hook -- e.g. a work/personal split), mux-style paints a loud banner in
+# context hook: e.g. a work/personal split), mux-style paints a loud banner in
 # the status bar and a context prefix on the terminal title. It is TEXT, not
-# colour, so the reminder does not depend on registering a hue -- the bar colour
+# colour, so the reminder does not depend on registering a hue: the bar colour
 # can be anything. The banner's own loud, theme-neutral style is a property of
 # the context, so the context hook defines it (`banner <style>`), not this file.
 #
@@ -129,7 +129,7 @@ set -g message-command-style       'bg=colour54 fg=colour189'
 # context marker, #S:#W keeps the session:window visible, and [#{host_short}]
 # tags the host the session lives on. host_short is the tmux SERVER's hostname,
 # so a local session and an ssh'd one that share a name and layout get DISTINCT
-# titles -- session-restore keys on the title and would otherwise snap the two
+# titles: session-restore keys on the title and would otherwise snap the two
 # windows onto each other.
 #
 # The gap before [host] is four U+2800 (Braille blank) chars, NOT spaces: kitty
@@ -139,8 +139,8 @@ set -g message-command-style       'bg=colour54 fg=colour189'
 set -g set-titles on
 set -g set-titles-string '#{@mux-prefix}#S:#W⠀⠀⠀⠀[#{host_short}]'
 
-# status-left: mux-style's output FIRST -- the context banner (marked contexts
-# only) then a per-host colour label -- then the session name. The host label
+# status-left: mux-style's output FIRST, the context banner (marked contexts
+# only) then a per-host colour label, then the session name. The host label
 # disambiguates identically-named sessions across machines; mux-style emits it
 # coloured per host (data in $MUX_DIR/hosts), so no host-specific config is
 # needed. It also (re)applies the theme and title prefix as side effects every
@@ -148,8 +148,8 @@ set -g set-titles-string '#{@mux-prefix}#S:#W⠀⠀⠀⠀[#{host_short}]'
 set -g status-left-length 100
 set -g status-left '#(mux style #S #{pane_pid})#[bold]#S#[default] '
 # A small orange marker on the left while a pane is zoomed (empty otherwise;
-# commas inside the #{?...} escaped as #,). The LOUD mode banners -- a bright
-# centred "PREFIX ENABLED" while the prefix is held, and the zoom EXIT hint --
+# commas inside the #{?...} escaped as #,). The LOUD mode banners (a bright
+# centred "PREFIX ENABLED" while the prefix is held, and the zoom EXIT hint), 
 # are drawn in the middle of the bar by mux-status-banner (run-shell below),
 # which rebuilds status-format[0]. So prefix-held is unmissable and an
 # accidental zoom is obviously recoverable.
@@ -158,7 +158,7 @@ run-shell "mux status-banner"
 
 # status-right: one token per session, in switch-client -n/-p order (prev left,
 # next right), divider-separated and fixed-width so cycling never shifts them.
-# #S (this bar's current session) is passed in so ONLY it is highlighted -- on
+# #S (this bar's current session) is passed in so ONLY it is highlighted: on
 # its own themed window-status-current-style, matching the left active-window
 # chip. Each token's emoji shows agent state (see mux-agent-state-render): a
 # caution
@@ -192,7 +192,7 @@ set-hook -g client-resized  'run-shell -b "mux pin"'
 # session did). That is exactly `mux go NAME` from inside a session, and every
 # session but the first after `mux resume`.
 #
-# client-session-changed does fire there, but BEFORE the rescale -- it reports
+# client-session-changed does fire there, but BEFORE the rescale: it reports
 # the old height, so a pin from it computes against a window size that is about
 # to change. window-layout-changed fires AFTER, with the real geometry, which
 # is the one moment a pin can be right.
@@ -214,7 +214,7 @@ set-hook -g window-layout-changed 'run-shell -b "mux pin"'
 # THE HOOK CANNOT SUPPLY THE "BEFORE" PICTURE ITSELF, measured: `pane-exited`
 # reports the SURVIVING pane rather than the dying one, and by the time it runs
 # `#{window_layout}` has already collapsed. So the picture is kept here,
-# continuously -- and because `pane-exited` fires BEFORE this hook, what these
+# continuously, and because `pane-exited` fires BEFORE this hook, what these
 # options hold at record time is still the pre-death state.
 #
 # APPENDED (-ag) so the pin above keeps its place. Re-sourcing this file stays
@@ -222,7 +222,7 @@ set-hook -g window-layout-changed 'run-shell -b "mux pin"'
 #
 # THREE OPTIONS RATHER THAN ONE RECORD, for two reasons that both bite. A single
 # combined format runs past 80 columns and tmux will not let a quoted hook be
-# split across lines (measured -- it reads the continuation as extra arguments).
+# split across lines (measured: it reads the continuation as extra arguments).
 # And each list is KEYED BY PANE ID rather than positional, so they cannot
 # desync if a start command ever contains a newline.
 #
@@ -253,7 +253,7 @@ set-hook -ag window-layout-changed \
 # pane's program exits (^D, `exit`) and NOT on kill-pane, which is exactly the
 # line we want: killing a pane is a thing you meant to do.
 #
-# FOREGROUND, deliberately -- no -b, unlike every other hook here.
+# FOREGROUND, deliberately: no -b, unlike every other hook here.
 # `run-shell -b` is ASYNCHRONOUS, and the recorder then races the very removal
 # it is recording: it
 # queried the pane list before tmux had finished taking the pane out and saw all

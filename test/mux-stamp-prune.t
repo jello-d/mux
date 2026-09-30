@@ -7,7 +7,7 @@
 # servers a test suite spins up, so the directory only ever grew: 60 stamps had
 # accumulated on this box from 59 sockets that no longer existed.
 #
-# Not harmful -- a stamp is a cache -- but it is litter mux made, and a
+# Not harmful (a stamp is a cache), but it is litter mux made, and a
 # directory that only grows is one nobody will ever audit. `load` is the moment
 # to clear it because it is the only one needing no decision: a prune verb has
 # to be remembered and a timer has to be installed, whereas every new server
@@ -38,7 +38,7 @@ n_stamps() {
 }
 
 # NO DEFENSIVE kill-server FIRST. The name is fresh, so there is nothing to
-# kill -- and killing then immediately creating on one socket races tmux's
+# kill, and killing then immediately creating on one socket races tmux's
 # teardown (see tmux_fresh_socket). Here that race was WORSE than a failure:
 # the create is guarded by a skip, so losing it reported "cannot start a tmux
 # server" and quietly dropped the whole file's coverage.
@@ -58,7 +58,7 @@ env MUX_CACHE="$STAMPS" MUX_SHARE="$HERE/share" MUX_DIR="$T/conf" \
   || fail "mux themes prune exited non-zero"
 
 have "$SOCK" || fail "THE LIVE SOCKET'S STAMP WAS PRUNED. Its server is up, so
-the next load would re-push a palette that was already correct -- and a prune
+the next load would re-push a palette that was already correct, and a prune
 that deletes everything passes any count-based assertion, which is why this is
 checked by name."
 have deadone && fail "a stamp whose socket has no server survived the prune"

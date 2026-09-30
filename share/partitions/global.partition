@@ -4,6 +4,6 @@
 #
 # `scan` is here rather than in mux's built-in defaults ON PURPOSE. Built-ins
 # carry behaviour only, never a location, so a partition nobody configured gets
-# no roots and therefore no map -- which is how a missing context file makes
+# no roots and therefore no map, which is how a missing context file makes
 # itself visible instead of quietly indexing the wrong tree.
 scan    ~/src 3

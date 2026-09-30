@@ -4,7 +4,7 @@
 # Two consumers now, which is why it is a lib: `mux style` paints the status
 # chip with it, and `mux host-color` hands it to the tray indicator, so a
 # per-host tray item is the same colour as that host's chip. Two copies of this
-# rule would drift, and the drift would be silent -- the bar and the tray would
+# rule would drift, and the drift would be silent: the bar and the tray would
 # simply disagree about which machine is which, and neither would look broken.
 #
 # THE ANSWER IS A PAIR, fg and bg, never one colour. That is not decoration: the
@@ -60,7 +60,7 @@ mux_host_style() {      # [host]
 # table: 16-231 is a 6x6x6 cube on the levels below, 232-255 even greyscale.
 #
 # 0-15 ARE NOT COMPUTABLE and are deliberately absent. They are the terminal's
-# OWN sixteen, remapped by every theme, so there is no correct answer -- only
+# OWN sixteen, remapped by every theme, so there is no correct answer: only
 # the one the user's terminal happens to use. A caller gets nothing for those
 # rather than a confident guess; the eight derived pairs above use only 16+, so
 # the common path never hits it. (colour016 IS in range: 16, the cube's black.)
@@ -75,7 +75,7 @@ _mux_hex() {            # <colour word>
   ''|*[!0-9]*) return 0 ;;
   esac
   # Strip leading zeros BY HAND. `$((10#$_hc))` is a bashism dash rejects
-  # outright, and plain `$((016))` is OCTAL -- 14, not 16 -- so the style
+  # outright, and plain `$((016))` is OCTAL (14, not 16), so the style
   # `fg=colour016` in the derived pairs would silently paint the wrong
   # colour. Both wrong answers are quiet, which is why this is spelled out.
   while :; do

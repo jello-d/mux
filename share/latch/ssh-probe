@@ -10,7 +10,7 @@
 # SHIPPED BUT NOT WIRED, deliberately, and that gap is the point of the hook
 # library. mux ships this so you do not have to write it; whether latch RUNS it
 # is your config's decision, not mux's. With no probe configured latch simply
-# attempts, and the attempt is the probe -- which is the right default, because
+# attempts, and the attempt is the probe, which is the right default, because
 # a probe costs a round trip before every single attempt and buys a faster
 # verdict only when the host is down.
 #
@@ -24,8 +24,8 @@
 #
 # WHAT IT CANNOT DO, and this is why it is off by default rather than merely
 # optional: a positive answer here is NOT a promise the attach will work. An MTU
-# blackhole passes every cheap liveness signal there is -- the control-master
-# check, a TCP connect, a ping -- and then hangs the moment a full-sized packet
+# blackhole passes every cheap liveness signal there is (the control-master
+# check, a TCP connect, a ping), and then hangs the moment a full-sized packet
 # moves. That case is common on a real fleet rather than exotic, so a probe that
 # says "yes" has ruled out one failure and left the interesting one untouched.
 set -eu
@@ -36,7 +36,7 @@ command -v ssh >/dev/null 2>&1 || exit 78
 
 # THE PORT IS THE SECOND ARGUMENT, since 0.84, because the target carries it
 # (`mux latch box:2222`). Absent, ssh uses its own default and whatever
-# ssh_config says -- so this is an addition to the hook contract and not a
+# ssh_config says, so this is an addition to the hook contract and not a
 # change to it: a probe written before 0.84 ignores $2 and still works.
 _port=${2:-}
 set --
@@ -59,7 +59,7 @@ ssh -O check "$_host" >/dev/null 2>&1 && exit 0
 # the classify hook exists to report.
 #
 # Distinguishing "unreachable" from "reachable but we could not authenticate" is
-# NOT this hook's job -- auth has its own hook, and answering 1 for an auth
+# NOT this hook's job: auth has its own hook, and answering 1 for an auth
 # problem would park latch in a retry loop for something only a human can fix.
 # So only a plain connection failure is 1, and everything else is 78.
 # ConnectTimeout IS NOT THE BOUND THAT MATTERS HERE, which a re-measurement
@@ -79,7 +79,7 @@ ssh -O check "$_host" >/dev/null 2>&1 && exit 0
 # SO timeout(1) IS DOING THE REAL WORK, not merely backing up an ssh option that
 # already covers it. This probe sets no ServerAlive, so past the banner NOTHING
 # in ssh bounds it and only the wrapper does. That is the case the open 342s
-# hang lives in -- a box mid-boot whose sshd completes key exchange and then
+# hang lives in: a box mid-boot whose sshd completes key exchange and then
 # blocks in authentication, answering every keepalive while making no progress.
 # Verified: against a post-banner stall this exits 124 at the bound, which maps
 # to 1 below and parks latch in a visible backoff instead of a silent wait.

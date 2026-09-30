@@ -9,7 +9,7 @@
 # is a way for agents to approve each other and route around the person.
 #
 # THE OVERRIDE CANNOT LIVE WHERE THE AGENT CAN REACH IT, and that is the whole
-# design. A command-line flag is forgeable -- the agent composes its own argv.
+# design. A command-line flag is forgeable: the agent composes its own argv.
 # A file under $MUX_DIR is equally forgeable, and worse for being plausible:
 # mux WRITES there (`mux save`, `mux theme`, `mux edit`), so it is user-owned
 # by design and an agent with a shell tool edits it in one line.
@@ -44,12 +44,12 @@
 #
 # WHO CONTROLS THE PANE IS THE REAL QUESTION, and it is a different one from
 # where the pane is. What makes answering a prompt wrong is not that an agent
-# typed it -- it is that the prompt was ADDRESSED TO A HUMAN. A worker spawned
+# typed it: it is that the prompt was ADDRESSED TO A HUMAN. A worker spawned
 # by an agent and supervised by an agent usurps no human decision; it has a
 # supervision ladder, and the class is what lets mux respect that ladder
 # instead of pretending every prompt belongs to a person.
 #
-#   human    NEVER. Not a token here at all -- see below.
+#   human    NEVER. Not a token here at all: see below.
 #   agent    supervised by an agent. Reasonably granted as a whole class:
 #            multi-agent work is not possible without it, and per-window
 #            grants do not scale to a village of eight generated names.
@@ -58,7 +58,7 @@
 #
 # `control:human` IS NOT A TOKEN AND CANNOT BE WRITTEN. A human-controlled
 # pane is refused BEFORE this file is consulted, so `never` is structural
-# rather than a property of the operator having written the right tokens --
+# rather than a property of the operator having written the right tokens:
 # `send-blocked window:reviewer` must not grant a human's pane by omission.
 #
 # AND HYBRID MUST NOT COLLAPSE INTO HUMAN, which was the first design here and
@@ -73,12 +73,12 @@
 # call `tmux send-keys` directly today. What the refusal buys is narrower and
 # still worth having: the dangerous thing stops being the EASY thing, the
 # default sits outside the agent's reach so the posture cannot drift, and a
-# bypass goes through tmux -- outside mux's audit log, which is itself a
+# bypass goes through tmux: outside mux's audit log, which is itself a
 # signal.
 #
 # THE WINDOW IS THE UNIT A FLEET ACTUALLY HAS. An orchestrator above mux
-# spawns a WINDOW per worker in the project's session -- that is what vicus
-# does -- so `session:` alone would grant the override to every worker in the
+# spawns a WINDOW per worker in the project's session (that is what vicus
+# does), so `session:` alone would grant the override to every worker in the
 # project at once, which is far coarser than anyone means. And a window is
 # what a human watches, so it is the thing they can reason about granting.
 #
@@ -88,11 +88,11 @@
 #
 # NO `pane:` KEY, deliberately. A pane id is stable for the pane's life and not
 # across a restore, so a policy keyed on one would silently stop applying after
-# `mux undo-pane` or a rebuild -- a permission that lapses without saying so is
+# `mux undo-pane` or a rebuild: a permission that lapses without saying so is
 # worse than one that was never granted.
 
 # _sp_file: the policy path. Overridable ONLY for the test suite, and named so
-# that is obvious -- a variable an agent could set to point at a file it owns
+# that is obvious: a variable an agent could set to point at a file it owns
 # would defeat the entire mechanism, so this must never be documented as a
 # user seam or read from config.
 _sp_file() {
@@ -104,7 +104,7 @@ _sp_file() {
 # THE TEST IS "CAN I WRITE IT", which is exactly the question that matters:
 # mux runs as the agent's own user, so if this process can write the file, so
 # can the agent, and a policy the governed party can edit is not a policy. The
-# containing DIRECTORY is checked too -- being unable to write a file is no
+# containing DIRECTORY is checked too: being unable to write a file is no
 # protection when you can replace it.
 #
 # Running as root makes both tests true and the policy unusable. That is the
@@ -139,7 +139,7 @@ mux_send_policy_why() {
 # mux_send_allowed WHAT PARTITION SESSION WINDOW CLASS -> is it permitted?
 #
 # WHAT is `blocked` or `unknown`. Every token on a line must match, and each is
-# compared as a STRING and never as a pattern -- so a window called `*` cannot
+# compared as a STRING and never as a pattern, so a window called `*` cannot
 # grant itself everything, and neither can one called `partition:work`.
 #
 # THE CALLER MUST HAVE REFUSED A `human` CLASS ALREADY. This function does not

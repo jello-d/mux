@@ -25,7 +25,7 @@ class Mux < Formula
   # archive checksum to recompute on every release, and both values are ones
   # git already knows. `test/mux-homebrew.t` asserts they name the NEWEST tag,
   # that the revision really is that tag's commit, and that the tag carries
-  # this version of `MUX_VERSION` -- so a release that forgets this file turns
+  # this version of `MUX_VERSION`, so a release that forgets this file turns
   # the suite red instead of leaving Homebrew users on an old mux forever.
   url "https://github.com/jello-d/mux.git",
       tag:      "v0.84",
@@ -48,7 +48,7 @@ class Mux < Formula
     # The three directories stay SIBLINGS, which is the one property mux
     # requires: `bin/mux` resolves `$0` and then reads `../libexec` and
     # `../share`. No `mux` namespace inside them, because a keg is already a
-    # private prefix -- that namespace exists only so several packages can
+    # private prefix: that namespace exists only so several packages can
     # share `~/.local`, which is `setup.sh`'s job and not this one's.
     libexec.install "bin", "libexec", "share"
 
@@ -97,7 +97,7 @@ class Mux < Formula
     assert_match "mux #{version}", shell_output("#{bin}/mux -V")
 
     # A verb that SOURCES a library, because `-V` can answer before any lookup
-    # happens -- which is precisely how a broken self-location passed a first
+    # happens, which is precisely how a broken self-location passed a first
     # check once. This fails if `libexec` or `share` did not land as siblings.
     assert_match "tmux session managed by",
                  shell_output("#{bin}/mux skill --agents-md")

@@ -55,7 +55,7 @@ chmod +x "$T/mysend" "$T/myclose"
 _saved=$PATH
 
 # only BACKENDS... : run with PATH holding ONLY the named stubs, so `command
-# -v` sees exactly the backends under test. The real PATH is restored FIRST --
+# -v` sees exactly the backends under test. The real PATH is restored FIRST:
 # a reduced PATH has no rm/mkdir/cp either, and the second call would otherwise
 # have no tools to rebuild the dir with. MUX_NOTIFY_CLOSER is cleared because
 # the lib caches its probe there.
@@ -85,7 +85,7 @@ has() {
 }
 
 # --- close: the backend preference order -----------------------------------
-# gdbus first, then busctl, then dbus-send, and makoctl LAST -- it is kept only
+# gdbus first, then busctl, then dbus-send, and makoctl LAST: it is kept only
 # so a mako box with no D-Bus CLI keeps the behaviour it had.
 only gdbus busctl dbus-send makoctl
 mux_notify_close 7
@@ -185,7 +185,7 @@ emit() {
     PATH="$T/emitbin:$_saved" LOG="$LOG" \
     "$HERE/libexec/mux-agent-state-emit" "$1"
 }
-# Record: state window pane epoch notif SESSION. The notif id is field 5 --
+# Record: state window pane epoch notif SESSION. The notif id is field 5:
 # the session moved to the END so a name containing a space survives, and
 # notif is `-` rather than empty so an absent one cannot shift the fields.
 notif_of() {
@@ -193,7 +193,7 @@ notif_of() {
   case ${_e:-} in -|'') printf '' ;; *) printf '%s' "$_e" ;; esac
 }
 
-# Starting work notifies nobody -- that transition is YOU, not the agent.
+# Starting work notifies nobody: that transition is YOU, not the agent.
 : >"$LOG"
 emit working || fail "emit working failed"
 case "$(logged)" in *notify-send*) fail "starting work raised a banner" ;; esac
@@ -217,7 +217,7 @@ has '4242' "closed some other id"
 [ -z "$(notif_of)" ] || fail "a cleared id is still on file: [$(notif_of)]"
 
 # The record is written ATOMICALLY: a reader never sees a torn or empty line.
-# Several hooks fire close together -- a tool finishing as a turn ends -- and a
+# Several hooks fire close together (a tool finishing as a turn ends), and a
 # plain redirect truncates before it writes, so a render landing in that gap
 # reads a session as having no agent at all.
 : >"$LOG"

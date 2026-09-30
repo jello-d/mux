@@ -4,13 +4,13 @@
 # Until 0.51 an integrator's hooks.json spelled out mux's own vocabulary:
 # which event means `working`, which means `idle`, which is only a `--beat`.
 # The state machine was written down in somebody else's repo, so changing a
-# rule meant a coordinated release -- and when `--beat` stopped being able to
+# rule meant a coordinated release, and when `--beat` stopped being able to
 # resurrect a turn, that WAS a plugin edit. Now the wiring says only what
 # happened and this table decides what it means.
 #
 # EVERY EVENT IS ASSERTED, not a sample. The table is the contract, and a
 # mapping is exactly the kind of thing that looks obviously right while one
-# row is wrong -- a Notification landing on `working` instead of `blocked`
+# row is wrong: a Notification landing on `working` instead of `blocked`
 # would make a session that needs you look busy, which is the signal mux
 # exists to carry, inverted.
 set -eu
@@ -43,7 +43,7 @@ done
 for _beat in PostToolUse SubagentStop; do
   agent_rec "$REC" idle %9 100 sess
   # CLEAR THE CORROBORATION MARK between cases. A beat over idle leaves
-  # one, and a second beat inside the window is MEANT to promote -- so
+  # one, and a second beat inside the window is MEANT to promote, so
   # without this the loop tests the second event as the second beat and
   # reports the 0.49 rule working as if it were a mapping bug.
   rm -f "$REC.beat"
@@ -93,7 +93,7 @@ agent_rec "$REC" idle %9 100 sess
 [$(state)]: the qualifier has stopped it doing its job at all"
 
 # AND `Stop` IS NOT QUALIFIED. Stop is an OBSERVATION that the turn ended, so
-# it must be able to end one -- if the guard were put on the whole `idle` state
+# it must be able to end one, if the guard were put on the whole `idle` state
 # rather than on this one event, a finished turn would stay working forever,
 # which these notes call the worse direction.
 agent_rec "$REC" working %9 100 sess
@@ -103,7 +103,7 @@ agent_rec "$REC" working %9 100 sess
 
 # --- the SOURCE travels, which is the point of the verb -------------------
 # Stop and SessionStart both resolve to `idle`, so the record alone can never
-# say which one wrote it -- and a record that went idle MID-TURN is exactly
+# say which one wrote it, and a record that went idle MID-TURN is exactly
 # that question. The breadcrumb is the only thing that answers it.
 rm -f "$REC"
 MUX_LOG=$T/log "$HERE/libexec/mux-agent-hook" Stop \

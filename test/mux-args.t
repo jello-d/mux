@@ -57,7 +57,7 @@ ok help-long  --help
 ok help-short -h
 
 # An option that does not apply to the verb is still rejected from EITHER
-# position -- moving a flag in front of the verb must not smuggle it past the
+# position: moving a flag in front of the verb must not smuggle it past the
 # per-verb gate. (--bare IS valid for new, which builds; --persist is not.)
 no persist-gate  "--persist is only for theme"  --persist new lay2
 no persist-gate2 "--persist is only for theme"  new --persist lay2
@@ -82,7 +82,7 @@ grep -q '^lay ' "$T/conf/profiles" || fail "positional: no row for lay"
 #
 # The verb used to take NO arguments; since 0.56 it takes an optional
 # PARTITION and SESSION. So the arity assertion moved to the real boundary
-# (three is too many) and the first argument is checked as a PARTITION --
+# (three is too many) and the first argument is checked as a PARTITION:
 # positionally, never by guessing which of the words names one.
 no resume-arity  "resume [PARTITION [SESSION]]" resume a b c
 no resume-part   "no such partition"            resume nosuchpartition
@@ -90,7 +90,7 @@ no resume-flag   "--resume is only for go"   resume --resume
 no resume-flag2  "--resume is only for go"   new --resume lay5
 no list-gate     "--list is only for resume" kill --list lay4
 
-# The flag itself still works, in either position -- the old behaviour did not
+# The flag itself still works, in either position: the old behaviour did not
 # go away with the verb, it just has one spelling now.
 ok go-resume-after  go --resume lay4
 ok go-resume-before --resume go lay4

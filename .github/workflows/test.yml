@@ -12,7 +12,7 @@
 # Putting `coreutils` on PATH there would make every BSD tool behave like its
 # GNU counterpart, which is precisely the difference this job exists to detect:
 # the run would go green and prove nothing. The exception is `timeout`, which
-# several TESTS use as a hang guard and macOS does not ship at all -- mux itself
+# several TESTS use as a hang guard and macOS does not ship at all: mux itself
 # only ever calls it behind `command -v` (asserted in test/mux-portability.t),
 # so it is a harness dependency rather than a mux one. It is symlinked in ALONE,
 # by name, so nothing else on PATH stops being BSD.

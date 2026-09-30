@@ -76,7 +76,7 @@ case $_w in
 esac
 # A fully derived session says so, and names the derivation for each field.
 # `|| true`: `undeclared` is a name nothing knows, so why exits 3, and an
-# unguarded substitution takes the file down SILENTLY under `set -e` -- the
+# unguarded substitution takes the file down SILENTLY under `set -e`: the
 # only symptom is the test disappearing from the runner's list.
 _w=$(mux why undeclared || true)
 case $_w in *"(none)"*) ;; *) fail "why: should report no profile: $_w" ;; esac
@@ -114,7 +114,7 @@ _o=$(mux go) && fail "a derived name colliding with a profile should refuse"
 case $_o in
 *"already means"*) ;; *) fail "unhelpful collision error: [$_o]" ;;
 esac
-# A TYPED name is still trusted -- looking a profile up by name is the point.
+# A TYPED name is still trusted: looking a profile up by name is the point.
 mux go proj >/dev/null || fail "a typed name should still resolve"
 
 # ... and when the root DOES match, no alarming marker.
@@ -140,7 +140,7 @@ rm -f "$T/conf/partitions/global.partition"
 LIVE=proj; LIVEROOT=$T/somewhere-else; export LIVE LIVEROOT
 fails collide "is live at" go
 fails collide-fix "--attach" go
-# An explicit name is trusted -- looking a session up by the name you typed is
+# An explicit name is trusted: looking a session up by the name you typed is
 # what a name argument is for.
 mux go proj >/dev/null || fail "a typed name should attach without the guard"
 # ... and --attach overrides it for the derived case.
@@ -150,7 +150,7 @@ LIVEROOT=$T/proj
 mux go >/dev/null || fail "same-root attach should not be guarded"
 
 # --- `mux help TOPIC` must reach the TOPIC ---------------------------------
-# This was an inline block where $1 was the script's first POSITIONAL -- the
+# This was an inline block where $1 was the script's first POSITIONAL: the
 # topic. Extracting it into cmd_help() without passing "$@" made $1 the
 # FUNCTION's own, which is unset, so every topic silently fell through to the
 # usage summary. Silently, because printing usage is a plausible thing for a
@@ -172,7 +172,7 @@ esac
 # The last functions the suite never reached: help_palette (the one function in
 # bin/mux over the 50-line guideline), _palette_grid, _palette_preview and
 # _sgr_frag. They need a TERMINAL, so without a pty the verb refuses and the
-# whole grid is unreachable -- which is why it stayed dark.
+# whole grid is unreachable, which is why it stayed dark.
 #
 # script(1) supplies the pty. Skipped rather than failed where it is absent: the
 # package's stated floor is a shell and a checkout.
@@ -243,7 +243,7 @@ if command -v script >/dev/null 2>&1; then
   esac
 fi
 
-# An unusable fg spec is refused with the accepted forms named, and exit 2 --
+# An unusable fg spec is refused with the accepted forms named, and exit 2,
 # not silently ignored, which would render a grid that answers a question you
 # did not ask.
 if command -v script >/dev/null 2>&1; then

@@ -5,20 +5,20 @@
 #
 # tmux sizes a window to ONE client, and which one is a server option. With more
 # than one client attached at different dimensions there is no size that suits
-# both, so something has to give -- and by default what gives is stability: the
+# both, so something has to give, and by default what gives is stability: the
 # window follows whichever client touched it last, so cycling sessions drags
 # every window between two sizes and every mux layout is re-pinned each time.
 # That is the "why does it redraw when I switch" question this answers.
 #
-# It is a live, transient condition -- it appears when a second client attaches
-# and vanishes when it leaves -- which is why it belongs on the status bar and
+# It is a live, transient condition (it appears when a second client attaches
+# and vanishes when it leaves), which is why it belongs on the status bar and
 # not only in an audit you have to remember to run.
 #
 # TWO INDEPENDENT FACTS, and conflating them is what makes this confusing:
 #
 #   1. Is there tension, and WHICH SIDE of it is this view on? (am I the one
 #      being clipped, the one with dead space, or the one setting the size)
-#   2. What MODE is resolving it -- and that is a choice, not fate.
+#   2. What MODE is resolving it, and that is a choice, not fate.
 #
 # The modes are mux's names for tmux's window-size, because "latest / smallest
 # / largest" describes tmux's ALGORITHM while these describe the OUTCOME you
@@ -39,7 +39,7 @@
 MUX_VIEW_MODES='auto floor ceil'
 
 # tmux, addressed at the right SERVER. Inside a session $TMUX already names it,
-# so a bare tmux is correct AND cheap -- which matters, because the status chip
+# so a bare tmux is correct AND cheap, which matters, because the status chip
 # runs this every status-interval. Outside one there is nothing to inherit, so
 # the caller resolves its partition and sets MUX_VIEW_SOCKET; without that a
 # partitioned setup would silently report on tmux's default socket instead of
@@ -55,7 +55,7 @@ _vt() {
 # mux_view_mode -> the mode in mux's vocabulary. Read through the probe rather
 # than its own show-options call: the probe already fetches window-size (it is
 # a real format), and a second reader would be a second place for the same fact
-# to be derived -- and to disagree.
+# to be derived, and to disagree.
 mux_view_mode() {   # [client-name]
   mux_view_probe "${1:-}"
   printf '%s' "$MUX_VIEW_MODE"
@@ -115,7 +115,7 @@ mux_view_server_tension() {
   [ "$(mux_view_sizes | grep -c .)" -gt 1 ]
 }
 
-# The distinct sizes contending for the window CLIENT is looking at -- i.e.
+# The distinct sizes contending for the window CLIENT is looking at: i.e.
 # among the clients attached to ITS session.
 #
 # tmux sizes a window from the clients attached to that window's SESSION, not
@@ -135,7 +135,7 @@ mux_view_contenders() {   # [client-name]
 # actually contended. Scoped to the window on purpose: the colour half of the
 # indicator already describes this view, and testing tension server-wide while
 # colouring per-window meant the chip could report contention that changed
-# nothing here -- and that the mode glyph sat beside a state the mode could not
+# nothing here, and that the mode glyph sat beside a state the mode could not
 # move.
 mux_view_tension() {   # [client-name]
   [ "$(mux_view_contenders "${1:-}" | grep -c .)" -gt 1 ]
@@ -143,7 +143,7 @@ mux_view_tension() {   # [client-name]
 
 # Everything the chip needs, in ONE round trip: this client's size, the window
 # it is currently showing, and the mode. The status bar redraws every interval
-# for every client, so each extra tmux call is a cost paid forever --
+# for every client, so each extra tmux call is a cost paid forever,
 # and #{window-size} being a real FORMAT is what lets the mode ride along here
 # instead of costing a second call to show-options.
 #
@@ -197,9 +197,9 @@ mux_view_probe() {      # [client-name]
 # the WINDOW it is currently showing, because that is the consequence you can
 # actually see:
 #
-#   clipped  the window is taller/wider than the client -- part of it is off
+#   clipped  the window is taller/wider than the client: part of it is off
 #            screen. The bad one, and the reason ceil is not a free win.
-#   slack    the window is smaller than the client -- dead space. Harmless, but
+#   slack    the window is smaller than the client: dead space. Harmless, but
 #            it is why floor costs something.
 #   fit      the window matches; this client is the one setting the size.
 #
@@ -212,7 +212,7 @@ mux_view_side() {   # <client-name>
   # A client's HEIGHT includes its status line(s); the window gets what is
   # left. So a perfectly fitted client is client_height - status, and
   # comparing against the raw height made EVERY view read as one row of
-  # slack -- which is exactly what it did, on both clients, until two
+  # slack, which is exactly what it did, on both clients, until two
   # differently-sized clients were put side by side and both came back the
   # same.
   _eh=$((MUX_VIEW_CH - MUX_VIEW_ST))
@@ -230,10 +230,10 @@ mux_view_side() {   # <client-name>
 # --- the one-glyph indicator -----------------------------------------------
 # TWO dimensions, TWO channels, assigned by what each is good at:
 #
-#   SHAPE  carries CONTROL -- the mode, which you chose. A small closed set is
+#   SHAPE  carries CONTROL: the mode, which you chose. A small closed set is
 #          exactly what a shape distinguishes well, and the glyphs are the
 #          mathematical floor and ceiling symbols, so the picture IS the name.
-#   COLOUR carries RENDER  -- what is happening TO this view, which has one
+#   COLOUR carries RENDER:   what is happening TO this view, which has one
 #          genuinely urgent value (clipped). Colour is what eyes catch, and
 #          mux already spends its loudest pairing on a blocked agent.
 #
@@ -247,7 +247,7 @@ mux_view_glyph() {
   # Box-drawing, not the mathematical floor/ceiling marks: those are
   # thin corner ticks that read as a bare pipe in most terminal fonts,
   # and as each other. Here the BAR is the pin and its POSITION is the
-  # bound it pins to -- bar at the bottom is a floor to stand on, bar at
+  # bound it pins to: bar at the bottom is a floor to stand on, bar at
   # the top is a ceiling to hit. auto keeps an arrow, deliberately a
   # different family: it is the one that is not pinned at all.
   # HEAVY box-drawing for the pinned pair: the BAR is the pin and its
@@ -257,9 +257,9 @@ mux_view_glyph() {
   # auto is an ASTERISK, not an arrow. Every up-down arrow actually present
   # in a monospace face renders too small to read at a glance, and the
   # bold triangle-headed ones (U+2B65, U+2B81) are in neither DejaVu Sans
-  # Mono nor most others -- they arrive from a proportional fallback, at
+  # Mono nor most others: they arrive from a proportional fallback, at
   # another font's metrics, and are tofu where it is absent. An asterisk's
-  # wildcard sense -- any of these, whatever comes last -- happens to be
+  # wildcard sense (any of these, whatever comes last) happens to be
   # exactly what auto means.
   #
   # The HEAVY asterisk, not the plain one. Measured against DejaVu Sans
@@ -269,7 +269,7 @@ mux_view_glyph() {
   # and being heavy it also reads at the weight of the bars beside it.
   # U+2733/U+2734 centre marginally better but are emoji-capable, so a
   # terminal may give them a width-2 presentation and break the strip's
-  # width budget -- not a trade worth ten font units.
+  # width budget, not a trade worth ten font units.
   case $MUX_VIEW_MODE in
   floor) printf '\342\224\273' ;;   # U+253B  heavy bar below, stem up
   ceil)  printf '\342\224\263' ;;   # U+2533  heavy bar above, stem down
@@ -277,7 +277,7 @@ mux_view_glyph() {
   esac
 }
 
-# calm | fit | slack | clipped -- the render half, in one word.
+# calm | fit | slack | clipped: the render half, in one word.
 mux_view_state() {   # <client-name>
   mux_view_tension "${1:-}" || { printf calm; return 0; }
   _st=$(mux_view_side "${1:-}")

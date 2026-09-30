@@ -2,14 +2,14 @@
 
 The D-Bus service needs a live session bus and a tray host, so it is integration
 territory. Everything that decides WHAT to show is pure, and it is where the
-interesting mistakes are -- because every one of them ends with a tray icon
+interesting mistakes are, because every one of them ends with a tray icon
 confidently showing the wrong thing, which nobody can tell from the right thing.
 
 The rule the whole feed rests on, and the one these tests exist to protect:
 
   AN EMPTY ANSWER IS AN ANSWER. `mux agent-summary` prints `none 0` and exits 0
-  on a host with no agents. A FAILURE to run it -- mux missing, the host
-  unreachable -- is a different fact entirely. If those two collapse into one,
+  on a host with no agents. A FAILURE to run it (mux missing, the host
+  unreachable) is a different fact entirely. If those two collapse into one,
   the tray draws a calm icon for a machine it cannot see, which is the exact
   failure this indicator exists to prevent.
 """
@@ -23,7 +23,7 @@ def _fresh(**env):
     """Re-import sni with a patched environment.
 
     Its module-level constants (MUX, POLL, CTL) are read at import time, so a
-    test that wants a different one has to reload rather than assign -- and a
+    test that wants a different one has to reload rather than assign, and a
     test that forgot would silently exercise the developer's own environment.
     """
     old = {k: os.environ.get(k) for k in env}
@@ -59,7 +59,7 @@ class Parse(unittest.TestCase):
     def test_idle_and_none_carry_no_number(self):
         """Their badges are a check and nothing, so a count would be drawn as a
         number the state does not have. Normalised away here as well as in the
-        renderer -- this one is about MEANING, the renderer's is about ink."""
+        renderer: this one is about MEANING, the renderer's is about ink."""
         self.assertEqual(self.sni._parse("idle 5"), ("idle", None))
         self.assertEqual(self.sni._parse("none 0"), ("none", None))
 
@@ -75,7 +75,7 @@ class Parse(unittest.TestCase):
 
     def test_empty_input_is_none_not_a_state(self):
         """Nothing read is not a state. Returning one would paint a value that
-        was never reported -- and `_watch` keys "did it change" off this."""
+        was never reported, and `_watch` keys "did it change" off this."""
         self.assertIsNone(self.sni._parse(""))
         self.assertIsNone(self.sni._parse("   \n"))
 
@@ -95,7 +95,7 @@ class Override(unittest.TestCase):
 
     NOT TESTED HERE: that the handle is closed. `open(CTL).read()` raised a
     ResourceWarning, which looked like an fd leak on a path that runs every
-    poll -- but CPython's refcounting closes it the instant .read() returns, so
+    poll, but CPython's refcounting closes it the instant .read() returns, so
     a descriptor count before and after is identical either way. The assertion
     could not fail, so it is gone rather than kept as decoration; the `with` in
     sni.py stands on not depending on an implementation detail.
@@ -128,12 +128,12 @@ class Query(unittest.TestCase):
     THE EXIT CODE IS THE CONTRACT, and ignoring it was a real bug. `mux
     agent-summary` prints `none 0` and exits 0 on a host with no agents, so
     EMPTY IS EXIT 0 and a quiet host is a genuine answer. A non-zero exit has
-    no meaning of its own -- it can only be the transport -- so it must become
+    no meaning of its own (it can only be the transport), so it must become
     UNKNOWN.
 
     The old `_query_mux` read stdout and never checked the status. A failed
     ssh produced empty output, which parsed to None, which the caller read as
-    "no change" -- so it left the previous icon up, and an unreachable machine
+    "no change", so it left the previous icon up, and an unreachable machine
     kept showing whatever it last said, forever. These tests exist so that
     cannot come back.
     """
@@ -159,7 +159,7 @@ class Query(unittest.TestCase):
 
     def test_an_empty_answer_is_still_an_answer(self):
         """`none 0` from a host with no agents is a FACT, and exits 0. It must
-        NOT be confused with a failure -- that is the whole distinction."""
+        NOT be confused with a failure: that is the whole distinction."""
         sni = _fresh()
         self.assertEqual(
             asyncio.run(sni._query([self._stub("none 0\n", 0)])),
@@ -189,7 +189,7 @@ class Query(unittest.TestCase):
 
     def test_A_HANG_BECOMES_UNKNOWN(self):
         """The case that makes `unknown` reachable at all. ssh into a blackholed
-        host does not fail, it SLEEPS -- so without a deadline the item would
+        host does not fail, it SLEEPS, so without a deadline the item would
         freeze on its last value indefinitely, showing a calm icon for a machine
         that fell off the network. That is the exact failure this feature exists
         to prevent, so the timeout is load-bearing, not a nicety.
@@ -210,7 +210,7 @@ class Query(unittest.TestCase):
 
         What broke it: killing the direct child leaves a GRANDCHILD holding the
         stdout pipe, and `communicate()` then waits for the grandchild rather
-        than the child -- measured at 30s against a `sleep 30` source with the
+        than the child: measured at 30s against a `sleep 30` source with the
         0.3s timeout firing correctly all along. The whole host's poll loop
         stalls for the grandchild's lifetime, which is the exact freeze the
         timeout exists to prevent, reintroduced through the reaping path. The
@@ -240,12 +240,12 @@ class Query(unittest.TestCase):
         # AND THE SURVIVOR IS THE OTHER, because they fail differently and a
         # single assertion would kill neither mutation. The bounded wait after
         # the kill already caps the DURATION even with no group kill at all, so
-        # timing alone cannot see `killpg` being lost -- what is lost then is
+        # timing alone cannot see `killpg` being lost: what is lost then is
         # the grandchild, which outlives the query as a leaked process, one per
         # poll, for as long as the host stays unreachable.
         # `-xf`, an EXACT full-command-line match, not a substring one. A bare
         # `-f` also matches any shell whose own argv happens to mention the
-        # pattern -- including the process running this suite -- which is the
+        # pattern (including the process running this suite), which is the
         # self-match trap this project has already paid for once with
         # `pkill -f "python -m mux_indicator"`. Measured here: 3 matches loose
         # against 1 exact.
@@ -309,7 +309,7 @@ class HostColour(unittest.TestCase):
     Run locally even for a remote host, which is the point and not a shortcut:
     the colour derives from the NAME by hashing, so this box can colour a remote
     host with nothing shared. Asking the remote would need it reachable just to
-    pick a colour -- so an unreachable host would lose its identity at the exact
+    pick a colour, so an unreachable host would lose its identity at the exact
     moment the `unknown` glyph needs to say which host is unreachable.
     """
 
@@ -408,7 +408,7 @@ class Mark(unittest.TestCase):
 
 
 class MarkPlan(unittest.TestCase):
-    """Who gets a mark, and which slot -- the supervisor's two rules, lifted
+    """Who gets a mark, and which slot: the supervisor's two rules, lifted
     out of its async loop so they can be asserted at all."""
 
     def setUp(self):
@@ -457,7 +457,7 @@ class MarkPlan(unittest.TestCase):
     def test_TWO_PARTITIONS_ON_ONE_HOST_GET_NO_MARK(self):
         """Counted in HOSTS, not items, which is the 0.56 correction. Marking
         both would put the same three letters and the same colour on each,
-        which says nothing -- they ARE the same machine. The partition letter
+        which says nothing: they ARE the same machine. The partition letter
         is what tells them apart, and the mark stays for the question it
         actually answers."""
         p = self.sni.mark_plan(["manifold:global", "manifold:work"],
@@ -494,7 +494,7 @@ class PartitionNames(unittest.TestCase):
 
     def test_the_solo_form_is_the_OLD_key_unchanged(self):
         """A host with one partition publishes exactly the item it always
-        did -- same Id, same tooltip. That is what keeps the single-partition
+        did: same Id, same tooltip. That is what keeps the single-partition
         case, which is every existing install, from changing at all."""
         self.assertEqual(self.sni.item_key("manifold", "global", True),
                          "manifold")
@@ -520,7 +520,7 @@ class PartitionNames(unittest.TestCase):
 
     def test_A_IS_ALWAYS_THE_BASELINE(self):
         """`global` is the reserved baseline partition, so it sorts first
-        whatever it is sitting beside -- including names that would beat it
+        whatever it is sitting beside, including names that would beat it
         alphabetically."""
         got = self.sni.partition_letters(["work", "global", "alpha"])
         self.assertEqual(got["global"], "A")
@@ -554,7 +554,7 @@ class PartitionNames(unittest.TestCase):
 
 
 class ItemSet(unittest.TestCase):
-    """Which items should exist right now -- the decision the whole partition
+    """Which items should exist right now: the decision the whole partition
     feature turns on, lifted out of the async loop so it can be asserted."""
 
     def setUp(self):
@@ -590,7 +590,7 @@ class ItemSet(unittest.TestCase):
 
     def test_AN_UNREACHABLE_HOST_KEEPS_ITS_ITEMS(self):
         """The load-bearing one. The partition set lives on the other machine,
-        so a failed query means "could not ask", never "it has none" --
+        so a failed query means "could not ask", never "it has none":
         withdrawing the items would empty the tray at the exact moment it has
         something to say, which is the entire promise of this design.
         """
@@ -673,7 +673,7 @@ class ParseAll(unittest.TestCase):
 
     def test_a_partition_that_is_not_a_LABEL_is_DROPPED(self):
         """These names arrive from another machine and go back out inside a
-        shell command, so a row that cannot be a partition name is not one --
+        shell command, so a row that cannot be a partition name is not one,
         which stays true whatever the transport encoding is."""
         got = self.sni.parse_all(self._doc(
             {"partition": "../etc", "state": "idle", "count": 0},
@@ -691,14 +691,14 @@ class ParseAll(unittest.TestCase):
     def test_JUNK_IS_NONE_NOT_EMPTY(self):
         """The distinction the tab-separated form could not make. A document
         that does not parse is a host that said something other than an
-        answer, and reading that as "no partitions" would withdraw its items
-        -- emptying the tray at the exact moment it has something to say."""
+        answer, and reading that as "no partitions" would withdraw its items:
+emptying the tray at the exact moment it has something to say."""
         for text in ("", "\n\n", "usage: mux agent <status>\n",
                      "onlyoneword\n", "[1,2,3]", '{"status":"ok"}'):
             self.assertIsNone(self.sni.parse_all(text), repr(text))
 
     def test_a_REFUSAL_is_none_too(self):
-        """`status` is not `ok`, so the payload is not an answer -- even
+        """`status` is not `ok`, so the payload is not an answer: even
         though the document parses perfectly. That is exactly what the
         symbolic status is for."""
         self.assertIsNone(self.sni.parse_all(self._doc(
@@ -727,7 +727,7 @@ class FeedRows(unittest.TestCase):
     def test_a_partition_MISSING_from_a_good_answer_is_unknown(self):
         """Not calm. The item exists because that partition was there a moment
         ago, so its absence from a SUCCESSFUL answer is a fact nobody has
-        explained -- and drawing it idle would be the tray inventing one."""
+        explained, and drawing it idle would be the tray inventing one."""
         f = self.sni.Feed(["true"])
         f.rows = {"global": ("working", 2)}
         self.assertEqual(f.row("work"), ("unknown", None))
@@ -790,7 +790,7 @@ class Identity(unittest.TestCase):
 
     def test_unknown_tooltip_says_it_cannot_reach_the_host(self):
         """Not "all sessions idle", which is what the count-is-None branch would
-        otherwise say -- a calm sentence about a host we cannot see."""
+        otherwise say: a calm sentence about a host we cannot see."""
         i = self.sni.Indicator(state="unknown", count=None, label="manifold")
         self.assertIn("cannot reach", i.ToolTip[3])
 
@@ -811,8 +811,8 @@ class Reconcile(unittest.TestCase):
 
     Extracted from the async loop for the same reason mark_plan was: it needs a
     bus, so nothing inside it could be asserted at all. `_supervise` and
-    `_publish` held every live bug this feature has ever had -- the ignored exit
-    code, the hanging source, the SIGKILL AttributeError -- and a 2026-09-26
+    `_publish` held every live bug this feature has ever had (the ignored exit
+    code, the hanging source, the SIGKILL AttributeError), and a 2026-09-26
     coverage sweep put them at the bottom of the file at 56%.
     """
 
@@ -952,11 +952,11 @@ class Watch(unittest.TestCase):
     """The per-item repaint loop: what it repaints, and how often.
 
     Tested as the real loop rather than through an extraction, because the loop
-    IS the rule -- there is nothing left once you lift the decision out of it.
+    IS the rule: there is nothing left once you lift the decision out of it.
     Driven with a tiny POLL and cancelled, so it runs in milliseconds.
 
     THE ITEM NO LONGER POLLS. Its host's Feed does, once per tick for every
-    partition at once, and the item waits on it and reads its own row -- so
+    partition at once, and the item waits on it and reads its own row, so
     these drive a real Feed over a stub source, which is also what proves the
     two halves fit together.
     """
@@ -1069,7 +1069,7 @@ class Pixmap(unittest.TestCase):
 
     def test_it_FOLLOWS_a_state_change(self):
         """The property must read the live attribute, not a copy taken at
-        construction -- that would freeze every icon at `none` forever."""
+        construction: that would freeze every icon at `none` forever."""
         i = self.sni.Indicator(label="manifold")
         before = i.IconPixmap
         i._state, i._count = "blocked", 4
@@ -1141,7 +1141,7 @@ class Blink(unittest.TestCase):
     """set() and the cursor blink: the "look at me" on a state change.
 
     Uncovered until 2026-09-26. The blink is the only motion the tray ever
-    makes, and every way it can fail is quiet -- it stops blinking, or it never
+    makes, and every way it can fail is quiet: it stops blinking, or it never
     stops, or it settles with the cursor hidden and the icon looks subtly wrong
     forever after.
     """
@@ -1196,7 +1196,7 @@ class Blink(unittest.TestCase):
 
     def test_A_CANCELLED_BLINK_ALSO_SETTLES_CURSOR_ON(self):
         """A second change cancels the first blink mid-frame, and that is the
-        common case, not the rare one -- a busy agent changes state faster than
+        common case, not the rare one: a busy agent changes state faster than
         the animation runs. Cancelling on the hidden frame without restoring
         would leave the cursor off until something else repainted."""
         sni = _fresh(MUX_INDICATOR_BLINK="50", MUX_INDICATOR_BLINK_MS="1")
@@ -1241,7 +1241,7 @@ class Activate(unittest.TestCase):
 
     Two halves, and the split is the design: mux switches the host's client,
     the integrator raises the window. Asserted by capturing the argv rather
-    than by running anything -- what matters is WHICH command goes WHERE.
+    than by running anything: what matters is WHICH command goes WHERE.
     """
 
     def setUp(self):
@@ -1271,7 +1271,7 @@ class Activate(unittest.TestCase):
     def test_a_REMOTE_item_goes_over_the_transport(self):
         """And asks for next-blocked, not agent-summary. The same transport
         carries both, so the COMMAND is the only thing distinguishing a click
-        from a poll -- send the wrong one and every click silently re-reads
+        from a poll: send the wrong one and every click silently re-reads
         state it already had."""
         os.environ["MUX_INDICATOR_TRANSPORT"] = "ssh %h %q"
         try:
