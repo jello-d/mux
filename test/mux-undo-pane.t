@@ -133,12 +133,6 @@ _until() {   # <seconds> <command...>: true as soon as it succeeds
   return 1
 }
 _npanes() { [ "$(tm list-panes -t t 2>/dev/null | wc -l)" -eq "$1" ]; }
-# THE RECORD IS THE REAL PRECONDITION FOR AN UNDO, not the pane count. The pane
-# disappears slightly before the hook finishes writing, so polling the count
-# alone raced the write and undo found nothing to do: a window a fixed sleep
-# had been hiding. A human pressing prefix-u is far slower than either, so this
-# is a test-harness ordering problem rather than a bug, but it is exactly the
-# kind a sleep converts into an intermittent failure on someone else's machine.
 # --- THREE DIRECTORIES THAT DIFFER, RESOLVED RATHER THAN SPELLED ----------
 # The restore has to put a pane back where it was, so the fixture needs three
 # distinguishable directories that exist everywhere. /tmp, /etc and /usr are
@@ -153,6 +147,12 @@ D2=$(CDPATH= cd -- /usr && pwd -P)
   || fail "the three fixture directories are not distinct ($D0 $D1 $D2), so a
 pane restored into the wrong one would read as a pass"
 
+# THE RECORD IS THE REAL PRECONDITION FOR AN UNDO, not the pane count. The pane
+# disappears slightly before the hook finishes writing, so polling the count
+# alone raced the write and undo found nothing to do: a window a fixed sleep
+# had been hiding. A human pressing prefix-u is far slower than either, so this
+# is a test-harness ordering problem rather than a bug, but it is exactly the
+# kind a sleep converts into an intermittent failure on someone else's machine.
 _recorded() { [ -n "$(ls -A "$T/run/mux-undo" 2>/dev/null)" ]; }
 # The shells must have STARTED before their cwd is readable: pane_current_path
 # reports the server's directory until then, which silently recorded the wrong
@@ -447,12 +447,35 @@ stage "a record belongs to one server"
 tm send-keys -t t.1 'exit' Enter
 _until 10 _npanes 2 || fail "otherserver: the pane did not close"
 _until 10 _recorded || fail "otherserver: no undo record was written"
+# EXACTLY ONE RECORD, ASSERTED, because `ls | head -1` picks A record rather
+# than THE record and would silently rewrite the wrong one. `rotate` clears the
+# directory, so anything else here means the fixture has drifted.
+_nrec=$(ls -A "$T/run/mux-undo" | wc -l)
+[ "$_nrec" -eq 1 ] || fail "otherserver: expected one undo record, found
+$_nrec: $(ls -A "$T/run/mux-undo" | tr '\n' ' ')"
 _rec=$T/run/mux-undo/$(ls -A "$T/run/mux-undo" | head -1)
+
+# ... AND THE REWRITE TOOK. This is the precondition for everything below, and
+# without it a fixture that failed to edit the record reports the PRODUCT as
+# having accepted a foreign record, which is exactly what macOS did: exit 0,
+# no message, and nothing to say whether the check or the edit was at fault.
+# The record is tab-separated, so the pattern carries a literal tab, and the
+# rewrite is verified rather than assumed for the reason this file already
+# states about the cwd tracker: turn a symptom into a named precondition.
 sed 's/^server	.*/server	999999/' "$_rec" >"$_rec.x" && mv -f "$_rec.x" "$_rec"
+grep -q "^server	999999$" "$_rec" || fail "otherserver: the fixture could not
+rewrite the record's server field, so the refusal below would be testing
+nothing. The record now reads:
+$(sed 's/^/    /' "$_rec")"
+
 _sp=$(tm display-message -p '#{socket_path}')
 _rc=0
 _o=$(env TMUX="$_sp,0,0" "$HERE/libexec/mux-undo-pane" 2>&1) || _rc=$?
-[ "$_rc" != 0 ] || fail "a record from another server was accepted"
+[ "$_rc" != 0 ] || fail "a record from another server was accepted.
+said: ${_o:-<nothing>}
+the record:
+$(sed 's/^/    /' "$_rec" 2>/dev/null || echo '    <gone>')
+the window this ran against: $(tm display-message -p '#{window_id}' 2>&1)"
 case $_o in
 *"server that is gone"*) ;;
 *) fail "the refusal did not say the record belongs to another server, so a
