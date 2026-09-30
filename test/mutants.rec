@@ -2201,3 +2201,16 @@ t mux-latch
 - *:*:*)
 + *:*:*:*)
 m IPv6 literal must be left whole
+
+= undo-pane-unwrapped-display-form
+f libexec/mux-undo-pane
+t mux-undo-pane
+# tmux 3.4 escapes `pane_start_command` WITHOUT wrapping it in quotes, 3.6 wraps
+# and escapes. Treating the wrapper as the signal returned 3.4's form verbatim,
+# so a restored pane exec'd a program literally named `${SHELL:-/bin/sh}`:
+# created, silent, wrong, on every Ubuntu LTS box. The assertion is a unit on
+# BOTH measured literals and sits AHEAD of the tmux skip, so it cannot depend on
+# which tmux this machine has, which is where the bug hid.
+-   '"'*'"') _uq=${_uq#\"}; _uq=${_uq%\"} ;;
++   '"'*'"') return 0 ;;
+m did not round-trip

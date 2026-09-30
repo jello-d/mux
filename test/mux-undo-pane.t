@@ -18,6 +18,38 @@ set -eu
 _name=mux-undo-pane
 . "$(dirname "$0")/harness_lib"
 
+# --- BOTH tmux DISPLAY FORMS, before the tmux skip -------------------------
+# AHEAD OF THE SKIP DELIBERATELY, and that is the whole reason this case exists
+# as a unit: everything below needs a real tmux, so it can only ever test the
+# form THIS box's tmux happens to produce, and the form is exactly what differs.
+# Measured on two versions of the same command:
+#
+#   tmux 3.6  ["echo MARK_A; exec \"\${SHELL:-/bin/sh}\""]   wrapped + escaped
+#   tmux 3.4  [echo MARK_A; exec "\${SHELL:-/bin/sh}"]      escaped, no wrapper
+#
+# The unwrapped one was returned verbatim, so on tmux 3.4 a restored pane tried
+# to exec a program literally named `${SHELL:-/bin/sh}`: created, silent, wrong.
+# Found by ubuntu-latest, which ships 3.4, after the test below passed here on
+# 3.6 for months. Pinning the LITERALS is what stops the next version hiding in
+# the same place.
+#
+# The function is lifted out of the source rather than sourced, because the file
+# is a command and sourcing it would run it.
+eval "$(sed -n '/^_unquote() {/,/^}/p' "$HERE/libexec/mux-undo-pane")"
+_want='echo MARK_A; exec "${SHELL:-/bin/sh}"'
+for _form in \
+  '"echo MARK_A; exec \"\${SHELL:-/bin/sh}\""' \
+  'echo MARK_A; exec "\${SHELL:-/bin/sh}"'
+do
+  _got=$(_unquote "$_form")
+  [ "$_got" = "$_want" ] || fail "a tmux display form did not round-trip:
+  form [$_form]
+  got  [$_got]
+  want [$_want]
+Replaying that does not fail loudly: the pane comes back running the wrong
+thing, which is how the same class survived a first live check once already."
+done
+
 command -v tmux >/dev/null 2>&1 || {
   printf 'skip %s (no tmux)\n' "$_name"; exit 0; }
 

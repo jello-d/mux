@@ -78,17 +78,30 @@ _lookup() {   # <pane id> <tab-separated list> -> the value for that id
     '$1 == k { sub(/^[^\t]*\t/, ""); print; exit }'
 }
 
-# tmux's `pane_start_command` is QUOTED for display: wrapped in double quotes
-# with inner `"`, `$` and `\` backslash-escaped. Replaying it verbatim does not
-# fail loudly: the pane is created and simply runs the wrong thing, which is
-# how it slipped past a first live test. Reversing tmux's own quoting is
-# well-defined, so it is done once, here, at the point the value is read.
-_unquote() {   # <quoted> -> the command as it was given
-  case $1 in
-  '"'*'"') ;;
-  *) printf '%s' "$1"; return 0 ;;
+# tmux's `pane_start_command` is QUOTED for display, and HOW it quotes differs
+# between tmux versions, which cost a live bug on Ubuntu LTS. Measured, the same
+# command in both:
+#
+#   tmux 3.6  ["echo MARK_A; exec \"\${SHELL:-/bin/sh}\""]   wrapped + escaped
+#   tmux 3.4  [echo MARK_A; exec "\${SHELL:-/bin/sh}"]      escaped, no wrapper
+#
+# THE OUTER QUOTES WERE TREATED AS THE SIGNAL and they are not: a value without
+# them was returned VERBATIM, so on tmux 3.4 the recorded command kept its `\$`
+# and the restored pane tried to exec a program literally named
+# `${SHELL:-/bin/sh}`. Replaying it does not fail loudly, which is how the same
+# class slipped past a first live test once before: the pane is created and runs
+# the wrong thing. Every Ubuntu 24.04 user had that, since prefix-u is the only
+# way to reach it.
+#
+# SO THE UNESCAPE IS UNCONDITIONAL and only the WRAPPER is optional. Both forms
+# then land on the same command, and `test/mux-undo-pane.t` pins both literals
+# rather than trusting whichever tmux the box has, which is what let a version
+# difference hide here in the first place.
+_unquote() {   # <display form> -> the command as it was given
+  _uq=$1
+  case $_uq in
+  '"'*'"') _uq=${_uq#\"}; _uq=${_uq%\"} ;;
   esac
-  _uq=${1#\"}; _uq=${_uq%\"}
   printf '%s' "$_uq" | sed 's/\\\(.\)/\1/g'
 }
 
