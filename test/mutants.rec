@@ -1589,8 +1589,8 @@ m peers-root
 = agent-peers-emits-an-epoch
 f libexec/mux-agent
 t mux-agent
--         *)  _ag=$((_now - _ep))
-+         *)  _ag=$_ep
+-         (*) _ag=$((_now - _ep))
++         (*) _ag=$_ep
 m peers-clamped
 
 = agent-peers-negative-age
@@ -1778,8 +1778,8 @@ m was not logged
 = agent-peers-unset-class-is-null
 f libexec/mux-agent
 t mux-agent
--           *) _cl=human ;;
-+           *) _cl= ;;
+-           (*) _cl=human ;;
++           (*) _cl= ;;
 m peers-class-default
 
 = agent-peers-stale-pane-gets-a-default

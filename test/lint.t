@@ -41,9 +41,6 @@ set -eu
 _name=lint
 . "$(dirname "$0")/harness_lib"
 
-command -v shellcheck >/dev/null 2>&1 || {
-  printf 'skip %s (no shellcheck)\n' "$_name"; exit 0; }
-
 # Every shell file, found by EXTENSION or by SHEBANG: most of mux's programs
 # are extensionless (bin/mux, libexec/mux-check), so a glob alone would miss
 # the bulk of the package and quietly lint almost nothing.
@@ -86,6 +83,61 @@ _n=$(wc -l <"$_list")
 [ "$_n" -ge 100 ] || fail "only $_n shell files found (expected 100+): either
 the discovery is broken, or files left the corpus; if that was deliberate,
 lower this floor in the same commit so the next shrink is still visible"
+
+# --- EVERY FILE MUST PARSE UNDER THE SHELL ITS SHEBANG NAMES --------------
+# CHEAP, UNCONDITIONAL, AND IT RUNS BEFORE THE shellcheck GATE, because every
+# box has a `/bin/sh` and not every box has a linter. A file that does not
+# PARSE is not a style question: nothing in it runs at all.
+#
+# WHAT IT ACTUALLY CATCHES IS A DIFFERENT SHELL, which is the whole reason it
+# is worth a rule. On Linux `/bin/sh` is dash and this is a restatement of the
+# `dash -n` every edit already gets. On macOS `/bin/sh` IS BASH 3.2, frozen at
+# GPLv2 in 2007 and never moving, and bash 3.2 finds the end of a `$( )` by
+# COUNTING PARENTHESES: an unparenthesised `case` pattern inside a command
+# substitution closes the substitution early and the following `;;` is a
+# syntax error. mux shipped exactly that in `libexec/mux-agent`, so `mux agent`
+# did not parse on macOS: EVERY verb of the machine contract dead, reported as
+# `status-rc: got [2]` in one test and nothing else.
+#
+# THAT IS THE ARGUMENT FOR CHECKING HERE rather than in a feature test. A parse
+# failure surfaces downstream as an exit code with empty stdout, which reads as
+# a logic bug in whatever happened to call it first; named here, it says the
+# file and the line. The fix is the POSIX `(pat)` form, verified identical in
+# dash, bash 3.2, bash 5 and ksh.
+#
+# `test/conventions.t` also parses with `dash -n` and `bash -n`. This is not a
+# duplicate of that: its `bash -n` runs bash in BASH mode, while a `#!/bin/sh`
+# file runs in SH mode, and it is a vendored file that is mux's to use and not
+# to fix. A check for a class mux shipped belongs in mux.
+_perr=$T/parse
+: >"$_perr"
+while IFS= read -r _f; do
+  [ -n "$_f" ] || continue
+  /bin/sh -n "$_f" 2>>"$_perr" || printf '%s: did not parse\n' "$_f" >>"$_perr"
+done <"$_list"
+if [ -s "$_perr" ]; then
+  # NAME THE SHELL, because that is the whole point of the check and the
+  # answer differs per box. dash has no `--version` at all (it exits 2 and
+  # says nothing), so an empty answer is the normal case here rather than a
+  # failure: fall back to whatever the path resolves to.
+  _shid=$(/bin/sh --version 2>/dev/null | head -1) || _shid=
+  [ -n "$_shid" ] || _shid="/bin/sh -> $(readlink -f /bin/sh 2>/dev/null \
+    || echo '(unresolved)')"
+  printf 'FAIL %s: a file does not parse under /bin/sh (%s):\n' \
+    "$_name" "$_shid" >&2
+  sed 's|^'"$HERE"'/||' "$_perr" >&2
+  printf '\nOn macOS /bin/sh is bash 3.2, which cannot parse a `case`\n' >&2
+  printf 'inside a $( ) unless every pattern is parenthesised, so the\n' >&2
+  printf 'fix for that one is the POSIX `(pat)` form.\n' >&2
+  exit 1
+fi
+
+# THE LINTER IS OPTIONAL, THE PARSE CHECK ABOVE IS NOT. shellcheck is absent on
+# a bare box and the package's stated floor is "a shell and the repo checkout",
+# so a missing linter must not make a correct checkout look broken. The skip
+# says which half ran.
+command -v shellcheck >/dev/null 2>&1 || {
+  printf 'skip %s (%s files parse; no shellcheck)\n' "$_name" "$_n"; exit 0; }
 
 _out=$T/out
 # Run from the repo root so shellcheck finds .shellcheckrc, and pass the list
