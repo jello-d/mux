@@ -107,15 +107,42 @@ case $_o in
 *) fail "the profile move was silent" ;;
 esac
 
-# --- tmux target metacharacters are folded -------------------------------
-# `:` and `.` are tmux's window/pane separators in a target, so a session named
-# with them cannot be addressed as `=NAME` afterwards.
+# --- A DOT IS FOLDED, A COLON IS REFUSED, and they are two rules ---------
+# They used to be one (`tr ':.' '--'`), and separating them is the point.
+#
+# THE DOT IS A COMPATIBILITY RULE WITH A VERSION ATTACHED: tmux up to 3.6
+# rewrites it in a session name, so mux has to agree with what tmux will
+# actually store or `has-session -t =NAME` stops matching the name mux
+# recorded. mux's own grammar stopped using a dot, so nothing here is
+# reserved: it is folded because of the tool, not because of mux.
 reset
-_o=$(mux rename alpha 'a:b.c') \
-  || fail "renaming to a name with tmux metacharacters failed: $_o"
-[ "$(live)" = "a-b-c " ] || fail "':' and '.' were not folded: [$(live)]"
-[ "$(recorded)" = "a-b-c " ] \
+_o=$(mux rename alpha 'a.c') \
+  || fail "renaming to a name with a dot failed: $_o"
+[ "$(live)" = "a-c " ] || fail "'.' was not folded: [$(live)]"
+[ "$(recorded)" = "a-c " ] \
   || fail "the recorded set kept the unfolded name: [$(recorded)]"
+
+# THE COLON IS RESERVED BY MUX, and a name the user TYPED is refused rather
+# than quietly rewritten: handing back a different session from the one asked
+# for is plausible, wrong and silent, which is this package's signature
+# failure. tmux 3.7 stopped rewriting it (measured: 3.7c sanitises session
+# names not at all), so the guarantee the address grammar rests on is mux's
+# now, and a colon is tmux's own window separator anyway, so such a session
+# could not be reached by a plain `tmux -t` either.
+reset
+_rc=0; _o=$(mux rename alpha 'a:b') || _rc=$?
+[ "$_rc" = 2 ] || fail "a typed colon must be refused with 2, got $_rc: $_o"
+case $_o in
+*'cannot contain a colon'*) ;;
+*) fail "the refusal did not say what the rule is: $_o" ;;
+esac
+case $_o in
+*'mux rename alpha a-b'*) ;;
+*) fail "the refusal did not PRESCRIBE the name that would work, so someone
+hits a rule with no way out of it: $_o" ;;
+esac
+[ "$(live)" = "alpha " ] \
+  || fail "a REFUSED rename still changed the live set: [$(live)]"
 
 # --- renaming an unknown session is a loud refusal ----------------------
 reset

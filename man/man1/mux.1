@@ -362,10 +362,17 @@ is a session in your partition,
 names its partition, and
 .B work::
 is every session there. A bare name is always a SESSION, since that is the
-common case; the rare field carries a DOUBLED separator. A colon is the only
-character tmux refuses to store in a session name on every version, so
+common case; the rare field carries a DOUBLED separator.
+.B "mux RESERVES THE COLON"
+in a session name: every verb refuses to create one that holds it and names
+derived from a directory fold it, so
 .B ::
-cannot arise from a name and is unambiguous by construction, and
+cannot arise from a name. That guarantee used to be tmux's, which rewrote a
+colon up to 3.6 and (measured) sanitises session names NOT AT ALL from 3.7,
+so it is mux's to keep now. It costs nothing: a colon is tmux's own window
+separator, so such a session could not be reached by a plain
+.B tmux \-t
+either, and
 .B api:2
 is byte\-identical to the window target tmux itself takes.
 .B --all

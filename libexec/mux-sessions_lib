@@ -50,6 +50,50 @@
 # `mux resume` after a reboot, so a set left behind in the old location is a
 # set lost at the one moment it mattered. The move is a rename, idempotent, and
 # silent when there is nothing to move.
+# --- what a session may be CALLED ------------------------------------------
+# mux RESERVES THE COLON in a session name, and that reservation is now the
+# grammar's foundation rather than a convenience.
+#
+# IT USED TO BE TMUX'S JOB. Every tmux up to 3.6 rewrote `:` and `.` to `_` in
+# a session name, so `[PARTITION::]SESSION[:WINDOW]` was unambiguous for free.
+# MEASURED ACROSS THREE VERSIONS, that is no longer true:
+#
+#     tmux 3.4    structural: : :: .     verbatim: @ ~ % ^ + = , /
+#     tmux 3.6    structural: : :: .     verbatim: @ ~ % ^ + = , /
+#     tmux 3.7c   structural: (none)     verbatim: everything
+#
+# 3.7 sanitises NOTHING, so a session there can be called `work::api` and no
+# choice of delimiter can rescue the grammar on its own. The premise has to be
+# mux's (the user's call, 2026-10-01), and it costs nothing to keep: a colon
+# is tmux's OWN window separator, so a session named `work:api` cannot be
+# addressed by a raw `tmux -t` either. mux is not fighting tmux here, it is
+# holding a line tmux stopped holding.
+#
+# `.` IS SANITISED TOO AND FOR A DIFFERENT REASON, which is why the two are
+# not one rule: mux's grammar does not use a dot any more, so a session called
+# `example.com` would be perfectly addressable. It is rewritten because TMUX
+# <= 3.6 rewrites it, and mux has to agree with what tmux will actually store
+# or `has-session` stops matching the name mux recorded. That is a
+# compatibility rule with a version attached, not a reservation.
+#
+# ONE COPY. This was open-coded as `tr ':.' '--'` in FIVE places in bin/mux
+# with no test anywhere, which is the shape that drifts.
+mux_sess_sanitise() {   # <name> -> a name tmux will store unchanged
+  printf '%s' "$1" | tr ':.' '--'
+}
+
+# Does this name hold something mux reserves? Answers 0 when it is CLEAN.
+# Separate from the sanitiser because the two have different callers: a name
+# the user TYPED is refused, while one DERIVED from a directory is rewritten,
+# since directories are full of dots and refusing `~/src/example.com` would be
+# mux being difficult about a name nobody chose.
+mux_sess_name_clean() {   # <name>
+  case ${1:-} in
+  *:*) return 1 ;;
+  esac
+  return 0
+}
+
 mux_sess_file() {       # [partition]
   _sk=${1:-${MUX_CTX_PARTITION:-global}}
   mux_state_path "sessions.$_sk"

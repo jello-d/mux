@@ -1176,6 +1176,25 @@ if [ -n "$name_arg" ] && _is_path "$name_arg"; then
     name=$(basename "$base")
   fi
 elif [ -n "$name_arg" ]; then
+  # A NAME THE USER TYPED IS REFUSED, never quietly rewritten, because mux
+  # RESERVES the colon for addressing and handing back a different session
+  # from the one asked for is this package's signature failure: plausible,
+  # wrong, and silent. A DERIVED name is rewritten instead (see
+  # mux_sess_sanitise), since a directory called `example.com` is nobody's
+  # mistake.
+  # NOT FOR `resume`, WHOSE ARGUMENT IS AN ADDRESS rather than a session
+  # name: `mux resume work::api` is the qualified form and the colons there
+  # are mux's own grammar doing its job. This block is the SHARED name
+  # resolution, so without the exclusion the reservation refused the very
+  # syntax it exists to protect, which the suite caught at once.
+  [ "$cmd" = resume ] || mux_sess_name_clean "$name_arg" || {
+    echo "mux: a session name cannot contain a colon: $name_arg" >&2
+    echo "mux: mux reserves it for addressing, where PARTITION::SESSION" >&2
+    echo "mux: and SESSION:WINDOW are how a name is qualified, and tmux" >&2
+    echo "mux: uses it for the same job, so such a session could not be" >&2
+    echo "mux: reached by a plain \`tmux -t\` either. Try:" >&2
+    echo "mux:   mux $cmd $(mux_sess_sanitise "$name_arg")" >&2
+    exit 2; }
   name=$name_arg
 else
   # No name typed: the directory decides. A row whose `root` IS this
@@ -1186,7 +1205,7 @@ else
   name=$(mux_prof_by_root "$base")
   [ -n "$name" ] || name=$(basename "$base")
 fi
-name=$(printf '%s' "$name" | tr ':.' '--')
+name=$(mux_sess_sanitise "$name")
 
 # Which tmux namespace. The context hook names the socket: an isolated context
 # gets a socket of its own, everything else the default server. Degrades cleanly
@@ -1744,7 +1763,7 @@ _why_resolve_name() {
   if [ -z "$wh" ] || [ "$w_bypath" -eq 1 ]; then
     wh=$(mux_prof_by_root "$base")
     [ -n "$wh" ] || wh=$(basename "$base")
-    wh=$(printf '%s' "$wh" | tr ':.' '--')
+    wh=$(mux_sess_sanitise "$wh")
   fi
   w_row=0; mux_prof_has "$wh" && w_row=1
   w_file=$(_find_profile "$wh")
@@ -1968,7 +1987,22 @@ cmd_rename() {
   else
     _old=$name_arg; _new=$layout_arg
   fi
-  _new=$(printf '%s' "$_new" | tr ':.' '--')
+  # REFUSED, NOT REWRITTEN, for the same reason `go`/`new` refuse: a rename
+  # is always a name the user TYPED, and quietly giving them a different one
+  # is worse than saying no. `why` and `save` keep the sanitiser on purpose:
+  # the first only REPORTS on a name and the second names a LAYOUT.
+  mux_sess_name_clean "$_new" || {
+    echo "mux: a session name cannot contain a colon: $_new" >&2
+    echo "mux: mux reserves it for addressing (PARTITION::SESSION and" >&2
+    echo "mux: SESSION:WINDOW), and tmux uses it for the same job. Try:" >&2
+    echo "mux:   mux rename $_old $(mux_sess_sanitise "$_new")" >&2
+    exit 2; }
+  # AND THE DOT IS STILL FOLDED, which is a SEPARATE rule: tmux <= 3.6
+  # rewrites it, so mux must agree with what tmux will store or
+  # `has-session -t =NAME` stops matching the name mux recorded. My first
+  # version of this block REPLACED the fold instead of preceding it, and the
+  # test caught the dot coming through unfolded.
+  _new=$(mux_sess_sanitise "$_new")
   tm has-session -t "=$_old" 2>/dev/null || {
     echo "mux: no such session: $_old" >&2
     exit "$MUX_EX_NONAME"; }
@@ -2151,7 +2185,7 @@ _save_identify() {
   [ -n "$sv_sess" ] || {
     echo "mux: could not identify the session" >&2; exit 1; }
   sv_name=${name_arg:-$sv_sess}
-  sv_name=$(printf '%s' "$sv_name" | tr ':.' '--')
+  sv_name=$(mux_sess_sanitise "$sv_name")
 }
 
 # The arrangement, into a temp so it can be compared before it lands.
@@ -2665,7 +2699,7 @@ cmd_new() {
   # own, since `mux new waybar` inside a repo would bind the whole repo.
   # Subdirectory sessions stay an outlier, but an outlier mux supports.
   here=$(pwd)
-  _derived=$(printf '%s' "$(basename "$base")" | tr ':.' '--')
+  _derived=$(mux_sess_sanitise "$(basename "$base")")
   if [ "$name" != "$_derived" ] || [ "$here" != "$base" ]; then
     mux_prof_set "$name" root "$(mux_fold_tilde "$here")" || {
       echo "mux: could not write $(mux_prof_file)" >&2

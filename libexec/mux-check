@@ -19,7 +19,7 @@ MUX_SHARE=${MUX_SHARE:-$(dirname "$0")/../share}
 # audits the data mux would ACTUALLY read: a default theme or layout supplied
 # by the overlay counts, and one shadowed by it is judged on the overlay copy.
 for _l in mux-paths_lib mux-data_lib mux-context_lib mux-scan_lib \
-    mux-profiles_lib mux-notify_lib mux-views_lib; do
+    mux-profiles_lib mux-notify_lib mux-views_lib mux-sessions_lib; do
   _lp=$(dirname "$0")/$_l
   [ -r "$_lp" ] || {
     printf '  [FAIL] %s missing (broken install)\n' "$_lp" >&2
@@ -499,6 +499,32 @@ else
       "are not wired. Fix with: mux setup <agent>" ;;
     esac
   fi
+
+  # --- A SESSION MUX CANNOT ADDRESS -------------------------------------
+  # mux RESERVES the colon in a session name, so every verb refuses to
+  # create one and every derived name folds it. A session made with RAW
+  # tmux is the gap that leaves, and it only became reachable at all in
+  # tmux 3.7, which sanitises session names NOT AT ALL (measured: 3.4 and
+  # 3.6 rewrite a colon, 3.7c keeps every character).
+  #
+  # A WARN RATHER THAN A FAIL, and the line is whose name it is: the
+  # session belongs to the user, so renaming it is their call and not a
+  # provisioner's. Nothing is broken either. The session works; it simply
+  # cannot be named in an address, because `work::api` would split there
+  # and a plain `tmux -t` could not reach it either.
+  _unaddr=
+  while IFS= read -r _s; do
+    [ -n "$_s" ] || continue
+    mux_sess_name_clean "$_s" || _unaddr="$_unaddr[$_s] "
+  done <<EOF
+$(_vt list-sessions -F "#{session_name}" 2>/dev/null)
+EOF
+  case ${_unaddr% } in
+  '') ;;
+  *)  warn "session(s) mux cannot address: ${_unaddr% }" \
+      "-- a colon is reserved for PARTITION::SESSION and SESSION:WINDOW," \
+      "and tmux uses it the same way. Rename: mux rename OLD NEW" ;;
+  esac
 fi
 
 exit "$RC"

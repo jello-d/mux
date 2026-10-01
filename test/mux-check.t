@@ -35,6 +35,12 @@ case "$*" in
 # therefore probes with list-sessions, so this arm has to fail the same way or
 # the stub is looser than the tool and the no-server case passes for the wrong
 # reason. Keyed on $KEYS, so one fixture still presents one whole server.
+# A MORE SPECIFIC ARM FIRST, because the two questions are different: the
+# BARE call is the no-server probe and answers with an exit code only, while
+# `-F` asks for the session NAMES. One arm serving both would have made the
+# name audit read an empty list and pass for the wrong reason.
+*"list-sessions -F"*)              [ -f "$KEYS" ] || exit 1
+                                   [ -f "$SESSN" ] && cat "$SESSN" ;;
 *list-sessions*)                   [ -f "$KEYS" ] || exit 1 ;;
 *list-keys*)                       [ -f "$KEYS" ]  && cat "$KEYS" ;;
 *list-panes*)                      [ -f "$PANES" ] && cat "$PANES" ;;
@@ -68,7 +74,7 @@ printf 'scan %s/src 2\n' "$T" >"$T/conf/partitions/probe.partition"
 # check [ENV=VAL ...] -> the audit's output; RC holds its exit status.
 check() {
   OUT=$(env -u MUX_NOTIFY_SEND -u MUX_NOTIFY_CLOSE \
-    PATH="$T/bin" NO_COLOR=1 MUX_DIR="$T/conf" \
+    PATH="$T/bin" NO_COLOR=1 MUX_DIR="$T/conf" SESSN="$T/sessn" \
     MUX_SHARE="$T/share" MUX_CACHE="$T/cache" \
     "$@" "$HERE/libexec/mux-check" 2>&1) && RC=0 || RC=$?
   printf '%s' "$OUT"
@@ -456,6 +462,41 @@ has "$T/bin/mux" "the shadowed copy was not named"
 rm -rf "$T/bin2"
 check >/dev/null
 no_has "mux commands on PATH" "one mux on PATH was reported as several"
+
+# --- A SESSION MUX CANNOT ADDRESS ----------------------------------------
+# mux RESERVES the colon in a session name: every verb refuses to create one
+# and every derived name folds it. A session made with RAW tmux is the gap
+# that leaves, and it only became reachable at all in tmux 3.7, which
+# sanitises session names NOT AT ALL (3.4 and 3.6 fold a colon, 3.7c keeps
+# every character). So this needs the STUB to be testable on a 3.6 box: the
+# real tmux here will not make such a session, which is exactly why a
+# platform-dependent premise has to be enforced by mux rather than hoped for.
+# A SERVER MUST BE PRESENT, because this marker lives inside the tmux-state
+# block: with no server the whole section is skipped and the case would pass
+# while asserting nothing. My first version set only the names fixture and
+# the audit reported `no tmux server ... tmux state unchecked`.
+_healthy_keys
+_healthy_hooks
+printf '#(mux agent-render #S #{client_name})\n' >"$SROPT"
+printf '#(mux style #S #{pane_pid})#[bold]#S\n' >"$SLOPT"
+printf 'plain\nwork:api\n' >"$T/sessn"
+check >/dev/null
+has "cannot address" "a session whose name holds a colon cannot be named in
+an address, and nothing else in this audit can see it"
+has "work:api" "the WARN must NAME the session, since the remedy is to rename
+that one and a count cannot say which"
+no_has "[FAIL]" "an unaddressable session is the USER's to rename, not a
+provisioner's, and nothing is broken by it: the session works and simply
+cannot be qualified, so this must never fail the audit"
+[ "$RC" -eq 0 ] || fail "an unaddressable session must not fail the audit"
+
+# ... and a clean set says nothing at all, which is the half that stops this
+# becoming noise on every run.
+printf 'plain\nother\n' >"$T/sessn"
+check >/dev/null
+no_has "cannot address" "every session name is clean here, so the marker must
+stay silent rather than reporting its own existence"
+
 
 # --- tmux itself: the one hard runtime dependency -------------------------
 rm -f "$T/bin/tmux"
