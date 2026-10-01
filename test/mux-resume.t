@@ -261,11 +261,11 @@ unset MUX_LOG
 # here". NOT an empty resume reporting "no sessions recorded": that reads as
 # data loss when the truth is a typo.
 #
-# THE TRAILING DOT IS WHAT MAKES IT A PARTITION. A bare word is a SESSION in
+# THE TRAILING `::` IS WHAT MAKES IT A PARTITION. A bare word is a SESSION in
 # mux's one address grammar, so `resume nosuchpartition` now asks to focus a
 # session of that name, and this case is about the PARTITION arm.
 _rc=0
-mux "$T/elsewhere" resume nosuchpartition. >"$T/out" 2>&1 || _rc=$?
+mux "$T/elsewhere" resume nosuchpartition:: >"$T/out" 2>&1 || _rc=$?
 [ "$_rc" = 3 ] || fail "an unknown partition should exit 3, got $_rc"
 grep -q "no such partition" "$T/out" \
   || fail "it did not say which: $(cat "$T/out")"
@@ -313,7 +313,7 @@ grep -q "^focus	" "$LIVE" || fail "the named form did not rebuild:
 [$(cat "$LIVE")]"
 
 # --- THE ADDRESS GRAMMAR, which is now the documented form ----------------
-# `[PARTITION.]SESSION`, the same grammar update-env and latch take, with the
+# `[PARTITION::]SESSION`, the same grammar update-env and latch take, with the
 # two-positional form above kept as the compatibility path because it is what
 # an OLDER `mux latch` composes as a remote command.
 #
@@ -343,7 +343,7 @@ grep -q "^focus	" "$LIVE" || fail "the bare-session form did not rebuild:
 # that proves nothing, which this one did until the corpus said so.
 : >"$FOCUSLOG"
 _rc=0
-mux "$T/elsewhere" resume "$_part.focus" >"$T/out" 2>&1 || _rc=$?
+mux "$T/elsewhere" resume "$_part::focus" >"$T/out" 2>&1 || _rc=$?
 [ "$_rc" = 0 ] || fail "the one-argument ADDRESS form failed ($_rc):
 $(cat "$T/out")"
 grep -q "already up" "$T/out" || fail "precondition: the set was not already
@@ -359,10 +359,10 @@ it was, which is the shape of bug \`mux latch box\` already shipped once.
 # parses and does nothing, which this package has shipped once already.
 : >"$LIVE"
 _rc=0
-mux "$T/elsewhere" resume "$_part.focus:2" >"$T/out" 2>&1 || _rc=$?
+mux "$T/elsewhere" resume "$_part::focus:2" >"$T/out" 2>&1 || _rc=$?
 [ "$_rc" = 2 ] || fail "a window field must be refused with 2, got $_rc:
 $(cat "$T/out")"
-grep -q "mux resume $_part.focus" "$T/out" \
+grep -q "mux resume $_part::focus" "$T/out" \
   || fail "the refusal must PRESCRIBE the form without the window, or it
 names a gap without saying how to close it: $(cat "$T/out")"
 [ ! -s "$LIVE" ] || fail "it rebuilt despite refusing the address:

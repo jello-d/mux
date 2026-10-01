@@ -2532,16 +2532,16 @@ t mux-agent
 +   elif [ "${_rp:-global}" = "$_sown" ]; then
 m send-rc
 
-= addr-leading-dot-accepted
+= addr-leading-sep-accepted
 f libexec/mux-addr_lib
 t mux-addr
-# A DOT WITH NOTHING BEFORE IT NAMES NO PARTITION. Accepting it makes `.api`
-# a second spelling of `api`, and one spelling per meaning is the entire
-# reason the old grammar's `:api:2` placeholder could be removed: two ways to
-# say one thing is what the two-delimiter design bought its way out of.
+# A `::` WITH NOTHING BEFORE IT NAMES NO PARTITION. Accepting it makes
+# `::api` a second spelling of `api`, and one spelling per meaning is the
+# entire reason no placeholder is needed: two ways to say one thing is what
+# the doubled-separator design bought its way out of.
 -     [ -n "$MUX_ADDR_PART" ] || {
 +     [ -n x ] || {
-m [.api] must be refused
+m [::api] must be refused
 
 = addr-bare-word-is-not-a-session
 f libexec/mux-addr_lib
