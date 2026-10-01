@@ -368,11 +368,45 @@ do_check() {
   "$_root/bin/mux" check || RC=1      # deps + package data (its own markers)
 }
 
-_U="usage: setup.sh [install|uninstall|check|test|version|all|indicator]"
+# --- paths: the ONE declaration of every root this package owns -----------
+# PART OF THE PACKAGE CONTRACT (the fleet's install-placement rule, ruled
+# 2026-10-01): one declaration feeds the four things that each otherwise
+# guess, which is the whole argument for it being a verb rather than prose:
+# the install audit, the stale-path sweep, uninstall saying what it kept, and
+# discoverability.
+#
+# `KIND PATH` PER LINE, two fields, because a consumer wants to act per KIND
+# (remove a payload, never a config) and parsing prose is how an integrator
+# ends up with its own copy of the list. Tab-separated for the reason every
+# other record in this package is: a path may contain a space.
+#
+# EVERY VALUE IS DERIVED, never restated: these are the same expressions the
+# installer and mux itself resolve, so a root cannot be renamed in one place
+# and still reported from here. That is the failure the verb exists to make
+# impossible, and a hand-written list would reintroduce it.
+#
+# RUNTIME IS REPORTED AS THE DIRECTORY MUX OWNS, not the XDG root: mux writes
+# per-pane agent state under it, and naming the whole runtime dir would invite
+# a sweep to delete another tool's socket.
+do_paths() {
+  printf 'bin\t%s\n'     "$_bin/$PKG"
+  printf 'payload\t%s\n' "$_shr/$PKG"
+  printf 'man\t%s\n'     "$_man/man1/$PKG.1"
+  printf 'config\t%s\n'  "${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/$PKG}"
+  _p_st=${XDG_STATE_HOME:-$HOME/.local/state}
+  printf 'state\t%s\n'   "${MUX_STATE:-$_p_st/$PKG}"
+  printf 'cache\t%s\n'   "${MUX_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/$PKG}"
+  printf 'runtime\t%s\n' "${XDG_RUNTIME_DIR:-/tmp/user-$(id -u)}/agent-state"
+  printf 'venv\t%s\n'    "${MUX_INDICATOR_VENV:-$HOME/.venvs/$PKG-indicator}"
+  printf 'policy\t%s\n'  "/etc/$PKG/send-policy"
+}
+
+_U="usage: setup.sh [install|uninstall|check|paths|test|version|all|indicator]"
 case "${1:-help}" in
   install)   do_install ;;
   uninstall) do_uninstall ;;
   check)     do_check; exit "$RC" ;;
+  paths)     do_paths ;;
   test)      exec sh "$_root/test/run" ;;
   version)   _v=$(git -C "$_root" describe --tags --always 2>/dev/null || true)
              echo "${_v:-$PKG (unversioned)}" ;;

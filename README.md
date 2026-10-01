@@ -134,7 +134,14 @@ standard package layout. Clone it and let `setup.sh` wire it into `~/.local`:
 ```sh
 git clone https://github.com/jello-d/mux ~/.mux
 ~/.mux/setup.sh install    # links mux into ~/.local (bin, libexec, share, man)
+~/.mux/setup.sh paths      # every directory mux owns, one `KIND<TAB>PATH` line
 ```
+
+`setup.sh paths` is the one place every root is declared, so an installer, an
+audit, an uninstall or a human asking "where does this live?" all read the
+same answer rather than each deriving it. `install` also drops a README into
+your config directory naming the same roots and saying which of them are
+shareable between machines and which are per-machine.
 
 Then source the tmux integration from your `~/.config/tmux/tmux.conf` (or
 `~/.tmux.conf`):
