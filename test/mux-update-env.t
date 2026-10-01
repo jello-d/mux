@@ -48,16 +48,16 @@ t_trap 'cleanup'
 # a skip is unreachable to the corpus. The same ordering lesson the homebrew
 # test paid for: in a test with an early skip, put what needs nothing first.
 
-_rc=0; _o=$(mux update-env --all x.y 2>&1) || _rc=$?
+_rc=0; _o=$(mux update-env --all x::y 2>&1) || _rc=$?
 [ "$_rc" -eq 2 ] || fail "--all and an address contradict each other and must
 be refused, not silently resolved to one of them: rc=$_rc [$_o]"
 
-_rc=0; _o=$(mux update-env 'a.b:2' 2>&1) || _rc=$?
+_rc=0; _o=$(mux update-env 'a::b:2' 2>&1) || _rc=$?
 [ "$_rc" -eq 2 ] || fail "a WINDOW field must be refused: tmux keeps an
 environment per session and per server, so accepting it would be a field that
 parses and does nothing. rc=$_rc [$_o]"
 case $_o in
-*'a.b'*) ;;
+*'a::b'*) ;;
 *) fail "the window refusal must print the address WITHOUT the window field,
 so the remedy is in the refusal rather than left as an exercise: [$_o]" ;;
 esac
@@ -94,7 +94,7 @@ MUX_T_DEAD=/a/dead/value; export MUX_T_DEAD
 # preview has a DROP in it as well as a SET: the drop is the arm that exposed
 # the tense bug and `set` is the one word that hides it.
 tm set-environment -t '=one' MUX_T_DEAD /a/dead/value
-_o=$(mux update-env "$SOCK.one" -n 2>&1 || true)
+_o=$(mux update-env "$SOCK::one" -n 2>&1 || true)
 case $_o in
 *'would set MUX_T_LIVE'*) ;;
 *) fail "a dry run must say what it WOULD do: [$_o]" ;;
@@ -114,7 +114,7 @@ a preview the caller trusted has already acted" ;;
 esac
 
 # --- the real run ---------------------------------------------------------
-_o=$(mux update-env "$SOCK.one" 2>&1 || true)
+_o=$(mux update-env "$SOCK::one" 2>&1 || true)
 [ "$(tm show-environment -t '=one' MUX_T_LIVE)" = "MUX_T_LIVE=/a/live/value" ] \
   || fail "a live session was not repaired, which is the entire reason this
 verb exists: without it the remedy for a poisoned box is killing the server.
@@ -165,7 +165,7 @@ fi
 # A second run must find nothing to do. R9 is what makes this true: the verb
 # acts only where a session LACKS a working value, so convergence is not a
 # thing it keeps re-asserting.
-_o2=$(mux update-env "$SOCK.one" 2>&1 || true)
+_o2=$(mux update-env "$SOCK::one" 2>&1 || true)
 case $_o2 in
 *'nothing needed changing'*) ;;
 *) fail "a second run changed something, so this verb is not idempotent and
@@ -173,7 +173,7 @@ cannot be run from a provisioner or a hook: [$_o2]" ;;
 esac
 
 # --- a session that is not there ------------------------------------------
-_o=$(mux update-env "$SOCK.nosuch" 2>&1 || true)
+_o=$(mux update-env "$SOCK::nosuch" 2>&1 || true)
 case $_o in
 *'no such session'*) ;;
 *) fail "naming a session that does not exist must say so: [$_o]" ;;

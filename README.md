@@ -36,7 +36,7 @@ orchestrator above mux does not have to reverse-engineer a status bar. mux stays
 serverless and leaves orchestration to that layer.
 
 **Remote sessions survive the network.** `mux latch HOST[:PORT]
-[[PARTITION.]SESSION]` holds an attachment to another machine's mux open across
+[[PARTITION::]SESSION]` holds an attachment to another machine's mux open across
 drops, and **brings your own transport**: mux owns the state machine and the
 attach semantics while ssh, mosh or anything else supplies the pipe. It tells a
 wait apart from a dead end, repairs the terminal when a session dies under it,
@@ -445,14 +445,15 @@ The sessions you have open are recorded as you open them, per socket, in
 mux resume            # rebuild them all, then attach the first
 mux resume --list     # just show what would be rebuilt
 mux resume api        # ... and land on `api` when it is done
-mux resume work.      # another PARTITION's set, not the one you are in
-mux resume work.api   # that partition, landing on `api`
+mux resume work::     # another PARTITION's set, not the one you are in
+mux resume work::api  # that partition, landing on `api`
 ```
 
-The argument is mux's one **address**, `[PARTITION.]SESSION`: a bare word is a
-session, since that is the common case, and the rare field carries the dot.
-The two separators are the only characters tmux refuses to store in a session
-name, which is what makes every address unambiguous, and `api:2` is identical
+The argument is mux's one **address**, `[PARTITION::]SESSION`: a bare word is
+a session, since that is the common case, and the rare field carries a DOUBLED
+separator. `:` is the only character tmux refuses to store in a session name on
+every version (3.4, 3.6, 3.7c), so `::` cannot arise from a name and is
+unambiguous by construction, while `api:2` is identical
 to the window target tmux itself takes (resume has no window, so it refuses
 one rather than dropping it). A partition nothing knows exits 3 rather
 than resuming an empty set and reporting "no sessions recorded", which reads
@@ -594,21 +595,21 @@ mode; `mux views --detach <client>` ends a claim outright.
 
 ### Remote sessions: latch
 
-`mux latch HOST[:PORT] [[PARTITION.]SESSION]` holds an attachment to a mux
+`mux latch HOST[:PORT] [[PARTITION::]SESSION]` holds an attachment to a mux
 session on another machine open across network drops. **Bring your own
 transport:** mux owns the state machine and the attach semantics, and ssh, mosh,
 Eternal Terminal or anything else supplies the pipe. latch never carries a
 keystroke and knows nothing about hosts, addresses or MTUs.
 
-Two arguments, each `primary[:qualifier]`, and each colon is spent on the field
-that could not otherwise be reached: `HOST[:PORT] [[PARTITION.]SESSION]`. A bare
-second argument is a **session**. What that asks the far side to run:
+Two arguments, and each separator is spent on the field that could not
+otherwise be reached: `HOST[:PORT] [[PARTITION::]SESSION]`. A bare second
+argument is a **session**. What that asks the far side to run:
 
 ```
 mux latch box              ->  mux resume            what that box had
 mux latch box api          ->  mux go api            that session specifically
-mux latch box work.        ->  mux resume work.      another partition's set
-mux latch box work.api     ->  mux resume work.api   ... landing on `api`
+mux latch box work::       ->  mux resume work::     another partition's set
+mux latch box work::api    ->  mux resume work::api  ... landing on `api`
 mux latch box :api         ->  mux go api            default partition, aloud
 mux latch box:2222 api     ->  mux go api            over port 2222
 mux latch [::1]:2222 api   ->  mux go api            IPv6 needs the brackets
@@ -857,7 +858,7 @@ mux kill NAME | kill-all     tear down a session, or all (prompts)
 mux sane                     put the terminal back after a wedged session
 mux go --attach-only [NAME]  attach if live, else refuse (never create)
 mux scan --init [DIR]        turn discovery on: where your projects are
-mux latch HOST[:PORT] [[PARTITION.]SESSION]
+mux latch HOST[:PORT] [[PARTITION::]SESSION]
                              hold a remote attachment open across drops
 mux capabilities             what this mux supports, for other programs
 ```

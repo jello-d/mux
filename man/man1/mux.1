@@ -354,17 +354,18 @@ With no argument inside a session it acts on that session. Outside one it
 refuses rather than guessing or silently widening. An
 .I ADDRESS
 is
-.RB [ PARTITION. ] SESSION,
+.RB [ PARTITION:: ] SESSION,
 so
 .B api
 is a session in your partition,
-.B work.api
+.B work::api
 names its partition, and
-.B work.
+.B work::
 is every session there. A bare name is always a SESSION, since that is the
-common case; the rare field carries the delimiter. The two separators are the
-only characters tmux refuses to store in a session name, which is what makes
-every address unambiguous, and
+common case; the rare field carries a DOUBLED separator. A colon is the only
+character tmux refuses to store in a session name on every version, so
+.B ::
+cannot arise from a name and is unambiguous by construction, and
 .B api:2
 is byte\-identical to the window target tmux itself takes.
 .B --all
@@ -1265,14 +1266,14 @@ what keeps it from growing into a transport project.
 TWO ARGUMENTS, EACH
 .IR primary [: qualifier ],
 and each colon spent on the field that could not otherwise be reached:
-.B "mux latch HOST[:PORT] [[PARTITION.]SESSION]" .
+.B "mux latch HOST[:PORT] [[PARTITION::]SESSION]" .
 What latch asks the far side to run follows from that:
 .PP
 .EX
 mux latch box              \(->  mux resume
 mux latch box api          \(->  mux go api
-mux latch box work.        \(->  mux resume work.
-mux latch box work.api     \(->  mux resume work.api
+mux latch box work::       \(->  mux resume work::
+mux latch box work::api    \(->  mux resume work::api
 mux latch box :api         \(->  mux go api      (default partition, said aloud)
 mux latch box:2222 api     \(->  mux go api      over port 2222
 mux latch [::1]:2222 api   \(->  mux go api      IPv6 needs the brackets

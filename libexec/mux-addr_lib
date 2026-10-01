@@ -1,48 +1,47 @@
 #!/bin/sh
 # mux-addr_lib: one address grammar for partition, session and window.
 #
-#     [PARTITION.]SESSION[:WINDOW]      a bare word is always a SESSION
+#     [PARTITION::]SESSION[:WINDOW]     a bare word is always a SESSION
 #
 #     api            session api, in my partition
 #     api:2          session api, window 2
-#     work.api       session api in partition work
-#     work.api:2     fully qualified
-#     work.          the whole partition
+#     work::api      session api in partition work
+#     work::api:2    fully qualified
+#     work::         the whole partition
 #
-# TWO DELIMITERS, AND THE CHOICE WAS FORCED BY MEASUREMENT rather than taste.
-# A delimiter is only structural if it CANNOT occur in the thing it separates,
-# so every candidate was put to tmux by creating `work<D>api` and reading back
-# what it stored:
+# ONE CHARACTER, DOUBLED FOR THE RARE FIELD (the user's design, 2026-10-01),
+# and it is the only form that survives the measurement. A delimiter is
+# structural only if it CANNOT occur in the thing it separates, so every
+# candidate was put to tmux by creating `work<D>api` and reading the stored
+# name back. The answer DEPENDS ON THE TMUX VERSION, which is the part that
+# cost two wrong decisions before this one:
 #
-#     @ ~ % ^ + = , /    kept VERBATIM, so each is a legal session name and
-#                        `work@api` is genuinely ambiguous with a session
-#                        called `work@api`
-#     : .                REWRITTEN to `_`, so neither can ever appear
+#     tmux 3.4    structural: . :           verbatim: @ ~ % ^ + = , /
+#     tmux 3.6    structural: . :           verbatim: @ ~ % ^ + = , /
+#     tmux 3.7c   structural: : @ ~ ^ = /   verbatim: . % + ,
 #
-# EXACTLY TWO CHARACTERS IN THE WHOLE ASCII RANGE ARE AVAILABLE, which is also
-# exactly how many this grammar needs. A partition name is a DNS label, so it
-# can contain neither either way.
+# `:` IS THE ONLY CHARACTER STRUCTURAL ON ALL THREE. A first attempt spent a
+# `.` on the partition, measured on 3.6 alone, and 3.7c stores `work.api`
+# verbatim: a session can be CALLED that there, so the address was ambiguous
+# on exactly the platform the macOS runner exists to speak for. 3.7 also moved
+# the other way, making `@ ~ ^ = /` structural, so a table from one version is
+# a table about that version and nothing more.
 #
-# WHICH ONE GOES WHERE WAS THE REAL DECISION (the user's, 2026-10-01), and it
-# went to the tool underneath: tmux spells a window target `session:window`,
-# and a user of mux types raw tmux targets too. So mux's `api:2` is
-# BYTE-IDENTICAL to tmux's `api:2`, and the rare field, the partition, is the
-# one that carries the unusual delimiter. The first choice made in this
-# session was the other way round (`partition:session.window`), and it was
-# reversed on exactly that argument: a `.` for the window would have meant
-# typing `tmux switch -t api:2` and `mux ... api.2` for the same thing
-# forever.
+# SO THE SECOND FIELD SEPARATOR IS THE SAME CHARACTER, DOUBLED. `::` can never
+# arise from a name, because neither a partition (a DNS label) nor a session
+# may contain even ONE colon, so a doubled colon is unambiguous BY
+# CONSTRUCTION rather than by a version-dependent accident. Verified directly
+# as well: `work::api` is stored as `work__api`.
 #
-# A BARE WORD IS A SESSION because that is the common case by a wide margin,
-# and naming a partition is rare. That is what removes the placeholder: the
-# old two-colon grammar needed a leading `:` to say "no partition" because one
-# delimiter had to serve both pairs, and with two delimiters no form is ever
-# ambiguous, so `:api:2` has nothing to express any more.
+# A BARE WORD IS A SESSION, the common case by a wide margin, and `api:2` is
+# BYTE-IDENTICAL to the window target tmux itself takes, which matters because
+# a user of mux types raw tmux targets too. The rare field pays the extra
+# character. That also removes the placeholder the old grammar needed: with
+# `::` carrying the partition, nothing has to be said to mean "not that".
 #
-# `host:port` IS A DIFFERENT CONCERN and is untouched, now with no overlap at
-# all: `mux latch box:2222 work.api` carries two delimiters answering two
-# questions, and the host field is parsed before the target ever reaches here.
-# A hostname's own dots are in the HOST field, which this never sees.
+# `host:port` IS A DIFFERENT CONCERN and does not overlap: `mux latch
+# box:2222 work::api` answers two questions with two spellings, and the host
+# field is parsed before the target ever reaches here.
 
 # Parse one address into three variables. Deliberately NOT a printf of three
 # fields: a session name may contain a space, so any single-string answer needs
@@ -68,41 +67,40 @@ mux_addr_parse() {   # <address>
     return 2 ;;
   esac
 
-  # THE PARTITION COMES OFF FIRST, because a dot binds tighter than a colon
-  # here: `work.api:2` is partition `work` holding `api:2`, never session
-  # `work.api` with window `2`, and that order has to be fixed rather than
-  # inferred. Neither character can appear in a NAME, so there is no case
-  # where the other reading is reachable.
+  # THE DOUBLE COLON COMES OFF FIRST, which fixes the precedence rather than
+  # inferring it: `work::api:2` is partition `work` holding `api:2`, and the
+  # single-colon split then runs on what is LEFT. Taking them the other way
+  # round would see `work` and `:api:2` and have to guess.
   #
-  # `%%` AND `#*` ARE DELIBERATE AND CARRY NO MUTATION RECORD, which was
-  # measured rather than assumed: swapping either for its longest-match
-  # twin is UNKILLABLE here, because an address with two dots is refused by
-  # the second check whichever way the first one splits it. Redundant
-  # strictness rather than an untested guard, so it is stated instead of
-  # defended with a record that could only ever survive.
+  # `%%` AND `#*` ARE DELIBERATE AND CARRY NO MUTATION RECORD, measured
+  # rather than assumed: swapping either for its longest-match twin is
+  # UNKILLABLE, because an address with two `::` is refused by the next
+  # check whichever way the first one splits it. Redundant strictness rather
+  # than an untested guard, so it is stated instead of defended by a record
+  # that could only ever survive.
   case $_apa in
-  *.*)
-    MUX_ADDR_PART=${_apa%%.*}
-    _aprest=${_apa#*.}
-    # A DOT WITH NOTHING BEFORE IT NAMES NO PARTITION, and is refused rather
+  *::*)
+    MUX_ADDR_PART=${_apa%%::*}
+    _aprest=${_apa#*::}
+    # A `::` WITH NOTHING BEFORE IT NAMES NO PARTITION, and is refused rather
     # than quietly accepted as a second spelling of the bare form. One
-    # spelling per meaning is the whole reason the placeholder went away.
+    # spelling per meaning is why no placeholder is needed at all.
     [ -n "$MUX_ADDR_PART" ] || {
-      echo "mux: '$_apa' has a dot with no partition before it" >&2
+      echo "mux: '$_apa' has a '::' with no partition before it" >&2
       echo "mux: a bare name is already a session: ${_aprest:-SESSION}" >&2
       return 2; }
     case $_aprest in
-    *.*)
-      echo "mux: too many dots in '$_apa'" >&2
-      echo "mux: an address is [PARTITION.]SESSION[:WINDOW], and neither a" >&2
-      echo "mux: partition (a DNS label) nor a tmux session name may" >&2
-      echo "mux: contain a dot, so there is no field it could belong to." >&2
+    *::*)
+      echo "mux: too many '::' in '$_apa'" >&2
+      echo "mux: an address is [PARTITION::]SESSION[:WINDOW], and a tmux" >&2
+      echo "mux: session name cannot contain a colon at all, so there is" >&2
+      echo "mux: no second partition field it could belong to." >&2
       return 2 ;;
     esac ;;
   *) _aprest=$_apa ;;
   esac
 
-  # Then the window, by the same reasoning in the other direction.
+  # Then the window, on a SINGLE colon, over what the partition left behind.
   case $_aprest in
   *:*)
     MUX_ADDR_SESS=${_aprest%%:*}
@@ -110,11 +108,20 @@ mux_addr_parse() {   # <address>
     case $MUX_ADDR_WIN in
     *:*)
       echo "mux: too many colons in '$_apa'" >&2
-      echo "mux: an address is [PARTITION.]SESSION[:WINDOW], and a tmux" >&2
+      echo "mux: an address is [PARTITION::]SESSION[:WINDOW], and a tmux" >&2
       echo "mux: session name cannot contain a colon, so there is no" >&2
       echo "mux: fourth field it could belong to." >&2
       return 2 ;;
-    esac ;;
+    esac
+    # A WINDOW WITH NO SESSION NAMES NOTHING. `work:::api` splits to a
+    # partition and then `:api`, which would otherwise read as an empty
+    # session with a window called `api`: a shape no caller can act on, so
+    # it is refused rather than passed along half-formed.
+    [ -z "$MUX_ADDR_WIN" ] || [ -n "$MUX_ADDR_SESS" ] || {
+      echo "mux: '$_apa' names a window with no session" >&2
+      echo "mux: an address is [PARTITION::]SESSION[:WINDOW]" >&2
+      return 2; }
+    ;;
   *) MUX_ADDR_SESS=$_aprest ;;
   esac
   return 0
@@ -125,7 +132,7 @@ mux_addr_parse() {   # <address>
 # invents a different spelling of the same thing.
 mux_addr_show() {
   printf '%s%s%s' \
-    "${MUX_ADDR_PART:+$MUX_ADDR_PART.}" \
+    "${MUX_ADDR_PART:+$MUX_ADDR_PART::}" \
     "$MUX_ADDR_SESS" \
     "${MUX_ADDR_WIN:+:$MUX_ADDR_WIN}"
 }

@@ -1250,7 +1250,7 @@ if [ "$cmd" = resume ] && [ "$#" -le 1 ] && [ -n "$rs_want" ]; then
     echo "mux: resume: a window cannot be addressed here." >&2
     echo "mux: resume rebuilds a SESSION SET and lands on one of them," >&2
     echo "mux: so there is nothing per-window for it to do. Try:" >&2
-    rs_try=${MUX_ADDR_PART:+${MUX_ADDR_PART}.}$MUX_ADDR_SESS
+    rs_try=${MUX_ADDR_PART:+${MUX_ADDR_PART}::}$MUX_ADDR_SESS
     echo "mux:   mux resume $rs_try" >&2
     exit 2; }
   rs_want=$MUX_ADDR_PART
