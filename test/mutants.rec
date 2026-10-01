@@ -1010,8 +1010,8 @@ m must outrank an UNKNOWN word
 = worst-wins-comparison-inverted
 f libexec/mux-agent-state_lib
 t mux-agent-rank
--     [ "$_r" -gt "$_br" ] && { _br=$_r; _best=$_st; _bestep=$_e; }
-+     [ "$_r" -lt "$_br" ] && { _br=$_r; _best=$_st; _bestep=$_e; }
+-     if [ "$_r" -gt "$_br" ]; then
++     if [ "$_r" -lt "$_br" ]; then
 m should beat
 = sessions-dedup-disabled
 f libexec/mux-agent-state_lib
@@ -1601,7 +1601,7 @@ m the answer did not parse
 = agent-status-word-ignored
 f libexec/mux-agent
 t mux-agent
--   _out usage 2 "usage: mux agent <status|peers|read|wait|send> ..."
+-   _out usage 2 "usage: mux agent <status|peers|read|wait|send|open> ..."
 +   _out ok 2 "usage: mux agent <status|peers|read|wait|send> ..."
 m noverb-status
 
@@ -2977,3 +2977,66 @@ t mux-notify
 -     _always=0; _vis=1
 +     _always=0
 m owed to its SUPERVISOR rang
+
+= open-selects-the-new-window
+f libexec/mux-window_lib
+t mux-agent
+# THE DEFECT vicus's HAND-ROLLED COPY ACTUALLY HAD, which is the strongest
+# argument for the verb existing. Without `-d`, tmux SELECTS the new window,
+# and a worker serves the session the human is working in, so EVERY SPAWN
+# yanks their view into a worker. A machine verb that moves the human's view
+# mid-turn is an interrupt nobody asked for, and it is the one axis on which
+# the human and machine presenters genuinely differ.
+-   [ "$_mwsw" = 1 ] || set -- "$@" -d
++   [ "$_mwsw" = 1 ] && set -- "$@" -d
+m open did not pass -d
+
+= open-invents-a-missing-session
+f libexec/mux-window_lib
+t mux-agent
+# IT NEVER CREATES A SESSION, which is `mux go`'s job: one verb one job. A
+# caller that mistyped a session must get `no-such-name` and exit 3, mux's
+# cross-cutting code for the condition, rather than a surprise session or
+# tmux's own wording to pattern-match. Checked here rather than left to tmux
+# precisely so the answer is mux's.
+-     MUX_WIN_ERR="no such session: $_mwsess"; return 3; }
++     MUX_WIN_ERR="no such session: $_mwsess"; return 0; }
+m open on a missing session must exit 3
+
+= open-classes-the-wrong-window
+f libexec/mux-window_lib
+t mux-agent
+# A CLASS RECORDED AGAINST THE WRONG PANE is this package's signature
+# failure: plausible, wrong and silent. Dropping the window from the target
+# sets it on whatever window the session happens to have current, which with
+# `-d` is NOT the one just created, so the worker stays `human` (refused to
+# every sender) while some other pane silently becomes agent-controlled.
+-     _mwt set-option -p -t "=$_mwsess:$_mwidx" \
++     _mwt set-option -p -t "=$_mwsess" \
+m the control class was not set on the new window
+
+= open-crosses-a-partition-boundary
+f libexec/mux-agent
+t mux-agent
+# AND THIS VERB CROSSES HARDER THAN `send` DOES, which is why it gets its own
+# record rather than leaning on send's. `send` types into a pane that already
+# exists; opening a window RUNS A COMMAND, and where a partition's boundary
+# is a group acquired per session, the children of that server hold it. There
+# is deliberately no flag and no policy token that opens this, so the refusal
+# reports `override: none`.
+-     mux_ctx_crossing "${_rp:-global}" 'open a window across' || {
++     true "${_rp:-global}" 'open a window across' || {
+m a cross-partition open must exit 1
+
+= peers-collapses-the-window
+f libexec/mux-agent
+t mux-agent
+# vicus's R4, and the half of R8 a session-level answer cannot give. A worker
+# is a WINDOW in the session it serves, so collapsing a session to its worst
+# agent cannot say whether THIS worker is live: it would confidently answer a
+# different question, which is worse than the bypass it replaced. With the
+# window dropped, every entry for a session reports that session's worst
+# state and the two windows become indistinguishable.
+-         _se=$(mux_agent_state_win "$_dir" "$_s" "$_wi")
++         _se=$(mux_agent_state "$_dir" "$_s")
+m peers-win-state
