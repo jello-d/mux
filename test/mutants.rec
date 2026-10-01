@@ -2347,3 +2347,29 @@ t mux-check
 - if ! _vt list-sessions >/dev/null 2>&1; then
 + if [ -z "$(_vt list-keys -T prefix 2>/dev/null || true)" ]; then
 m the check did not say so
+
+= env-plan-truncates-on-an-invalid-name
+f libexec/mux-env_lib
+t mux-wire
+# UNDER `set -e` A BARE NON-ZERO CALL KILLS THE LOOP, and this loop runs inside
+# `$( )`, so the plan TRUNCATED at the first INVALID name and every name after
+# it alphabetically was never considered. Live on both boxes the day the marker
+# shipped: four names resolved, two reported. The fixture's dead name sorts
+# FIRST, which is the whole fixture: with the order reversed a truncating loop
+# still answers correctly about everything it reached.
+-     mux_env_validate "$_epn" "$_epv" || _epvr=$?
++     mux_env_validate "$_epn" "$_epv"
+m verdicts for two names
+
+= env-apply-truncates-on-an-invalid-name
+f libexec/mux-env_lib
+t mux-wire
+# THE SAME SHAPE IN THE WORSE PLACE: `bin/mux` calls mux_env_apply on every
+# session build and every attach, both under `set -eu`, so ONE dead value
+# stopped the repair for every name alphabetically after it and the session
+# came up missing pointers mux had resolved perfectly well. Separately
+# killable from the plan record because the plan is a different function, so
+# the earlier assertion passes and this one fires.
+-       mux_env_validate "$_eaname" "$_eahave" || _eavr=$?
++       mux_env_validate "$_eaname" "$_eahave"
+m was not applied, so
