@@ -122,12 +122,21 @@ dir=$(mux_agent_dir "$_ns")
 # splitting here made a session named `my project` two phantom candidates and
 # hid the real one, in the feature whose whole job is "take me to whoever has
 # waited longest".
+# PANES OWED TO AN AGENT RATHER THAN TO THE HUMAN, skipped below. This verb's
+# whole promise is "take me to whoever needs me most", so walking the human to
+# an orchestrated worker that is blocked on its SUPERVISOR is not a near miss,
+# it is the promise inverted. One extra query, and this runs on a keystroke or
+# a tray click rather than per status-interval, so a round trip here is free in
+# a way it is not in the strip.
+_notours=$(_nb list-panes -a -F '#{pane_id}	#{@mux-attention}' 2>/dev/null \
+  | awk -F'\t' '$2 == "agent" { print $1 }' | tr '\n' ' ')
+
 best= bestep=
 while IFS= read -r s; do
   [ -n "$s" ] || continue
   mux_excluded_has "$excluded" "$s" && continue      # mux hide
   [ "$s" = "$current" ] && continue
-  pair=$(mux_agent_state "$dir" "$s")
+  pair=$(mux_agent_state_skip "$dir" "$s" "$_notours")
   [ "${pair%% *}" = blocked ] || continue
   ep=${pair##* }
   [ -n "$ep" ] || ep=9999999999

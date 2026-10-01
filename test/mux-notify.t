@@ -171,6 +171,7 @@ cat >"$T/emitbin/tmux" <<'EOF'
 case "$*" in
 *session_name*)       printf 'alpha 0\n' ;;
 *mux-notify-always*)  printf '\n' ;;
+*mux-attention*)      printf '%s\n' "${FAKE_ATTN:-}" ;;
 *pane_active*)        printf '0\n' ;;   # not on screen -> do notify
 esac
 exit 0
@@ -309,5 +310,54 @@ printf 'idle 0 %%40 %s 522 charon\n' "$((_now - 10))" \
 MUX_NOTIF_TTL=5 ttlemit working; unset MUX_NOTIF_TTL
 [ ! -s "$CLOSELOG" ] \
   || fail "MUX_NOTIF_TTL was ignored: [$(cat "$CLOSELOG")]"
+
+
+# --- A BANNER IS AN INTERRUPT, SO WHOSE ATTENTION IS IT? -------------------
+# The strip is a glance and the tray is a glance; a notification is the one
+# surface that INTERRUPTS. So a run with several orchestrated workers would
+# ring the bell repeatedly for decisions the human was never going to make,
+# which is vicus's R2 stated about the surface it named as "worse".
+#
+# Driven through the real emit, because the decision is the caller's: a lib
+# that would happily raise it proves nothing about whether mux asks.
+FAKE_ATTN=agent; export FAKE_ATTN
+: >"$LOG"
+emit working >/dev/null 2>&1 || fail "emit working failed (worker)"
+: >"$LOG"
+emit blocked >/dev/null 2>&1 || fail "emit blocked failed (worker)"
+case "$(logged)" in
+*notify-send*) fail "a worker owed to its SUPERVISOR rang the human's
+notification daemon. The supervisor is the thing that is waiting and it
+already knows; this is the interrupt R2 calls the worse half." ;;
+esac
+
+# AND THE CONTROL, which is what stops the assertion above passing for the
+# wrong reason: the same transition with no attention declared DOES notify,
+# so the silence is the marker's doing rather than a broken fixture.
+FAKE_ATTN=; export FAKE_ATTN
+: >"$LOG"
+emit working >/dev/null 2>&1 || fail "emit working failed (control)"
+: >"$LOG"
+emit blocked >/dev/null 2>&1 || fail "emit blocked failed (control)"
+case "$(logged)" in
+*notify-send*) ;;
+*) fail "control: an undeclared pane must still notify, or the assertion
+above proves only that the fixture is broken: $(logged)" ;;
+esac
+
+# `hybrid` NOTIFIES, because it means BOTH. A pane the human may also be
+# asked about must not go quiet, and failing toward the human is the one
+# direction that cannot invert the signal.
+FAKE_ATTN=hybrid; export FAKE_ATTN
+: >"$LOG"
+emit working >/dev/null 2>&1 || fail "emit working failed (hybrid)"
+: >"$LOG"
+emit blocked >/dev/null 2>&1 || fail "emit blocked failed (hybrid)"
+case "$(logged)" in
+*notify-send*) ;;
+*) fail "hybrid went quiet. It means both, so it must reach the human:
+$(logged)" ;;
+esac
+unset FAKE_ATTN
 
 pass

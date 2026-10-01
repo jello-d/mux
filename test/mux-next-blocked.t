@@ -28,6 +28,9 @@ case "$*" in
 *client_name*)      printf '/dev/pts/7\n' ;;
 *client_session*)   printf 'alpha\n' ;;
 *switch-client*)    printf 'SWITCH %s\n' "$*" >>"$TMUXLOG" ;;
+# pane<TAB>@mux-attention, for the worker filter. Empty unless a case sets
+# $MUX_NB_PANES, so every assertion above is unaffected by its existence.
+*list-panes*)       printf '%s' "${MUX_NB_PANES:-}" ;;
 esac
 EOF
 chmod +x "$T/bin/tmux"
@@ -165,6 +168,49 @@ env -u MUX_SHARE -u TMUX "$HERE/libexec/mux-next-blocked" --nope \
   >/dev/null 2>&1 || _rc=$?
 [ "$_rc" = 2 ] || fail "an unknown option must exit 2, got $_rc"
 
+# --- A WORKER BLOCKED ON ITS SUPERVISOR IS NOT THE HUMAN'S JUMP -----------
+# THIS VERB'S PROMISE IS "take me to whoever needs me most", so walking the
+# human to an orchestrated worker that is waiting on its SUPERVISOR is not a
+# near miss: it is the promise inverted. vicus's R2 named this surface
+# directly, and until `@mux-attention` existed nothing here could tell the
+# two apart.
+rm -f "$T"/rt/mux/agent-state/default/*
+agent_rec "$T/rt/mux/agent-state/default/p1" blocked %1 200 bravo x
+agent_rec "$T/rt/mux/agent-state/default/p9" blocked %9 100 charlie x
+
+# WITHOUT the marker, the OLDER wait wins and that is `charlie`: this is the
+# control, and it is what makes the next assertion mean something rather than
+# merely agreeing with its author.
+_got=$(run '/dev/pts/7')
+case $_got in
+*'=charlie'*) ;;
+*) fail "control: with no attention declared the oldest blocked session
+should win, got [$_got]" ;;
+esac
+
+# WITH it, %9 is owed to its supervisor, so the human is taken to `bravo`
+# instead: skipped, never merely deprioritised.
+MUX_NB_PANES=$(printf '%%1\t\n%%9\tagent\n')
+export MUX_NB_PANES
+_got=$(run '/dev/pts/7')
+case $_got in
+*'=bravo'*) ;;
+*) fail "a worker owed to its supervisor was offered to the human: [$_got].
+That is the inversion R2 exists to prevent, and this surface is the one it
+names first." ;;
+esac
+
+# AND WITH EVERY BLOCKED PANE OWED ELSEWHERE, there is NO jump and silence:
+# not a fallback to the least-bad candidate, which would be the same bug
+# wearing a tiebreak.
+MUX_NB_PANES=$(printf '%%1\tagent\n%%9\tagent\n')
+export MUX_NB_PANES
+_got=$(run '/dev/pts/7')
+[ -z "$_got" ] || fail "every blocked pane was owed to an agent, so there was
+nothing to offer the human, but it switched anyway: [$_got]"
+unset MUX_NB_PANES
+
+
 # ... and with nothing attached at all it says so rather than switching blind.
 cat >"$T/bin/tmux" <<'EOF'
 #!/bin/sh
@@ -181,5 +227,7 @@ env -u MUX_SHARE -u TMUX MUX_CTX_PARTITION=default \
   "$HERE/libexec/mux-next-blocked" >/dev/null 2>&1 || _rc=$?
 [ "$_rc" = 1 ] || fail "with no client attached it must exit 1, got $_rc"
 [ ! -s "$TMUXLOG" ] || fail "it switched something with no client attached"
+
+
 
 pass

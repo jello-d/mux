@@ -2926,3 +2926,54 @@ t mux-save
 -     agent|hybrid) printf 'attention %s\n' "$_pn" ;;
 +     agent|hybrid) ;;
 m 'attention agent' was dropped
+
+= strip-shows-a-worker-to-the-human
+f libexec/mux-agent-state-render
+t mux-strip
+# vicus's R2, on the surface it names first. A worker blocked on its
+# SUPERVISOR would otherwise paint its whole session blocked, so one
+# checkpoint makes a project look stuck and the human goes looking for a
+# decision nobody wanted from them. The skip set is built from a marker that
+# rides a query the strip was already making, so the filter costs nothing and
+# removing it costs the whole promise.
+-   _pair=$(mux_agent_state_skip "$dir" "$sess" "$_notours")
++   _pair=$(mux_agent_state "$dir" "$sess")
+m painted the human's chip for bravo
+
+= strip-filters-the-record-but-not-the-plug
+f libexec/mux-agent-state-render
+t mux-strip
+# THE SECOND PATH, and the reason the test asserts twice. A pane is excluded
+# from TWO questions: whether a RECORD speaks for the session, and whether
+# mux STARTED an agent there. Filter only the records and a worker-only
+# session draws the UNWIRED plug forever: the loudest glyph on the strip,
+# announcing the one agent the human was told to ignore. Neither assertion
+# kills this alone, which is the two-guards pattern again.
+-   | awk -F'\t' '$2 != "" && $3 != "agent" { print $4 }')
++   | awk -F'\t' '$2 != "" { print $4 }')
+m drawing the UNWIRED plug
+
+= next-blocked-offers-a-worker-to-the-human
+f libexec/mux-next-blocked
+t mux-next-blocked
+# THE PROMISE IS "take me to whoever needs me most", so handing the human an
+# orchestrated worker that is waiting on its supervisor is not a near miss, it
+# is the promise inverted. The fixture carries a control (the same records
+# with no attention declared DO offer the older wait), so the kill is the
+# marker's doing rather than a fixture that cannot fail.
+-   pair=$(mux_agent_state_skip "$dir" "$s" "$_notours")
++   pair=$(mux_agent_state "$dir" "$s")
+m was offered to the human
+
+= notification-rings-for-a-worker
+f libexec/mux-agent-state-emit
+t mux-notify
+# A BANNER IS THE ONE SURFACE THAT INTERRUPTS, which is why R2 calls this the
+# worse half: a run with several workers rings the bell repeatedly for
+# decisions the human was never going to make. The supervisor is the thing
+# that is waiting and it already knows. Three cases guard it together (agent
+# silent, undeclared notifies, hybrid notifies), so a mutation that merely
+# silenced everything dies on the control rather than passing.
+-     _always=0; _vis=1
++     _always=0
+m owed to its SUPERVISOR rang
