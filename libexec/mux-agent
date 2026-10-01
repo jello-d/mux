@@ -322,47 +322,22 @@ if [ "$_verb" = send ]; then
   # partition. One root-owned line, written for a perfectly good reason,
   # crosses the wall.
   #
-  # AND CROSSING IT IS REAL RATHER THAN THEORETICAL. A partition is a tmux
-  # `-L` socket, `/tmp/tmux-<uid>` is `drwx------ <user>` and the sockets
-  # inside are the login user's, so same-uid means full reach. Where the
-  # boundary is a GROUP acquired per session (which is how a kernel-enforced
-  # work/personal split does it), the pane on the other side HOLDS that
-  # group: typing into it executes commands with privileges this side was
-  # refused. mux did not create that capability (`tmux -L other send-keys`
-  # always had it) but blessing it through a policy would be mux endorsing
-  # it, which is worse than leaving it to the raw tool.
-  #
   # STRUCTURAL, NOT A POLICY TOKEN, and that is the same argument the class
   # gate already makes one line down: a grant that names only a class or
   # only a window would otherwise cross a boundary BY OMISSION, and the
   # omission is the easy mistake rather than the hard one.
   #
-  # A FAILED CONTEXT COMMAND REFUSES rather than assuming the baseline,
-  # because `mux_ctx_resolve` answers 0 with `global` for a hook that
-  # EXITED NON-ZERO (measured) and so cannot be distinguished by its
-  # status alone. `MUX_CTX_SRC` is what separates them: `baseline` is no
-  # hook at all and `declined` is a real answer, while `failed` is the
-  # ABSENCE of one. Failing OPEN is the single answer an actuating verb
-  # must never give, which is the call `mux resume` already makes.
-  #
-  # COSTS NOTHING ON A BOX WITH NO PARTITIONS, which is most of them:
-  # no hook answers `baseline` with `global`, the target resolves to
-  # `global` too, and the comparison passes.
-  _sown=global
+  # THE DECISION ITSELF IS `mux_ctx_crossing`, in mux-context_lib, because
+  # every actuating verb has to ask it and a second copy is the one that
+  # drifts. Why crossing matters, what a failed hook means, and why a box
+  # with no partitions pays nothing are all documented there, at the one
+  # site that answers it.
+  _scross=
   if [ -r "$_lib/mux-context_lib" ]; then
     # shellcheck source=/dev/null
     . "$_lib/mux-context_lib"
-    mux_ctx_resolve 2>/dev/null || true
-    _sown=${MUX_CTX_PARTITION:-global}
-  fi
-  _scross=
-  if [ "${MUX_CTX_SRC:-baseline}" = failed ]; then
-    _scross="the context command failed, so mux cannot tell which"
-    _scross="$_scross partition this call is being made from"
-  elif [ "${_rp:-global}" != "$_sown" ]; then
-    _scross="it is in partition ${_rp:-global} and this call is from"
-    _scross="$_scross $_sown; mux does not type across a partition"
-    _scross="$_scross boundary"
+    mux_ctx_crossing "${_rp:-global}" 'type across' \
+      || _scross=$MUX_CTX_CROSS
   fi
 
   # _refuse WHAT ACK: the target needs an override. Reports whether one

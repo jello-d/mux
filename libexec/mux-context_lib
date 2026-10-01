@@ -248,3 +248,52 @@ mux_ctx_partitions() {
 mux_ctx_socket() {      # [partition]
   printf '%s' "${1:-$MUX_CTX_PARTITION}"
 }
+
+# mux_ctx_crossing TARGET ACTION -> 0 when this call is being made from INSIDE
+# TARGET's partition, 1 when it would cross one, with the reason in
+# $MUX_CTX_CROSS. ACTION is the verb phrase for the message ("type across",
+# "open a window across"), so the sentence stays whole in one place rather
+# than being assembled by each caller.
+#
+# ONE SITE, which is the point of its being here: `mux agent send` asked this
+# question inline, and every actuating verb has to ask it, so the second copy
+# would be the one that drifts. `_mux-partition-security.md` lists what is
+# still OPEN about the comparison, and this is where that fix will land.
+#
+# WHY CROSSING MATTERS, in one paragraph rather than at each caller: a
+# partition is a tmux `-L` socket, `/tmp/tmux-<uid>` is `drwx------ <user>`
+# and the sockets inside are the login user's, so SAME UID IS FULL REACH.
+# Where the boundary is a GROUP acquired per session (which is how a
+# kernel-enforced work/personal split does it), the pane on the other side
+# HOLDS that group, so acting on it carries privileges this side was refused.
+# mux did not create that capability and cannot enforce the boundary; what it
+# does is DECLINE TO BE THE INSTRUMENT, which is the whole claim and is
+# narrower than it first reads.
+#
+# A FAILED CONTEXT COMMAND REFUSES rather than assuming the baseline, because
+# `mux_ctx_resolve` answers 0 with `global` for a hook that EXITED NON-ZERO
+# (measured) and so cannot be distinguished by its status alone.
+# `MUX_CTX_SRC` is the discriminator: `baseline` is no hook at all and
+# `declined` is a real answer, while `failed` is the ABSENCE of one. Failing
+# OPEN is the single answer an actuating verb must never give, which is the
+# call `mux resume` already makes.
+#
+# COSTS NOTHING ON A BOX WITH NO PARTITIONS, which is most of them: no hook
+# answers `baseline` with `global`, the target resolves to `global` too, and
+# the comparison passes.
+mux_ctx_crossing() {    # <target partition> <action phrase>
+  MUX_CTX_CROSS=
+  mux_ctx_resolve 2>/dev/null || true
+  _cxown=${MUX_CTX_PARTITION:-global}
+  _cxto=${1:-global}
+  if [ "${MUX_CTX_SRC:-baseline}" = failed ]; then
+    MUX_CTX_CROSS="the context command failed, so mux cannot tell which"
+    MUX_CTX_CROSS="$MUX_CTX_CROSS partition this call is being made from"
+    return 1
+  fi
+  [ "$_cxto" = "$_cxown" ] && return 0
+  MUX_CTX_CROSS="it is in partition $_cxto and this call is from"
+  MUX_CTX_CROSS="$MUX_CTX_CROSS $_cxown; mux does not $2 a partition"
+  MUX_CTX_CROSS="$MUX_CTX_CROSS boundary"
+  return 1
+}

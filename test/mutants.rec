@@ -2522,7 +2522,7 @@ t mux-agent
 m cross-rc
 
 = send-trusts-a-failed-context-command
-f libexec/mux-agent
+f libexec/mux-context_lib
 t mux-agent
 # FAILING OPEN IS THE ONE ANSWER AN ACTUATING VERB MUST NOT GIVE.
 # `mux_ctx_resolve` answers 0 with `global` for a hook that EXITED NON-ZERO
@@ -2535,14 +2535,14 @@ t mux-agent
 m ctxfail-rc
 
 = send-compares-the-partition-backwards
-f libexec/mux-agent
+f libexec/mux-context_lib
 t mux-agent
 # BOTH DIRECTIONS IN ONE LINE, which is why the test asserts both: inverting
 # it lets a cross-partition send through AND refuses a send inside your own
 # partition, so a test that only checked one would read as coverage while the
 # feature was deleted in the other direction.
--   elif [ "${_rp:-global}" != "$_sown" ]; then
-+   elif [ "${_rp:-global}" = "$_sown" ]; then
+-   [ "$_cxto" = "$_cxown" ] && return 0
++   [ "$_cxto" != "$_cxown" ] && return 0
 m send-rc
 
 = addr-leading-sep-accepted
