@@ -118,8 +118,16 @@ dir=$(mux_agent_dir)
 # THE SESSION NAME IS LAST because it may contain a space, and tab-separated
 # because tmux escapes a real tab in a value as the two characters `\t`, so it
 # cannot appear inside a field.
+#
+# AND `@mux-attention` RIDES ALONG, for the same reason: a pane whose
+# attention is owed to its SUPERVISOR rather than to the human must be
+# invisible here. Without that, one orchestrated worker waiting on a
+# checkpoint paints its whole session blocked, and `next-blocked` walks the
+# human to an agent that does not need them. The marker costs nothing: the
+# round trip was already being made.
 _panes=$(tmux list-panes -a \
-  -F '#{pane_id}	#{@mux-agent}	#{session_name}' 2>/dev/null || true)
+  -F '#{pane_id}	#{@mux-agent}	#{@mux-attention}	#{session_name}' \
+  2>/dev/null || true)
 # EMPTY MUST STAY EMPTY. `printf '%s\n' ""` emits a NEWLINE, which `tr` turns
 # into a space, which makes `live` non-empty, and the prune below is guarded
 # on exactly that emptiness, because an empty pane list means the QUERY FAILED
@@ -132,8 +140,20 @@ live=" "
 # exact whole-name match rather than a substring one: `api` must not match
 # `api-2`, which is the bug this codebase has shipped four times.
 _agented="
-$(printf '%s\n' "$_panes" | awk -F'\t' '$2 != "" { print $3 }')
+$(printf '%s\n' "$_panes" \
+  | awk -F'\t' '$2 != "" && $3 != "agent" { print $4 }')
 "
+# THE PANES THIS STRIP MUST NOT SPEAK FOR: attention declared to the agent
+# side. Space-padded by the consumer, one id per line here.
+#
+# THE SAME TEST IS APPLIED TWICE ON PURPOSE, above and here, and they are not
+# redundant: the line above decides whether mux STARTED an agent in a session
+# (which draws the plug glyph when no record ever arrives), and this one
+# decides whether a RECORD speaks for it. Filtering only the records would
+# leave a worker-only session drawing a plug forever, which is the loudest
+# glyph on the strip announcing a worker the human was told to ignore.
+_notours=$(printf '%s\n' "$_panes" \
+  | awk -F'\t' '$3 == "agent" { print $1 }' | tr '\n' ' ')
 # _has_agent_pane SESSION -> did mux build an agent pane in it?
 _has_agent_pane() {
   case $_agented in
@@ -209,7 +229,7 @@ nsess=0
 while read -r sess; do
   [ -n "$sess" ] || continue
   mux_excluded_has "$excluded" "$sess" && continue     # mux hide
-  _pair=$(mux_agent_state "$dir" "$sess")
+  _pair=$(mux_agent_state_skip "$dir" "$sess" "$_notours")
   _st=${_pair%% *}; _ep=${_pair##* }
   # NO RECORD AT ALL, and mux started an agent here: the wiring never
   # fired. A wired agent emits on SessionStart, so the absence of ANY

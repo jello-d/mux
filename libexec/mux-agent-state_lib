@@ -96,7 +96,38 @@ mux_agent_rank() {
 # lone space when the session has no tracked agent. A session may hold several
 # agent panes; the worst one wins (and carries its epoch), so nothing is hidden.
 mux_agent_state() {
-  _asdir=$1 _assess=$2
+  mux_agent_state_skip "$1" "$2" ""
+}
+
+# mux_agent_state_skip DIR SESSION SKIP -> the same answer, ignoring any record
+# whose PANE appears in SKIP (a space-separated list of pane ids).
+#
+# WHY THE EXCLUSION IS A PARAMETER AND NOT A RULE IN HERE: the panes a caller
+# wants to ignore are the ones whose `@mux-attention` is not the human's, and
+# that is a tmux OPTION. This lib reads FILES and makes no tmux calls at all,
+# which is what lets `mux agent-summary` answer headless with no server
+# anywhere. So the caller asks tmux (in a query it is already making) and
+# passes the answer down.
+#
+# AND IT MUST NOT BE THE DEFAULT, which is the 0.60 `--attached` call again:
+# the HUMAN surfaces filter (the strip, the notification path,
+# `next-blocked`), and the MACHINE surface does not, because a supervisor
+# polling `mux agent peers` specifically wants to see its own workers. A
+# filter in the shared enumerator would delete that promise for every caller
+# at once.
+#
+# TWO ENTRY POINTS, ONE WALK, ONE RANKING. `mux_agent_state` is a wrapper
+# rather than this function gaining an optional third argument, because the
+# two shellcheck versions this tree meets (0.9.0 on ubuntu-latest, which is
+# what CI runs, and 0.11 here) disagree about a function that references an
+# argument some callers omit. Both of these are always called with their full
+# arity, so neither rule set has anything to say.
+#
+# AND THAT PARAGRAPH COST A RED SUITE: a comment whose FIRST WORD is
+# `shellcheck` is read as a DIRECTIVE, so the sentence above used to fail to
+# parse (SC1073) and took the whole file's linting with it.
+mux_agent_state_skip() {
+  _asdir=$1 _assess=$2 _asskip=$3
   _best= _bestep= _br=-1
   [ -d "$_asdir" ] || { printf ' '; return; }
   for _f in "$_asdir"/*; do
@@ -104,6 +135,7 @@ mux_agent_state() {
     # session LAST: it may contain spaces, so it takes the rest.
     read -r _st _w _p _e _nid _ss <"$_f" || continue
     [ "$_ss" = "$_assess" ] || continue
+    case " $_asskip " in *" $_p "*) continue ;; esac
     _r=$(mux_agent_rank "$_st")
     [ "$_r" -gt "$_br" ] && { _br=$_r; _best=$_st; _bestep=$_e; }
   done

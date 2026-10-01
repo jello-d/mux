@@ -85,7 +85,8 @@ no_has() { case "$1" in *"$2"*) fail "$3: unwanted [$2] in [$(vis "$1")]" ;;
 #
 # Fields: pane id, @mux-agent, session: the session LAST because a name may
 # contain a space.
-printf '%%1\t\talpha\n%%2\t\tdelta\n%%3\t1\tcharlie\n' >"$PANES"
+printf '%%1\t\t\talpha\n%%2\t\t\tdelta\n%%3\t1\t\tcharlie\n' \
+  >"$PANES"
 _o=$(vis "$(render delta 400)")
 has "$_o" "$MUX_GLYPH_UNWIRED charlie" "charlie has an agent pane and no
 record, so it must draw the unwired glyph rather than reading like a plain
@@ -107,6 +108,45 @@ _o=$(vis "$(render delta 46)")
 has "$_o" "$MUX_GLYPH_UNWIRED" "the unwired glyph was folded away under
 reduction, which hides the only thing telling the user why the strip is empty"
 printf '%%1\n%%2\n%%3\n' >"$PANES"
+
+# INSERTED HERE, NOT EARLIER, because the cases above share one `_o`
+# across several assertions: a new case that re-renders in the middle
+# of them silently re-points every later check at its own output, which
+# is the positional hazard this suite already records about a fixture
+# defined twice.
+# --- A WORKER IS INVISIBLE TO THE HUMAN'S STRIP ---------------------------
+# vicus's R2: a human surface must not report an agent owed elsewhere. A
+# worker blocked on its SUPERVISOR would otherwise paint its whole session
+# blocked, so one checkpoint makes a project look stuck.
+#
+# TWO ASSERTIONS, because the pane is excluded from TWO things and either
+# alone leaves the session visibly wrong. Its RECORD must not speak for the
+# session, and `@mux-agent` on it must not count either: filtering only the
+# records would leave a worker-only session drawing the UNWIRED plug forever,
+# which is the loudest glyph on the strip announcing the one agent the human
+# was told to ignore.
+printf '%%1\t\t\talpha\n%%7\t1\tagent\tbravo\n' >"$PANES"
+agent_rec "$T/run/mux/agent-state/global/p7" blocked %7 100 bravo x
+_o=$(vis "$(render alpha 400)")
+no_has "$_o" "$MUX_GLYPH_BLOCKED bravo" "a worker blocked on its supervisor
+painted the human's chip for bravo. That is the inversion R2 exists to
+prevent, on the surface it names first."
+no_has "$_o" "$MUX_GLYPH_UNWIRED bravo" "filtering the record alone left the
+session drawing the UNWIRED plug, which is louder than the chip it replaced:
+the pane has to be invisible to BOTH questions."
+has "$_o" "$MUX_GLYPH_NONE bravo" "a session whose only agent is a worker must
+read as agentless, which is what it is from the human's side"
+
+# AND THE CONTROL: the same record with no attention declared DOES paint the
+# chip, so the silence above is the marker's doing and not a broken fixture.
+printf '%%1\t\t\talpha\n%%7\t1\t\tbravo\n' >"$PANES"
+_o=$(vis "$(render alpha 400)")
+has "$_o" "$MUX_GLYPH_BLOCKED bravo" "control: an undeclared blocked agent
+must still reach the human, or the assertions above prove only that the
+fixture is broken"
+rm -f "$T/run/mux/agent-state/global/p7"
+printf '%%1\n%%2\n%%3\n' >"$PANES"
+
 
 # --- the widest tier: every session, with its age -------------------------
 _o=$(vis "$(render delta 400)")

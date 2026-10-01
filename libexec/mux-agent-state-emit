@@ -288,6 +288,26 @@ if [ "$_pstate" = working ] && [ "$state" != working ]; then
     2>/dev/null || true)
   _always=$(tmux display-message -p -t "$TMUX_PANE" \
     '#{@mux-notify-always}' 2>/dev/null || true)
+  # WHOSE ATTENTION IS THIS, and the notification path is where the answer
+  # matters most. The strip is a glance; a banner is an INTERRUPT, so a run
+  # with several orchestrated workers would ring the bell repeatedly for
+  # decisions the human was never going to make. A worker answers to its
+  # supervisor, which already knows: it is the thing that is waiting.
+  #
+  # `agent` ALONE SUPPRESSES. `hybrid` means both, so it notifies: a pane the
+  # human may also be asked about must not go quiet, and failing toward the
+  # human is the direction that cannot invert the signal.
+  #
+  # AND IT OVERRIDES `notify always`, deliberately: that directive answers
+  # "even when I am looking at it", a question about VISIBILITY, while this
+  # one answers whether the banner is addressed to this human at all. A
+  # layout that says `notify always` on a worker is describing the window,
+  # not volunteering the human.
+  _attn=$(tmux display-message -p -t "$TMUX_PANE" \
+    '#{@mux-attention}' 2>/dev/null || true)
+  if [ "$_attn" = agent ]; then
+    _always=0; _vis=1
+  fi
   if [ "$_always" = 1 ] || [ "$_vis" != 1 ]; then
     # Both at NORMAL urgency. `blocked` used to be critical, which
     # in mako and dunst alike means "never expire": the banner
