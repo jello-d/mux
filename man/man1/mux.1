@@ -816,6 +816,26 @@ a specific agent, and a bare
 .B pane
 a plain shell.
 .TP
+.B mux window [[\fIPARTITION\fB::]\fISESSION\fB:]\fINAME\fR
+Open a window in a session that already EXISTS, and switch to it. The address
+is read from the RIGHT here, which is the one place mux's grammar is: this
+verb's subject is a window, so a bare word is a window name, exactly as
+.B tmux select\-window \-t foo
+reads it.
+.B \-\-dir
+and
+.B \-\-cmd
+set where it starts and what it runs;
+.B \-\-control
+and
+.B \-\-attention
+declare what the pane is for (see the layout directives of the same names).
+It never creates a SESSION, it refuses a partition it is not in, and outside
+tmux a bare name is refused rather than guessed at, because tmux's own default
+target is the most recently created session.
+.B mux agent open
+is the machine form: same engine, but DETACHED and answering JSON.
+.TP
 .B control human | agent | hybrid
 Declare who may TYPE into the pane declared immediately above. The default is
 .BR human ,
