@@ -108,13 +108,76 @@
 # session already holding a working value keeps it. If a reason appears, the
 # mechanism wants thinking about rather than guessing at now.
 mux_env_names() {
-  for _end in "$MUX_DIR/envhooks.d" "$MUX_SHARE/envhooks.d"; do
+  for _end in "$MUX_DIR/envhooks.d" "$MUX_SHARE/envhooks.d" \
+              "$MUX_DIR/envhooks.d/strip.d" "$MUX_SHARE/envhooks.d/strip.d"; do
     [ -d "$_end" ] || continue
     for _enf in "$_end"/*; do
+      # `-f` is what keeps `strip.d` itself out of the name list: a
+      # directory is not a file, so the subdirectory cannot be mistaken for
+      # a variable called "strip.d".
       [ -f "$_enf" ] || continue
       printf '%s\n' "${_enf##*/}"
     done
   done | LC_ALL=C sort -u
+}
+
+# --- DECLARED REMOVAL: envhooks.d/strip.d/<VARNAME> ------------------------
+# THE USER'S DESIGN (2026-09-30), and the argument for it is not that it adds
+# a capability. Stripping was ALREADY possible: a validator that exits 1 makes
+# the value invalid, and invalid already means "do not write it, and clear it
+# if present". Verified before this was built.
+#
+# WHAT IT ADDS IS THE DISTINCTION BETWEEN POLICY AND DIAGNOSIS, which matters
+# because of what mux does with each. A validator saying 1 means THIS VALUE IS
+# BROKEN, so mux acts and says so, loudly, every time, per R7. A deliberate
+# opt-out expressed that way would therefore announce `dropped WAYLAND_DISPLAY`
+# on every run forever, which is noise about a decision the human already made.
+# A declared strip is not a finding. Same shape as this package's older rule
+# that "I could not answer" and "the answer is no" are different claims.
+#
+# THE SAME SHAPE AS A VALIDATOR, deliberately: one file per variable, the
+# directory listing is the set, $MUX_DIR overrides $MUX_SHARE per name. Anyone
+# who understands envhooks.d understands this without being told.
+#
+# IT SEES THE VALUE, which is the half that makes it more than a list of names:
+#
+#     exit 0                              always; I manage this myself
+#     case $1 in /run/user/999/*) exit 0  only values from a dead runtime dir
+#                ;; *) exit 1 ;; esac
+#
+# 0 MEANS STRIP, because the hook answers "should this be removed?" and true is
+# yes. That is the opposite of the validator next door, where 1 means the value
+# is bad, and the asymmetry is deliberate: a file in `strip.d` whose answer of
+# "no" meant "strip it" would be a trap for whoever writes the second one.
+#
+# AND ANYTHING ELSE MEANS KEEP, which is the only safe direction for a hook
+# whose yes deletes data. A missing hook, one that errors, one that times out:
+# none of them has made a finding, and the three-answer discipline the
+# validators follow says a non-finding must not be acted on. Here that means
+# never deleting on doubt.
+mux_env_strip_hook() {   # <VARNAME>
+  for _esd in "$MUX_DIR/envhooks.d/strip.d" "$MUX_SHARE/envhooks.d/strip.d"; do
+    if [ -f "$_esd/$1" ]; then printf '%s' "$_esd/$1"; return 0; fi
+  done
+  return 1
+}
+
+# True when this name/value pair is declared strippable. Bounded and with
+# stdin closed for the same reasons mux_env_validate is: the cost of a
+# user-supplied hook is unbounded and this runs on the path a human types most.
+mux_env_strips() {   # <VARNAME> <value> -> 0 strip, non-zero keep
+  _esh=$(mux_env_strip_hook "$1") || return 1
+  [ -x "$_esh" ] || return 1
+  _est=$(mux_env_timeout)
+  # THE if/else IS THE RETURN VALUE: its status is the status of whichever
+  # branch ran, so there is nothing to test afterwards. Only an exact 0
+  # strips; 124 from `timeout`, 126/127 from an unrunnable hook and any other
+  # code all mean no finding was made, so the value is kept.
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$_est" "$_esh" "$2" >/dev/null 2>&1 </dev/null
+  else
+    "$_esh" "$2" >/dev/null 2>&1 </dev/null
+  fi
 }
 
 # The hook for one name, $MUX_DIR first. Empty when there is none, which
@@ -269,6 +332,18 @@ EOF
   mux_env_names | while IFS= read -r _epn; do
     [ -n "$_epn" ] || continue
     _epv=$(printf '%s\n' "$_epres" | sed -n "s/^$_epn=//p" | head -1)
+    # STRIP IS ASKED FIRST, and about whichever value is in play. Here that is
+    # the RESOLVED one, deciding whether to WRITE it; mux_env_apply asks again
+    # about the SESSION's own value, deciding whether to REMOVE that. One
+    # question, two subjects, which is why the hook takes the value rather
+    # than only the name.
+    #
+    # ASKED EVEN WHEN NOTHING RESOLVED, because "mux, remove this" must work
+    # for a name that has no value to find: the whole point may be that the
+    # session holds something the login session does not.
+    if mux_env_strips "$_epn" "$_epv"; then
+      printf 'strip %s\n' "$_epn"; continue
+    fi
     if [ -z "$_epv" ]; then printf 'none %s\n' "$_epn"; continue; fi
     mux_env_validate "$_epn" "$_epv"
     case $? in
@@ -336,6 +411,29 @@ mux_env_apply() {   # <session-or-empty> [-v|-n] -> what it changed/would
     "$_eaname="*) _eahave=${_eacur#"$_eaname="} ;;
     *)            _eahave= ;;
     esac
+
+    # A DECLARED STRIP IS ANSWERED BEFORE VALIDITY, because it is a different
+    # kind of statement: not "is this good" but "I do not want this here".
+    # Asked about the SESSION's value, since that is what would be removed, so
+    # a conditional hook can strip one value and leave another.
+    if [ "$_eaverd" = strip ] || \
+       { [ -n "$_eahave" ] && mux_env_strips "$_eaname" "$_eahave"; }; then
+      if [ -n "$_eahave" ]; then
+        if [ "$_ean" -eq 0 ]; then
+          if [ -n "$_eas" ]; then
+            tm set-environment -t "$_eas" -u "$_eaname" 2>/dev/null || true
+          else
+            tm set-environment -g -u "$_eaname" 2>/dev/null || true
+          fi
+        fi
+        # `stripped`, NOT `dropped`, and the caller depends on the difference:
+        # a dropped value is a FINDING and gets announced per R7, while a
+        # stripped one is the human's own policy and must not be reported as
+        # news on every run.
+        [ -z "$_eav" ] || printf 'stripped %s\n' "$_eaname"
+      fi
+      continue
+    fi
 
     if [ -n "$_eahave" ]; then
       # A value is already here. Judge THAT before touching anything.
