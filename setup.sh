@@ -27,9 +27,18 @@ _root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 PREFIX=${PREFIX:-$HOME/.local}
 _bin=${XDG_BIN_HOME:-$PREFIX/bin}
-_lib=$PREFIX/libexec
 _shr=${XDG_DATA_HOME:-$PREFIX/share}
 _man=$_shr/man
+# THE PAYLOAD: one tree holding mux as shipped, per the fleet's
+# install-placement rule (ruled 2026-10-01). bin/, libexec/, share/ and man/
+# live INSIDE it as siblings, because `bin/mux` resolves $0 and reads the
+# other two relative to it; that invariant is what makes a checkout, a
+# Homebrew keg and a relocated install all work, and it is why the nested
+# `<payload>/share` stays. The wart is cosmetic; the invariant is not.
+_pay=$_shr/$PKG
+# THE RETIRED ROOT, kept as a name so install, uninstall and check all remove
+# or report the same thing rather than each spelling it.
+_oldlib=$PREFIX/libexec/$PKG
 RC=0
 
 # marker contract: plain [OK]/[FAIL]/[WARN] a host styles; coloured at a tty,
@@ -141,8 +150,8 @@ mux ships four environment validators and several latch hooks. They are NOT
 copied here, because this directory is yours and an upgrade must be able to
 replace a default without touching your files. They live in the payload:
 
-  $_shr/$PKG/envhooks.d/
-  $_shr/$PKG/latch/
+  $_pay/share/envhooks.d/
+  $_pay/share/latch/
 
 To override one, put a file of the same name in envhooks.d/ or latch/ here;
 to add one, use a name mux does not ship. Run \`mux check\` to see what mux
@@ -158,14 +167,93 @@ EOF
   echo "$PKG: wrote $_cr_f (what each root holds, and which are shareable)"
 }
 
+# _payload_stage: build the new payload beside the live one and swap it in.
+#
+# IT COPIES, AND THAT IS THE POINT OF THE WHOLE CHANGE. Until now every root
+# was a SYMLINK into the source clone, so an installed mux died the moment
+# that clone moved: measured, with the source removed the entry point answers
+# `No such file or directory` and nothing can diagnose it, because mux is the
+# thing that is gone. A copy is self-contained, which is what Homebrew and
+# the indicator's venv already were, so all three install paths now agree.
+#
+# STAGED AND SWAPPED, never emptied in place, because a live tmux calls
+# `mux <verb>` on every status tick: removing the payload first would make
+# every binding and the status bar fail for the length of a copy. Two renames
+# is as close to atomic as a directory gets, which is the same reasoning that
+# made the undo-pane record a rename rather than a create-then-fill.
+_payload_stage() {
+  _ps_new=$_pay.new
+  _ps_old=$_pay.old
+  # Expanded and CHECKED before anything is removed, per the standing rm
+  # rule: this package's own harness once deleted this repository because an
+  # empty value reached `rm -rf` at trap fire time.
+  case $_pay in
+  /*/*) ;;
+  *) bad "refusing to stage a payload at '$_pay'"; return 1 ;;
+  esac
+  rm -rf -- "$_ps_new" "$_ps_old"
+  mkdir -p "$_ps_new" || { bad "could not create $_ps_new"; return 1; }
+  for _d in bin libexec share man; do
+    [ -d "$_root/$_d" ] || continue
+    cp -R "$_root/$_d" "$_ps_new/" || { bad "could not copy $_d"; return 1; }
+  done
+  [ -f "$_ps_new/bin/$PKG" ] || { bad "staged payload has no bin/$PKG"; \
+    rm -rf -- "$_ps_new"; return 1; }
+  # THE TWO FRAGMENT ALIASES, and they are a COEXISTENCE WINDOW rather than
+  # tidiness. The tmux fragments are the only payload files a user names in
+  # their OWN config, and that line moved with the layout:
+  #
+  #   was  source-file ~/.local/share/mux/mux.tmux
+  #   now  source-file ~/.local/share/mux/share/mux.tmux
+  #
+  # Every tmux.conf on every box carries the old spelling, and without an
+  # alias the first install after this change leaves mux installed and INERT
+  # (no bar, no strip, no bindings) with nothing on screen saying why: the
+  # exact state `mux check`'s whole contract exists to prevent, caused by
+  # mux. The fleet rule makes the same point generally, that a change with no
+  # coexistence window is a self-inflicted red tree.
+  #
+  # RELATIVE, so the alias survives the payload being moved or copied, and a
+  # data-file alias rather than a second command: nothing resolves a PATH
+  # through it, so this is not the two-copies-on-PATH hazard in disguise.
+  for _f in mux.tmux mux-opinions.tmux; do
+    [ -f "$_ps_new/share/$_f" ] && ln -sfn "share/$_f" "$_ps_new/$_f"
+  done
+  if [ -e "$_pay" ] || [ -L "$_pay" ]; then
+    mv -- "$_pay" "$_ps_old" || { bad "could not move the old payload"; \
+      return 1; }
+  fi
+  mv -- "$_ps_new" "$_pay" || { bad "could not swap in the new payload"
+    [ -e "$_ps_old" ] && mv -- "$_ps_old" "$_pay"
+    return 1; }
+  rm -rf -- "$_ps_old"
+}
+
+# _retire_old_layout: a LAYOUT switch removes the layout it replaces, which
+# the placement rule requires for the same reason a mode switch does: a
+# surviving `~/.local/libexec/mux` is the two-copies hazard in another dress,
+# and nothing audited for it before.
+_retire_old_layout() {
+  [ -e "$_oldlib" ] || [ -L "$_oldlib" ] || return 0
+  case $_oldlib in
+  /*/libexec/?*) ;;
+  *) warn "not retiring '$_oldlib': unexpected shape"; return 0 ;;
+  esac
+  rm -rf -- "$_oldlib"
+  rmdir "$PREFIX/libexec" 2>/dev/null || :
+  echo "$PKG: retired the old layout at $_oldlib"
+}
+
 do_install() {
-  mkdir -p "$_bin" "$_lib" "$_shr"
-  for _t in "$_root"/bin/*; do _ln "$_t" "$_bin/$(basename "$_t")"; done
-  _ln "$_root/libexec" "$_lib/$PKG"      # ~/.local/libexec/mux -> clone/libexec
-  _ln "$_root/share"   "$_shr/$PKG"      # ~/.local/share/mux   -> clone/share
+  mkdir -p "$_bin" "$_shr"
+  _payload_stage || return 1
+  _ln "$_pay/bin/$PKG" "$_bin/$PKG"
   _man_pages | while IFS= read -r _m; do
-    _ln "$_m" "$_man/$(basename "$(dirname "$_m")")/$(basename "$_m")"; done
-  echo "$PKG: linked into $PREFIX (bin, libexec/$PKG, share/$PKG, man)"
+    _mr=${_m#"$_root"/}
+    _ln "$_pay/$_mr" "$_man/$(basename "$(dirname "$_m")")/$(basename "$_m")"
+  done
+  _retire_old_layout
+  echo "$PKG: installed to $_pay (+ bin and man links in $PREFIX)"
   _reload_live
   _tmux_conf_notice
   _config_readme
@@ -233,9 +321,27 @@ _reload_live() {
   # Each form on its own LINE, so the corpus can mutate either: an anchor that
   # ends in a continuation backslash is failure mode two in the corpus's own
   # header and never matches.
-  _rf=$_shr/$PKG/mux.tmux
-  _rt="~${_shr#"$HOME"}/$PKG/mux.tmux"
-  _conf_mentions "$_rf" || _conf_mentions "$_rt" || return 0
+  # FOUR SPELLINGS, because two things vary independently and both are real.
+  # The TILDE is the form people actually write, and tmux expands it itself,
+  # so a guard checking only the expanded path matched nothing and the whole
+  # reload was inert on the box it was written for (found by reading the real
+  # config, which is why that case exists in the test).
+  #
+  # And the PATH MOVED with the layout: `<pkg>/mux.tmux` became
+  # `<pkg>/share/mux.tmux`, with an alias at the old spelling so every
+  # existing tmux.conf keeps working. A guard that accepted only the new one
+  # would stop reloading exactly the servers that are mid-migration, which is
+  # the population this is for.
+  #
+  # Each form on its own LINE, so the corpus can mutate either: an anchor that
+  # ends in a continuation backslash is failure mode two in the corpus's own
+  # header and never matches.
+  _rf=$_pay/share/mux.tmux
+  _rt="~${_shr#"$HOME"}/$PKG/share/mux.tmux"
+  _rfo=$_pay/mux.tmux
+  _rto="~${_shr#"$HOME"}/$PKG/mux.tmux"
+  _conf_mentions "$_rf" || _conf_mentions "$_rt" \
+    || _conf_mentions "$_rfo" || _conf_mentions "$_rto" || return 0
   _out=$("$_bin/$PKG" reload 2>&1) || {
     echo "$PKG: NOTE could not reload live tmux servers: $_out" >&2
     echo "$PKG:      a running server keeps the bindings and hooks it read" >&2
@@ -264,10 +370,15 @@ _reload_live() {
 # cannot become noise people learn to skip. The check is textual and looks in
 # both conventional locations plus $XDG_CONFIG_HOME.
 _tmux_conf_notice() {
-  _frag=$_shr/$PKG/mux.tmux
+  _frag=$_pay/share/mux.tmux
   # ANY mux fragment, not this prefix's: a user who installed elsewhere has
   # already done this step, and nagging them would be wrong. The reload above
   # asks the narrower question on purpose.
+  # MATCHES BOTH SPELLINGS ON PURPOSE: `mux/mux.tmux` is the tail of the old
+  # path AND of the new `mux/share/mux.tmux`... it is not, so both are asked
+  # for explicitly. Tightening this to one spelling makes the notice fire on
+  # every box still carrying the old line, which the alias keeps working.
+  _conf_mentions "$PKG/share/mux.tmux" && return 0
   _conf_mentions "$PKG/mux.tmux" && return 0
   echo "$PKG: NOTE nothing sources mux's tmux fragment yet, so the status" >&2
   echo "$PKG:      bar, the agent strip and the key bindings will not" >&2
@@ -348,23 +459,58 @@ _indicator_notice() {
 }
 
 do_uninstall() {
-  for _t in "$_root"/bin/*; do _rmln "$_t" "$_bin/$(basename "$_t")"; done
-  _rmln "$_root/libexec" "$_lib/$PKG"
-  _rmln "$_root/share" "$_shr/$PKG"
+  _rmln "$_pay/bin/$PKG" "$_bin/$PKG"
+  # The OLD link target too, so uninstalling a pre-migration install works.
+  _rmln "$_root/bin/$PKG" "$_bin/$PKG"
   _man_pages | while IFS= read -r _m; do
-    _rmln "$_m" "$_man/$(basename "$(dirname "$_m")")/$(basename "$_m")"; done
-  echo "$PKG: removed its links from $PREFIX"
+    _mt=$_man/$(basename "$(dirname "$_m")")/$(basename "$_m")
+    _rmln "$_pay/${_m#"$_root"/}" "$_mt"
+    _rmln "$_m" "$_mt"
+  done
+  _rmln "$_root/share" "$_shr/$PKG"     # a pre-migration share link
+  _retire_old_layout
+  if [ -d "$_pay" ] && [ ! -L "$_pay" ]; then
+    case $_pay in
+    /*/*) rm -rf -- "$_pay" ;;
+    *) bad "refusing to remove a payload at '$_pay'" ;;
+    esac
+  fi
+  echo "$PKG: removed $_pay and its links from $PREFIX"
+  # AND IT SAYS WHAT IT KEPT. Keeping these is right, because a session set
+  # and a log are not the package's to delete; saying nothing about them is
+  # not, because "uninstalled" then reads as "gone" while they sit on disk.
+  echo "$PKG: KEPT your own files, delete them by hand if you mean to:"
+  do_paths | while IFS="$(printf '\t')" read -r _k _v; do
+    case $_k in
+    config|state|cache) [ -e "$_v" ] && echo "$PKG:   $_k  $_v" ;;
+    esac
+  done
 }
 
 do_check() {
   echo "== $PKG (package install) =="
-  for _t in "$_root"/bin/*; do _n=$(basename "$_t")
-    [ "$(readlink "$_bin/$_n" 2>/dev/null)" = "$_t" ] \
-      && ok "bin/$_n linked" || bad "bin/$_n not linked"; done
-  [ "$(readlink "$_lib/$PKG" 2>/dev/null)" = "$_root/libexec" ] \
-    && ok "libexec/$PKG linked" || bad "libexec/$PKG not linked"
-  [ "$(readlink "$_shr/$PKG" 2>/dev/null)" = "$_root/share" ] \
-    && ok "share/$PKG linked" || bad "share/$PKG not linked"
+  [ "$(readlink "$_bin/$PKG" 2>/dev/null)" = "$_pay/bin/$PKG" ] \
+    && ok "bin/$PKG links into the payload" \
+    || bad "bin/$PKG does not link to $_pay/bin/$PKG"
+  # THE PAYLOAD IS A TREE, NOT A LINK, which is the whole migration: a
+  # symlink here means the install still depends on a source checkout and
+  # dies when it moves.
+  if [ -L "$_pay" ]; then
+    bad "$_pay is a SYMLINK: this install still depends on a source tree"
+  elif [ -d "$_pay" ] && [ -f "$_pay/bin/$PKG" ] \
+      && [ -d "$_pay/libexec" ] && [ -d "$_pay/share" ]; then
+    ok "payload is a self-contained tree ($_pay)"
+  else
+    bad "no payload tree at $_pay: reinstall mux"
+  fi
+  # A RETIRED LAYOUT PATH THAT SURVIVED. A WARN rather than a FAIL: nothing
+  # resolves through it (libexec was never on PATH and bin/mux self-locates),
+  # so it is stale rather than broken, and the fleet is mid-transition.
+  if [ -e "$_oldlib" ] || [ -L "$_oldlib" ]; then
+    warn "retired layout path survives: $_oldlib (reinstall removes it)"
+  else
+    ok "no retired layout path"
+  fi
   "$_root/bin/mux" check || RC=1      # deps + package data (its own markers)
 }
 

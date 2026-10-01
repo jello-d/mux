@@ -9,17 +9,81 @@ run() {
     sh "$HERE/setup.sh" "$@"
 }
 
-# install: bin + the namespaced libexec/share + the man page all linked
+# --- INSTALL IS ONE PAYLOAD TREE PLUS TWO LINKS ---------------------------
+# THE MIGRATION ITSELF (fleet install-placement rule, ruled 2026-10-01). Every
+# root used to be a SYMLINK into the source clone, so an installed mux died
+# the moment that clone moved: measured, with the source gone the entry point
+# answered `No such file or directory` and nothing could diagnose it, because
+# mux was the thing that had gone.
 run install >/dev/null 2>&1 || fail "install errored"
-[ "$(readlink "$T/bin/mux")" = "$HERE/bin/mux" ] || fail "bin/mux not linked"
-[ "$(readlink "$T/libexec/mux")" = "$HERE/libexec" ] || fail "libexec/mux link"
-[ "$(readlink "$T/share/mux")" = "$HERE/share" ] || fail "share/mux link"
+_pay=$T/share/mux
+[ "$(readlink "$T/bin/mux")" = "$_pay/bin/mux" ] \
+  || fail "bin/mux does not link into the payload:
+[$(readlink "$T/bin/mux")]"
 [ -e "$T/share/man/man1/mux.1" ] || fail "man page not linked"
 
-# check: the install-symlink lines are green (tmux may be absent in a sandbox,
-# so tolerate a non-zero overall rc and assert the install line directly)
+# A TREE, NOT A LINK, which is the whole point and the one assertion that
+# would have caught the old layout.
+[ ! -L "$_pay" ] || fail "the payload is a SYMLINK, so this install still
+depends on a source checkout and dies when it moves"
+for _d in bin libexec share; do
+  [ -d "$_pay/$_d" ] && [ ! -L "$_pay/$_d" ] \
+    || fail "$_pay/$_d is missing or a link, so the payload is not
+self-contained"
+done
+
+# AND THE SIBLINGS ARE WHY `<payload>/share` IS NESTED, which reads as a wart
+# and is load-bearing: `bin/mux` resolves $0 and reads ../libexec and
+# ../share, which is what makes a checkout, a Homebrew keg and a relocated
+# install all work. Asserted so nobody flattens it to tidy the name away.
+[ -f "$_pay/bin/mux" ] || fail "no entry point inside the payload"
+[ -d "$_pay/share/themes" ] \
+  || fail "the payload's share/ is not where mux's data landed, so sibling
+self-location cannot find it"
+
+# THE OLD LAYOUT IS RETIRED, not left to rot: a surviving
+# ~/.local/libexec/mux is the two-copies hazard in another dress.
+[ ! -e "$T/libexec/mux" ] \
+  || fail "install left the retired layout path $T/libexec/mux in place"
+
+# check: the payload lines are green (tmux may be absent in a sandbox, so
+# tolerate a non-zero overall rc and assert the lines directly)
 run check >"$T/out" 2>&1 || true
-grep -q 'bin/mux linked' "$T/out" || fail "check missing the bin/mux OK line"
+grep -q 'links into the payload' "$T/out" \
+  || fail "check missing the bin link OK line: $(cat "$T/out")"
+grep -q 'self-contained tree' "$T/out" \
+  || fail "check does not assert the payload is a tree: $(cat "$T/out")"
+grep -q 'no retired layout path' "$T/out" \
+  || fail "check does not audit for a retired layout path: $(cat "$T/out")"
+
+# --- IT SURVIVES ITS SOURCE GOING AWAY -----------------------------------
+# The property the migration exists for, asserted rather than described. A
+# COPY of the tree is used, never $HERE, because deleting the real checkout
+# is not a thing a test may do.
+# COPIED FROM THE WORKING TREE, never `git archive HEAD`, and the first
+# version got this wrong in the direction that reports a false failure: the
+# archive carries the COMMITTED installer, so it built the OLD symlink layout
+# and then correctly died when the copy went away. A test of an installer has
+# to run the installer under test.
+_cp=$T/srccopy
+mkdir -p "$_cp"
+for _d in bin libexec share man; do
+  [ -d "$HERE/$_d" ] && cp -R "$HERE/$_d" "$_cp/"
+done
+cp "$HERE/setup.sh" "$_cp/setup.sh" 2>/dev/null || _cp=
+if [ -n "$_cp" ] && [ -f "$_cp/setup.sh" ]; then
+  env PREFIX="$T/p2" XDG_BIN_HOME="$T/p2/bin" XDG_DATA_HOME="$T/p2/share" \
+    NO_COLOR=1 MUX_DIR="$T/conf2" sh "$_cp/setup.sh" install >/dev/null 2>&1 \
+    || fail "install from the source copy errored"
+  "$T/p2/bin/mux" -V >/dev/null 2>&1 || fail "the copied install does not run"
+  rm -rf -- "$_cp"
+  "$T/p2/bin/mux" -V >/dev/null 2>&1 \
+    || fail "with its SOURCE REMOVED the installed mux no longer runs, which
+is exactly the dependency this layout was changed to remove"
+else
+  printf 'note %s: could not copy the tree, source-removal unchecked\n' \
+    "$_name"
+fi
 
 # --- NOTHING SOURCING THE FRAGMENT IS SAID, NOT FIXED -----------------------
 # Linking mux into PATH does nothing VISIBLE: the bar, the strip and the
@@ -208,24 +272,39 @@ inert on this machine, and mux check reports drift that apply cannot fix." ;;
     # nothing and the whole reload was inert on the box it was written for.
     # Found by reading the real config rather than by any test, which is why
     # this case exists.
-    tmux set-option -g status-right 'STALE' 2>/dev/null
-    printf 'source-file ~/share/mux/mux.tmux\n' \
-      >"$T/conf-tmux-parent/tmux/tmux.conf"
-    _o=$(_inst) || fail "install errored on the tilde form"
-    case $(_sr) in
-    *'mux agent-render'*) ;;
-    *) fail "a config written with a TILDE was not recognised, so the reload
-never fires on a real machine: status-right is [$(_sr)]" ;;
-    esac
+    # BOTH TILDE SPELLINGS, because the fragment path moved with the layout
+    # and an alias keeps the OLD one working: `<pkg>/mux.tmux` became
+    # `<pkg>/share/mux.tmux`. With four spellings accepted (expanded or
+    # tilde, old path or new) a fixture using only one leaves the other three
+    # unkillable, which the corpus said out loud by surviving.
+    for _tf in 'share/mux/mux.tmux' 'share/mux/share/mux.tmux'; do
+      tmux set-option -g status-right 'STALE' 2>/dev/null
+      printf 'source-file ~/%s\n' "$_tf" \
+        >"$T/conf-tmux-parent/tmux/tmux.conf"
+      _o=$(_inst) || fail "install errored on the tilde form [$_tf]"
+      case $(_sr) in
+      *'mux agent-render'*) ;;
+      *) fail "a config written with a TILDE [$_tf] was not recognised, so
+the reload never fires on a real machine: status-right is [$(_sr)]" ;;
+      esac
+    done
     tmux_drop_socket default
   fi
 fi
 
-# uninstall: every link removed
-run uninstall >/dev/null 2>&1 || fail "uninstall errored"
+# --- UNINSTALL REMOVES CODE, KEEPS YOUR FILES, AND SAYS WHICH ------------
+# Keeping config, state and cache is right: a session set and a log are not
+# the package's to delete. Saying NOTHING about them is not, because
+# "uninstalled" then reads as "gone" while they sit on disk.
+run uninstall >"$T/uout" 2>&1 || fail "uninstall errored"
 [ -e "$T/bin/mux" ] && fail "bin/mux link not removed"
 [ -e "$T/libexec/mux" ] && fail "libexec/mux link not removed"
-[ -e "$T/share/mux" ] && fail "share/mux link not removed"
+[ -e "$T/share/mux" ] && fail "the payload tree was not removed"
+grep -qi 'KEPT your own files' "$T/uout" \
+  || fail "uninstall said nothing about what it kept: $(cat "$T/uout")"
+grep -q 'config' "$T/uout" \
+  || fail "uninstall did not NAME the config root it left behind:
+$(cat "$T/uout")"
 
 # --- THE CONFIG ROOT CARRIES A README NAMING EVERY LOCATION ---------------
 # WHY THIS EXISTS: mux keeps things in five roots and a user looking for one

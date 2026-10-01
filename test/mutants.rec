@@ -2117,16 +2117,20 @@ m was not brought current
 = setup-reload-only-for-this-install
 f setup.sh
 t setup
--   _conf_mentions "$_rf" || _conf_mentions "$_rt" || return 0
-+   _conf_mentions "$_rf" || _conf_mentions "$_rt" || :
+#
+# RE-ANCHORED when the fragment path moved with the layout: the guard now
+# accepts four spellings (expanded or tilde, old path or new), because an
+# alias keeps every existing tmux.conf working across the migration.
+-     || _conf_mentions "$_rfo" || _conf_mentions "$_rto" || return 0
++     || _conf_mentions "$_rfo" || _conf_mentions "$_rto" || :
 m pushed an unrelated config
 
-= setup-reload-knows-the-tilde-form
+= setup-reload-knows-the-old-tilde-form
 f setup.sh
 t setup
--   _rt="~${_shr#"$HOME"}/$PKG/mux.tmux"
-+   _rt=/nowhere/at/all/mux.tmux
-m written with a TILDE was not recognised
+-   _rto="~${_shr#"$HOME"}/$PKG/mux.tmux"
++   _rto=/nowhere/at/all/mux.tmux
+m TILDE [share/mux/mux.tmux]
 
 = brew-caveats-say-reload
 f HomebrewFormula/mux.rb
@@ -2691,3 +2695,15 @@ t setup
 -   printf 'payload\t%s\n' "$_shr/$PKG"
 +   :
 m never reports the 'payload' root
+
+= setup-reload-knows-the-new-tilde-form
+f setup.sh
+t setup
+# THE SECOND TILDE SPELLING, and it needs its own record because four forms
+# are accepted (expanded or tilde, old path or new) and a fixture using one
+# leaves the rest unkillable: the corpus said so by surviving a mutation of
+# this very line while the old-spelling fixture carried the case. The test
+# drives both tilde forms in a loop now.
+-   _rt="~${_shr#"$HOME"}/$PKG/share/mux.tmux"
++   _rt=/nowhere/at/all
+m TILDE [share/mux/share/mux.tmux]
