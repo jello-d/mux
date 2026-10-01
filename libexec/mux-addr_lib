@@ -1,0 +1,100 @@
+#!/bin/sh
+# mux-addr_lib: one address grammar for partition, session and window.
+#
+#     [PARTITION]:[SESSION]:[WINDOW]      a bare word is always a SESSION
+#
+#     api            session api, in my partition
+#     work:api       session api in partition work
+#     work:api:2     fully qualified
+#     :api:2         session api, window 2, my partition
+#     work::         the whole partition
+#     work:api:      session api, any window
+#
+# THE SEPARATOR WAS DECIDED BY MEASUREMENT, not taste, and this is the part
+# that keeps the grammar from being argued with later:
+#
+#     a tmux SESSION name may contain `/`   accepted verbatim (has/slash)
+#     a tmux SESSION name may NOT contain `:`  tmux REWRITES it
+#                                              (has:colon became has_colon)
+#
+# So every colon in an address is STRUCTURAL and can never be part of a name,
+# while `/` cannot make that promise: `work/api` is genuinely ambiguous with a
+# session called `work/api` and would need a disambiguating rule. A partition
+# name is a DNS label, so it can contain neither.
+#
+# FIXED POSITIONS WITH PLACEHOLDERS, rather than inferring which field a lone
+# word means (the user's call, 2026-09-30). The reason is the one that decides
+# it: with two of three fields given, intent is otherwise unknowable, and
+# nobody should be forced to spell all three. A leading `:` costs one character
+# and is unambiguous, where a rule like "a numeric second field is a window"
+# breaks the day somebody names a session `2`. That is the same magic
+# `mux resume` already refuses for partitions, and for the same reason.
+#
+# THIS IS AN EXTENSION, NOT A THIRD CONVENTION. `mux latch` has taken
+# `[[PARTITION:]SESSION]` since 0.84, so the two-field form is already mux's
+# human-facing spelling and already tested. What is new is the THIRD field, and
+# reclaiming it costs nothing: latch's fourth asserted case passes `a:b`
+# through as a session name, and measured, THAT CASE CAN NEVER REACH A SESSION,
+# because tmux rewrites the colon at creation (`new-session -s 'a:b'` yields
+# `a_b`, and `has-session -t '=a:b'` answers "can't find session: a"). The
+# third colon was already dead space.
+#
+# `host:port` IS A DIFFERENT CONCERN and is untouched: `mux latch box:2222
+# work:api` carries two colons answering two questions, and the host field is
+# parsed before the target ever reaches here.
+
+# Parse one address into three variables. Deliberately NOT a printf of three
+# fields: a session name may contain a space, so any single-string answer needs
+# a delimiter and every delimiter is a bug waiting for a name that contains it.
+# The same reason latch's transport is argv rather than a string.
+#
+#     MUX_ADDR_PART   empty means "not specified", never "global"
+#     MUX_ADDR_SESS
+#     MUX_ADDR_WIN
+#
+# EMPTY IS NOT A DEFAULT, which matters at every call site: resolving an
+# unspecified partition to the caller's own context is the CALLER's decision,
+# because `update-env` and a future window verb want different answers for it
+# and a default buried here would make one of them wrong silently.
+#
+# Returns 2 and says why on a malformed address, rather than guessing. A fourth
+# field cannot be legitimate, since no name may contain the separator.
+mux_addr_parse() {   # <address>
+  MUX_ADDR_PART=; MUX_ADDR_SESS=; MUX_ADDR_WIN=
+  _apa=${1:-}
+  case $_apa in
+  '')
+    echo "mux: empty address" >&2
+    return 2 ;;
+  esac
+
+  # Count the separators first, because the FIELD COUNT is what decides the
+  # meaning and a malformed address must be refused before any field is read.
+  _apn=$(printf '%s' "$_apa" | tr -dc ':' | wc -c | tr -d ' ')
+  case $_apn in
+  0) MUX_ADDR_SESS=$_apa ;;
+  1) MUX_ADDR_PART=${_apa%%:*}
+     MUX_ADDR_SESS=${_apa#*:} ;;
+  2) MUX_ADDR_PART=${_apa%%:*}
+     _aprest=${_apa#*:}
+     MUX_ADDR_SESS=${_aprest%%:*}
+     MUX_ADDR_WIN=${_aprest#*:} ;;
+  *)
+    # THE REMEDY IS IN THE REFUSAL, which this package does for the old latch
+    # spelling too: a user who typed three colons has a model in their head
+    # and deserves to be told what the fields are rather than just "no".
+    echo "mux: too many colons in '$_apa'" >&2
+    echo "mux: an address is [PARTITION]:[SESSION]:[WINDOW], and a tmux" >&2
+    echo "mux: session name cannot contain a colon, so there is no fourth" >&2
+    echo "mux: field it could belong to." >&2
+    return 2 ;;
+  esac
+  return 0
+}
+
+# A human-readable rendering of what was parsed, for a message that has to
+# quote the address back. Kept here so a caller never re-assembles it and
+# invents a different spelling of the same thing.
+mux_addr_show() {
+  printf '%s:%s:%s' "$MUX_ADDR_PART" "$MUX_ADDR_SESS" "$MUX_ADDR_WIN"
+}

@@ -1,0 +1,262 @@
+#!/bin/sh
+# mux-update-env: bring a LIVE session's environment up to date.
+#
+#   mux update-env [ADDRESS] [--all] [-n]
+#
+# WHY THIS VERB EXISTS. Everything else about the environment work happens when
+# a session is BUILT or ATTACHED, which covers every session created from now
+# on and none of the ones already running. Without this, the remedy for a box
+# whose sessions were poisoned before any of it existed is "kill the tmux
+# server", and for a session manager that is not a remedy: it is the difference
+# between recovering a machine in place and losing every session on it.
+#
+# It is also what a newly added hook, or a validator whose bug has just been
+# fixed, reaches sessions with. The build path cannot help there, because the
+# sessions are already up.
+#
+# NAMED LITERALLY AND NOT `repair`, because it is not one. It is scoped to the
+# names in envhooks.d, it acts only where a session lacks a working value, and
+# it acts only after validation, so it can do nothing it should not already
+# have done at build time.
+#
+# ---------------------------------------------------------------------------
+# WHAT IT ACTS ON, which is where the care is
+#
+# THE DEFAULT IS THE CURRENT SESSION, not a sweep, and that changed with R9.
+# While this verb CONVERGED every session onto one answer, sweeping everything
+# was the natural default. Now that it only repairs what is broken, a wide
+# sweep is the bigger hammer and wants asking for. So recovering a whole box
+# is an explicit `--all`, which is the right way round.
+#
+# NAMING A SESSION YOU ARE NOT IN IS ORDINARY, not a mistake. Working on one
+# session from inside another is routine here (`mux go <other>` from within a
+# session is the common case), so a guard that assumed "the session you are in
+# is the session you mean" would be wrong about normal use.
+#
+# AND IT ONLY COMPLAINS WHEN THERE IS GENUINELY NOTHING TO ACT ON. Inside a
+# session with no argument the current session is the obvious subject and this
+# just works. OUTSIDE any session with no argument there is no subject at all,
+# and that is the one case that must say so and stop rather than guess or
+# silently widen to everything. Silently widening would be the worst of the
+# three, because it would act on sessions the caller never named.
+#
+# A WINDOW FIELD IS REFUSED RATHER THAN IGNORED. tmux's environment is per
+# SESSION and per server; there is no per-window environment for this to act
+# on. Accepting `work:api:2` and quietly treating it as `work:api` would be a
+# flag that parses and does nothing, which this package has already shipped
+# once and which is worse than a missing one, because the caller believes it
+# asked for something.
+#
+# ---------------------------------------------------------------------------
+# THE HONEST LIMIT, included rather than hidden
+#
+# A RUNNING PROCESS'S ENVIRONMENT IS FIXED AT EXEC and cannot be changed from
+# outside. So this can only ever affect panes created AFTERWARDS, and it must
+# not report otherwise. It can be precise about what is left, because the data
+# is there: every pane's pid is a format away and /proc/<pid>/environ says what
+# that pane actually has. So it NAMES the stale panes rather than leaving the
+# user to discover that "updated" did not mean their running agent was fixed.
+#
+# ON A BOX WITH NO /proc THAT QUESTION IS UNANSWERABLE, and saying nothing
+# would be the wrong answer twice over: it would read as "no stale panes". It
+# says it cannot tell instead, which is the same three-answer discipline the
+# validators follow.
+set -eu
+
+_self=$(command -v -- "$0" 2>/dev/null || printf '%s' "$0")
+_self=$(readlink -f -- "$_self" 2>/dev/null || printf '%s' "$_self")
+_lib=${_self%/*}
+MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
+MUX_SHARE=${MUX_SHARE:-$_lib/../share}
+[ -d "$MUX_SHARE" ] || MUX_SHARE=$_lib/../share
+. "$_lib/mux-paths_lib"
+. "$_lib/mux-conf_lib"
+. "$_lib/mux-addr_lib"
+. "$_lib/mux-notice_lib"
+. "$_lib/mux-env_lib"
+. "$_lib/mux-context_lib"
+
+_all=0
+_dry=0
+_addr=
+while [ $# -gt 0 ]; do
+  case $1 in
+  --all) _all=1; shift ;;
+  -n|--dry-run) _dry=1; shift ;;
+  -h|--help)
+    echo "usage: mux update-env [[PARTITION]:[SESSION]] [--all] [-n]"
+    exit 0 ;;
+  --) shift; break ;;
+  -*) echo "mux: update-env: unknown option: $1" >&2; exit 2 ;;
+  *)  [ -z "$_addr" ] || {
+        echo "mux: update-env takes one address" >&2; exit 2; }
+      _addr=$1; shift ;;
+  esac
+done
+
+[ "$_all" -eq 0 ] || [ -z "$_addr" ] || {
+  echo "mux: update-env: --all and an address contradict each other" >&2
+  exit 2; }
+
+# --- which sessions ---------------------------------------------------------
+# Emits `<partition>\t<session>` lines. A TAB because a session name may
+# contain a space, which is the fifth time that fact has decided a format in
+# this package.
+_targets() {
+  if [ "$_all" -eq 1 ]; then
+    while IFS= read -r _tp; do
+      [ -n "$_tp" ] || continue
+      _sessions_in "$_tp"
+    done <<EOF
+$(mux_ctx_partitions)
+EOF
+    return 0
+  fi
+
+  if [ -n "$_addr" ]; then
+    mux_addr_parse "$_addr" || exit 2
+    [ -z "$MUX_ADDR_WIN" ] || {
+      echo "mux: update-env: a window cannot be addressed here." >&2
+      echo "mux: tmux keeps an environment per SESSION and per server, so" >&2
+      echo "mux: there is nothing per-window for this to act on. Drop the" >&2
+      echo "mux: last field: ${MUX_ADDR_PART}:${MUX_ADDR_SESS}" >&2
+      exit 2; }
+    _tp=$MUX_ADDR_PART
+    [ -n "$_tp" ] || _tp=$(_my_partition)
+    if [ -n "$MUX_ADDR_SESS" ]; then
+      printf '%s\t%s\n' "$_tp" "$MUX_ADDR_SESS"
+    else
+      # `work::` or `work:` is the whole partition, which is a deliberate
+      # form rather than an empty address: it says "every session here".
+      _sessions_in "$_tp"
+    fi
+    return 0
+  fi
+
+  # No address and no --all: the session the caller is in, or nothing.
+  if [ -n "${TMUX:-}" ]; then
+    _cur=$(tmux display-message -p '#{session_name}' 2>/dev/null || true)
+    if [ -n "$_cur" ]; then
+      printf '%s\t%s\n' "$(_my_partition)" "$_cur"
+      return 0
+    fi
+  fi
+  echo "mux: update-env: no session to act on." >&2
+  echo "mux: run it inside a session, name one ([PARTITION]:SESSION)," >&2
+  echo "mux: or ask for every session with --all." >&2
+  exit 2
+}
+
+# The caller's own partition, which is a question mux already answers; the
+# fallback is the reserved word rather than an invented one.
+_my_partition() {
+  if mux_ctx_resolve 2>/dev/null; then
+    printf '%s' "${MUX_CTX_PARTITION:-global}"
+  else
+    printf 'global'
+  fi
+}
+
+_sessions_in() {   # <partition>
+  tmux -L "$1" list-sessions -F "$1	#{session_name}" 2>/dev/null || true
+}
+
+# --- act --------------------------------------------------------------------
+_did=0
+# A scratch file for the stale-pane findings, verified before anything is
+# appended: see the subshell note at the loop below.
+_stalef=$(mktemp "${TMPDIR:-/tmp}/mux-updenv.XXXXXX" 2>/dev/null) || _stalef=
+[ -n "$_stalef" ] && [ -f "$_stalef" ] || {
+  echo "mux: update-env: could not make a scratch file" >&2; exit 1; }
+# The literal is baked in at ARM time, per the standing rm rule: `trap` then
+# prints exactly what will be removed and no later assignment moves it.
+_cleanup="'$_stalef'"
+# shellcheck disable=SC2064  # EXPANDING NOW IS THE POINT, see above.
+trap "rm -f $_cleanup" EXIT INT TERM
+while IFS='	' read -r _p _s; do
+  [ -n "$_s" ] || continue
+  # tm() is what mux_env_apply calls; it is bound per target here because a
+  # sweep crosses partitions and each one is a different server.
+  sock=$_p
+  tm() { tmux -L "$sock" "$@"; }
+
+  if ! tm has-session -t "=$_s" 2>/dev/null; then
+    echo "mux: no such session: $_p:$_s" >&2
+    continue
+  fi
+
+  # THE DRY RUN GOES THROUGH THE SAME DECISION, which the first version got
+  # wrong: it printed mux_env_plan, and the plan says what RESOLVED while
+  # the decision to write also consults the SESSION's existing value. So the
+  # preview listed two names where the real run changed three. `-n` lives
+  # inside mux_env_apply for that reason: a preview computed by a different
+  # code path from the action is not a preview, and the comment that claimed
+  # otherwise was the giveaway.
+  _mode=-v
+  [ "$_dry" -eq 0 ] || _mode=-n
+  _out=$(mux_env_apply "$_s" "$_mode" 2>/dev/null || true)
+  if [ "$_dry" -eq 1 ]; then
+    printf '%s\n' "$_out" | while IFS= read -r _l; do
+      [ -n "$_l" ] || continue
+      printf '%s:%s  would %s\n' "$_p" "$_s" "$_l"
+    done
+    continue
+  fi
+  if [ -n "$_out" ]; then
+    printf '%s\n' "$_out" | while IFS= read -r _l; do
+      [ -n "$_l" ] || continue
+      printf '%s:%s  %s\n' "$_p" "$_s" "$_l"
+    done
+    _did=1
+  fi
+
+  # THE PANES THAT CANNOT BE FIXED, named rather than implied. A pane whose
+  # environment lacks a name mux just set is running on the old one and always
+  # will be, because exec already happened.
+  # COLLECTED TO A FILE, NOT A VARIABLE, because this loop reads from a
+  # here-doc and therefore runs in a SUBSHELL: the first version assigned
+  # to `_stale` in here and read it after the loop, where it was always
+  # empty. Reported once at the end rather than interleaved, since these
+  # are a different KIND of fact: what was fixed versus what cannot be.
+  while IFS='	' read -r _loc _pid; do
+    [ -n "$_pid" ] || continue
+    if [ ! -r "/proc/$_pid/environ" ]; then
+      printf '%s\t(cannot tell: no readable /proc)\n' \
+        "$_loc" >>"$_stalef"
+      continue
+    fi
+    mux_env_names | while IFS= read -r _n; do
+      [ -n "$_n" ] || continue
+      # `2>/dev/null` BEFORE the redirect: a pane can die while this sweep
+      # is walking, so a vanished /proc entry is the NORMAL case, and with
+      # the order reversed the SHELL prints `cannot open` before tr runs.
+      if ! tr '\0' '\n' 2>/dev/null <"/proc/$_pid/environ" \
+        | grep -q "^$_n="; then
+        printf '%s\t%s\n' "$_loc" "$_n" >>"$_stalef"
+      fi
+    done
+  done <<EOF
+$(tm list-panes -s -t "=$_s" \
+  -F '#{session_name}:#{window_index}.#{pane_index}	#{pane_pid}' 2>/dev/null)
+EOF
+done <<EOF
+$(_targets)
+EOF
+
+if [ "$_dry" -eq 0 ] && [ -s "$_stalef" ]; then
+  # SAID PLAINLY, because "updated" must not be read as "your running
+  # agent is fixed". A process environment is fixed at exec, and setting a
+  # session option cannot reach back into one already running.
+  echo
+  echo "mux: these panes are still on the OLD environment. A running"
+  echo "mux: process cannot be changed from outside, so they stay as they"
+  echo "mux: are until restarted; anything NEW in them is correct."
+  LC_ALL=C sort -u "$_stalef" | while IFS='	' read -r _loc _what; do
+    [ -n "$_loc" ] || continue
+    printf '  %-26s %s\n' "$_loc" "$_what"
+  done
+fi
+
+[ "$_did" -eq 1 ] || [ "$_dry" -eq 1 ] \
+  || echo "mux: nothing needed changing"
+exit 0
