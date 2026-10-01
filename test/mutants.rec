@@ -2373,3 +2373,42 @@ t mux-wire
 -       mux_env_validate "$_eaname" "$_eahave" || _eavr=$?
 +       mux_env_validate "$_eaname" "$_eahave"
 m was not applied, so
+
+= update-env-stale-names-a-withheld-value
+f libexec/mux-update-env
+t mux-update-env
+# A PANE IS STALE RELATIVE TO WHAT THE SESSION HOLDS, never to the name list.
+# Without this guard every pane was reported stale for a name mux had
+# DELIBERATELY WITHHELD: measured live, 18 panes named for WAYLAND_DISPLAY on
+# a box where nothing listens to it, advising a restart that could never
+# supply it, printed beside a real finding about SSH_AUTH_SOCK. Advice that
+# cannot come true is this package's oldest defect class.
+-       *) continue ;;
++       *) ;;
+m DELIBERATELY WITHHELD
+
+= update-env-dry-run-writes
+f libexec/mux-update-env
+t mux-update-env
+# `-n` MUST GO THROUGH THE SAME DECISION AND ACT ON NOTHING. The flag lives
+# inside mux_env_apply so the preview cannot be computed by a different code
+# path from the action; losing the -n hand-off makes a dry run WRITE, which is
+# worse than having no preview at all, because the caller trusted it. The
+# assertion is on the SESSION rather than the output, since "would set" is
+# equally printable by a run that also set it.
+-   [ "$_dry" -eq 0 ] || _mode=-n
++   _mode=$_mode
+m DRY RUN WROTE TO THE SESSION
+
+= update-env-window-refusal-succeeds
+f libexec/mux-update-env
+t mux-update-env
+# A REFUSAL THAT EXITS 0 IS THE SIGNATURE FAILURE OF THIS CODEBASE, and this
+# verb shipped with it: the validation used to sit in `_targets`, which the
+# pane loop reads through a here-doc, so `exit 2` left only the SUBSHELL. The
+# message printed, the substitution came back empty, and the script ran on to
+# report "nothing needed changing" and exit 0. Same shape as `mux latch -V`.
+# The test asserts the CODE, which is the only observable that differs.
+-     exit 2; }
++     : ; }
+m a WINDOW field must be refused
