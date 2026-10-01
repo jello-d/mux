@@ -227,4 +227,58 @@ run uninstall >/dev/null 2>&1 || fail "uninstall errored"
 [ -e "$T/libexec/mux" ] && fail "libexec/mux link not removed"
 [ -e "$T/share/mux" ] && fail "share/mux link not removed"
 
+# --- THE CONFIG ROOT CARRIES A README NAMING EVERY LOCATION ---------------
+# WHY THIS EXISTS: mux keeps things in five roots and a user looking for one
+# of them had to read source. That is how this whole review started, with the
+# shipped envhooks.d reported as "missing from ~/.config/mux" when it is in
+# the payload by design, where an upgrade can replace it without touching
+# anything of the user's.
+#
+# A README RATHER THAN A SYMLINK, deliberately: the convenient answer is a
+# `logs -> ...state/mux` link in the config dir, and $MUX_DIR is designed to
+# be SHARED between machines, so such a link either carries a session set into
+# a dotfiles repo or dangles on the other box. A README can SAY which roots
+# are shared and which are per-machine; a symlink cannot.
+mkdir -p "$T/h-readme"
+runmd "$T/h-readme" >"$T/out" 2>&1 || fail "install errored"
+_rm=$T/conf-mux/README
+[ -s "$_rm" ] || fail "install wrote no README into the config root, so every
+location mux uses is still only discoverable by reading source: $(cat "$T/out")"
+
+# EVERY ROOT MUX ACTUALLY USES MUST BE NAMED, and the list is SCRAPED from the
+# source rather than restated here: a hand-written list in a test is the
+# second copy that drifts, and the failure it would hide is a new root nobody
+# documents. mux-paths_lib owns the cache and state derivations; the config
+# and share roots are bin/mux's.
+for _v in MUX_DIR MUX_SHARE MUX_STATE MUX_CACHE XDG_RUNTIME_DIR; do
+  grep -q "\$$_v" "$_rm" \
+    || fail "the README never names \$$_v, which mux resolves and writes
+under, so a user looking for it is back to reading source"
+done
+
+# AND IT SAYS WHICH ARE SHAREABLE AND WHICH ARE NOT, which is the half a
+# symlink could never express and the reason the symlink was refused.
+grep -qi 'shareable' "$_rm" || fail "the README does not say which roots are
+shareable between machines, which is the property that decides whether a
+dotfiles repo may carry one"
+grep -qi 'machine-local' "$_rm" || fail "the README does not mark the
+machine-local roots, so it reads as though all five could be shared"
+
+# IT POINTS AT THE SHIPPED DEFAULTS BY PATH, and that path must be real: the
+# whole complaint was that these look absent.
+grep -q 'envhooks.d' "$_rm" || fail "the README does not say where the SHIPPED
+envhooks live, which is the exact confusion it exists to end"
+
+# AND IT NEVER EATS SOMETHING A HUMAN WROTE. The marker line is the test: with
+# it gone the file is the user's, and an installer that rewrites it anyway is
+# the one unrecoverable mistake available here.
+printf 'my own notes\n' >"$_rm"
+runmd "$T/h-readme" >"$T/out" 2>&1 || fail "install errored over a user README"
+[ "$(cat "$_rm")" = 'my own notes' ] \
+  || fail "the installer OVERWROTE a README a human had edited:
+[$(cat "$_rm")]"
+grep -qi 'left your own' "$T/out" || fail "it left the file alone and said
+nothing, so the user never learns why their README stopped being updated:
+$(cat "$T/out")"
+
 pass

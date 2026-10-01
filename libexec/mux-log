@@ -1,11 +1,27 @@
 #!/bin/sh
 # mux-log: read mux's log.
 #
-#   mux log [-n LINES] [-f] [SUBSYSTEM]
+#   mux log [-n LINES] [-f] [--path] [SUBSYSTEM]
 #
 # The log itself is written by mux-log_lib (which explains what goes in it and
 # why it is always on). This is the reader, and it exists so the feature is
 # DISCOVERABLE: a log whose path you have to know is a log nobody reads.
+#
+# AND IT NAMES THE FILE ON THE SUCCESS PATH TOO, which it did not until now:
+# it said where the log was when there was NO log (`no log yet at ...`) and
+# then printed the contents of a file it never identified. So the one case
+# where you already knew the path was the only case it told you, and a path a
+# user has to read source to find is a path they assume is missing.
+#
+# THE HEADER IS FOR A HUMAN AND IS GATED ON A TERMINAL, which is the
+# convention this package already uses for colour: `[ -t 2 ]`. Stderr alone
+# was the first version and it was wrong in a way the suite caught at once:
+# anything reading `mux log 2>&1` gains a line, and a case counting `-n 2`
+# then saw three. So a pipe, a redirect and a 2>&1 capture are all byte-
+# identical to before, and the path appears exactly where it is useful.
+#
+# `--path` IS THE MACHINE ANSWER, always available and on stdout alone, so
+# nothing has to drive a pty to learn the location.
 #
 # IT REPORTS ITS OWN ABSENCE, and that is load-bearing rather than politeness.
 # Writing is deliberately best-effort (a full disk must not kill a latch that
@@ -21,17 +37,19 @@ _lib=$(dirname "$0")
   echo "mux: mux-log_lib missing (incomplete install)" >&2; exit 1; }
 . "$_lib/mux-log_lib"
 
-_n=200 _follow=0 _sub=
+_n=200 _follow=0 _sub= _pathonly=0
 while [ "$#" -gt 0 ]; do
   case $1 in
   -n) shift; _n=${1:-200} ;;
   -n*) _n=${1#-n} ;;
   -f|--follow) _follow=1 ;;
+  -p|--path) _pathonly=1 ;;
   -h|--help)
-    echo "usage: mux log [-n LINES] [-f] [SUBSYSTEM]"; exit 0 ;;
+    echo "usage: mux log [-n LINES] [-f] [--path] [SUBSYSTEM]"; exit 0 ;;
   --) shift; break ;;
   -*) echo "mux: log: unknown option: $1" >&2
-      echo "usage: mux log [-n LINES] [-f] [SUBSYSTEM]" >&2; exit 2 ;;
+      echo "usage: mux log [-n LINES] [-f] [--path] [SUBSYSTEM]" >&2
+      exit 2 ;;
   *)  break ;;
   esac
   shift
@@ -47,6 +65,15 @@ _f=$(mux_log_path)
   echo "mux: logging is OFF (MUX_LOG=none)" >&2
   echo "mux: unset MUX_LOG to log to the default path" >&2
   exit 1; }
+
+# ANSWERED BEFORE THE EXISTENCE CHECKS, deliberately: "where would the log be"
+# is a valid question on a box that has correctly never written one, and
+# failing it because the file is absent would make the flag useless exactly
+# when somebody is looking for the path.
+if [ "$_pathonly" -eq 1 ]; then
+  printf '%s\n' "$_f"
+  exit 0
+fi
 
 if [ ! -e "$_f" ]; then
   # Not an error state: a box that has never latched and never repaired a
@@ -68,6 +95,9 @@ _filter() {
     cat
   fi
 }
+
+# Said once, before any content, and only to a human: see the note above.
+[ -t 2 ] && printf 'mux: log at %s\n' "$_f" >&2
 
 if [ "$_follow" -eq 1 ]; then
   # No `tail -n` here: -f is for watching what ARRIVES, and pairing it with

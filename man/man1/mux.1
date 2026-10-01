@@ -153,11 +153,21 @@ It REFUSES (exit 1) rather than answering half a pair: colours 0-15 are the
 terminal's own and have no fixed value, so a guess would put a wrong colour on
 the thing whose whole job is identifying a machine.
 .TP
-.B mux log " [" \-n " " \fILINES\fR "] [" \-f "] [" \fISUBSYSTEM\fR ]
+.B mux log " [" \-n " " \fILINES\fR "] [" \-f "] [" \-\-path "]"
+.B " [" \fISUBSYSTEM\fR ]
 Read mux's log: what mux CHANGED, and what it could not do. Mutations and
 failures only (never routine activity), which is what keeps it small
 enough to read and makes it answer the question you actually have after an
 incident.
+.IP
+IT NAMES THE FILE IT IS READING, at a terminal, because a path you have to
+read source to find is one you assume is missing.
+.B \-\-path
+prints that path and nothing else, on stdout, so a caller can have the
+location without the lines; the header is gated on a terminal so a pipe, a
+redirect and a
+.B 2>&1
+capture are all byte\-identical without it.
 .IP
 It is ALWAYS ON, unlike
 .B MUX_EMIT_LOG
