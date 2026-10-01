@@ -1266,7 +1266,7 @@ f libexec/mux-latch
 t mux-latch
 -   if [ -n "$_part" ]; then
 +   if false; then
-m a trailing colon in the SECOND argument names a partition
+m a trailing double colon in the SECOND argument names a partition
 
 = latch-extra-arguments-ignored
 f libexec/mux-latch
@@ -2690,9 +2690,15 @@ t setup
 # and discoverability), so a root it reports wrongly is four consumers acting
 # on the wrong path. Hardcoding the default is the easy way to get that wrong
 # and it passes any test run with no overrides set.
+#
+# THE KILL LANDS ON `uninstall`, EARLIER IN THE FILE THAN THE `paths` CASE,
+# and that is the guard working rather than a weak record: uninstall names the
+# config root it kept from this same declaration, so a hardcoded root is
+# wrong THERE first. Four consumers, one declaration, which is the whole
+# argument for the verb; the corpus found the coupling by killing through it.
 -   printf 'config\t%s\n'  "${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/$PKG}"
 +   printf 'config\t%s\n'  "$HOME/.config/$PKG"
-m paths ignored MUX_DIR
+m did not NAME the config root it left behind
 
 = paths-drops-a-root
 f setup.sh
