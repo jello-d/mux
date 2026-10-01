@@ -304,4 +304,57 @@ check, got $RC. Passing is what stops a provisioner ever restarting it."
 fi
 rm -rf "$T/site"
 
+# --- THE VENV FOLDED INTO MUX'S PAYLOAD ----------------------------------
+# `~/.venvs/mux-indicator` became `~/.local/share/mux/venv` (fleet
+# install-placement rule, 2026-10-01): `~/.venvs` had the same ours-only
+# smell as the `~/.local/libexec` that ruling struck, a root at the top of
+# $HOME with ten tenants and nobody else's.
+#
+# HOME IS PINNED FOR THESE, which the rest of this file does not do. The
+# retired path is $HOME-relative, so with the real home these cases would
+# report on the DEVELOPER's own venv: a test that measures the machine it
+# runs on rather than the code, which is the trap test/setup.t records
+# against itself. Caught here the same way, by the suite going red on a box
+# that happens to still have one.
+_vh=$T/vhome
+mkdir -p "$_vh/.local/share"
+_vrun() {   # <verb...>: the installer with HOME and XDG pinned
+  env PATH="$T/bin" HOME="$_vh" XDG_CONFIG_HOME="$T/xdg" \
+    XDG_DATA_HOME="$_vh/.local/share" MUX_INDICATOR_BIN="$T/bin" \
+    SCTL="$SCTL" SCTL_ENABLED=disabled SCTL_PID=0 \
+    "$SETUP" "$@" 2>&1 || true
+}
+
+# THE DEFAULT LANDS INSIDE THE PAYLOAD, derived from XDG_DATA_HOME rather
+# than hardcoded, so a box that moves its data home takes the venv with it.
+_vo=$(_vrun check)
+case $_vo in
+*"$_vh/.local/share/mux/venv"*) ;;
+*) fail "the default venv is not inside mux's payload, so the package is
+still spread over two roots: [$_vo]" ;;
+esac
+case $_vo in
+*'.venvs'*) fail "the old \$HOME/.venvs path is still the default: [$_vo]" ;;
+esac
+
+# A SURVIVING OLD VENV IS REPORTED, because install only removes it after a
+# successful rebuild, so a box that has not re-run install yet has two.
+mkdir -p "$_vh/.venvs/mux-indicator"
+_vo=$(_vrun check)
+case $_vo in
+*'retired venv survives'*) ;;
+*) fail "a leftover $_vh/.venvs/mux-indicator was not reported, so it sits
+there unnoticed as a second copy nothing resolves through: [$_vo]" ;;
+esac
+
+# ... AND SAYING SO IS NOT AN [OK]. A marker that announces its own existence
+# on every clean box is noise, and it broke this file's own premise that
+# nothing should read [OK] when nothing is installed.
+rm -rf "$_vh/.venvs"
+_vo=$(_vrun check)
+case $_vo in
+*'retired venv'*) fail "with no leftover, the check still talks about one:
+[$_vo]" ;;
+esac
+
 pass

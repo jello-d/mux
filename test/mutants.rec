@@ -538,7 +538,12 @@ m DRIFTED unit file read as current
 = indicator-check-never-fails
 f indicator/setup.sh
 t mux-indicator-setup
--   bad() { printf '  %s[FAIL]%s %s\n' "$_R" "$_O" "$*"; RC=1; }
+#
+# RE-ANCHORED when `warn()` joined the marker helpers and the two existing
+# ones gained a space to line up with it: the rider caught the rewording on
+# the next suite run, which is now the sixth time it has told a real record
+# from a plausible one by machine.
+-   bad()  { printf '  %s[FAIL]%s %s\n' "$_R" "$_O" "$*"; RC=1; }
 +   bad() { printf '  %s[FAIL]%s %s\n' "$_R" "$_O" "$*"; :; }
 m must exit non-zero
 
@@ -2707,3 +2712,29 @@ t setup
 -   _rt="~${_shr#"$HOME"}/$PKG/share/mux.tmux"
 +   _rt=/nowhere/at/all
 m TILDE [share/mux/share/mux.tmux]
+
+= venv-default-outside-the-payload
+f indicator/setup.sh
+t mux-indicator-setup
+# THE VENV FOLDS INTO MUX'S PAYLOAD (fleet install-placement rule, ruled
+# 2026-10-01). `~/.venvs` had the same ours-only smell as the
+# `~/.local/libexec` that ruling struck: a root at the top of $HOME with ten
+# tenants, none of them anybody else's. Restoring the old default leaves the
+# package spread over two roots, which is the thing one-payload-tree exists
+# to end, and it passes any test that pins MUX_INDICATOR_VENV.
+- VENV=${MUX_INDICATOR_VENV:-$_mux_pay/venv}
++ VENV=${MUX_INDICATOR_VENV:-$HOME/.venvs/mux-indicator}
+m not inside mux's payload
+
+= venv-leftover-unreported
+f indicator/setup.sh
+t mux-indicator-setup
+# `install` REMOVES THE OLD VENV ONLY AFTER A SUCCESSFUL REBUILD, because a
+# failed rebuild that had already deleted it would leave the box with no
+# indicator at all and the running daemon as the last copy. So a box that has
+# not re-run install yet legitimately has TWO, and the only thing that makes
+# the stale one visible is this line. A WARN, never a FAIL: nothing resolves
+# through it once the bin link moves, so it is wasted disk rather than breakage.
+-     && warn "retired venv survives: $OLD_VENV (install removes it)" || :
++     && : || :
+m was not reported
