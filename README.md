@@ -128,12 +128,14 @@ The text is the signal; colour is decoration.
 ## Install
 
 mux is a single entry point (`bin/mux`) that self-locates its helpers
-(`libexec/`) and data (`share/`) as siblings under one prefix, the
-standard package layout. Clone it and let `setup.sh` wire it into `~/.local`:
+(`libexec/`) and data (`share/`) as siblings under one prefix. `setup.sh`
+**copies** that tree to `~/.local/share/mux` and links only `bin` and the man
+page, so an installed mux is self-contained and does not depend on the clone
+it came from. Clone it and let `setup.sh` wire it in:
 
 ```sh
 git clone https://github.com/jello-d/mux ~/.mux
-~/.mux/setup.sh install    # links mux into ~/.local (bin, libexec, share, man)
+~/.mux/setup.sh install    # copies mux into ~/.local/share/mux, links bin+man
 ~/.mux/setup.sh paths      # every directory mux owns, one `KIND<TAB>PATH` line
 ```
 
@@ -147,9 +149,14 @@ Then source the tmux integration from your `~/.config/tmux/tmux.conf` (or
 `~/.tmux.conf`):
 
 ```tmux
-source-file ~/.local/share/mux/mux.tmux           # required
-source-file ~/.local/share/mux/mux-opinions.tmux  # optional ergonomics
+source-file ~/.local/share/mux/share/mux.tmux           # required
+source-file ~/.local/share/mux/share/mux-opinions.tmux  # optional
 ```
+
+The shorter `~/.local/share/mux/mux.tmux` also works and always will: the
+install leaves an alias at that name, because the path moved when mux became
+one self-contained payload tree and every existing `tmux.conf` carries the
+older spelling.
 
 `mux.tmux` reaches mux only as `mux <verb>`, so it carries no paths; it just
 needs `mux` on `PATH`. `mux-opinions.tmux` adds mouse, scroll-routing, and

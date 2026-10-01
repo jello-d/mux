@@ -64,15 +64,29 @@ env PATH="$T/stub:$PATH" readlink -f / >/dev/null 2>&1 \
   && fail "the stub still accepts -f, so every assertion below would pass on a
 tool that is not the one being modelled"
 
-# A REAL INSTALL, because the bug only appears through the install's symlink and
-# its namespaced libexec. Running ./bin/mux from the checkout cannot see it:
-# there $0 is already the real path, which is exactly why this went unnoticed.
+# A REAL INSTALL, because the bug only appears THROUGH the install's symlink.
+# Running ./bin/mux from the checkout cannot see it: there $0 is already the
+# real path, which is exactly why this went unnoticed for so long.
 PREFIX=$T/prefix; export PREFIX
 sh "$HERE/setup.sh" install >/dev/null 2>&1 || fail "setup.sh install failed"
 [ -L "$PREFIX/bin/mux" ] || fail "the install is not a symlink, so this file is
 no longer testing what it claims"
-[ -d "$PREFIX/libexec/mux" ] || fail "the install is not namespaced, so the
-failure mode this pins does not exist any more"
+# THE PRECONDITION MOVED WITH THE LAYOUT, and the bug did not. mux's libraries
+# used to be at $PREFIX/libexec/mux and now live inside the payload, so what
+# makes an unresolved $0 fail is that the PREFIX ROOT has no libexec of its
+# own: resolve $0 and you get <payload>/bin, so ../libexec is the payload's;
+# fail to resolve it and you get $PREFIX/libexec, which does not exist.
+[ -d "$PREFIX/share/mux/libexec" ] || fail "the payload has no libexec, so
+this file is not testing the install it claims to"
+[ ! -d "$PREFIX/libexec" ] || fail "the PREFIX root has a libexec of its own,
+which would make an unresolved \$0 succeed by accident and this whole file
+pass on a resolver that does not work"
+# AND IT IS SHARPER THAN BEFORE, which is worth stating: $PREFIX/share DOES
+# exist (it holds the payload and the man pages), so an unresolved $0 gives a
+# MUX_SHARE that passes the real-directory guard while pointing at the wrong
+# directory. The old layout failed that guard outright.
+[ -d "$PREFIX/share" ] || fail "no $PREFIX/share, so the wrong-but-existing
+MUX_SHARE case this now also covers is unreachable"
 
 bsd() { env PATH="$T/stub:$PREFIX/bin:$PATH" "$@"; }
 
