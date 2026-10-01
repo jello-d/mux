@@ -30,24 +30,32 @@ if command -v tmux >/dev/null 2>&1; then
   tm -f /dev/null new-session -d -s base -x 80 -y 24 \
     || { printf 'skip %s (cannot start a tmux server)\n' "$_name"; exit 0; }
 
-  # THE WHOLE TABLE IS MEASURED AND REPORTED, never failed on the first row,
-  # and that change is the point: the first version of this stopped at `.`,
-  # so a CI run told us one character's answer and hid the rest. A premise
-  # this load-bearing has to be reported in full or a disagreement costs one
-  # round trip per character.
+  # THE WHOLE TABLE IS MEASURED AND REPORTED, and the METHOD matters more
+  # than the loop: two CI runs of the SAME tmux 3.7c returned different
+  # tables, and the only difference was the order the candidates were tried
+  # in. The first version read the result back with
+  # `list-sessions | head -1` and killed the previous session by the name
+  # tmux had STORED, so whenever that kill failed the leftover made `head -1`
+  # answer about the wrong session. Order-dependent, and therefore worthless
+  # for the one claim this whole grammar rests on.
+  #
+  # SO THE QUESTION IS ASKED EXACTLY: create `work<D>api`, then look for that
+  # LITERAL spelling in the full session list. `grep -qxF` cannot be fooled
+  # by a leftover and needs no cleanup to be correct, and crucially it cannot
+  # be fooled by tmux's TARGET parsing either: `has-session -t =work:api`
+  # would read the colon as a window separator, which is the very thing being
+  # measured.
   _structural=
   _verbatim=
   for _d in : '::' . '@' '~' '%' '^' '+' '=' ',' '/'; do
-    tm new-session -d -s "work${_d}api" 2>/dev/null || {
-      _structural="$_structural $_d(refused)"; continue; }
-    _got=$(tm list-sessions -F '#{session_name}' 2>/dev/null \
-      | grep -v '^base$' | head -1)
-    if [ "$_got" = "work${_d}api" ]; then
+    _n="work${_d}api"
+    tm new-session -d -s "$_n" 2>/dev/null || true
+    if tm list-sessions -F '#{session_name}' 2>/dev/null \
+       | grep -qxF -- "$_n"; then
       _verbatim="$_verbatim $_d"
     else
       _structural="$_structural $_d"
     fi
-    tm kill-session -t "=$_got" 2>/dev/null || true
   done
   printf 'note %s: tmux %s structural:[%s] verbatim:[%s]\n' \
     "$_name" "$(tmux -V)" "$_structural" "$_verbatim"
