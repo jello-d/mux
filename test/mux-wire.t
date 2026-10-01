@@ -64,7 +64,13 @@ wired() {   # is mux's fragment in force on this server?
 # and asserts it STAYS removed, which a whole-server test can never show while
 # any other mux binding is present. One arm per question.
 ubound() {   # is `prefix u` bound to MUX specifically?
-  tmux -L "$SOCK" list-keys -T prefix u 2>/dev/null | grep -q mux
+  # THE WHOLE TABLE IS LISTED AND FILTERED, never queried by key, because
+  # `list-keys -T prefix u` returns NOTHING on tmux 3.7c while the binding is
+  # plainly there: the macOS runner reported `prefix u: []` beside
+  # `mux binds: [8]` and a correctly advanced marker. Asking for one key by
+  # name is a version-dependent interface; listing the table is not.
+  tmux -L "$SOCK" list-keys -T prefix 2>/dev/null \
+    | awk '$4 == "u" && /mux/ { f = 1 } END { exit !f }'
 }
 marker() { tmux -L "$SOCK" show-options -gqv @mux-wired 2>/dev/null || true; }
 
