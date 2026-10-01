@@ -459,6 +459,9 @@ _indicator_notice() {
 }
 
 do_uninstall() {
+  # Noted BEFORE the payload goes, since the evidence is inside it.
+  _had_venv=
+  [ -d "$_pay/venv" ] && _had_venv=1
   _rmln "$_pay/bin/$PKG" "$_bin/$PKG"
   # The OLD link target too, so uninstalling a pre-migration install works.
   _rmln "$_root/bin/$PKG" "$_bin/$PKG"
@@ -476,6 +479,14 @@ do_uninstall() {
     esac
   fi
   echo "$PKG: removed $_pay and its links from $PREFIX"
+  # THE INDICATOR'S VENV LIVES INSIDE THE PAYLOAD NOW, so removing the
+  # payload took it too. Said rather than left to be discovered: its bin
+  # link and its systemd unit are still there and now point at nothing, and
+  # a dangling unit that fails at every login is worse than one that is gone.
+  [ -z "$_had_venv" ] || {
+    echo "$PKG: that INCLUDED the indicator's venv, so its unit and"
+    echo "$PKG:   $_bin/$PKG-indicator now dangle. Clean them up with:"
+    echo "$PKG:   sh indicator/setup.sh uninstall"; }
   # AND IT SAYS WHAT IT KEPT. Keeping these is right, because a session set
   # and a log are not the package's to delete; saying nothing about them is
   # not, because "uninstalled" then reads as "gone" while they sit on disk.
@@ -543,7 +554,7 @@ do_paths() {
   printf 'state\t%s\n'   "${MUX_STATE:-$_p_st/$PKG}"
   printf 'cache\t%s\n'   "${MUX_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/$PKG}"
   printf 'runtime\t%s\n' "${XDG_RUNTIME_DIR:-/tmp/user-$(id -u)}/agent-state"
-  printf 'venv\t%s\n'    "${MUX_INDICATOR_VENV:-$HOME/.venvs/$PKG-indicator}"
+  printf 'venv\t%s\n'    "${MUX_INDICATOR_VENV:-$_pay/venv}"
   printf 'policy\t%s\n'  "/etc/$PKG/send-policy"
 }
 

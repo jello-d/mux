@@ -32,7 +32,14 @@ _py=
 # $HOME_REAL, not $HOME: harness_lib pins HOME inside the scratch dir so no test
 # can write outside it, and the venv lives in the user's actual home. This
 # only READS it, which is what HOME_REAL exists for.
-for _c in "${MUX_INDICATOR_VENV:-$HOME_REAL/.venvs/mux-indicator}/bin/python" \
+# BOTH VENV LOCATIONS, newest first, because the venv folded into mux's
+# payload (fleet rule, 2026-10-01) and a box that has not re-run the
+# indicator's install still has the old one. Trying only the new path would
+# make this file SKIP on an unconverted box, and a skip is invisible: it
+# would read as "no python with the deps" rather than "the venv moved".
+_vnew=${XDG_DATA_HOME:-$HOME_REAL/.local/share}/mux/venv
+for _c in "${MUX_INDICATOR_VENV:-$_vnew}/bin/python" \
+    "$HOME_REAL/.venvs/mux-indicator/bin/python" \
     python3 python; do
   command -v "$_c" >/dev/null 2>&1 || [ -x "$_c" ] || continue
   if "$_c" -c 'import dbus_next, PIL' >/dev/null 2>&1; then

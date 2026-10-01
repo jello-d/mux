@@ -16,7 +16,7 @@
 # python3 (for the venv) and, for the service, a systemd --user manager. A tray
 # HOST (waybar's tray, or any desktop's) and `mux` on PATH are runtime needs.
 # Overrides:
-#   MUX_INDICATOR_VENV   venv dir   (default ~/.venvs/mux-indicator)
+#   MUX_INDICATOR_VENV   venv dir   (default ~/.local/share/mux/venv)
 #   MUX_INDICATOR_BIN    bin dir    (default ~/.local/bin)
 set -eu
 
@@ -24,12 +24,52 @@ self=$0
 case $self in */*) ;; *) self=$(command -v -- "$self" || echo "$self") ;; esac
 PKG_DIR=$(CDPATH= cd -- "$(dirname -- "$self")" && pwd)
 
-VENV=${MUX_INDICATOR_VENV:-$HOME/.venvs/mux-indicator}
+# THE VENV LIVES INSIDE MUX'S PAYLOAD, per the fleet install-placement rule
+# (ruled 2026-10-01). It was `~/.venvs/mux-indicator`, and `~/.venvs` had the
+# same ours-only smell as the `~/.local/libexec` that ruling struck: a root at
+# the top of $HOME with ten tenants, none of them anybody else's. One payload
+# tree per package is the durable reason, and it is what makes uninstall and
+# audit a single question rather than two.
+#
+# THE XDG DATA HOME, NOT A SELF-LOCATED PATH, which is the one place this file
+# differs from mux's core on purpose: this script is run standalone as often
+# as through `mux`, so it cannot assume it sits beside an installed payload.
+# A venv is also not reachable by self-location in any case, since its
+# shebangs are absolute.
+_mux_pay=${XDG_DATA_HOME:-$HOME/.local/share}/mux
+VENV=${MUX_INDICATOR_VENV:-$_mux_pay/venv}
+# WHERE IT USED TO BE, named so install can retire it and check can report it
+# rather than each spelling the old path again.
+OLD_VENV=$HOME/.venvs/mux-indicator
 BIN_DIR=${MUX_INDICATOR_BIN:-$HOME/.local/bin}
 UNIT=mux-indicator.service
 UNIT_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user
 
+# _retire_old_venv: A REBUILD, NOT A MOVE, and the distinction is the whole
+# reason this is safe. A venv bakes an ABSOLUTE interpreter path into every
+# console script and into pyvenv.cfg, so moving the directory leaves every
+# entry point pointing at a python that is no longer there. The new venv is
+# built from scratch at the new path by `app` below, and only then is the old
+# one removed.
+#
+# REMOVED ONLY ON SUCCESS, which is why this runs AFTER the build rather than
+# before: a failed rebuild that had already deleted the old venv would leave
+# the box with no indicator at all, and the daemon it was running would be
+# the last copy.
+_retire_old_venv() {
+  [ -d "$OLD_VENV" ] || return 0
+  [ -x "$VENV/bin/mux-indicator" ] || return 0
+  case $OLD_VENV in
+  "$HOME"/.venvs/?*) ;;
+  *) return 0 ;;
+  esac
+  rm -rf -- "$OLD_VENV"
+  rmdir "$HOME/.venvs" 2>/dev/null || :
+  echo "mux-indicator: retired the old venv at $OLD_VENV"
+}
+
 app() {
+  mkdir -p "$(dirname "$VENV")"
   [ -d "$VENV" ] || python3 -m venv "$VENV"
   "$VENV/bin/pip" install -q --upgrade pip
   # Deps come from the package's pyproject.toml (the single source): the first
@@ -41,6 +81,7 @@ app() {
   mkdir -p "$BIN_DIR"
   ln -sfn "$VENV/bin/mux-indicator" "$BIN_DIR/mux-indicator"
   echo "mux-indicator: app -> $BIN_DIR/mux-indicator"
+  _retire_old_venv
 }
 
 service() {
@@ -86,6 +127,8 @@ uninstall() {
   rm -f "$UNIT_DIR/$UNIT" "$BIN_DIR/mux-indicator"
   systemctl --user daemon-reload 2>/dev/null || true
   echo "mux-indicator: uninstalled (venv $VENV left in place)"
+  echo "mux-indicator: it sits inside mux's payload, so \`mux\`'s own"
+  echo "mux-indicator:   uninstall removes it along with everything else."
 }
 
 # _code_current: is the INSTALLED code the package's code?
@@ -217,22 +260,45 @@ _running_current() {
   fi
 }
 
-# check: the [OK]/[FAIL] MARKER contract (same as `mux check`): coloured ONLY
-# on a real terminal, so a caller that captures the output repaints the plain
-# markers itself. mux owns this copy; no integrator dependency.
+# check: the [OK]/[FAIL]/[WARN] MARKER contract (same as `mux check`):
+# coloured ONLY on a real terminal, so a caller that captures the output
+# repaints the plain markers itself. mux owns this copy; no integrator
+# dependency.
+#
+# WARN WAS MISSING UNTIL NOW, while this file's own usage text has promised
+# `[OK]/[FAIL]/[WARN]` since it was written: the first WARN anybody tried to
+# emit died with `warn: not found`, caught by the test for it on the first
+# run. Worth recording because the file documented a three-marker contract
+# and implemented two, which is the same shape as a flag that parses and does
+# nothing.
 check() {
   if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
     _e=$(printf '\033')
-    _G="$_e[1;32m"; _R="$_e[1;31m"; _O="$_e[0m"
+    _G="$_e[1;32m"; _R="$_e[1;31m"; _Y="$_e[1;33m"; _O="$_e[0m"
   else
-    _G=; _R=; _O=
+    _G=; _R=; _Y=; _O=
   fi
   RC=0
-  ok()  { printf '  %s[OK]%s   %s\n' "$_G" "$_O" "$*"; }
-  bad() { printf '  %s[FAIL]%s %s\n' "$_R" "$_O" "$*"; RC=1; }
+  ok()   { printf '  %s[OK]%s   %s\n' "$_G" "$_O" "$*"; }
+  bad()  { printf '  %s[FAIL]%s %s\n' "$_R" "$_O" "$*"; RC=1; }
+  # ADVISORY, so it does NOT set RC: a leftover is not a broken install, and
+  # a provisioner gating on the exit code must not be made to loop over one.
+  warn() { printf '  %s[WARN]%s %s\n' "$_Y" "$_O" "$*"; }
 
   if [ -x "$VENV/bin/mux-indicator" ]; then ok "venv app ($VENV)"
   else bad "venv app missing ($VENV); run: install app"; fi
+  # A RETIRED VENV THAT SURVIVED. A WARN, not a FAIL: nothing resolves
+  # through it once the bin link points at the new one, so it is wasted disk
+  # and a confusing second copy rather than a broken install. `install`
+  # removes it, but only after a successful rebuild, so a box that has not
+  # re-run install yet is correctly reported rather than failed.
+  # SILENT WHEN THERE IS NOTHING TO SAY, not an [OK]: this reports a LEFTOVER,
+  # and a marker that announces its own existence on every clean box is noise
+  # (and broke this file's "nothing is installed, so nothing should read [OK]"
+  # premise, which is a fair premise). Same call the unaddressable-session
+  # marker in mux check makes.
+  [ -d "$OLD_VENV" ] \
+    && warn "retired venv survives: $OLD_VENV (install removes it)" || :
   if "$VENV/bin/python" -c 'import dbus_next, PIL' 2>/dev/null
   then ok "deps import (dbus-next, Pillow)"
   else bad "deps not importable in the venv"; fi
