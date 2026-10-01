@@ -216,6 +216,17 @@ while IFS='	' read -r _p _s; do
   if [ "$_dry" -eq 1 ]; then
     printf '%s\n' "$_out" | while IFS= read -r _l; do
       [ -n "$_l" ] || continue
+      # THE VERB IS PUT BACK INTO THE PRESENT, because mux_env_apply reports
+      # what it DID and this is a preview. Prefixing "would " onto the past
+      # tense printed `would dropped WAYLAND_DISPLAY`, which is how it read
+      # on a live box. Only `set` happens to work in both tenses, which is
+      # exactly why the first version looked right: the common case is the
+      # one word that does not expose the bug.
+      _lv=${_l%% *}
+      case $_lv in
+      dropped)  _l="drop ${_l#* }" ;;
+      stripped) _l="strip ${_l#* }" ;;
+      esac
       printf '%s:%s  would %s\n' "$_p" "$_s" "$_l"
     done
     continue

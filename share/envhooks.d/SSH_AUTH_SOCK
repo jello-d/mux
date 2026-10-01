@@ -16,5 +16,22 @@
 # but costs a process and answers about the KEYRING as much as the socket.
 # Good enough here because the agent's socket is removed with its session,
 # where a Wayland socket is not.
+#
+# PRESENCE, NOT A CONNECT, AND THAT IS DELIBERATE, which is worth saying out
+# loud because the WAYLAND_DISPLAY hook beside this one argues at length that
+# a presence test is not enough. Both are right, and the difference is which
+# way the error falls:
+#
+#   a false LIVE here costs one honest "could not open a connection to your
+#   authentication agent" from ssh itself, which names the problem;
+#   a false DEAD withholds a working socket from every session on the box,
+#   and the human then cannot push from any of them.
+#
+# A socket file does outlive its listener, so this CAN say live about a dead
+# agent (a gcr restart leaving the path behind). That is the lenient
+# direction, and leniency is the right default for a value another tool
+# diagnoses well. Tightening it to a connect is a change with its own
+# measurement, not a tidy-up: `nc -zU` on an agent socket is cheap, but a
+# box without netcat would then need the third answer rather than this one.
 set -eu
 [ -S "${1:-}" ]

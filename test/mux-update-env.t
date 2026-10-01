@@ -90,10 +90,22 @@ MUX_T_DEAD=/a/dead/value; export MUX_T_DEAD
 # --- a dry run must change nothing ----------------------------------------
 # Asserted on the SESSION rather than on the output, because "would set" is
 # equally printable by a run that also set it.
+# The session is given a value whose own validator calls it dead, so the
+# preview has a DROP in it as well as a SET: the drop is the arm that exposed
+# the tense bug and `set` is the one word that hides it.
+tm set-environment -t '=one' MUX_T_DEAD /a/dead/value
 _o=$(mux update-env "$SOCK:one" -n 2>&1 || true)
 case $_o in
 *'would set MUX_T_LIVE'*) ;;
 *) fail "a dry run must say what it WOULD do: [$_o]" ;;
+esac
+case $_o in
+*'would drop MUX_T_DEAD'*) ;;
+*'would dropped'*) fail "the preview prefixes 'would ' onto the PAST tense
+mux_env_apply reports, so it reads 'would dropped X'. Seen on a live box.
+Only 'set' works in both tenses, which is why this looked right: [$_o]" ;;
+*) fail "a dead value already in the session must appear in the preview as a
+DROP, or the preview is not showing the whole decision: [$_o]" ;;
 esac
 case $(tm show-environment -t '=one' MUX_T_LIVE 2>&1) in
 *'unknown variable'*) ;;
@@ -122,19 +134,28 @@ esac
 #                       `updated` read as "your running agent is fixed"
 #   naming MUX_T_DEAD   is the bug found live: advice to restart a pane for
 #                       something no restart can ever supply
+# SCOPED TO THE STALE SECTION, because the output carries TWO reports and
+# they are different kinds of fact: what was changed, then what cannot be.
+# Matching the whole thing made this assertion read the apply report's own
+# `dropped MUX_T_DEAD` line as a stale-pane finding, so it failed against
+# correct code. The product already draws this line; the test has to too.
+_stale=$(printf '%s\n' "$_o" | sed -n '/still on the OLD/,$p')
 if [ -r /proc/$$/environ ]; then
-  case $_o in
+  [ -n "$_stale" ] || fail "no stale-pane section at all, so the two
+assertions below would both pass against a verb that said nothing: [$_o]"
+  case $_stale in
   *MUX_T_LIVE*) ;;
   *) fail "the pane predates the value and can never gain it, so it must be
 NAMED: a process environment is fixed at exec, and reporting only what was
-set invites the reader to think their running agent was repaired. [$_o]" ;;
+set invites the reader to think their running agent was repaired.
+[$_stale]" ;;
   esac
-  case $_o in
+  case $_stale in
   *MUX_T_DEAD*)
     fail "a pane was reported stale for a name mux DELIBERATELY WITHHELD. The
 session does not hold it and never will, so there is nothing a restart could
 supply; printing it beside a real finding is advice that cannot come true,
-which is this package's oldest defect class. [$_o]" ;;
+which is this package's oldest defect class. [$_stale]" ;;
   esac
 else
   printf 'note %s: no readable /proc, stale-pane cases skipped\n' "$_name"
