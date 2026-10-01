@@ -340,6 +340,37 @@ old path present: $(cat "$T/aout2")"
 grep -q 'moving' "$_new/1" \
   || fail "a second install disturbed an adopted record"
 
+# --- THE NOTICES REACH THE LOG, AND ONLY AS EVENTS ------------------------
+# WHY: measured 2026-10-01, a provisioner swallows this script's output
+# entirely, so its log held one line of its own about mux and NOT ONE of
+# mux's notices. Everything here exists to be read by a human, and on the
+# fleet's only real install path nobody could.
+_log=$MUX_STATE/mux.log
+[ -f "$_log" ] || fail "the install logged nothing, so every notice it
+printed exists only on a stdout that a provisioner throws away"
+grep -q "installed .* to $_pay" "$_log" \
+  || fail "the install EVENT is not logged, so nothing on the box can say
+which mux it received or when. That has twice had to be reconstructed from a
+payload mtime against a provisioner log: [$(cat "$_log")]"
+grep -q 'agent-doctor --repair' "$_log" \
+  || fail "the adoption kept a record unjudged and said so only on stdout.
+That is the one notice here no later check can reconstruct, because the
+adoption happens once: [$(cat "$_log")]"
+
+# THE EVENT, NOT THE PROSE, and the pair is what makes this non-vacuous: the
+# fragment notice DID fire and its wrapped explanation DID reach the
+# terminal, so the log's silence about it is a choice rather than an absence.
+# A log capped at mutations-and-failures volume must not fill with
+# explanation, and prose copied into it is a second copy that can drift.
+grep -q 'source-file' "$T/aout2" \
+  || fail "the fragment notice did not fire, so the next assertion would
+prove nothing: [$(cat "$T/aout2")]"
+if grep -q 'source-file' "$_log"; then
+  fail "a notice's continuation prose reached the log. The log records the
+CONDITION and the terminal explains it; mux check already reports this one
+durably, which is why it is deliberately not logged: [$(cat "$_log")]"
+fi
+
 # --- UNINSTALL REMOVES CODE, KEEPS YOUR FILES, AND SAYS WHICH ------------
 # Keeping config, state and cache is right: a session set and a log are not
 # the package's to delete. Saying NOTHING about them is not, because

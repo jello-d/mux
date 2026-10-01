@@ -2821,3 +2821,29 @@ t mux-agent-rank
 -   printf '%s' "$_ad"
 +   [ -d "$_rt/agent-state/$_ns" ] && mkdir -p "$_ad"; printf '%s' "$_ad"
 m adopted the old state path
+
+= install-event-not-logged
+f setup.sh
+t setup
+# THE ANCHOR EVENT. A provisioner swallows setup.sh's output entirely
+# (measured 2026-10-01: its log carried `install: pkg mux -> ~/.local` and not
+# one of mux's own notices), so without this line nothing on the box can say
+# which mux it received or when. These notes have twice had to reconstruct
+# that from a payload mtime against a provisioner log, which only works while
+# both survive.
+-   _slog "installed $("$_bin/$PKG" -V 2>/dev/null || echo "$PKG ?") to $_pay"
++   :
+m the install EVENT is not logged
+
+= adoption-repair-advice-not-logged
+f setup.sh
+t setup
+# THE ONE NOTICE NO LATER CHECK CAN RECONSTRUCT, which is why it is logged
+# while the fragment and scan-root notices are not: the adoption happens
+# ONCE, and a record kept at the new path is unjudged forever afterwards. No
+# timestamp rule can tell a stale snapshot from a live record (a beat
+# refreshes mtime without advancing the epoch), so the repair verb is the
+# whole answer and it has to reach somebody.
+-     _slog "kept $_kept record(s) unjudged; mux agent-doctor --repair"; }
++     }
+m kept a record unjudged and said so only on stdout
