@@ -281,4 +281,71 @@ grep -qi 'left your own' "$T/out" || fail "it left the file alone and said
 nothing, so the user never learns why their README stopped being updated:
 $(cat "$T/out")"
 
+# --- `setup.sh paths`: ONE declaration of every root ----------------------
+# PART OF THE PACKAGE CONTRACT (the fleet install-placement rule): one
+# declaration feeds the install audit, the stale-path sweep, uninstall saying
+# what it kept, and discoverability. Its only real failure mode is DRIFT, so
+# that is what these assert: a verb that reports a root mux does not use is
+# worse than no verb, because four consumers then act on it.
+_pth() { env -u MUX_SHARE MUX_DIR="$T/conf-mux" MUX_STATE="$T/st" \
+  MUX_CACHE="$T/ca" PREFIX="$T" XDG_DATA_HOME="$T/share" \
+  sh "$HERE/setup.sh" paths; }
+
+_po=$(_pth) || fail "setup.sh paths failed"
+[ -n "$_po" ] || fail "paths printed nothing, so every consumer of the
+contract has to guess again"
+
+# TWO TAB-SEPARATED FIELDS AND AN ABSOLUTE PATH, per line. A consumer acts
+# PER KIND (remove a payload, never a config), so a malformed line is a
+# consumer deleting the wrong thing.
+printf '%s\n' "$_po" | while IFS= read -r _l; do
+  [ -n "$_l" ] || continue
+  case $_l in
+  *"	"*) ;;
+  *) echo "NOTAB $_l" ;;
+  esac
+  case ${_l#*	} in
+  /*) ;;
+  *) echo "NOTABS $_l" ;;
+  esac
+done >"$T/pbad"
+[ ! -s "$T/pbad" ] || fail "malformed paths line(s), so a consumer parsing
+KIND and acting on PATH would act on something else: $(cat "$T/pbad")"
+
+# EVERY KIND APPEARS ONCE. A duplicate makes "the" payload ambiguous.
+_pk=$(printf '%s\n' "$_po" | cut -f1 | sort)
+_pn=$(printf '%s\n' "$_pk" | wc -l)
+_pu=$(printf '%s\n' "$_pk" | sort -u | wc -l)
+[ "$_pn" = "$_pu" ] \
+  || fail "a KIND is reported twice, so a consumer cannot tell which path is
+the one it should act on: [$(printf '%s' "$_pk" | tr '\n' ' ')]"
+
+# THE KINDS THE RULE NAMES must all be there, or a consumer silently skips a
+# root: the stale-path sweep would then leave it behind forever.
+for _k in bin payload man config state cache runtime venv policy; do
+  printf '%s\n' "$_po" | cut -f1 | grep -qxF -- "$_k" \
+    || fail "paths never reports the '$_k' root, so whatever consumes this
+contract cannot audit, sweep or report it"
+done
+
+# IT HONOURS THE OVERRIDES, which is what makes it usable by a consumer
+# running against a scratch prefix rather than only against a real install.
+_pv=$(printf '%s\n' "$_po" | awk -F'\t' '$1 == "config" { print $2 }')
+[ "$_pv" = "$T/conf-mux" ] || fail "paths ignored MUX_DIR and reported
+[$_pv], so it describes the developer's own machine rather than the install
+it was asked about"
+
+# AND IT AGREES WITH WHAT MUX ITSELF RESOLVES, which is the whole point of
+# one declaration and the only assertion here that can catch drift. Both
+# sides are DERIVED: the verb from the installer's expressions, mux from its
+# own libs, so a root renamed in one place and not the other fails here.
+_pstate=$(printf '%s\n' "$_po" | awk -F'\t' '$1 == "state" { print $2 }')
+_mlog=$(env -u MUX_SHARE MUX_STATE="$T/st" "$HERE/bin/mux" log --path \
+  2>/dev/null) || fail "mux log --path failed"
+case $_mlog in
+"$_pstate"/*) ;;
+*) fail "paths says state is [$_pstate] but mux writes its log to [$_mlog],
+so the contract and the program disagree about where state lives" ;;
+esac
+
 pass

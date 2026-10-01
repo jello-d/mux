@@ -2667,3 +2667,27 @@ t setup
 -      && ! grep -qxF -- "$_README_MARK" "$_cr_f" 2>/dev/null; then
 +      && false; then
 m OVERWROTE a README
+
+= paths-config-ignores-the-override
+f setup.sh
+t setup
+# THE VERB MUST DESCRIBE THE INSTALL IT WAS ASKED ABOUT, not the developer's
+# own machine. `paths` is the single declaration four other things consume
+# (the install audit, the stale-path sweep, uninstall saying what it kept,
+# and discoverability), so a root it reports wrongly is four consumers acting
+# on the wrong path. Hardcoding the default is the easy way to get that wrong
+# and it passes any test run with no overrides set.
+-   printf 'config\t%s\n'  "${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/$PKG}"
++   printf 'config\t%s\n'  "$HOME/.config/$PKG"
+m paths ignored MUX_DIR
+
+= paths-drops-a-root
+f setup.sh
+t setup
+# A ROOT THE CONTRACT DOES NOT NAME IS A ROOT NOTHING SWEEPS. The stale-path
+# audit and uninstall both walk this list, so a dropped line is a directory
+# that survives every migration and every uninstall silently, which is the
+# `~/.config/mux.bak` crumb mechanised.
+-   printf 'payload\t%s\n' "$_shr/$PKG"
++   :
+m never reports the 'payload' root
