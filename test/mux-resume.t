@@ -41,6 +41,18 @@ case "$*" in
   _n=$*; _n=${_n##*=}
   grep -v "^$_n	" "$LIVE" 2>/dev/null >"$LIVE.t"; mv -f "$LIVE.t" "$LIVE" ;;
 *kill-server*) : >"$LIVE" ;;
+*switch-client*)
+  # RECORDED SO FOCUS IS OBSERVABLE AT ALL, and `switch-client` ALONE is the
+  # observable rather than "anything that switches". resume ends by attaching
+  # to the set, which the stub sees as `attach-session`, and the FOCUS step
+  # tries `switch-client` first: logging both made the two indistinguishable,
+  # so a resume that focused nothing still showed the focus target, because
+  # the fixture's only session is also what the final attach picks. ONE ARM
+  # PER QUESTION, which is a rule this suite has paid for before.
+  # `_t=$*` first, then strip: `${*##pat}` applies the pattern to EACH
+  # parameter in bash, which is macOS's /bin/sh.
+  _t=$*; _t=${_t##*=}
+  printf '%s\n' "$_t" >>"${FOCUSLOG:-/dev/null}" ;;
 *window_index*) printf '0\n' ;;
 *pane_id*)      printf '%%1\n' ;;
 esac
@@ -48,6 +60,7 @@ exit 0
 EOF
 chmod +x "$T/bin/tmux"
 LIVE=$T/live; : >"$LIVE"; export LIVE
+FOCUSLOG=$T/focus; : >"$FOCUSLOG"; export FOCUSLOG
 PATH=$T/bin:$PATH; export PATH
 
 mux() {
@@ -247,8 +260,12 @@ unset MUX_LOG
 # An unknown partition is exit 3, mux's cross-cutting "the name is not known
 # here". NOT an empty resume reporting "no sessions recorded": that reads as
 # data loss when the truth is a typo.
+#
+# THE TRAILING DOT IS WHAT MAKES IT A PARTITION. A bare word is a SESSION in
+# mux's one address grammar, so `resume nosuchpartition` now asks to focus a
+# session of that name, and this case is about the PARTITION arm.
 _rc=0
-mux "$T/elsewhere" resume nosuchpartition >"$T/out" 2>&1 || _rc=$?
+mux "$T/elsewhere" resume nosuchpartition. >"$T/out" 2>&1 || _rc=$?
 [ "$_rc" = 3 ] || fail "an unknown partition should exit 3, got $_rc"
 grep -q "no such partition" "$T/out" \
   || fail "it did not say which: $(cat "$T/out")"
@@ -293,6 +310,74 @@ mux "$T/elsewhere" resume "$_part" focus >"$T/out" 2>&1 || _rc=$?
 [ "$_rc" = 0 ] || fail "a valid partition and session failed ($_rc):
 $(cat "$T/out")"
 grep -q "^focus	" "$LIVE" || fail "the named form did not rebuild:
+[$(cat "$LIVE")]"
+
+# --- THE ADDRESS GRAMMAR, which is now the documented form ----------------
+# `[PARTITION.]SESSION`, the same grammar update-env and latch take, with the
+# two-positional form above kept as the compatibility path because it is what
+# an OLDER `mux latch` composes as a remote command.
+#
+# A BARE WORD IS A SESSION, and this is the BREAKING half: resume's first
+# positional used to be a PARTITION, so `mux resume work` changed meaning.
+# That is safe to take only because the failure is LOUD, which the
+# nosuchpartition case above pins: a bare name that is not a recorded session
+# exits 3 and lists the ones that are.
+: >"$LIVE"
+_rc=0
+mux "$T/elsewhere" resume focus >"$T/out" 2>&1 || _rc=$?
+[ "$_rc" = 0 ] || fail "a BARE second word must be a SESSION, which is the
+common case the grammar optimises for ($_rc): $(cat "$T/out")"
+grep -q "^focus	" "$LIVE" || fail "the bare-session form did not rebuild:
+[$(cat "$LIVE")]"
+
+# ... and the qualified form means the same thing with the partition said.
+#
+# THE SET IS LEFT UP ON PURPOSE, which is the whole design of this case. The
+# FOCUS is what it has to assert (the rebuild happens whether or not the
+# session half of the address survived parsing, so asserting that proves only
+# the PARTITION arrived), and with the set WIPED the rebuild attaches each
+# session it creates, so the focus target and the rebuild's own last attach
+# are the same string: the observable could not tell them apart. Resuming a
+# set that is already up rebuilds nothing, so the only switch recorded is the
+# focus. A fixture whose value coincides with the obvious constant is a test
+# that proves nothing, which this one did until the corpus said so.
+: >"$FOCUSLOG"
+_rc=0
+mux "$T/elsewhere" resume "$_part.focus" >"$T/out" 2>&1 || _rc=$?
+[ "$_rc" = 0 ] || fail "the one-argument ADDRESS form failed ($_rc):
+$(cat "$T/out")"
+grep -q "already up" "$T/out" || fail "precondition: the set was not already
+up, so the rebuild's own attach is indistinguishable from the focus:
+$(cat "$T/out")"
+grep -qxF focus "$FOCUSLOG" || fail "the address named session 'focus' and
+nothing was switched to it: the set was left alone and the client left where
+it was, which is the shape of bug \`mux latch box\` already shipped once.
+[$(cat "$FOCUSLOG")]"
+
+# A WINDOW IS REFUSED rather than ignored: resume rebuilds a session SET and
+# lands on one of them, so a field it would silently drop is a flag that
+# parses and does nothing, which this package has shipped once already.
+: >"$LIVE"
+_rc=0
+mux "$T/elsewhere" resume "$_part.focus:2" >"$T/out" 2>&1 || _rc=$?
+[ "$_rc" = 2 ] || fail "a window field must be refused with 2, got $_rc:
+$(cat "$T/out")"
+grep -q "mux resume $_part.focus" "$T/out" \
+  || fail "the refusal must PRESCRIBE the form without the window, or it
+names a gap without saying how to close it: $(cat "$T/out")"
+[ ! -s "$LIVE" ] || fail "it rebuilt despite refusing the address:
+[$(cat "$LIVE")]"
+
+# AND THE TWO-FIELD FORM IS NOT READ AS AN ADDRESS, which is why the
+# discriminator is the ARGUMENT COUNT and not emptiness: `resume PART ''` is a
+# deliberate two-field call naming a partition and no focus, and parsing it as
+# an address would turn it into the session `PART`, silently.
+: >"$LIVE"
+_rc=0
+mux "$T/elsewhere" resume "$_part" '' >"$T/out" 2>&1 || _rc=$?
+[ "$_rc" = 0 ] || fail "a partition with an EMPTY focus must still resume the
+set ($_rc): $(cat "$T/out")"
+grep -q "^focus	" "$LIVE" || fail "the empty-focus pair did not rebuild:
 [$(cat "$LIVE")]"
 
 # A FAILED context-command refuses rather than resuming the baseline.

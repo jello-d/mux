@@ -822,24 +822,41 @@ yours and looks like it worked."
 # successfully against a stub, and latch has shipped a default that attached to
 # the wrong thing and looked like it worked, which is exactly what a
 # did-it-attach assertion cannot see.
-[ "$(sent box work:)" = 'mux resume work' ] \
-  || fail "a trailing colon in the SECOND argument names a partition and no
-session, sent as 'mux resume work': got [$(sent box work:)]"
-[ "$(sent box work:api)" = 'mux resume work api' ] \
-  || fail "a partition AND a session is resume's two-argument form, got
-[$(sent box work:api)]"
+# A DOT NAMES THE PARTITION, because the colon is spent on tmux's own
+# `session:window` spelling. Both characters were chosen by measurement: they
+# are the only two tmux refuses to store in a session name, so each is
+# structural and neither can ever be part of a name.
+[ "$(sent box work.)" = 'mux resume work.' ] \
+  || fail "a trailing DOT in the SECOND argument names a partition and no
+session, sent as the address 'mux resume work.': got [$(sent box work.)]"
+[ "$(sent box work.api)" = 'mux resume work.api' ] \
+  || fail "a partition AND a session is one ADDRESS, so it crosses the wire as
+one too: got [$(sent box work.api)]"
 # NOT also asserted separately is "it did not use `go`": the exact-equality
 # above already excludes every other command, and a second guard for one
 # condition is a pair neither of whose mutations can be killed.
-[ "$(sent box :api)" = 'mux go api' ] \
-  || fail "a LEADING colon says 'the default partition' out loud and must mean
-the same as a bare session, got [$(sent box :api)]"
-# Everything after the FIRST colon is the session, so a session name may contain
-# one and latch never has to decide what a partition may hold: the far side
-# does, and answers 3.
-[ "$(sent box work:a:b)" = 'mux resume work a:b' ] \
-  || fail "only the FIRST colon splits partition from session, got
-[$(sent box work:a:b)]"
+
+# --- A COLON IN THE SECOND ARGUMENT IS REFUSED -----------------------------
+# ANY colon, not merely a non-empty window, and the wider test is the whole
+# point. latch attaches a SESSION so a colon can only name a window, and more
+# importantly this is what stops the OLD spelling changing meaning in silence:
+# `work:api` named a partition until now and parses as session `work` window
+# `api`, while `work:` named a partition and parses as session `work` with an
+# EMPTY window. The first version of the guard tested the window FIELD and
+# waved `work:` straight through to `mux go work`, which this assertion caught
+# by looking at the composed command rather than at whether it attached.
+for _old in 'work:' 'work:api'; do
+  _crc=0
+  env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
+    MUX_LATCH_TRANSPORT="$T/bin/echocmd %h sh -lc %c" MUX_LATCH_AUTH=true \
+    MUX_LATCH_MAX_TRIES=1 "$HERE/libexec/mux-latch" box "$_old" \
+    >"$T/colout" 2>&1 || _crc=$?
+  [ "$_crc" = 2 ] || fail "[$_old] must exit 2 rather than latching somewhere
+plausible, got $_crc: [$(head -2 "$T/colout")]"
+  grep -q "mux latch box ${_old%%:*}\.${_old#*:}" "$T/colout" \
+    || fail "[$_old] was refused without PRESCRIBING the dot form, so someone
+with muscle memory gets a bare error: [$(head -4 "$T/colout")]"
+done
 
 # --- THE OLD SPELLING IS REFUSED, NOT REINTERPRETED ------------------------
 # `box:work` meant partition `work` until 0.84. Under the new grammar its tail
@@ -853,10 +870,10 @@ env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
   MUX_LATCH_MAX_TRIES=1 "$HERE/libexec/mux-latch" box:work \
   >"$T/oldout" 2>&1 || _orc=$?
 [ "$_orc" = 2 ] || fail "the pre-0.84 target form must exit 2, got $_orc"
-grep -q 'partitions moved to the SECOND argument' "$T/oldout" \
+grep -q 'a partition is the SECOND argument' "$T/oldout" \
   || fail "the refusal does not say where partitions went, so someone with
 muscle memory gets a bare error: [$(head -2 "$T/oldout")]"
-grep -q 'mux latch box work:' "$T/oldout" \
+grep -q 'mux latch box work\.' "$T/oldout" \
   || fail "the refusal does not PRESCRIBE the new form. A tool that reports a
 gap without saying how to close it invites two different fixes:
 [$(head -3 "$T/oldout")]"
@@ -1057,7 +1074,7 @@ _rc=$(latch box proj)
 # reader can tell that from a host genuinely called `manifold_work`. A tray item
 # polling the wrong hostname would draw `unknown` forever with nothing on screen
 # to say why.
-MAXT=1 _rc=$(latch hostwith 'part:')
+MAXT=1 _rc=$(latch hostwith 'part.')
 _lk=$T/run/mux-latch/hostwith_part.lock
 [ ! -e "$_lk" ] || fail "the lock outlived the run: the trap must remove it on
 every exit path, or a finished latch leaves a phantom host in the tray"
@@ -1078,7 +1095,7 @@ MAXT=1 env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
   MUX_LATCH_AUTH="$T/bin/auth" MUX_LATCH_PROBE="$T/bin/probe" \
   MUX_LATCH_STATUS="$T/bin/status" MUX_LATCH_SLEEP="$T/bin/nosleep" \
   MUX_LATCH_BACKOFF=1 MUX_LATCH_MAX_TRIES=1 \
-  "$HERE/libexec/mux-latch" hostwith 'part:sess' >/dev/null 2>&1 || :
+  "$HERE/libexec/mux-latch" hostwith 'part.sess' >/dev/null 2>&1 || :
 # THE PATH IT READ IS THE ASSERTION, and it carries the SESSION:
 # `hostwith_part_sess`, not `hostwith_part`. The session left the target string
 # in 0.56, so a lock keyed on the target alone would make two latches to one

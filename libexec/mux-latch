@@ -234,7 +234,7 @@ PROGRESS=${MUX_LATCH_PROGRESS:-30}
 SLEEP=${MUX_LATCH_SLEEP:-sleep}
 
 _usage() {
-  echo "usage: mux latch [HOST[:PORT]] [[PARTITION:]SESSION]"
+  echo "usage: mux latch [HOST[:PORT]] [[PARTITION.]SESSION]"
   echo "  hold an attachment to a remote mux session open across drops"
 }
 
@@ -261,14 +261,20 @@ done
 # THE GRAMMAR IS TWO ARGUMENTS, EACH `primary[:qualifier]`, and each colon is
 # spent on the field that could not otherwise be reached:
 #
-#   mux latch HOST[:PORT] [[PARTITION:]SESSION]
+#   mux latch HOST[:PORT] [[PARTITION.]SESSION]
 #
 #     box                  -> mux resume            that box's recorded set
 #     box api              -> mux go api            one session
-#     box work:            -> mux resume work       another partition's set
-#     box work:api         -> mux resume work api   ... landing on `api`
-#     box :api             -> mux go api            default partition, explicit
+#     box work.            -> mux resume work.      another partition's set
+#     box work.api         -> mux resume work.api   ... landing on `api`
 #     box:2222 api         -> mux go api, over port 2222
+#
+# THE SECOND ARGUMENT IS MUX'S ONE ADDRESS GRAMMAR, shared with update-env and
+# parsed by `mux-addr_lib` rather than here, so latch cannot drift from it. The
+# partition delimiter is a DOT because the colon is spent on tmux's own
+# `session:window` spelling, and both characters were chosen by measurement:
+# they are the only two tmux refuses to store in a session name. A WINDOW is
+# refused rather than ignored, since latch attaches a SESSION.
 #
 # THE PORT IS IN THE TARGET BECAUSE EVERY SEAM NEEDS IT. Before 0.84 a
 # nonstandard port could only live in the transport template or in ssh_config,
@@ -294,11 +300,11 @@ done
 # naming the partitions it does have.
 _target=${1:-}
 [ -n "$_target" ] || {
-  echo "mux: latch needs a target: HOST[:PORT] [[PARTITION:]SESSION]" >&2
+  echo "mux: latch needs a target: HOST[:PORT] [[PARTITION.]SESSION]" >&2
   _usage >&2; exit 2; }
 _arg2=${2:-}
 [ "$#" -le 2 ] || {
-  echo "mux: latch takes HOST[:PORT] and at most one [PARTITION:]SESSION" >&2
+  echo "mux: latch takes HOST[:PORT] and at most one [PARTITION.]SESSION" >&2
   _usage >&2; exit 2; }
 
 # --- arg 1: HOST[:PORT] ---------------------------------------------------
@@ -323,8 +329,8 @@ case $_target in
   case $_target in
   *[!0-9A-Fa-f:%]*)
     echo "mux: latch: '$_target' is not a host:port" >&2
-    echo "mux:   partitions moved to the SECOND argument in 0.84:" >&2
-    echo "mux:     mux latch ${_target%%:*} ${_target#*:}:" >&2
+    echo "mux:   a partition is the SECOND argument, after a dot:" >&2
+    echo "mux:     mux latch ${_target%%:*} ${_target#*:}." >&2
     exit 2 ;;
   esac
   _host=$_target ;;
@@ -338,24 +344,43 @@ case $_target in
     # until 0.84. Refusing loudly beats dialling a host called `box` on a
     # port called `work`, and beats silently ignoring it.
     echo "mux: latch: '$_port' is not a port number" >&2
-    echo "mux:   partitions moved to the SECOND argument in 0.84:" >&2
-    echo "mux:     mux latch $_host $_port:" >&2
+    echo "mux:   a partition is the SECOND argument, after a dot:" >&2
+    echo "mux:     mux latch $_host $_port." >&2
     exit 2 ;;
   esac ;;
 *) _host=$_target ;;
 esac
 [ -n "$_host" ] || { echo "mux: latch: empty host in '$_target'" >&2; exit 2; }
 
-# --- arg 2: [PARTITION:]SESSION ------------------------------------------
-# The FIRST colon splits, so a session name may contain one; a bare word is a
-# session; a trailing colon names a partition and no session; a leading colon
-# says "the default partition" out loud.
+# --- arg 2: [PARTITION.]SESSION ------------------------------------------
+# PARSED BY THE SHARED LIB, never here, so latch cannot grow a second opinion
+# about mux's own grammar. A bare word is a session; `work.` is a partition
+# and no session; `work.api` is both.
 _part= _sess=
-case $_arg2 in
-'') ;;
-*:*) _part=${_arg2%%:*}; _sess=${_arg2#*:} ;;
-*) _sess=$_arg2 ;;
-esac
+if [ -n "$_arg2" ]; then
+  # shellcheck source=/dev/null
+  . "$_lib/mux-addr_lib"
+  mux_addr_parse "$_arg2" || exit 2
+  # ANY COLON IS REFUSED, not merely a non-empty window, and that wider
+  # test is the whole point: latch attaches a SESSION so a colon can only
+  # ever name a window, AND it is what stops the old spelling changing
+  # meaning in silence. `work:api` named a partition until now and parses
+  # as session `work` window `api`; `work:` named a partition and parses as
+  # session `work` with an EMPTY window, which a check on the window field
+  # alone waves straight through. The first version of this guard tested
+  # `$MUX_ADDR_WIN` and did exactly that, and the suite caught it by
+  # asserting the composed command rather than the outcome.
+  case $_arg2 in
+  *:*)
+    echo "mux: latch: a window cannot be addressed here." >&2
+    echo "mux: latch attaches a SESSION, so there is nothing per-window" >&2
+    echo "mux: for it to hold open, and a partition now takes a DOT:" >&2
+    echo "mux:   mux latch $_target ${_arg2%%:*}.${_arg2#*:}" >&2
+    exit 2 ;;
+  esac
+  _part=$MUX_ADDR_PART
+  _sess=$MUX_ADDR_SESS
+fi
 
 # SINGLE FLIGHT. A network flap can fire several attach attempts at once (a
 # dispatcher hook, a key binding, a human), and N loops against one target is N
@@ -771,7 +796,12 @@ _remote_cmd() {   # -> sets $_cmd
   # classifier reads as `gone`, so the loud failure comes from the far
   # side's own contract rather than from a flag negotiated here.
   if [ -n "$_part" ]; then
-    _cmd="mux resume $_part${_sess:+ $_sess}"
+    # THE ADDRESS FORM, so one grammar crosses the wire too. A remote
+    # below this release reads `work.` as a partition name, which its
+    # `mux_ctx_valid` refuses (a DNS label holds no dot), so it exits with
+    # usage rather than doing something plausible: loud, which is the only
+    # acceptable way for a contract change to land on an old peer.
+    _cmd="mux resume $_part.$_sess"
     return 0
   fi
   if [ -z "$_sess" ]; then
