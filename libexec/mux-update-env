@@ -99,11 +99,52 @@ done
   exit 2; }
 
 # --- which sessions ---------------------------------------------------------
+# VALIDATED IN THE MAIN SHELL, EMITTED IN A SUBSHELL, and the split is not
+# stylistic. The first version did both in `_targets`, which the pane loop
+# reads through a here-doc: `exit 2` inside `$( )` leaves the SUBSHELL, so
+# every refusal here PRINTED ITS MESSAGE AND THEN EXITED 0, with the
+# substitution yielding nothing and the script running on to report "nothing
+# needed changing". A refusal that succeeds is this package's signature
+# failure, the same one `mux latch -V` shipped, and the test for the window
+# field caught it on its first run.
+#
+# So anything that can REFUSE happens here, where `exit` means what it says.
+_tmode=cur
+_tpart=
+_tsess=
+if [ "$_all" -eq 1 ]; then
+  _tmode=all
+elif [ -n "$_addr" ]; then
+  mux_addr_parse "$_addr" || exit 2
+  [ -z "$MUX_ADDR_WIN" ] || {
+    echo "mux: update-env: a window cannot be addressed here." >&2
+    echo "mux: tmux keeps an environment per SESSION and per server, so" >&2
+    echo "mux: there is nothing per-window for this to act on. Drop the" >&2
+    echo "mux: last field: ${MUX_ADDR_PART}:${MUX_ADDR_SESS}" >&2
+    exit 2; }
+  _tpart=$MUX_ADDR_PART
+  _tsess=$MUX_ADDR_SESS
+  _tmode=addr
+elif [ -n "${TMUX:-}" ]; then
+  _tsess=$(tmux display-message -p '#{session_name}' 2>/dev/null || true)
+  [ -z "$_tsess" ] || _tmode=one
+fi
+
+if [ "$_tmode" = cur ]; then
+  # OUTSIDE any session with no argument there is no subject, and this must
+  # not silently widen to everything: that would act on sessions the caller
+  # never named, which is the worst of the three available answers.
+  echo "mux: update-env: no session to act on." >&2
+  echo "mux: run it inside a session, name one ([PARTITION]:SESSION)," >&2
+  echo "mux: or ask for every session with --all." >&2
+  exit 2
+fi
+
 # Emits `<partition>\t<session>` lines. A TAB because a session name may
 # contain a space, which is the fifth time that fact has decided a format in
 # this package.
 _targets() {
-  if [ "$_all" -eq 1 ]; then
+  if [ "$_tmode" = all ]; then
     while IFS= read -r _tp; do
       [ -n "$_tp" ] || continue
       _sessions_in "$_tp"
@@ -113,38 +154,15 @@ EOF
     return 0
   fi
 
-  if [ -n "$_addr" ]; then
-    mux_addr_parse "$_addr" || exit 2
-    [ -z "$MUX_ADDR_WIN" ] || {
-      echo "mux: update-env: a window cannot be addressed here." >&2
-      echo "mux: tmux keeps an environment per SESSION and per server, so" >&2
-      echo "mux: there is nothing per-window for this to act on. Drop the" >&2
-      echo "mux: last field: ${MUX_ADDR_PART}:${MUX_ADDR_SESS}" >&2
-      exit 2; }
-    _tp=$MUX_ADDR_PART
-    [ -n "$_tp" ] || _tp=$(_my_partition)
-    if [ -n "$MUX_ADDR_SESS" ]; then
-      printf '%s\t%s\n' "$_tp" "$MUX_ADDR_SESS"
-    else
-      # `work::` or `work:` is the whole partition, which is a deliberate
-      # form rather than an empty address: it says "every session here".
-      _sessions_in "$_tp"
-    fi
-    return 0
+  _tp=$_tpart
+  [ -n "$_tp" ] || _tp=$(_my_partition)
+  if [ -n "$_tsess" ]; then
+    printf '%s\t%s\n' "$_tp" "$_tsess"
+  else
+    # `work::` or `work:` is the whole partition, which is a deliberate
+    # form rather than an empty address: it says "every session here".
+    _sessions_in "$_tp"
   fi
-
-  # No address and no --all: the session the caller is in, or nothing.
-  if [ -n "${TMUX:-}" ]; then
-    _cur=$(tmux display-message -p '#{session_name}' 2>/dev/null || true)
-    if [ -n "$_cur" ]; then
-      printf '%s\t%s\n' "$(_my_partition)" "$_cur"
-      return 0
-    fi
-  fi
-  echo "mux: update-env: no session to act on." >&2
-  echo "mux: run it inside a session, name one ([PARTITION]:SESSION)," >&2
-  echo "mux: or ask for every session with --all." >&2
-  exit 2
 }
 
 # The caller's own partition, which is a question mux already answers; the
@@ -218,6 +236,22 @@ while IFS='	' read -r _p _s; do
   # to `_stale` in here and read it after the loop, where it was always
   # empty. Reported once at the end rather than interleaved, since these
   # are a different KIND of fact: what was fixed versus what cannot be.
+  # WHICH NAMES THE SESSION NOW HOLDS, computed ONCE per session rather than
+  # per pane. This is not an optimisation, it is the question: a pane is only
+  # stale relative to something it could actually GAIN by restarting.
+  #
+  # THE FIRST VERSION COMPARED AGAINST THE NAME LIST, and so reported every
+  # pane as stale for a name mux had DELIBERATELY WITHHELD. Found by running
+  # it on this box, where nothing listens on WAYLAND_DISPLAY: it named all 18
+  # panes for it, advising a restart that could never supply it, in the same
+  # breath as a real finding about SSH_AUTH_SOCK. A withheld name is already
+  # announced once by R7 and carried by `mux check`; repeating it here as a
+  # per-pane defect is the one reading that is actively wrong.
+  #
+  # Space-delimited and matched with the padded `case` idiom, because an
+  # unanchored substring test makes `AUTH_SOCK` match `SSH_AUTH_SOCK`.
+  _held=$(tm show-environment -t "=$_s" 2>/dev/null \
+    | sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' | tr '\n' ' ')
   while IFS='	' read -r _loc _pid; do
     [ -n "$_pid" ] || continue
     if [ ! -r "/proc/$_pid/environ" ]; then
@@ -227,6 +261,11 @@ while IFS='	' read -r _p _s; do
     fi
     mux_env_names | while IFS= read -r _n; do
       [ -n "$_n" ] || continue
+      # Not held by the session, so there is nothing to be stale ABOUT.
+      case " $_held " in
+      *" $_n "*) ;;
+      *) continue ;;
+      esac
       # `2>/dev/null` BEFORE the redirect: a pane can die while this sweep
       # is walking, so a vanished /proc entry is the NORMAL case, and with
       # the order reversed the SHELL prints `cannot open` before tr runs.
