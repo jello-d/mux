@@ -29,32 +29,41 @@ if command -v tmux >/dev/null 2>&1; then
   tm -f /dev/null new-session -d -s base -x 80 -y 24 \
     || { printf 'skip %s (cannot start a tmux server)\n' "$_name"; exit 0; }
 
-  # `.` and `:` MUST BOTH BE REWRITTEN, or they are not structural.
-  for _d in . :; do
-    tm new-session -d -s "work${_d}api" 2>/dev/null || true
+  # THE WHOLE TABLE IS MEASURED AND REPORTED, never failed on the first row,
+  # and that change is the point: the first version of this stopped at `.`,
+  # so a CI run told us one character's answer and hid the rest. A premise
+  # this load-bearing has to be reported in full or a disagreement costs one
+  # round trip per character.
+  _structural=
+  _verbatim=
+  for _d in . : '@' '~' '%' '^' '+' '=' ',' '/'; do
+    tm new-session -d -s "work${_d}api" 2>/dev/null || {
+      _structural="$_structural $_d(refused)"; continue; }
     _got=$(tm list-sessions -F '#{session_name}' 2>/dev/null \
       | grep -v '^base$' | head -1)
-    [ "$_got" != "work${_d}api" ] || fail "tmux now STORES [work${_d}api]
-verbatim, so '${_d}' can appear in a session name and every address in this
-package is ambiguous: 'work${_d}api' could be two fields or one name. The
-grammar's whole premise is that this cannot happen."
+    if [ "$_got" = "work${_d}api" ]; then
+      _verbatim="$_verbatim $_d"
+    else
+      _structural="$_structural $_d"
+    fi
     tm kill-session -t "=$_got" 2>/dev/null || true
   done
+  printf 'note %s: tmux %s structural:[%s] verbatim:[%s]\n' \
+    "$_name" "$(tmux -V)" "$_structural" "$_verbatim"
 
-  # AND THE REJECTED CANDIDATES MUST STILL BE REJECTED, which is the other
-  # half and is what stops someone "improving" the grammar to a friendlier
-  # character. Each of these is kept VERBATIM, so each is a legal session
-  # name and therefore unusable as a delimiter. `@` was proposed and is in
-  # this list for that reason.
-  for _d in '@' '~' '%' '^' '+' '=' ',' '/'; do
-    tm new-session -d -s "work${_d}api" 2>/dev/null || continue
-    _got=$(tm list-sessions -F '#{session_name}' 2>/dev/null \
-      | grep -v '^base$' | head -1)
-    [ "$_got" = "work${_d}api" ] || fail "tmux no longer keeps [work${_d}api]
-verbatim (it stored [$_got]), so '${_d}' may now be safe as a delimiter. That
-is not a failure, it is news: the grammar chose '.' and ':' because they were
-the ONLY two available, and that measurement has changed."
-    tm kill-session -t "=$_got" 2>/dev/null || true
+  # THE GRAMMAR NEEDS EXACTLY ITS OWN TWO, and nothing else about the table
+  # matters to correctness: a character that became structural is news, while
+  # one of OURS becoming verbatim makes every address in this package
+  # ambiguous in silence, which is the failure this exists to catch.
+  for _d in . :; do
+    case " $_structural " in
+    *" $_d "*) ;;
+    *) fail "tmux $(tmux -V) STORES [work${_d}api] verbatim, so '${_d}' can
+appear in a session name and 'work${_d}api' could be two fields or one name.
+The grammar's whole premise is that this cannot happen.
+  structural: [$_structural]
+  verbatim:   [$_verbatim]" ;;
+    esac
   done
 else
   printf 'note %s: no tmux, the delimiter premise is unchecked\n' "$_name"
