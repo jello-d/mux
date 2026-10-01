@@ -90,7 +90,7 @@ done
 # UserPromptSubmit, sleeps, and only then goes blocked, so the read landed on
 # `working` and the assertion failed for a reason that had nothing to do with
 # the demo. Wait for the condition under test.
-_dir=$XDG_RUNTIME_DIR/agent-state/$SOCK
+_dir=$XDG_RUNTIME_DIR/mux/agent-state/$SOCK
 _blocked() { grep -lq '^blocked ' "$_dir"/* 2>/dev/null; }
 _until 20 _blocked || fail "nothing reached \`blocked\`, so \`prefix b\` has no
 target and the demo's main claim does not hold. Either the pretend agents are
@@ -100,7 +100,7 @@ blocked. States seen: [$(cat "$_dir"/* 2>/dev/null | awk '{print $1}' \
 
 # AND NOTHING ELSE HAS A NAMESPACE HERE. This is the assertion the whole file
 # exists for: one directory, named after the demo's own socket.
-_ns=$(ls "$XDG_RUNTIME_DIR/agent-state" | tr '\n' ' ')
+_ns=$(ls "$XDG_RUNTIME_DIR/mux/agent-state" | tr '\n' ' ')
 [ "$_ns" = "$SOCK " ] || fail "the demo wrote outside its own namespace: found
 [$_ns], expected only [$SOCK]. A pretend agent must never write a record a real
 session reads."
@@ -136,7 +136,7 @@ esac
 _o=$(demo --stop 2>&1) || fail "--stop failed: $_o"
 tmux -L "$SOCK" has-session -t api 2>/dev/null \
   && fail "--stop left the server running"
-[ -d "$XDG_RUNTIME_DIR/agent-state/$SOCK" ] && fail "--stop left the demo's
+[ -d "$XDG_RUNTIME_DIR/mux/agent-state/$SOCK" ] && fail "--stop left the demo's
 agent state behind, so \`mux agent-doctor\` on that socket would report
 findings about a demo nobody is running"
 

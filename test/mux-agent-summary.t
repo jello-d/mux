@@ -20,15 +20,15 @@ XDG_RUNTIME_DIR=$T/run
 MUX_DIR=$T/conf
 MUX_CACHE=$T/cache
 export XDG_RUNTIME_DIR MUX_DIR MUX_CACHE
-mkdir -p "$XDG_RUNTIME_DIR/agent-state/global" \
-  "$XDG_RUNTIME_DIR/agent-state/work" "$MUX_DIR/partitions"
+mkdir -p "$XDG_RUNTIME_DIR/mux/agent-state/global" \
+  "$XDG_RUNTIME_DIR/mux/agent-state/work" "$MUX_DIR/partitions"
 
 # agent_rec writes the record; test/harness_lib owns the field order, so a
 # format
 # change lands in one place instead of being re-typed in every fixture.
-agent_rec "$XDG_RUNTIME_DIR/agent-state/global/p1" blocked %1 100 alpha x
-agent_rec "$XDG_RUNTIME_DIR/agent-state/global/p2" working %2 200 bravo x
-agent_rec "$XDG_RUNTIME_DIR/agent-state/work/p1"   idle    %3 300 wsess x
+agent_rec "$XDG_RUNTIME_DIR/mux/agent-state/global/p1" blocked %1 100 alpha x
+agent_rec "$XDG_RUNTIME_DIR/mux/agent-state/global/p2" working %2 200 bravo x
+agent_rec "$XDG_RUNTIME_DIR/mux/agent-state/work/p1"   idle    %3 300 wsess x
 
 # A tmux that answers ONE question: does partition X have a client attached?
 # $WATCHED is the set that does. Stubbed because --attached is the only part
@@ -78,7 +78,7 @@ eq explicit-beats-ctx "$(sum global)" "blocked 1"
 rm -f "$MUX_DIR/config"
 
 # --- the worst state wins, and the count is of sessions in THAT state ------
-agent_rec "$XDG_RUNTIME_DIR/agent-state/global/p3" blocked %3 150 charlie x
+agent_rec "$XDG_RUNTIME_DIR/mux/agent-state/global/p3" blocked %3 150 charlie x
 eq worst-wins "$(sum global)" "blocked 2"
 
 # --- --all: EVERY partition, in one call ----------------------------------
@@ -143,7 +143,7 @@ eq all-unfiltered "$_o" "2"
 # mux_ctx_resolve OVERWRITES that variable from the context command, so an
 # env-var fixture would silently test the resolved partition instead of the
 # one it named. That override has now cost three separate debugging sessions.
-rm -rf "$XDG_RUNTIME_DIR/agent-state"
+rm -rf "$XDG_RUNTIME_DIR/mux/agent-state"
 _o=$(sum --all)
 [ "$(printf '%s\n' "$_o" | grep -c .)" = 1 ] \
   || fail "with no state at all, --all should still answer once: [$_o]"
@@ -151,5 +151,49 @@ case $_o in
 *" none 0") ;;
 *) fail "with no state at all, --all said [$_o]" ;;
 esac
+
+# --- THE RUNTIME PATH IS NAMESPACED, AND A LIVE SESSION IS ADOPTED -------
+# It used to sit at `$XDG_RUNTIME_DIR/agent-state`, directly beside `at-spi`,
+# `bus`, `dbus-1`, `dconf`, `doc` and `gcr`, under a GENERIC name any other
+# agent tool could claim. Every other location mux owns was namespaced; this
+# was the one that was not (fleet install-placement rule, 2026-10-01).
+#
+# ADOPTION IS THE HALF THAT MATTERS. Sessions already running have their
+# records at the OLD path, and without carrying them over every live pane
+# draws the no-record glyph until its agent's next lifecycle hook fires,
+# which on an idle session can be hours. That is a regression caused by a
+# tidy-up, which is the worst kind.
+_nr=$T/nsrun
+mkdir -p "$_nr/agent-state/global"
+agent_rec "$_nr/agent-state/global/p1" blocked %1 100 oldsess x
+
+_no=$(env XDG_RUNTIME_DIR="$_nr" "$HERE/bin/mux" agent-summary global 2>&1) \
+  || fail "agent-summary failed over an old-layout runtime dir: [$_no]"
+case $_no in
+'blocked 1'*) ;;
+*) fail "a record at the OLD runtime path was not adopted, so every session
+that was already running goes dark until its next hook: [$_no]" ;;
+esac
+
+# IT COPIES RATHER THAN MOVES, and the old tree is left alone on purpose:
+# several processes call this concurrently (an emit from a hook, a render per
+# client per status-interval) and `mv old new` against a `new` another process
+# just created nests the old directory INSIDE it. No cleanup is owed either,
+# because this is the RUNTIME dir and a reboot clears it.
+[ -f "$_nr/agent-state/global/p1" ] \
+  || fail "adoption MOVED the old records, which races a concurrent reader
+and is why this is a copy"
+[ -f "$_nr/mux/agent-state/global/p1" ] \
+  || fail "the record was not carried to the namespaced path"
+
+# AND A FRESH BOX WRITES ONLY THE NEW PATH, so the old one is not recreated
+# by a mux that has never seen it.
+_nf=$T/nsfresh
+mkdir -p "$_nf"
+env XDG_RUNTIME_DIR="$_nf" "$HERE/bin/mux" agent-summary global \
+  >/dev/null 2>&1 || true
+[ ! -d "$_nf/agent-state" ] \
+  || fail "mux created the retired un-namespaced path on a box that never had
+one, so the thing being retired comes back by itself"
 
 pass

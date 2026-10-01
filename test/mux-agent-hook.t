@@ -19,7 +19,7 @@ _name=mux-agent-hook
 
 XDG_RUNTIME_DIR=$T/run; TMUX=/tmp/fake/global,1,0; TMUX_PANE=%9
 export XDG_RUNTIME_DIR TMUX TMUX_PANE
-REC=$T/run/agent-state/global/9
+REC=$T/run/mux/agent-state/global/9
 
 hook() { rm -f "$REC"; "$HERE/libexec/mux-agent-hook" "$@" >/dev/null 2>&1; }
 state() { cut -d' ' -f1 2>/dev/null <"$REC" || true; }

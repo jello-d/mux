@@ -26,7 +26,7 @@ set -eu
 _name=mux-agent-doctor
 . "$(dirname "$0")/harness_lib"
 
-mkdir -p "$T/bin" "$T/run/agent-state/global" "$T/proc" "$T/share/agents"
+mkdir -p "$T/bin" "$T/run/mux/agent-state/global" "$T/proc" "$T/share/agents"
 : >"$T/share/agents/claude.agent"
 
 # A fabricated process table and pane list. pane %1 -> pid 100 -> claude 101.
@@ -77,7 +77,7 @@ no_has() { case "$1" in *"$2"*) fail "$3: unwanted [$2] in: $1" ;; esac; }
 burn() { ( sleep 0.3; setcpu "$1" "$2" ) & }
 
 # --- a busy agent whose file says idle is the reported bug ----------------
-agent_rec "$T/run/agent-state/global/1" idle %1 1 alpha
+agent_rec "$T/run/mux/agent-state/global/1" idle %1 1 alpha
 setcpu 101 0
 burn 101 40          # 40 jiffies in a 1s window = 40% of a core
 _rc=0; _o=$(doc) || _rc=$?
@@ -105,24 +105,24 @@ no_has "$_o" "DRIFT" "the middle band was counted as drift"
 [ "$_rc" -eq 0 ] || fail "a suspect reading must not fail the run"
 
 # --- recorded working with no agent at all -------------------------------
-agent_rec "$T/run/agent-state/global/2" working %2 1 beta
-rm -f "$T/run/agent-state/global/1"
+agent_rec "$T/run/mux/agent-state/global/2" working %2 1 beta
+rm -f "$T/run/mux/agent-state/global/1"
 _rc=0; _o=$(doc) || _rc=$?
 has "$_o" "gone" "a working record with no agent process was not surfaced"
 
 # --- READ-ONLY: it must not add, remove or alter a single state file -----
 # The property the renderer did not have.
-agent_rec "$T/run/agent-state/global/1" idle %1 1 alpha
-agent_rec "$T/run/agent-state/global/2" working %2 1 beta
+agent_rec "$T/run/mux/agent-state/global/1" idle %1 1 alpha
+agent_rec "$T/run/mux/agent-state/global/2" working %2 1 beta
 setcpu 101 0
 burn 101 40                                  # drift, the noisiest path
-_before=$(ls "$T/run/agent-state/global" | LC_ALL=C sort | tr '\n' ' ')
-_sum=$(cat "$T/run/agent-state/global"/* | md5sum)
+_before=$(ls "$T/run/mux/agent-state/global" | LC_ALL=C sort | tr '\n' ' ')
+_sum=$(cat "$T/run/mux/agent-state/global"/* | md5sum)
 doc >/dev/null 2>&1 || true
-_after=$(ls "$T/run/agent-state/global" | LC_ALL=C sort | tr '\n' ' ')
+_after=$(ls "$T/run/mux/agent-state/global" | LC_ALL=C sort | tr '\n' ' ')
 [ "$_before" = "$_after" ] \
   || fail "state files changed: [$_before] -> [$_after]"
-[ "$_sum" = "$(cat "$T/run/agent-state/global"/* | md5sum)" ] \
+[ "$_sum" = "$(cat "$T/run/mux/agent-state/global"/* | md5sum)" ] \
   || fail "a state file's CONTENT was altered"
 
 # --- `working` with no CPU: stale record vs genuinely mid-turn -----------
@@ -139,8 +139,8 @@ _after=$(ls "$T/run/agent-state/global" | LC_ALL=C sort | tr '\n' ' ')
 # The tiebreaker is the AGENT's own UI, and the pattern comes from the agent
 # DEFINITION so mux never learns what any particular agent's footer says.
 printf 'busy    esc to interrupt\n' >"$T/share/agents/claude.agent"
-agent_rec "$T/run/agent-state/global/1" working %1 1 alpha
-rm -f "$T/run/agent-state/global/2"
+agent_rec "$T/run/mux/agent-state/global/1" working %1 1 alpha
+rm -f "$T/run/mux/agent-state/global/2"
 setcpu 101 0
 burn 101 0                                   # no CPU at all
 
@@ -200,11 +200,11 @@ printf 'some output\n  auto mode on . esc to interrupt . for agents\n' \
 # an ORPHAN would have to invent a state from a CPU sample.
 printf 'busy    esc to interrupt\n' >"$T/share/agents/claude.agent"
 printf 'nothing that matches the marker\n' >"$PANE_TXT"
-rm -f "$T/run/agent-state/global"/*
+rm -f "$T/run/mux/agent-state/global"/*
 # A session name WITH A SPACE and a notification id, because the rewrite has to
 # put six fields back in the order it found them. Hand-parsing a record is the
 # trap this codebase has already paid for twice.
-SFILE=$T/run/agent-state/global/1
+SFILE=$T/run/mux/agent-state/global/1
 agent_rec "$SFILE" working %1 1234 'my project' 777
 setcpu 101 0
 burn 101 0
@@ -317,7 +317,7 @@ _rc=0; _o=$(doc --repar) || _rc=$?
 has "$_o" "unknown option" "an unknown option did not say so"
 has "$_o" "usage" "an unknown option did not print the usage"
 
-rm -f "$T/run/agent-state/global"/*
+rm -f "$T/run/mux/agent-state/global"/*
 printf 'some output\n  auto mode on . esc to interrupt . for agents\n' \
   >"$PANE_TXT"
 : >"$T/share/agents/claude.agent"
@@ -338,8 +338,8 @@ printf 'some output\n  auto mode on . esc to interrupt . for agents\n' \
 printf '  100     1 ksh\n  101   100 claude\n  200     1 ksh\n' >"$PSTAB"
 printf '  300     1 ksh\n  301   300 claude\n' >>"$PSTAB"
 printf '%%1 100 alpha\n%%2 200 beta\n%%3 300 gamma\n' >"$PANES"
-rm -f "$T/run/agent-state/global"/*
-agent_rec "$T/run/agent-state/global/1" idle %1 1 alpha
+rm -f "$T/run/mux/agent-state/global"/*
+agent_rec "$T/run/mux/agent-state/global/1" idle %1 1 alpha
 setcpu 101 0
 setcpu 301 0
 _rc=0; _o=$(doc) || _rc=$?
@@ -358,9 +358,10 @@ if printf '%s\n' "$_o" | grep -q '^beta .*ORPHAN'; then
   fail "a pane with no agent was called an orphan"
 fi
 # READ-ONLY still holds on this path.
-_bf=$(ls "$T/run/agent-state/global" | LC_ALL=C sort | tr '\n' ' ')
+_bf=$(ls "$T/run/mux/agent-state/global" | LC_ALL=C sort | tr '\n' ' ')
 doc >/dev/null 2>&1 || true
-[ "$_bf" = "$(ls "$T/run/agent-state/global" | LC_ALL=C sort | tr '\n' ' ')" ] \
+_af=$(ls "$T/run/mux/agent-state/global" | LC_ALL=C sort | tr '\n' ' ')
+[ "$_bf" = "$_af" ] \
   || fail "the orphan pass changed state files"
 
 # ... and --repair REFUSES this one, which is why it is asserted HERE rather
@@ -372,13 +373,13 @@ doc >/dev/null 2>&1 || true
 # that breaks DETECTION must be caught by the detection test, not by this one.
 _rc=0; _o=$(doc --repair) || _rc=$?
 has "$_o" "ORPHAN" "--repair hid an orphan finding"
-[ ! -e "$T/run/agent-state/global/3" ] \
+[ ! -e "$T/run/mux/agent-state/global/3" ] \
   || fail "--repair CREATED a record for an orphan. It has no state to
 copy, so any value it wrote would be a guess dressed up as a reading."
 [ "$_rc" -ne 0 ] || fail "an unrepaired orphan must still exit non-zero"
 
 # Recording it clears the finding: the verb must be satisfiable.
-agent_rec "$T/run/agent-state/global/3" idle %3 1 gamma
+agent_rec "$T/run/mux/agent-state/global/3" idle %3 1 gamma
 _rc=0; _o=$(doc) || _rc=$?
 no_has "$_o" "ORPHAN" "a recorded agent was still called an orphan"
 [ "$_rc" -eq 0 ] || fail "with every agent recorded the run must pass"
@@ -387,9 +388,9 @@ no_has "$_o" "ORPHAN" "a recorded agent was still called an orphan"
 # against ($_before, captured in the read-only section above).
 printf '  100     1 ksh\n  101   100 claude\n  200     1 ksh\n' >"$PSTAB"
 printf '%%1 100 alpha\n%%2 200 beta\n' >"$PANES"
-rm -f "$T/run/agent-state/global"/*
-agent_rec "$T/run/agent-state/global/1" idle %1 1 alpha
-agent_rec "$T/run/agent-state/global/2" working %2 1 beta
+rm -f "$T/run/mux/agent-state/global"/*
+agent_rec "$T/run/mux/agent-state/global/1" idle %1 1 alpha
+agent_rec "$T/run/mux/agent-state/global/2" working %2 1 beta
 
 # --- a pane tmux cannot resolve is not an excuse to guess ----------------
 # With no pane list at all there is no agent to find, so nothing can be called
@@ -403,7 +404,7 @@ chmod +x "$T/bin/tmux"
 _rc=0; _o=$(doc) || _rc=$?
 no_has "$_o" "DRIFT" "a failed pane query produced a drift verdict"
 [ "$_rc" -eq 0 ] || fail "a failed pane query must not fail the run"
-_after=$(ls "$T/run/agent-state/global" | LC_ALL=C sort | tr '\n' ' ')
+_after=$(ls "$T/run/mux/agent-state/global" | LC_ALL=C sort | tr '\n' ' ')
 [ "$_before" = "$_after" ] || fail "a failed pane query pruned state"
 
 pass

@@ -27,7 +27,7 @@ XDG_RUNTIME_DIR=$T/run
 MUX_DIR=$T/conf
 MUX_CACHE=$T/cache
 export XDG_RUNTIME_DIR MUX_DIR MUX_CACHE
-G=$XDG_RUNTIME_DIR/agent-state/global
+G=$XDG_RUNTIME_DIR/mux/agent-state/global
 mkdir -p "$G" "$MUX_DIR/partitions"
 
 # No tmux on PATH AT ALL. The verb must never reach for it: its caller is a
@@ -124,7 +124,7 @@ _rc=0; _o=$(lst nosuchpartition) || _rc=$?
 [ -z "$_o" ] || fail "an empty namespace printed something: [$_o]"
 [ "$_rc" -eq 0 ] || fail "an empty namespace must exit 0, got $_rc"
 # Same for a namespace whose directory exists but holds nothing.
-mkdir -p "$XDG_RUNTIME_DIR/agent-state/bare"
+mkdir -p "$XDG_RUNTIME_DIR/mux/agent-state/bare"
 _rc=0; _o=$(lst bare) || _rc=$?
 [ -z "$_o" ] || fail "an empty dir printed something: [$_o]"
 [ "$_rc" -eq 0 ] || fail "an empty dir must exit 0, got $_rc"

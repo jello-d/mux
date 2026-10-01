@@ -179,7 +179,7 @@ cp "$T/bin/notify-send" "$T/emitbin/notify-send"
 cp "$T/bin/gdbus" "$T/emitbin/gdbus"
 chmod +x "$T/emitbin/tmux"
 
-_sf=$T/run/agent-state/global/5
+_sf=$T/run/mux/agent-state/global/5
 emit() {
   env XDG_RUNTIME_DIR="$T/run" TMUX=/tmp/fake/global,1,0 TMUX_PANE=%5 \
     PATH="$T/emitbin:$_saved" LOG="$LOG" \
@@ -224,7 +224,7 @@ has '4242' "closed some other id"
 emit working || fail "emit working (atomicity) failed"
 [ "$(wc -l <"$_sf")" -eq 1 ] || fail "the record is not exactly one line"
 # No temp file may survive the write.
-_left=$(ls "$T/run/agent-state/global")
+_left=$(ls "$T/run/mux/agent-state/global")
 case $_left in
 *.[0-9]*) fail "a temp file was left behind: $_left" ;;
 esac
@@ -277,7 +277,7 @@ cat >"$T/ttlbin/closer" <<'EOF'
 printf 'closed %s\n' "$1" >>"$CLOSELOG"
 EOF
 chmod +x "$T/ttlbin/closer"
-mkdir -p "$T/run/agent-state/global"
+mkdir -p "$T/run/mux/agent-state/global"
 ttlemit() {
   : >"$CLOSELOG"
   env XDG_RUNTIME_DIR="$T/run" TMUX=/tmp/fake/global,1,0 TMUX_PANE=%40 \
@@ -288,24 +288,24 @@ ttlemit() {
 # A FRESH id is still closed on a real state change. This is the behaviour the
 # TTL must not break.
 _now=$(date +%s)
-printf 'idle 0 %%40 %s 522 charon\n' "$_now" >"$T/run/agent-state/global/40"
+printf 'idle 0 %%40 %s 522 charon\n' "$_now" >"$T/run/mux/agent-state/global/40"
 ttlemit working
 grep -qx 'closed 522' "$CLOSELOG" \
   || fail "a fresh id was not closed on a state change: [$(cat "$CLOSELOG")]"
 
 # A STALE id must be dropped silently, never handed to the closer.
 printf 'idle 0 %%40 %s 522 charon\n' "$((_now - 200000))" \
-  >"$T/run/agent-state/global/40"
+  >"$T/run/mux/agent-state/global/40"
 ttlemit working
 [ ! -s "$CLOSELOG" ] \
   || fail "a 55-hour-old id was closed: [$(cat "$CLOSELOG")]"
 # ... and it is not carried into the new record either.
-_n=$(cut -d' ' -f5 <"$T/run/agent-state/global/40")
+_n=$(cut -d' ' -f5 <"$T/run/mux/agent-state/global/40")
 [ "$_n" = - ] || fail "a stale id survived into the record: [$_n]"
 
 # The window is configurable, and the boundary is respected.
 printf 'idle 0 %%40 %s 522 charon\n' "$((_now - 10))" \
-  >"$T/run/agent-state/global/40"
+  >"$T/run/mux/agent-state/global/40"
 MUX_NOTIF_TTL=5 ttlemit working; unset MUX_NOTIF_TTL
 [ ! -s "$CLOSELOG" ] \
   || fail "MUX_NOTIF_TTL was ignored: [$(cat "$CLOSELOG")]"

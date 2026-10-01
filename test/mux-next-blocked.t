@@ -10,7 +10,7 @@ set -eu
 _name=mux-next-blocked
 . "$(dirname "$0")/harness_lib"
 
-mkdir -p "$T/bin" "$T/rt/agent-state/default"
+mkdir -p "$T/bin" "$T/rt/mux/agent-state/default"
 cat >"$T/bin/tmux" <<'EOF'
 #!/bin/sh
 case "$*" in
@@ -53,8 +53,8 @@ run() {
 
 # bravo blocked since epoch 200, charlie since 100: charlie has waited
 # LONGER, so charlie is the jump. (alpha is the client's own session.)
-agent_rec "$T/rt/agent-state/default/p1" blocked %1 200 bravo x
-agent_rec "$T/rt/agent-state/default/p2" blocked %2 100 charlie x
+agent_rec "$T/rt/mux/agent-state/default/p1" blocked %1 200 bravo x
+agent_rec "$T/rt/mux/agent-state/default/p2" blocked %2 100 charlie x
 
 # An explicit CLIENT (how the `prefix b` binding calls it) must reach the
 # helper and be passed on to switch-client -c.
@@ -67,14 +67,14 @@ _got=$(run)
 [ "$_got" = "$_exp" ] || fail "bare form: got [$_got] want [$_exp]"
 
 # Once charlie clears, bravo is next in the urgency order.
-rm -f "$T/rt/agent-state/default/p2"
+rm -f "$T/rt/mux/agent-state/default/p2"
 _got=$(run '/dev/pts/7')
 _exp='SWITCH switch-client -c /dev/pts/7 -t =bravo'
 [ "$_got" = "$_exp" ] || fail "next in order: got [$_got] want [$_exp]"
 
 # Nothing blocked: no jump, and SILENCE; it runs from a key binding, whose
 # stdout tmux would pop in a view-mode buffer over the pane.
-rm -f "$T/rt/agent-state/default/p1"
+rm -f "$T/rt/mux/agent-state/default/p1"
 _got=$(run '/dev/pts/7')
 [ -z "$_got" ] || fail "nothing blocked: expected no switch, got [$_got]"
 
@@ -110,7 +110,7 @@ fi
 # Seed its own blocked session: the cases above deliberately clear both, so
 # without this the helper correctly does nothing and the assertion below
 # would fail for a reason that has nothing to do with client resolution.
-agent_rec "$T/rt/agent-state/default/p9" blocked %9 100 charlie x
+agent_rec "$T/rt/mux/agent-state/default/p9" blocked %9 100 charlie x
 # The HELPER directly, not through `bin/mux`: the front end resolves the
 # partition itself and would override MUX_CTX_PARTITION here, pointing at an
 # empty state dir. That the verb REACHES the helper is already proved by the
@@ -137,8 +137,8 @@ esac
 #
 # The discriminator is the `default` record left live above: if the option
 # were ignored, this would switch to charlie rather than to worksess.
-mkdir -p "$T/rt/agent-state/work"
-agent_rec "$T/rt/agent-state/work/p1" blocked %1 50 worksess x
+mkdir -p "$T/rt/mux/agent-state/work"
+agent_rec "$T/rt/mux/agent-state/work/p1" blocked %1 50 worksess x
 : >"$TMUXLOG"
 env -u MUX_SHARE -u TMUX MUX_CTX_PARTITION=default \
   "$HERE/libexec/mux-next-blocked" --partition work >/dev/null 2>&1 || true
