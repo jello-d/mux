@@ -86,6 +86,11 @@
 #                        agent (shaped by go/resume), `pane <name>` a specific
 #                        agent, anything else runs literally. A bare `pane` is a
 #                        plain shell.
+#   control CLASS        declare who may TYPE into the pane just above:
+#                        human (the default, and refused to every sender),
+#                        agent (an orchestrated worker, grantable as a class
+#                        by /etc/mux/send-policy) or hybrid. mux records what
+#                        you declare and classifies nothing itself.
 #   bottom SIZE [CMD]    add a pane spanning the full width below the panes of
 #                        the current window; must come after them. SIZE is N to
 #                        pin the height, or MIN-MAX to track the window between
@@ -1460,8 +1465,9 @@ is_shell() {
 # (best-effort); a shell pane emits a bare directive.
 emit_window() {
   tm list-panes -t "$1" -F \
-   '#{pane_index}|#{@mux-bottom}|#{@mux-agent}|#{pane_current_command}' \
-  | sort -t'|' -k1,1n | while IFS='|' read -r _pi _pb _pa _pc; do
+   "#{pane_index}|#{@mux-bottom}|#{@mux-agent}|#{@mux-control}|\
+#{pane_current_command}" \
+  | sort -t'|' -k1,1n | while IFS='|' read -r _pi _pb _pa _pk _pc; do
     [ -z "$_pb" ] || continue
     # @mux-agent, set at build: an agent that has exited (or was
     # never installed) looks exactly like a shell here, so without
@@ -1469,6 +1475,18 @@ emit_window() {
     if [ -n "$_pa" ]; then printf 'pane    agent\n'
     elif is_shell "$_pc"; then printf 'pane\n'
     else printf 'pane    %s\n' "$_pc"; fi
+    # AND THE CLASS ROUND-TRIPS, for exactly the reason one line up: without
+    # it a save-then-build cycle silently reclasses a worker to `human`, the
+    # safe default, and a supervisor then cannot type into its own worker.
+    # The same loss `@mux-agent` is already here to prevent.
+    #
+    # OMITTED WHEN IT IS THE DEFAULT, because a layout holds only what
+    # OVERRIDES: an explicit `control human` is indistinguishable from the
+    # absence of the line, so emitting it would be noise that reads as a
+    # decision.
+    case $_pk in
+    agent|hybrid) printf 'control %s\n' "$_pk" ;;
+    esac
   done
   tm list-panes -t "$1" -F '#{@mux-bottom}|#{pane_current_command}' \
   | while IFS='|' read -r _pb _pc; do
@@ -3084,6 +3102,44 @@ while read -r verb rest; do
     }
     v_panes=$((v_panes + 1))
     ;;
+  control)
+    # QUALIFIES THE PANE JUST DECLARED, which is the shape `bottom` already
+    # uses, because `pane`'s argument is the COMMAND and a modifier cannot
+    # ride it without colliding with an arbitrary command line.
+    #
+    # WHY MUX WRITES THIS AT ALL, when `libexec/mux-agent` reads it and
+    # nothing wrote it before: the send policy's whole vocabulary is
+    # `control:agent`, and with no producer that grant was unreachable, so a
+    # root-owned line nobody could satisfy. A seam nobody can cross for you
+    # is not a seam, it is a gap, which is the argument `mux setup claude`
+    # already makes about another program's config.
+    #
+    # A DECLARATION, NEVER AN INVENTION. The creator of a pane says what the
+    # pane is for; mux records it and classifies nothing on its own. That is
+    # also the line that keeps this safe: there is deliberately no way here
+    # to reclassify a pane somebody else created.
+    [ "$v_panes" -gt 0 ] || {
+      echo "mux: 'control' with no pane in $profile" >&2
+      exit 1
+    }
+    # REFUSED AFTER `bottom` for the same reason `pane` is: the builder
+    # qualifies the pane it last created, and after a bottom that is no
+    # longer the pane a reader of this file would expect. Silently marking
+    # the wrong pane is the failure this package keeps paying for.
+    [ "$v_bottom" -eq 0 ] || {
+      echo "mux: 'control' after 'bottom' in $profile" >&2
+      exit 1
+    }
+    # THE VOCABULARY LIVES HERE. `libexec/mux-agent`'s `agent|hybrid` is NOT
+    # a second copy of it: that is the narrower set a policy may GRANT, since
+    # `human` is refused before the policy file is read at all.
+    case $rest in
+    human|agent|hybrid) ;;
+    *)
+      echo "mux: 'control' wants human|agent|hybrid: $rest" >&2
+      exit 1 ;;
+    esac
+    ;;
   bottom)
     [ "$v_panes" -gt 0 ] || {
       echo "mux: 'bottom' with no pane in $profile" >&2
@@ -3298,6 +3354,14 @@ while read -r verb rest; do
         agentpane=$thispane; }
     fi
     paneseen=$((paneseen + 1))
+    ;;
+  control)
+    # THE VALIDATOR ABOVE READS THE SAME `$flat` AND RUNS FIRST, so a pane
+    # precedes this and the value is one of the three. Re-checking here would
+    # be a second guard for one condition, which makes NEITHER killable: this
+    # package has measured that twice and deleted the redundant half both
+    # times.
+    tm set-option -p -t "$thispane" @mux-control "$rest"
     ;;
   bottom)
     # N pins the height; MIN-MAX tracks the window between those

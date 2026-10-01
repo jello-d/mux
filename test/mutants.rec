@@ -2847,3 +2847,54 @@ t setup
 -     _slog "kept $_kept record(s) unjudged; mux agent-doctor --repair"; }
 +     }
 m kept a record unjudged and said so only on stdout
+
+= control-class-not-written
+f bin/mux
+t mux-control-class
+# THE PRODUCER ITSELF. `libexec/mux-agent` reads `@mux-control` in two places
+# to decide whether a send may proceed, and before this nothing in the tree
+# wrote it, so the send policy's `control:agent` grant was unreachable: a
+# root-owned line nobody could satisfy. With this gone it is unreachable
+# again, and silently, because a pane with no option reads as `human`, which
+# is a REFUSAL and therefore looks like the policy working.
+-     tm set-option -p -t "$thispane" @mux-control "$rest"
++     :
+m there was no @mux-control call at all
+
+= control-class-marks-the-wrong-pane
+f bin/mux
+t mux-control-class
+# MARKING THE WRONG PANE IS THE SIGNATURE FAILURE: plausible, wrong, silent.
+# `control` qualifies the pane just declared, so the builder must use the
+# pane it last created; `$firstpane` is a real variable in scope and the
+# mutation is one word. A fixture answering `%1` to every pane_id query
+# could not tell these apart, which is why this file's stub counts panes
+# rather than queries.
+-     tm set-option -p -t "$thispane" @mux-control "$rest"
++     tm set-option -p -t "$firstpane" @mux-control "$rest"
+m the class landed on the wrong pane
+
+= control-class-accepts-any-word
+f bin/mux
+t mux-control-class
+# AN UNKNOWN WORD MUST BE LOUD. Accepting it writes an option every reader
+# falls through on, so the pane reads as `human`: the layout would read as a
+# grant and behave as a refusal, which is the worst available answer. Same
+# call `notify` makes about its two words and `mux agent-hook` makes about an
+# unknown event: an UNSET thing says nothing because nobody asked, a NAMED
+# one mux cannot honour is an author claiming a contract that does not exist.
+-     human|agent|hybrid) ;;
++     human|agent|hybrid|supervisor) ;;
+m was accepted and should be refused
+
+= control-class-lost-on-save
+f bin/mux
+t mux-save
+# THE ROUND TRIP, and the same defect `@mux-agent` two fields earlier already
+# exists to prevent. Dropping this emits a layout with no class, so the next
+# build hands the pane to the human: a supervisor can no longer type into its
+# own worker and nothing anywhere says why. A save that quietly writes LESS
+# than it read is this file's whole subject.
+-     agent|hybrid) printf 'control %s\n' "$_pk" ;;
++     agent|hybrid) ;;
+m came back unclassed
