@@ -2052,8 +2052,12 @@ m fired with the fragment already sourced
 = demo-state-not-removed-on-stop
 f libexec/mux-demo
 t mux-demo
--   */agent-state/"$SOCK") rm -rf "$_statedir" 2>/dev/null || true ;;
-+   */agent-state/"$SOCK") : ;;
+#
+# RE-ANCHORED when the runtime path was namespaced under `mux/` and the
+# guard before this `rm -rf` was tightened to match: a guard ahead of a
+# delete should be as specific as the thing it is protecting.
+-   */mux/agent-state/"$SOCK") rm -rf "$_statedir" 2>/dev/null || true ;;
++   */mux/agent-state/"$SOCK") : ;;
 m left the demo
 
 = demo-second-run-rebuilds
@@ -2738,3 +2742,33 @@ t mux-indicator-setup
 -     && warn "retired venv survives: $OLD_VENV (install removes it)" || :
 +     && : || :
 m was not reported
+
+= runtime-path-not-namespaced
+f libexec/mux-agent-state_lib
+t mux-agent-summary
+# THE NAMESPACE (fleet install-placement rule, 2026-10-01). Per-pane state
+# used to sit at `$XDG_RUNTIME_DIR/agent-state`, beside `at-spi`, `bus`,
+# `dbus-1`, `dconf`, `doc` and `gcr`, under a GENERIC name any other agent
+# tool could claim. Reverting it also resurrects the retired path on a box
+# that never had one, which is what the fresh-box assertion catches.
+#
+# THE KILL LANDS ON A PRE-EXISTING CASE, named deliberately: with the
+# namespace gone every fixture in this file writes where nothing reads, so
+# the headless summary answers `none 0`. An existing consumer breaking is
+# better evidence than a new assertion agreeing with its author.
+-   _ad=$_rt/mux/agent-state/$_ns
++   _ad=$_rt/agent-state/$_ns
+m headless: got [none 0]
+
+= runtime-adoption-drops-live-records
+f libexec/mux-agent-state_lib
+t mux-agent-summary
+# ADOPTION IS THE HALF THAT MATTERS, and it is invisible on a fresh box: with
+# it gone, a box upgrading mid-session keeps its records at the old path
+# while every reader looks at the new one, so EVERY LIVE PANE draws the
+# no-record glyph until its agent's next lifecycle hook fires. On an idle
+# session that is hours. A regression caused by a tidy-up is the worst kind,
+# and no assertion about a clean install can see it.
+-         && cp "$_ao"/* "$_ad"/ 2>/dev/null || :
++         && : || :
+m was not adopted

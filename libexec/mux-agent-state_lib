@@ -6,7 +6,7 @@
 # state GLYPHS live in ONE place, so the bar and the picker cannot drift apart.
 # Functions and glyph constants only; source it, do not run it.
 #
-# State lives in per-pane files under $XDG_RUNTIME_DIR/agent-state/<ns>, a line
+# State lives in per-pane files under $XDG_RUNTIME_DIR/mux/agent-state/<ns>, a
 # each: "state window pane epoch notif SESSION" (see mux-agent-state-emit). The
 # session comes LAST so a name containing a space reads back whole in one
 # `read`; this comment said the old order long after the code changed, which is
@@ -52,7 +52,37 @@ mux_agent_dir() {
     _ns=global
     [ -n "${TMUX:-}" ] && { _ns=${TMUX%%,*}; _ns=${_ns##*/}; }
   fi
-  printf '%s/agent-state/%s' "$_rt" "$_ns"
+  # NAMESPACED UNDER `mux/`, per the fleet install-placement rule (ruled
+  # 2026-10-01). It used to sit at `$XDG_RUNTIME_DIR/agent-state`, directly
+  # beside `at-spi`, `bus`, `dbus-1`, `dconf`, `doc` and `gcr`, under a
+  # GENERIC name any other agent tool could claim. Every other location mux
+  # owns was already namespaced; this was the one that was not.
+  _ad=$_rt/mux/agent-state/$_ns
+
+  # ADOPTION, best effort, for sessions that are ALREADY RUNNING. Their
+  # records are at the old path and the strip reads the new one, so without
+  # this every live pane draws the no-record glyph until its agent's next
+  # lifecycle hook fires, which on an idle session can be a long time.
+  #
+  # NO CLEANUP IS OWED, which is what keeps this simple and safe: this is the
+  # RUNTIME dir, cleared at reboot, so the old tree disappears by itself and
+  # nothing here has to delete anything. That is the whole reason adoption
+  # can be a COPY rather than a move.
+  #
+  # A COPY, NOT A MOVE, deliberately. Several processes call this
+  # concurrently (an emit from a hook, a render per client per
+  # status-interval), and `mv old new` when another process has just created
+  # `new` nests the old directory INSIDE it. Copying is idempotent and the
+  # worst a lost race costs is one record written twice with the same
+  # contents. Records are rewritten by the next emit in any case.
+  if [ ! -d "$_ad" ]; then
+    _ao=$_rt/agent-state/$_ns
+    if [ -d "$_ao" ]; then
+      mkdir -p "$_ad" 2>/dev/null \
+        && cp "$_ao"/* "$_ad"/ 2>/dev/null || :
+    fi
+  fi
+  printf '%s' "$_ad"
 }
 
 # Numeric urgency of a state, so the worst live agent in a session wins.

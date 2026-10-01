@@ -62,7 +62,11 @@ done
 
 # The namespace agent-state-emit will use inside that server. Derived the same
 # way the rest of mux derives it, so --stop cannot remove the wrong directory.
-_statedir=${XDG_RUNTIME_DIR:-/tmp/user-$(id -u)}/agent-state/$SOCK
+# THE SAME NAMESPACED PATH mux_agent_dir derives, and the only place in the
+# tree that still builds it by hand: this file deliberately does not source
+# the lib, because the demo must not be able to touch a real namespace, and
+# its whole safety argument is that the SOCKET name decides the directory.
+_statedir=${XDG_RUNTIME_DIR:-/tmp/user-$(id -u)}/mux/agent-state/$SOCK
 
 if [ "$_stop" -eq 1 ]; then
   if _tx kill-server 2>/dev/null; then
@@ -75,7 +79,7 @@ if [ "$_stop" -eq 1 ]; then
   # `mux agent-doctor` on the demo socket report findings about a demo nobody
   # is running.
   case $_statedir in
-  */agent-state/"$SOCK") rm -rf "$_statedir" 2>/dev/null || true ;;
+  */mux/agent-state/"$SOCK") rm -rf "$_statedir" 2>/dev/null || true ;;
   esac
   exit 0
 fi

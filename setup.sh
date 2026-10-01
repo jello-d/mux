@@ -542,9 +542,11 @@ do_check() {
 # and still reported from here. That is the failure the verb exists to make
 # impossible, and a hand-written list would reintroduce it.
 #
-# RUNTIME IS REPORTED AS THE DIRECTORY MUX OWNS, not the XDG root: mux writes
-# per-pane agent state under it, and naming the whole runtime dir would invite
-# a sweep to delete another tool's socket.
+# RUNTIME IS REPORTED AS THE DIRECTORY MUX OWNS, not the XDG root: naming the
+# whole runtime dir would invite a sweep to delete another tool's socket. It
+# is `<runtime>/mux` now rather than `<runtime>/agent-state`, which is the
+# namespacing the same ruling asked for: agent state used to sit under a
+# generic name beside at-spi, bus, dbus-1 and gcr.
 do_paths() {
   printf 'bin\t%s\n'     "$_bin/$PKG"
   printf 'payload\t%s\n' "$_shr/$PKG"
@@ -553,7 +555,8 @@ do_paths() {
   _p_st=${XDG_STATE_HOME:-$HOME/.local/state}
   printf 'state\t%s\n'   "${MUX_STATE:-$_p_st/$PKG}"
   printf 'cache\t%s\n'   "${MUX_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/$PKG}"
-  printf 'runtime\t%s\n' "${XDG_RUNTIME_DIR:-/tmp/user-$(id -u)}/agent-state"
+  _p_rt=${XDG_RUNTIME_DIR:-/tmp/user-$(id -u)}
+  printf 'runtime\t%s\n' "$_p_rt/$PKG"
   printf 'venv\t%s\n'    "${MUX_INDICATOR_VENV:-$_pay/venv}"
   printf 'policy\t%s\n'  "/etc/$PKG/send-policy"
 }

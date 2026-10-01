@@ -24,7 +24,7 @@ _name=mux-strip
 . "$(dirname "$0")/harness_lib"
 . "$HERE/libexec/mux-agent-state_lib"      # the glyph constants
 
-mkdir -p "$T/bin" "$T/run/agent-state/global"
+mkdir -p "$T/bin" "$T/run/mux/agent-state/global"
 SESSIONS=$T/sessions
 PANES=$T/panes
 export SESSIONS PANES
@@ -52,7 +52,7 @@ printf '%%1\n%%2\n%%3\n' >"$PANES"
 # everything after it.
 # epoch 1 keeps ages stable and large.
 st() { printf '%s 0 %s 1 %s %s\n' "$2" "$1" "${4:--}" "$3" \
-  >"$T/run/agent-state/global/${1#%}"; }
+  >"$T/run/mux/agent-state/global/${1#%}"; }
 st %1 blocked alpha
 st %2 working delta
 # bravo and charlie have no agent at all: the fold candidates.
@@ -241,10 +241,10 @@ EOF
 chmod +x "$T/bin/tmux.broken"
 st %1 blocked alpha
 st %2 working delta
-_kept=$(ls "$T/run/agent-state/global" | tr '\n' ' ')
+_kept=$(ls "$T/run/mux/agent-state/global" | tr '\n' ' ')
 cp "$T/bin/tmux.broken" "$T/bin/tmux"
 render delta 400 >/dev/null 2>&1 || true
-_after=$(ls "$T/run/agent-state/global" 2>/dev/null | tr '\n' ' ')
+_after=$(ls "$T/run/mux/agent-state/global" 2>/dev/null | tr '\n' ' ')
 [ "$_after" = "$_kept" ] \
   || fail "a failed pane query pruned state: had [$_kept] left [$_after]"
 # Put the working stub back for everything below.
@@ -265,11 +265,11 @@ chmod +x "$T/bin/tmux"
 # A killed agent never fires its Stop hook, so nothing else removes these; a
 # phantom would keep reporting state for a pane that is gone.
 st %9 blocked ghost
-[ -f "$T/run/agent-state/global/9" ] || fail "setup: no phantom to prune"
+[ -f "$T/run/mux/agent-state/global/9" ] || fail "setup: no phantom to prune"
 render delta 400 >/dev/null
-[ -f "$T/run/agent-state/global/9" ] \
+[ -f "$T/run/mux/agent-state/global/9" ] \
   && fail "a state file for a dead pane survived the render"
 # ... and a LIVE pane's file is untouched.
-[ -f "$T/run/agent-state/global/1" ] || fail "pruned a live pane's state"
+[ -f "$T/run/mux/agent-state/global/1" ] || fail "pruned a live pane's state"
 
 pass

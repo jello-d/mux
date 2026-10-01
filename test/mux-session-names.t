@@ -31,7 +31,7 @@ set -eu
 _name=mux-session-names
 . "$(dirname "$0")/harness_lib"
 
-mkdir -p "$T/bin" "$T/run/mux-exclude" "$T/run/agent-state/global"
+mkdir -p "$T/bin" "$T/run/mux-exclude" "$T/run/mux/agent-state/global"
 SESSIONS=$T/sessions
 OUT=$T/out
 export SESSIONS OUT
@@ -104,7 +104,7 @@ unhide
 # shared the word-splitting loop.
 # Record: state window pane epoch notif SESSION: session LAST, which is the
 # whole point here: `my project` must come back whole.
-st() { agent_rec "$T/run/agent-state/global/${1#%}" "$2" "$1" 1 "$3"; }
+st() { agent_rec "$T/run/mux/agent-state/global/${1#%}" "$2" "$1" 1 "$3"; }
 st %2 blocked 'my project'
 st %3 blocked zulu
 nb() {
@@ -146,11 +146,11 @@ esac
 exit 0
 EOF
 chmod +x "$T/emitbin/tmux"
-rm -f "$T/run/agent-state/global"/*
+rm -f "$T/run/mux/agent-state/global"/*
 env XDG_RUNTIME_DIR="$T/run" TMUX=/tmp/fake/global,1,0 TMUX_PANE=%7 \
   PATH="$T/emitbin:$PATH" "$HERE/libexec/mux-agent-state-emit" working \
   >/dev/null 2>&1 || fail "emit failed"
-_rec=$(cat "$T/run/agent-state/global/7")
+_rec=$(cat "$T/run/mux/agent-state/global/7")
 _found=$(env XDG_RUNTIME_DIR="$T/run" sh -c '
   . "$1/libexec/mux-agent-state_lib"
   mux_agent_state "$(mux_agent_dir global)" "my project"' _ "$HERE")
@@ -205,15 +205,15 @@ EOF
 chmod +x "$T/notifbin/send"
 NLOG=$T/nlog; : >"$NLOG"; export NLOG
 
-rm -f "$T/run/agent-state/global"/*
+rm -f "$T/run/mux/agent-state/global"/*
 # Previous state must be `working` for the transition to fire.
-agent_rec "$T/run/agent-state/global/8" working %8 100 'my project'
+agent_rec "$T/run/mux/agent-state/global/8" working %8 100 'my project'
 env XDG_RUNTIME_DIR="$T/run" TMUX=/tmp/fake/global,1,0 TMUX_PANE=%8 \
   MUX_NOTIFY_SEND="$T/notifbin/send" PATH="$T/notifbin:$PATH" \
   "$HERE/libexec/mux-agent-state-emit" idle >/dev/null 2>&1 \
   || fail "emit with a notification failed"
 
-_rec=$(cat "$T/run/agent-state/global/8")
+_rec=$(cat "$T/run/mux/agent-state/global/8")
 # The session is the LAST field, and it must still be the real one.
 _got=$(printf '%s
 ' "$_rec" | { read -r _a _b _c _d _e _f; printf '%s' "$_f"; })
@@ -231,7 +231,7 @@ grep -qF 'my project' "$NLOG" \
 grep -qxF 'Claude finished: 0' "$NLOG" \
   && fail "the banner named the window index"
 
-rm -f "$T/run/agent-state/global"/*
+rm -f "$T/run/mux/agent-state/global"/*
 st %2 blocked 'my project'
 st %3 blocked zulu
 
@@ -290,11 +290,11 @@ emit() {
   PATH="$T/lateb:$PATH" "$HERE/libexec/mux-agent-state-emit" "$@" \
   >/dev/null 2>&1
 }
-recstate() { cut -d' ' -f1 <"$T/run/agent-state/global/30"; }
+recstate() { cut -d' ' -f1 <"$T/run/mux/agent-state/global/30"; }
 
-rm -f "$T/run/agent-state/global"/*
+rm -f "$T/run/mux/agent-state/global"/*
 # The turn ends.
-agent_rec "$T/run/agent-state/global/30" idle %30 100 vicus
+agent_rec "$T/run/mux/agent-state/global/30" idle %30 100 vicus
 # A straggler fires. WITHOUT the flag this is the bug, and it is still allowed,
 # because an old hooks.json calls it exactly that way and must keep working.
 emit working
@@ -302,16 +302,16 @@ emit working
   || fail "a bare 'working' should still be honoured (compatibility)"
 
 # WITH the flag it must be refused: the turn is over.
-agent_rec "$T/run/agent-state/global/30" idle %30 100 vicus
+agent_rec "$T/run/mux/agent-state/global/30" idle %30 100 vicus
 emit working --beat
 [ "$(recstate)" = idle ] \
   || fail "--beat resurrected 'working' out of 'idle'"
 # ... and the record is untouched, not rewritten with a new epoch.
-_ep=$(cut -d' ' -f4 <"$T/run/agent-state/global/30")
+_ep=$(cut -d' ' -f4 <"$T/run/mux/agent-state/global/30")
 [ "$_ep" = 100 ] || fail "--beat rewrote the epoch: [$_ep]"
 
 # It must still REFRESH an agent that is genuinely working.
-agent_rec "$T/run/agent-state/global/30" working %30 100 vicus
+agent_rec "$T/run/mux/agent-state/global/30" working %30 100 vicus
 emit working --beat
 [ "$(recstate)" = working ] \
   || fail "--beat dropped a live 'working'"
@@ -327,8 +327,8 @@ emit working --beat
 # corroborates it. Asserted as a sequence, because each step is a different
 # failure: promoting on the first beat is the straggler bug returning, and
 # never promoting is the bug this exists to fix.
-BEATF=$T/run/agent-state/global/30.beat
-agent_rec "$T/run/agent-state/global/30" idle %30 100 vicus
+BEATF=$T/run/mux/agent-state/global/30.beat
+agent_rec "$T/run/mux/agent-state/global/30" idle %30 100 vicus
 rm -f "$BEATF"
 emit working --beat
 [ "$(recstate)" = idle ] \
@@ -343,7 +343,7 @@ working in auto mode can never be seen again"
 
 # A LAPSED window does not corroborate. Two beats far apart are two
 # stragglers, not sustained work, and the whole discriminator is sustained.
-agent_rec "$T/run/agent-state/global/30" idle %30 100 vicus
+agent_rec "$T/run/mux/agent-state/global/30" idle %30 100 vicus
 printf '1\n' >"$BEATF"          # an ancient first beat
 emit working --beat
 [ "$(recstate)" = idle ] \
@@ -352,7 +352,7 @@ emit working --beat
 # A REAL TRANSITION CLEARS THE MARK. Otherwise a mark left by a beat during
 # one turn lets a straggler in the NEXT turn find corroboration it never
 # earned: the straggler bug, reintroduced through the back door.
-agent_rec "$T/run/agent-state/global/30" idle %30 100 vicus
+agent_rec "$T/run/mux/agent-state/global/30" idle %30 100 vicus
 rm -f "$BEATF"
 emit working --beat               # leaves a mark
 [ -f "$BEATF" ] || fail "setup: expected a mark"
@@ -362,23 +362,23 @@ emit working --beat               # leaves a mark
 emit working                      # the bare compatibility form
 [ "$(recstate)" = working ] || fail "setup: expected the bare form to promote"
 [ -f "$BEATF" ] && fail "a state transition did not clear the beat mark"
-agent_rec "$T/run/agent-state/global/30" idle %30 100 vicus
+agent_rec "$T/run/mux/agent-state/global/30" idle %30 100 vicus
 emit working --beat
 [ "$(recstate)" = idle ] \
   || fail "a single beat promoted using a mark from a previous turn"
 
 # And `blocked` -> `working` is a LEGITIMATE promotion: you approved a
 # permission prompt and the tool ran. Scoped to idle, nothing wider.
-agent_rec "$T/run/agent-state/global/30" blocked %30 100 vicus
+agent_rec "$T/run/mux/agent-state/global/30" blocked %30 100 vicus
 emit working --beat
 [ "$(recstate)" = working ] \
   || fail "--beat blocked a legitimate blocked->working"
 
 # Flag order must not matter.
-agent_rec "$T/run/agent-state/global/30" idle %30 100 vicus
+agent_rec "$T/run/mux/agent-state/global/30" idle %30 100 vicus
 emit --beat working
 [ "$(recstate)" = idle ] || fail "flag order changed the outcome"
-rm -f "$T/run/agent-state/global"/*
+rm -f "$T/run/mux/agent-state/global"/*
 st %2 blocked 'my project'
 st %3 blocked zulu
 

@@ -17,7 +17,7 @@ set -eu
 _name=mux-ls
 . "$(dirname "$0")/harness_lib"
 
-mkdir -p "$T/bin" "$T/conf/partitions" "$T/proj" "$T/run/agent-state/global"
+mkdir -p "$T/bin" "$T/conf/partitions" "$T/proj" "$T/run/mux/agent-state/global"
 XDG_RUNTIME_DIR=$T/run; export XDG_RUNTIME_DIR
 
 LIVE=$T/live; SRC=$T/srclog
@@ -62,9 +62,9 @@ esac
 # Same mapping the strip uses. A session with no tracked agent gets the
 # no-agent glyph rather than being omitted or blank.
 printf 'blocked\nworking\nidle\nbare\n' >"$LIVE"
-agent_rec "$T/run/agent-state/global/1" blocked %1 100 blocked
-agent_rec "$T/run/agent-state/global/2" working %2 100 working
-agent_rec "$T/run/agent-state/global/3" idle    %3 100 idle
+agent_rec "$T/run/mux/agent-state/global/1" blocked %1 100 blocked
+agent_rec "$T/run/mux/agent-state/global/2" working %2 100 working
+agent_rec "$T/run/mux/agent-state/global/3" idle    %3 100 idle
 _o=$(mux ls)
 glyph_of() { printf '%s\n' "$_o" | awk -v s="$1:" '$2==s{print $1; exit}'; }
 [ "$(glyph_of blocked)" = '⚠️' ] \
@@ -81,7 +81,7 @@ glyph_of() { printf '%s\n' "$_o" | awk -v s="$1:" '$2==s{print $1; exit}'; }
 
 # --- a session name containing a SPACE survives ls ---------------------
 printf 'my project\n' >"$LIVE"
-agent_rec "$T/run/agent-state/global/4" working %4 100 'my project'
+agent_rec "$T/run/mux/agent-state/global/4" working %4 100 'my project'
 _o=$(mux ls)
 case $_o in
 *"my project:"*) ;;

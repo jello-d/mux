@@ -23,12 +23,12 @@ XDG_RUNTIME_DIR=$T/run
 MUX_DIR=$T/conf
 MUX_CACHE=$T/cache
 export XDG_RUNTIME_DIR MUX_DIR MUX_CACHE
-mkdir -p "$XDG_RUNTIME_DIR/agent-state/global" \
-  "$XDG_RUNTIME_DIR/agent-state/work" "$MUX_DIR/partitions" "$T/bin"
+mkdir -p "$XDG_RUNTIME_DIR/mux/agent-state/global" \
+  "$XDG_RUNTIME_DIR/mux/agent-state/work" "$MUX_DIR/partitions" "$T/bin"
 
-agent_rec "$XDG_RUNTIME_DIR/agent-state/global/p1" blocked %1 100 alpha x
-agent_rec "$XDG_RUNTIME_DIR/agent-state/global/p2" working %2 200 bravo x
-agent_rec "$XDG_RUNTIME_DIR/agent-state/work/p1"   idle    %3 300 wsess x
+agent_rec "$XDG_RUNTIME_DIR/mux/agent-state/global/p1" blocked %1 100 alpha x
+agent_rec "$XDG_RUNTIME_DIR/mux/agent-state/global/p2" working %2 200 bravo x
+agent_rec "$XDG_RUNTIME_DIR/mux/agent-state/work/p1"   idle    %3 300 wsess x
 
 # The same one-question tmux as mux-agent-summary.t: does partition X have a
 # client attached? $WATCHED is the set that does.
@@ -227,7 +227,8 @@ eq peers-root \
 # would make a leaked epoch and a genuine 55-year age indistinguishable. This
 # one was written just now, so an age is single digits and an epoch is 1.7
 # billion: no threshold to tune, and the two cannot be confused.
-agent_rec "$XDG_RUNTIME_DIR/agent-state/global/p9" idle %9 "$(date +%s)" fresh x
+agent_rec "$XDG_RUNTIME_DIR/mux/agent-state/global/p9" idle %9 \
+  "$(date +%s)" fresh x
 printf 'fresh	/srv/fresh
 ' >>"$MUX_STATE/sessions.global"
 run peers
@@ -236,7 +237,7 @@ eq peers-age-sane "$(jq 'all(p["age"] >= 0 for p in d["peers"])')" True
 # A record stamped in the FUTURE, which is what the clamp exists for: this
 # host's clock moved, and "0" is the honest floor for "it began no earlier
 # than now". Without a case for it the clamp is a guard nothing can kill.
-agent_rec "$XDG_RUNTIME_DIR/agent-state/global/p8" idle %8 \
+agent_rec "$XDG_RUNTIME_DIR/mux/agent-state/global/p8" idle %8 \
   "$(( $(date +%s) + 3600 ))" ahead x
 printf 'ahead\t/srv/ahead\n' >>"$MUX_STATE/sessions.global"
 run peers
@@ -539,7 +540,7 @@ eq hybrid-granted-rc "$RC" 0
 # --- the two acknowledgements are SEPARATE --------------------------------
 # Being allowed to answer prompts must never imply being allowed to type into
 # a pane mux cannot classify.
-agent_rec "$XDG_RUNTIME_DIR/agent-state/global/p7" weirdstate %7 100 odd x
+agent_rec "$XDG_RUNTIME_DIR/mux/agent-state/global/p7" weirdstate %7 100 odd x
 printf 'odd\t/srv/odd\n' >>"$MUX_STATE/sessions.global"
 pol 'send-blocked control:agent'
 CLASS=agent run send odd 'x' --answer-prompt; unset CLASS
