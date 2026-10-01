@@ -63,9 +63,24 @@ case "$*" in
   [ -z "${NOSERVER:-}" ] || exit 1
   printf '%%1\t%s\n%%2\t%s\n' "${CLASS1:-}" "${CLASS2:-}" ;;
 *window_name*)   printf '%s\n' "${WINNAME:-main}" ;;
+# BEFORE the `@mux-control` arm, and that ordering is the point: a
+# `set-option ... @mux-control agent` MENTIONS the option name, so the query
+# arm below would answer it and swallow the write. Most specific arm first,
+# which is this stub's own header rule, met again.
+*set-option*)    printf 'TMUX %s\n' "$*" >>"$CAPLOG" ;;
 *@mux-control*)  printf '%s\n' "${CLASS:-}" ;;
 *load-buffer*|*paste-buffer*|*send-keys*|*delete-buffer*)
   printf 'TMUX %s\n' "$*" >>"$CAPLOG" ;;
+# $NOSESSION makes the existence check fail, which is a DIFFERENT answer
+# from "it exists and is empty" and the whole reason open exits 3.
+*has-session*)
+  [ -z "${NOSESSION:-}" ] || exit 1 ;;
+# new-window answers with the index it made, because `open` asks the CREATE
+# for it (`-P -F`) rather than querying afterwards: a follow-up query would
+# be about "the current window", which `-d` has just declined to change.
+*new-window*)
+  printf 'TMUX %s\n' "$*" >>"$CAPLOG"
+  printf '%s\n' "${NEWIDX:-3}" ;;
 esac
 exit 0
 EOF
@@ -82,7 +97,8 @@ run() {   # <args...> -> stdout in $OUT, exit in $RC
     CAPLOG="${CAPLOG:-/dev/null}" CLASS="${CLASS:-}" \
     WINNAME="${WINNAME:-main}" MUX_LOG="$T/log" \
     CLASS1="${CLASS1:-}" CLASS2="${CLASS2:-}" \
-    NOSERVER="${NOSERVER:-}" \
+    NOSERVER="${NOSERVER:-}" NOSESSION="${NOSESSION:-}" \
+    NEWIDX="${NEWIDX:-3}" \
     MUX_SEND_POLICY_FILE="$T/etc/send-policy" \
     "$HERE/bin/mux" agent "$@" 2>"$T/err") || RC=$?
 }
@@ -649,8 +665,17 @@ eq "cross-override" "$(jq 'd["override"]')" none
 # capture log rather than on the verdict, because a refusal that prints the
 # right JSON after already pasting the text is the one failure that matters
 # here, and no status assertion can see it.
+# CAPLOG IS RESTORED, NOT UNSET, and that distinction is a real trap in the
+# `VAR=x func; unset VAR` idiom this suite adopted for the macOS leak. The
+# idiom is only safe for a name that is OTHERWISE UNSET: `CAPLOG` has a
+# legitimate value set at the top of this file, the prefix merely shadows it
+# for one call, and `unset` therefore destroyed the file's own global. It went
+# unnoticed because nothing after this line read CAPLOG until a case was
+# appended months later, which then died with `CAPLOG: parameter not set`
+# about a variable assigned 600 lines above.
 CAPLOG=$T/crosslog WATCHED=global run send wsess 'rm -rf /' \
-  --partition work --answer-prompt --blind; unset CAPLOG WATCHED
+  --partition work --answer-prompt --blind
+CAPLOG=$T/caplog; unset WATCHED
 [ ! -s "$T/crosslog" ] || fail "text was sent into another partition even
 though the call was refused, and the override flags must not be a way
 through: [$(cat "$T/crosslog")]"
@@ -674,5 +699,104 @@ eq "ctxfail-rc" "$RC" 1
 eq "ctxfail-reason" "$(jq 'd["reason"]')" cross-partition
 cp "$T/config.keep" "$MUX_DIR/config"
 
+
+
+# --- `open`: a WINDOW in an existing session, and what it is for ----------
+# vicus's R8. Without this verb the layer above reimplements it, and did: its
+# one documented exemption from "never sidestep mux to reach tmux" omitted
+# `-d`, so every worker it spawned dragged the human's view into the worker.
+: >"$CAPLOG"
+run open alpha --name build-1 --dir "$T" --cmd 'make watch' \
+  --control agent --attention agent
+[ "$RC" = 0 ] || fail "open failed: rc=$RC $(cat "$T/err") $OUT"
+eq "open-status" "$(jq 'd["status"]')" ok
+eq "open-window" "$(jq 'd["window"]')" 3
+eq "open-session" "$(jq 'd["session"]')" alpha
+eq "open-control" "$(jq 'd["control"]')" agent
+eq "open-attention" "$(jq 'd["attention"]')" agent
+
+# DETACHED, ALWAYS, on this surface. THE LOAD-BEARING ASSERTION of the verb:
+# a machine call that moves the human's view mid-turn is an interrupt nobody
+# asked for, and it is the exact defect the hand-rolled copy had.
+case "$(cat "$CAPLOG")" in
+*'new-window'*' -d '*) ;;
+*) fail "open did not pass -d, so tmux SELECTED the new window and the
+human's view followed a worker: $(cat "$CAPLOG")" ;;
+esac
+# The target is anchored, or `alpha` would match `alpha-2`: the bug this
+# codebase has shipped four times.
+case "$(cat "$CAPLOG")" in
+*'new-window -t =alpha'*) ;;
+*) fail "open did not anchor the session target: $(cat "$CAPLOG")" ;;
+esac
+# And both classes are declared on the window it just made, not on whatever
+# pane happened to be current.
+case "$(cat "$CAPLOG")" in
+*'set-option -p -t =alpha:3 @mux-control agent'*) ;;
+*) fail "the control class was not set on the new window: $(cat "$CAPLOG")" ;;
+esac
+case "$(cat "$CAPLOG")" in
+*'set-option -p -t =alpha:3 @mux-attention agent'*) ;;
+*) fail "attention was not set on the new window: $(cat "$CAPLOG")" ;;
+esac
+
+# IT NEVER CREATES A SESSION, which is a different job (`mux go`). A missing
+# one is `no-such-name` and exit 3, mux's existing cross-cutting code for the
+# condition, so a caller that mistyped a session does not get a surprise one.
+NOSESSION=1; export NOSESSION
+run open nosuch --name w
+[ "$RC" = 3 ] || fail "open on a missing session must exit 3, got $RC: $OUT"
+eq "open-missing" "$(jq 'd["status"]')" no-such-name
+unset NOSESSION
+
+# A CLASS IS ONE OF THREE WORDS. An unknown one is refused rather than
+# recorded: every reader falls through to `human`, so the call would read as a
+# grant and behave as a refusal.
+run open alpha --control supervisor
+[ "$RC" = 2 ] || fail "a bad class must exit 2, got $RC: $OUT"
+eq "open-badclass" "$(jq 'd["status"]')" usage
+
+# A WINDOW NAME MAY NOT CONTAIN A COLON, for the same reason a session name
+# may not: the address grammar spends `:` on the window separator, so such a
+# window is unaddressable by the grammar that would name it.
+run open alpha --name 'a:b'
+[ "$RC" = 2 ] || fail "a colon in a window name must exit 2, got $RC: $OUT"
+
+# AND IT REFUSES TO CROSS A PARTITION, which it must do HARDER than `send`:
+# send types into a pane that exists, open RUNS A COMMAND, and where a
+# partition's boundary is a group acquired per session the children of that
+# server hold it. No flag and no policy token opens this.
+printf 'label work\n' >"$MUX_DIR/partitions/work.partition"
+run open wsess --partition work --name w
+[ "$RC" = 1 ] || fail "a cross-partition open must exit 1, got $RC: $OUT"
+eq "open-cross" "$(jq 'd["status"]')" refused
+eq "open-cross-reason" "$(jq 'd["reason"]')" cross-partition
+eq "open-cross-override" "$(jq 'd["override"]')" none
+
+# --- `peers` reports per WINDOW ------------------------------------------
+# vicus's R4, and the half of R8 a session-level answer cannot give: a worker
+# is a WINDOW in the session it serves, so collapsing a session to its worst
+# agent cannot say whether THIS worker is live.
+agent_rec "$XDG_RUNTIME_DIR/mux/agent-state/global/p9" idle %9 400 alpha x
+python3 - "$XDG_RUNTIME_DIR/mux/agent-state/global/p9" <<'PY'
+import sys
+# agent_rec writes window 0; this record is the SECOND window of alpha, and
+# the window field is what the per-window answer is about.
+p = sys.argv[1]
+f = open(p).read().split()
+f[1] = "7"
+open(p, "w").write(" ".join(f) + "\n")
+PY
+run peers
+[ "$RC" = 0 ] || fail "peers failed: $OUT"
+_wq='sorted(str(x["window"]) for x in d["peers"]'
+_wq="$_wq"' if x["session"]=="alpha")'
+eq "peers-windows" "$(jq "$_wq")" "['0', '7']"
+eq "peers-win-state" \
+  "$(jq '[x["state"] for x in d["peers"] if x["window"]==7][0]')" idle
+_sq='[x["state"] for x in d["peers"]'
+_sq="$_sq"' if x["session"]=="alpha" and x["window"]==0][0]'
+eq "peers-win0-state" "$(jq "$_sq")" blocked
+rm -f "$XDG_RUNTIME_DIR/mux/agent-state/global/p9"
 
 pass

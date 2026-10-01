@@ -35,15 +35,20 @@ else.
 mux agent peers
 ```
 
-One object per session with a tracked agent:
+One object per WINDOW with a tracked agent. A session usually has one, and
+then this reads exactly as a per-session answer; a session being supervised
+has one window per worker, and each answers for itself:
 
 ```json
 {"status":"ok","peers":[
-  {"partition":"global","session":"api","state":"working","age":42,
-   "control":"agent","root":"/home/you/src/api"}
+  {"partition":"global","session":"api","window":0,"state":"working",
+   "age":42,"control":"agent","root":"/home/you/src/api"}
 ]}
 ```
 
+- `window` is the tmux window index. Pass it back to nothing: it is here so
+  you can tell one worker from another, and every verb that acts resolves its
+  own target rather than trusting an id you cached.
 - `state` is `blocked`, `working` or `idle`. **`blocked` means it is waiting
   on a human** - a permission prompt, a question - not that it is stuck.
 - `age` is SECONDS in that state, already computed. Never treat it as a
@@ -110,6 +115,38 @@ printf '%s' "$charge" | mux agent send api -
 
 Sending to a `working` agent is fine: the text queues and it picks it up when
 its turn ends. That is the normal way to give an agent its next instruction.
+
+## Opening a window for a worker
+
+```sh
+mux agent open api --name build-1 --dir ~/src/api \
+  --cmd 'make watch' --control agent --attention agent
+```
+
+Opens a WINDOW in a session that already exists, and declares what it is for.
+It answers with the window it made:
+
+```json
+{"status":"ok","partition":"global","session":"api","window":3,
+ "control":"agent","attention":"agent"}
+```
+
+- It never creates a session. That is a different job, and if `api` is not
+  there you get `no-such-name` rather than a surprise session.
+- It is always DETACHED. Your window does not move the human's view, which
+  would be an interrupt nobody asked for.
+- `--control` says who may TYPE into the new pane: `agent` is what makes it
+  reachable by `mux agent send` where a policy allows it, and the default
+  without the flag is `human`, which is refused to every sender.
+- `--attention` says whose attention it is OWED. `agent` keeps it off the
+  human's status strip, their notifications and their `next-blocked`, which
+  is what stops one worker waiting on you from painting a whole session
+  blocked. Leave it off and the human sees the worker as their own.
+- You may declare either class on a window you are CREATING. There is no verb
+  that reclassifies a pane somebody else made.
+- A partition is a boundary: opening a window in another one is refused
+  outright, with no flag and no policy that opens it. Opening runs a COMMAND,
+  so it crosses harder than sending text does.
 
 ## The rule that matters
 

@@ -59,7 +59,7 @@ _out() {   # <status> <exit> <message>
 }
 
 _usage() {
-  _out usage 2 "usage: mux agent <status|peers|read|wait|send> ..."
+  _out usage 2 "usage: mux agent <status|peers|read|wait|send|open> ..."
 }
 
 _verb=${1:-}
@@ -67,7 +67,7 @@ _verb=${1:-}
 shift
 
 case $_verb in
-status|peers|read|wait|send) ;;
+status|peers|read|wait|send|open) ;;
 *) _out usage 2 "unknown agent verb: $_verb" ;;
 esac
 
@@ -444,6 +444,91 @@ $_sstate$_sov ${#_stext} bytes"
   exit 0
 fi
 
+if [ "$_verb" = open ]; then
+  # --- open ----------------------------------------------------------
+  # Open a WINDOW in an existing session, and declare what it is for.
+  # vicus's R8: a worker is a WINDOW in the session it serves, and with no
+  # verb for this the layer above reimplements it. It did, as its single
+  # documented exemption from "never sidestep mux to reach tmux", and the
+  # copy omitted `-d` so every spawn dragged the human's view into a worker.
+  #
+  # FIELDS, NOT A COMPOUND TOKEN, which is the machine surface's existing
+  # rule rather than a new one: `peers` emits partition and session
+  # separately, so nothing here parses a packed identifier and `send` has
+  # nothing imposed on it backwards. The HUMAN verb (`mux window`) takes one
+  # typed token, because a human types.
+  _oname= _odir= _ocmd= _octl= _oattn= _opart= _osess=
+  while [ "$#" -gt 0 ]; do
+    case $1 in
+    --partition) _opart=${2:-}; shift 2 || _usage ;;
+    --name)      _oname=${2:-}; shift 2 || _usage ;;
+    --dir)       _odir=${2:-}; shift 2 || _usage ;;
+    --cmd)       _ocmd=${2:-}; shift 2 || _usage ;;
+    --control)   _octl=${2:-}; shift 2 || _usage ;;
+    --attention) _oattn=${2:-}; shift 2 || _usage ;;
+    -*) _out usage 2 "unknown option: $1" ;;
+    *)  [ -z "$_osess" ] || _out usage 2 "one session, not two: $1"
+        _osess=$1; shift ;;
+    esac
+  done
+  [ -n "$_osess" ] || _out usage 2 "usage: mux agent open SESSION \
+[--partition P] [--name N] [--dir D] [--cmd C] [--control CLASS] \
+[--attention CLASS]"
+
+  _rp=$_opart
+  if [ -z "$_rp" ] && [ -r "$_lib/mux-context_lib" ]; then
+    . "$_lib/mux-context_lib"
+    mux_ctx_resolve 2>/dev/null && _rp=$MUX_CTX_PARTITION
+  fi
+
+  # CROSS-PARTITION IS REFUSED, AND THIS VERB CROSSES HARDER THAN `send`
+  # DOES. `send` types into a pane that already exists; opening a window
+  # RUNS A COMMAND, and where a partition's boundary is a group acquired per
+  # session, the children of that server hold it. So the same structural
+  # refusal, for a stronger reason, and there is deliberately no flag and no
+  # policy token that opens it.
+  if [ -r "$_lib/mux-context_lib" ]; then
+    . "$_lib/mux-context_lib"
+    mux_ctx_crossing "${_rp:-global}" 'open a window across' || {
+      printf '{"status":%s,"reason":%s,"override":%s,"message":%s}\n' \
+        "$(mux_json_str refused)" \
+        "$(mux_json_str cross-partition)" \
+        "$(mux_json_str none)" \
+        "$(mux_json_str "refusing to open a window in $_osess: \
+$MUX_CTX_CROSS")"
+      exit 1
+    }
+  fi
+
+  . "$_lib/mux-sessions_lib"
+  . "$_lib/mux-window_lib"
+  # NOT IN A `$( )`, deliberately: the engine reports its reason in a
+  # variable, and a command substitution is a subshell that throws it away.
+  # See mux-window_lib, where doing it the other way cost an empty document
+  # on the refusal path.
+  _ow=0
+  mux_window_open "${_rp:-global}" "$_osess" "$_oname" "$_odir" \
+    "$_ocmd" "$_octl" "$_oattn" 0 || _ow=$?
+  case $_ow in
+  0) ;;
+  3) _out no-such-name 3 "$MUX_WIN_ERR" ;;
+  *) _out usage 2 "$MUX_WIN_ERR" ;;
+  esac
+
+  # DETACHED, ALWAYS, on this surface: a machine verb that moves the human's
+  # view mid-turn is an interrupt nobody asked for. The human verb switches.
+  printf '{"status":%s,"partition":%s,"session":%s,"window":%s,' \
+    "$(mux_json_str ok)" \
+    "$(mux_json_str "${_rp:-global}")" \
+    "$(mux_json_str "$_osess")" \
+    "$(mux_json_num "${MUX_WIN_OUT#*:}")"
+  printf '"control":%s,"attention":%s}\n' \
+    "$([ -n "$_octl" ] && mux_json_str "$_octl" || printf null)" \
+    "$([ -n "$_oattn" ] && mux_json_str "$_oattn" || printf null)"
+  exit 0
+fi
+
+
 if [ "$_verb" = peers ]; then
   # --- peers ---------------------------------------------------------
   # Every session with a tracked agent, and what it is doing. The verb an
@@ -524,7 +609,19 @@ if [ "$_verb" = peers ]; then
         2>/dev/null) || _ctl=
       mux_agent_sessions "$_dir" | while IFS= read -r _s; do
         [ -n "$_s" ] || continue
-        _se=$(mux_agent_state "$_dir" "$_s")
+        # ONE ENTRY PER WINDOW, which is vicus's R4 and the half of R8 that
+        # a session-level answer cannot give: a worker is a WINDOW in the
+        # session it serves, so collapsing a session to its worst agent
+        # cannot say whether THIS worker is live. That was tried and
+        # rejected for exactly that, because it would confidently answer a
+        # different question, which is worse than the bypass it replaced.
+        #
+        # THE COMMON CASE IS UNCHANGED IN SUBSTANCE: a session with one
+        # agent emits one object, as before, now carrying the window it is
+        # in. The SHAPE moved, so `agent contract` moved with it.
+        mux_agent_windows "$_dir" "$_s" | while IFS= read -r _wi; do
+        [ -n "$_wi" ] || continue
+        _se=$(mux_agent_state_win "$_dir" "$_s" "$_wi")
         _st=${_se%% *}
         _ep=${_se#* }
         [ -n "$_st" ] || continue
@@ -562,7 +659,7 @@ if [ "$_verb" = peers ]; then
         # the same as handing it over.
         _cl=
         if [ -n "$_ctl" ]; then
-          _pn=$(mux_agent_pane "$_dir" "$_s")
+          _pn=$(mux_agent_pane_win "$_dir" "$_s" "$_wi")
           _cl=$(printf '%s\n' "$_ctl" | awk \
             -F'\t' -v k="$_pn" \
             '$1 == k { print $2; exit }')
@@ -579,9 +676,10 @@ if [ "$_verb" = peers ]; then
             | grep -q "^$_pn	" \
             || _cl=
         fi
-        printf '{"partition":%s,"session":%s,' \
+        printf '{"partition":%s,"session":%s,"window":%s,' \
           "$(mux_json_str "$_p")" \
-          "$(mux_json_str "$_s")"
+          "$(mux_json_str "$_s")" \
+          "$(mux_json_num "$_wi")"
         printf '"state":%s,"age":%s,"control":%s,' \
           "$(mux_json_str "$_st")" \
           "$(mux_json_num "${_ag:-}")" \
@@ -591,6 +689,7 @@ if [ "$_verb" = peers ]; then
         printf '"root":%s}\n' \
           "$(mux_json_str \
             "$(mux_sess_root "$_s" "$_p")")"
+        done
       done
     done | mux_json_array
   )
