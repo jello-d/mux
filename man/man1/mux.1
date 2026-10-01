@@ -816,6 +816,21 @@ a specific agent, and a bare
 .B pane
 a plain shell.
 .TP
+.B control human | agent | hybrid
+Declare who may TYPE into the pane declared immediately above. The default is
+.BR human ,
+which every sender is refused before
+.I /etc/mux/send-policy
+is even consulted;
+.B agent
+marks an orchestrated worker, the class that policy can grant;
+.B hybrid
+is its own class rather than a shade of either neighbour. mux records what the
+layout declares and classifies nothing on its own, and there is deliberately no
+way to reclassify a pane somebody else created. Refused after
+.BR bottom ,
+and refused with no pane above it, because the directive is positional.
+.TP
 .B bottom \fIN\fR | \fIMIN\-MAX\fR
 A full-width bottom shell pane, with a fixed or bounded height in lines.
 .PP

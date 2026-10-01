@@ -34,7 +34,7 @@ case "$*" in
   case "$*" in
   *pane_index*) cat "$PANES" ;;
   *) grep '|5-10|' "$PANES" \
-    | while IFS='|' read -r _i b a c; do
+    | while IFS='|' read -r _i b a k c; do
       printf '%s|%s\n' "$b" "$c"
       done ;;
   esac ;;
@@ -46,12 +46,13 @@ TMUXLOG=$T/log; PROJDIR=$T/proj; WINDOWS=$T/win; PANES=$T/panes; THEMEF=$T/theme
 export TMUXLOG PROJDIR WINDOWS PANES THEMEF
 PATH=$T/bin:$PATH; export PATH
 printf '0 main\n' >"$WINDOWS"
-# index|bottom|agent|command: the middle pane is the agent, the last the
-# full-width bottom, i.e. exactly the shipped default arrangement.
+# index|bottom|agent|control|command: the middle pane is the agent, the last
+# the full-width bottom, i.e. exactly the shipped default arrangement. No pane
+# declares a control class, so the default arrangement round-trips to itself.
 {
-  printf '0|||bash\n'
-  printf '1||1|bash\n'
-  printf '2|5-10||bash\n'
+  printf '0||||bash\n'
+  printf '1||1||bash\n'
+  printf '2|5-10|||bash\n'
 } >"$PANES"
 : >"$THEMEF"
 
@@ -113,5 +114,32 @@ esac
 save --force >/dev/null || fail "--force did not allow the overwrite"
 grep -qE '^window[[:space:]]+third' "$T/conf/layouts/proj.layout" \
   || fail "--force did not write the new arrangement"
+
+# --- THE CONTROL CLASS ROUND-TRIPS ----------------------------------------
+# EXACTLY THE REASON `@mux-agent` IS READ TWO FIELDS EARLIER, applied to the
+# option that decides who may TYPE into a pane. Without it a save-then-build
+# cycle silently reclasses a worker to `human`, which is mux's safe default
+# and precisely wrong here: a supervisor then cannot type into its own
+# worker, and nothing anywhere says why.
+printf '0|||agent|bash\n1||1|hybrid|bash\n2|5-10|||bash\n' >"$PANES"
+save --force >/dev/null || fail "save with declared classes failed"
+grep -qE '^control[[:space:]]+agent'  "$T/conf/layouts/proj.layout" \
+  || fail "a pane declared 'control agent' came back unclassed, so the next
+build would hand it to the human and the send policy would refuse its own
+supervisor: $(cat "$T/conf/layouts/proj.layout")"
+grep -qE '^control[[:space:]]+hybrid' "$T/conf/layouts/proj.layout" \
+  || fail "'hybrid' did not survive the round trip. It is its own class on
+purpose: folding it into either neighbour would force the strictest grant to
+express the middling case."
+
+# AND `human` IS OMITTED, because a layout holds only what OVERRIDES: an
+# explicit `control human` is indistinguishable from the absence of the line,
+# so writing it would read as a decision somebody made.
+printf '0|||human|bash\n1||1||bash\n2|5-10|||bash\n' >"$PANES"
+save --force >/dev/null || fail "save with an explicit human class failed"
+grep -q '^control' "$T/conf/layouts/proj.layout" \
+  && fail "the default class was written out: $(cat \
+"$T/conf/layouts/proj.layout")"
+:
 
 pass
