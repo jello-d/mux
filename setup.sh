@@ -54,6 +54,40 @@ warn() { printf '  %s[WARN]%s %s\n' "$_Y" "$_O" "$1"; }
 _ln()  { mkdir -p "$(dirname "$2")"; ln -sfn "$1" "$2"; }
 _rmln() { [ "$(readlink "$2" 2>/dev/null)" = "$1" ] && rm -f "$2" || :; }
 
+# --- the install's notices reach the LOG as well as the terminal ----------
+# BECAUSE ON THE FLEET'S PRIMARY INSTALL PATH NOBODY CAN READ THEM, measured
+# 2026-10-01: a provisioner swallows this script's output entirely, so its log
+# carried `install: pkg mux -> ~/.local` and not one of mux's own notices. The
+# inert-fragment warning, the indicator skew and the agent-record adoption's
+# repair advice all exist to be READ by a human, and on every provisioned box
+# they went nowhere. That is this package's oldest rule one layer out: advice
+# nobody can read is decoration.
+#
+# THE LOG RECORDS THE EVENT, THE TERMINAL EXPLAINS IT, so this is NOT a second
+# copy of the prose waiting to drift from it. A notice is several lines of
+# wrapped explanation; what belongs in a file capped at mutations-and-failures
+# volume is ONE line naming the CONDITION. Reword the prose freely: the
+# condition is the stable half, the same reason `_common.md` prescribes
+# quoting a message's PREFIX rather than its wording.
+#
+# NOT EVERY NOTICE, and the test is whether the condition survives the install
+# anywhere else. `mux check` already reports an unsourced fragment and absent
+# scan roots durably, so those are covered the moment anybody looks. The
+# adoption is not: it happens once, and afterwards nothing on the box can say
+# it happened or that a record was kept unjudged.
+#
+# SOURCED, NEVER REQUIRED. setup.sh is otherwise standalone on purpose, since
+# it is the one entry point a consumer or provisioner calls, so a missing lib
+# costs the log line and never the install. That matches the lib's own stated
+# bargain: a failed write must not break the thing being logged, and the
+# reader is where the breakage surfaces.
+_HAVE_LOG=
+if [ -r "$_root/libexec/mux-log_lib" ]; then
+  # shellcheck source=/dev/null
+  . "$_root/libexec/mux-log_lib" && _HAVE_LOG=1
+fi
+_slog() { [ -n "$_HAVE_LOG" ] || return 0; mux_log setup "$@"; }
+
 _man_pages() { for _m in "$_root"/man/man*/*.[0-9]; do
   [ -e "$_m" ] && printf '%s\n' "$_m"; done; }
 
@@ -285,10 +319,14 @@ _adopt_runtime_state() {
     rmdir "$_nsd" 2>/dev/null || :
   done
   rmdir "$_rt/agent-state" 2>/dev/null || :
-  [ "$_moved" -eq 0 ] || echo "$PKG: adopted $_moved agent record(s)"
+  [ "$_moved" -eq 0 ] || { echo "$PKG: adopted $_moved agent record(s)"
+    _slog "adopted $_moved agent record(s) from $_rt/agent-state"; }
   [ "$_kept" -eq 0 ] || { echo "$PKG: $_kept agent record(s) were already at"\
     "the new path; if a session reads busy and is not, run"\
-    "'mux agent-doctor --repair'"; }
+    "'mux agent-doctor --repair'"
+    # ONE LINE so the corpus can anchor it: a continuation backslash cannot
+    # be an anchor, which is failure mode two in test/mutants' own header.
+    _slog "kept $_kept record(s) unjudged; mux agent-doctor --repair"; }
   :
 }
 
@@ -302,6 +340,11 @@ do_install() {
   done
   _retire_old_layout
   echo "$PKG: installed to $_pay (+ bin and man links in $PREFIX)"
+  # THE ANCHOR EVENT, and it earns its line by answering a question nothing
+  # else on the box can: WHICH mux this machine received and WHEN. The notes
+  # have twice had to establish that from a payload mtime against a
+  # provisioner log, which only works while both survive.
+  _slog "installed $("$_bin/$PKG" -V 2>/dev/null || echo "$PKG ?") to $_pay"
   _adopt_runtime_state
   _reload_live
   _tmux_conf_notice
@@ -505,6 +548,11 @@ _indicator_notice() {
   echo "$PKG:      (or its daemon is running older code). It polls a mux" >&2
   echo "$PKG:      contract, so leaving it behind loses items silently." >&2
   echo "$PKG:      Refresh it with: ./setup.sh indicator" >&2
+  # LOGGED BECAUSE `mux check` CANNOT SEE IT: the verdict comes from the
+  # indicator's own three-copy check, which core deliberately does not run.
+  # So without this the skew is reported once, to a terminal that may not
+  # exist, and never again.
+  _slog "the installed tray indicator is behind: ./setup.sh indicator"
 }
 
 do_uninstall() {
@@ -528,6 +576,9 @@ do_uninstall() {
     esac
   fi
   echo "$PKG: removed $_pay and its links from $PREFIX"
+  # A REMOVAL IS A MUTATION, which is exactly what this log is for, and it
+  # answers the awkward question afterwards: mux went away, by what and when.
+  _slog "removed $_pay and its links from $PREFIX"
   # THE INDICATOR'S VENV LIVES INSIDE THE PAYLOAD NOW, so removing the
   # payload took it too. Said rather than left to be discovered: its bin
   # link and its systemd unit are still there and now point at nothing, and
