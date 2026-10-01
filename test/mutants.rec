@@ -2760,15 +2760,64 @@ t mux-agent-summary
 +   _ad=$_rt/agent-state/$_ns
 m headless: got [none 0]
 
-= runtime-adoption-drops-live-records
-f libexec/mux-agent-state_lib
-t mux-agent-summary
+= install-adopts-live-records
+f setup.sh
+t setup
 # ADOPTION IS THE HALF THAT MATTERS, and it is invisible on a fresh box: with
 # it gone, a box upgrading mid-session keeps its records at the old path
 # while every reader looks at the new one, so EVERY LIVE PANE draws the
 # no-record glyph until its agent's next lifecycle hook fires. On an idle
 # session that is hours. A regression caused by a tidy-up is the worst kind,
 # and no assertion about a clean install can see it.
--         && cp "$_ao"/* "$_ad"/ 2>/dev/null || :
-+         && : || :
+#
+# IT MOVED HERE FROM `mux_agent_dir` (2026-10-01) because a READER that
+# migrates takes a snapshot: see that lib's comment for the measured cost.
+# The replacement keeps the counter so the step still reports, which is what
+# makes the fixture's own assertion the thing that fires.
+-         mv -- "$_r" "$_nd/" 2>/dev/null && _moved=$((_moved + 1))
++         _moved=$((_moved + 1))
 m was not adopted
+
+= install-adoption-overwrites-a-live-record
+f setup.sh
+t setup
+# THE OTHER DIRECTION, and the dangerous one. A destination that already
+# exists is the box that has ALREADY taken a snapshot, or one whose new
+# writer has already run; either way the installer cannot tell which, because
+# a beat refreshes mtime without advancing the epoch, so the stale copy can
+# legitimately be the newer FILE. Overwriting therefore destroys a live
+# record about as often as it repairs a dead one. Two guards, two records:
+# this one is `rm the source`, the one above is `move it`.
+-         rm -f -- "$_r" && _kept=$((_kept + 1))
++         mv -- "$_r" "$_nd/" && _kept=$((_kept + 1))
+m overwrote a record already at
+
+= install-never-calls-the-adoption
+f setup.sh
+t setup
+# THE CALL SITE, which neither record above can see: a function defined and
+# never called passes every assertion about its own body. It shares the
+# failure message with `install-adopts-live-records` on purpose, because the
+# OBSERVABLE is the same (nothing was adopted) and only the cause differs.
+-   _adopt_runtime_state
++   :
+m was not adopted
+
+= agent-dir-adopts-from-a-reader
+f libexec/mux-agent-state_lib
+t mux-agent-rank
+# THE BUG THAT SHIPPED, 2026-10-01, reintroduced in one line because that is
+# all it ever was. Eleven of this function's twelve callers are read-only, so
+# the first of them to run on an upgraded box copied the old state tree, the
+# still-deployed old writer carried on updating the original, and at the next
+# install the frozen copy became authoritative: a session reading `working`
+# with an epoch 51 minutes stale, every beat refreshing it, no transition
+# logged because there was nothing left to transition from.
+#
+# THE ASSERTION IS AN ABSENCE, which is the only thing that can see this: the
+# returned PATH was always correct, and a timestamp cannot tell the snapshot
+# from the live record afterwards. Adoption belongs to `setup.sh`, where the
+# install is atomic with the writer switching over.
+-   printf '%s' "$_ad"
++   [ -d "$_rt/agent-state/$_ns" ] && mkdir -p "$_ad"; printf '%s' "$_ad"
+m adopted the old state path

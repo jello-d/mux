@@ -125,4 +125,35 @@ _n=$(mux_agent_sessions "$D" | grep -c .)
 mux_agent_sessions "$D" | grep -qx 'my project' \
   || fail "a session name with a space did not survive enumeration"
 
+# --- mux_agent_dir DERIVES, AND TOUCHES NOTHING ---------------------------
+# THE REGRESSION GUARD FOR A PRODUCT BUG THIS SHIPPED, 2026-10-01. For one
+# afternoon this function adopted the pre-namespacing state directory, and
+# ELEVEN OF ITS TWELVE CALLERS ARE READ-ONLY: the status strip (per client,
+# per status-interval), agent-summary, agent-list, next-blocked, the doctor,
+# `mux ls`, the picker, and `mux check`, which this package requires never to
+# be able to damage what it inspects. The copy it took then went stale while
+# the still-deployed old writer carried on, and became authoritative at the
+# next install: a session stuck reading `working`, which is the inversion
+# these notes call worse than a stale idle.
+#
+# ASSERTED ON THE FILESYSTEM, NOT ON THE RETURNED PATH, because the path was
+# always right. What was wrong was the side effect, and only an absence can
+# see it. The adoption lives in setup.sh now, where the install is atomic with
+# the writer switching over.
+_rtp=$T/dirprobe
+XDG_RUNTIME_DIR=$_rtp mux_agent_dir global >/dev/null
+[ ! -e "$_rtp" ] || fail "mux_agent_dir CREATED [$_rtp]. It is called on
+eleven read-only paths including 'mux check' and the status strip, so it must
+derive a path and touch nothing. See setup.sh:_adopt_runtime_state."
+
+# AND IT MUST NOT ADOPT, which is the specific shape that bit: an old-path
+# directory sitting there is not an invitation to copy it.
+mkdir -p "$_rtp/agent-state/global"
+agent_rec "$_rtp/agent-state/global/1" working %1 100 stale
+XDG_RUNTIME_DIR=$_rtp mux_agent_dir global >/dev/null
+[ ! -e "$_rtp/mux" ] || fail "mux_agent_dir adopted the old state path. A
+reader that migrates takes a SNAPSHOT, and a beat refreshes mtime without
+advancing the epoch, so afterwards nothing can tell the copy from the live
+record."
+
 pass
