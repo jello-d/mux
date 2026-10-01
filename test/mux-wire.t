@@ -125,7 +125,8 @@ mux_wire || fail "mux_wire failed on an already-wired server"
 ubound && fail "mux_wire re-sourced a server already at $MUX_VERSION: the
 version marker is not being consulted, so every session-affecting verb pays a
 source-file it does not need.
-  prefix u: [$(tmux -L "$SOCK" list-keys -T prefix u 2>&1)]
+  the u row: [$(tmux -L "$SOCK" list-keys -T prefix 2>/dev/null \
+               | awk '$4 == "u"')]
   tmux:     [$(tmux -V)]"
 
 # --- A MARKER FROM AN OLDER MUX RE-SOURCES -------------------------------
@@ -138,7 +139,8 @@ mux_wire || fail "mux_wire failed over a stale marker"
 ubound || fail "mux_wire did not re-source a server whose marker (0.01) is
 older than this mux, so an upgrade leaves a live server on the old fragment.
   marker now:  [$(marker)]  (want $MUX_VERSION)
-  prefix u:    [$(tmux -L "$SOCK" list-keys -T prefix u 2>&1)]
+  the u row:   [$(tmux -L "$SOCK" list-keys -T prefix 2>/dev/null \
+                 | awk '$4 == "u"')]
   mux binds:   [$(tmux -L "$SOCK" list-keys -T prefix 2>/dev/null \
                   | grep -c mux)]
   tmux:        [$(tmux -V)]"
@@ -207,12 +209,17 @@ _reload_one "$SOCK" || fail "reload failed with a user tmux.conf present"
 [ "$(tmux -L "$SOCK" show-options -gqv @from-user-conf)" = yes ] \
   || fail "reload did not source the user's own tmux.conf, so their prefix key
 and bindings would be lost the moment mux stops relying on that file"
-case $(tmux -L "$SOCK" list-keys -T prefix u) in
-*mux*) ;;
-*) fail "the USER's binding won prefix-u, so mux's fragment is not sourced
-last and a stale binding in their config would shadow a mux verb:
-[$(tmux -L "$SOCK" list-keys -T prefix u)]" ;;
-esac
+# THROUGH `ubound`, not a single-key query, which is the same
+# version-dependent interface that bit the marker pair: `list-keys -T prefix
+# u` answers NOTHING on tmux 3.7c while the binding is present. I inspected
+# this site when fixing that one and judged it safe because it matches on
+# CONTENT (`*mux*`) rather than on existence, which was true about the match
+# and missed that the QUERY feeding it was the broken part.
+ubound || fail "the USER's binding won prefix-u, so mux's fragment is not
+sourced last and a stale binding in their config would shadow a mux verb.
+  the u row: [$(tmux -L "$SOCK" list-keys -T prefix 2>/dev/null \
+                | awk '$4 == "u"')]
+  tmux:      [$(tmux -V)]"
 
 # --- reload must not start a server that was down ------------------------
 _down=$(tmux_fresh_socket muxwiredown)
