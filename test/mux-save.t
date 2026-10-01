@@ -30,11 +30,11 @@ case "$*" in
 *list-windows*)  cat "$WINDOWS" ;;
 *"@mux-theme"*)  cat "$THEMEF" 2>/dev/null || true ;;
 *list-panes*)
-  # index|bottom|agent|command, in the format order bin/mux asks for.
+  # index|bottom|agent|control|attention|command, in the order bin/mux asks.
   case "$*" in
   *pane_index*) cat "$PANES" ;;
   *) grep '|5-10|' "$PANES" \
-    | while IFS='|' read -r _i b a k c; do
+    | while IFS='|' read -r _i b a k n c; do
       printf '%s|%s\n' "$b" "$c"
       done ;;
   esac ;;
@@ -46,13 +46,14 @@ TMUXLOG=$T/log; PROJDIR=$T/proj; WINDOWS=$T/win; PANES=$T/panes; THEMEF=$T/theme
 export TMUXLOG PROJDIR WINDOWS PANES THEMEF
 PATH=$T/bin:$PATH; export PATH
 printf '0 main\n' >"$WINDOWS"
-# index|bottom|agent|control|command: the middle pane is the agent, the last
-# the full-width bottom, i.e. exactly the shipped default arrangement. No pane
-# declares a control class, so the default arrangement round-trips to itself.
+# index|bottom|agent|control|attention|command: the middle pane is the agent,
+# the last the full-width bottom, i.e. exactly the shipped default
+# arrangement. No pane declares either class, so the default arrangement
+# round-trips to itself.
 {
-  printf '0||||bash\n'
-  printf '1||1||bash\n'
-  printf '2|5-10|||bash\n'
+  printf '0|||||bash\n'
+  printf '1||1|||bash\n'
+  printf '2|5-10||||bash\n'
 } >"$PANES"
 : >"$THEMEF"
 
@@ -121,7 +122,8 @@ grep -qE '^window[[:space:]]+third' "$T/conf/layouts/proj.layout" \
 # cycle silently reclasses a worker to `human`, which is mux's safe default
 # and precisely wrong here: a supervisor then cannot type into its own
 # worker, and nothing anywhere says why.
-printf '0|||agent|bash\n1||1|hybrid|bash\n2|5-10|||bash\n' >"$PANES"
+printf '0|||agent||bash\n1||1|hybrid|agent|bash\n2|5-10||||bash\n' \
+  >"$PANES"
 save --force >/dev/null || fail "save with declared classes failed"
 grep -qE '^control[[:space:]]+agent'  "$T/conf/layouts/proj.layout" \
   || fail "a pane declared 'control agent' came back unclassed, so the next
@@ -132,13 +134,23 @@ grep -qE '^control[[:space:]]+hybrid' "$T/conf/layouts/proj.layout" \
 purpose: folding it into either neighbour would force the strictest grant to
 express the middling case."
 
+# AND `attention` ROUND-TRIPS SEPARATELY, asserted on the pane that declares
+# BOTH: it is `control hybrid` and `attention agent`, which is the
+# combination that proves the two are carried independently rather than one
+# being inferred from the other. A worker the supervisor may type into but
+# the human should still SEE is the case that would otherwise be unsayable.
+grep -qE '^attention[[:space:]]+agent' "$T/conf/layouts/proj.layout" \
+  || fail "'attention agent' was dropped, so a round trip hands a worker back
+to the human's strip, notifications and next-blocked: the inversion R2 exists
+to prevent. $(cat "$T/conf/layouts/proj.layout")"
+
 # AND `human` IS OMITTED, because a layout holds only what OVERRIDES: an
 # explicit `control human` is indistinguishable from the absence of the line,
 # so writing it would read as a decision somebody made.
-printf '0|||human|bash\n1||1||bash\n2|5-10|||bash\n' >"$PANES"
+printf '0|||human|human|bash\n1||1|||bash\n2|5-10||||bash\n' >"$PANES"
 save --force >/dev/null || fail "save with an explicit human class failed"
-grep -q '^control' "$T/conf/layouts/proj.layout" \
-  && fail "the default class was written out: $(cat \
+grep -qE '^control|^attention' "$T/conf/layouts/proj.layout" \
+  && fail "a default class was written out: $(cat \
 "$T/conf/layouts/proj.layout")"
 :
 

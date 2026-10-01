@@ -1,6 +1,6 @@
 #!/bin/sh
-# test/mux-control-class.t - the `control` layout directive, mux's FIRST
-# producer of `@mux-control`.
+# test/mux-pane-class.t - the two PANE CLASS directives, `control` and
+# `attention`, and mux's first producer of either option.
 #
 # WHY IT EXISTS AT ALL. `libexec/mux-agent` READS that option in two places to
 # decide whether `mux agent send` may type into a pane, and until now NOTHING
@@ -18,7 +18,7 @@
 #
 # tmux is stubbed, so no server starts.
 set -eu
-_name=mux-control-class
+_name=mux-pane-class
 . "$(dirname "$0")/harness_lib"
 
 mkdir -p "$T/bin" "$T/conf/layouts" "$T/conf/profiles.d" "$T/proj"
@@ -156,5 +156,41 @@ control agent'
 r "wants human|agent|hybrid" 'window main
 pane
 control supervisor'
+
+# --- `attention` IS THE SECOND MARKER, AND A SEPARATE QUESTION -------------
+# `control` answers who may TYPE here; `attention` answers whose attention is
+# OWED. They are two because R3's escalation moves one without the other: a
+# worker hands off to the human, ATTENTION moves, and the supervisor keeps its
+# write access and can go on nudging. Fused, escalation would silently revoke
+# the supervisor's ability to type at the exact moment it is handing over.
+_o=$(build 'window main
+pane
+pane
+attention agent') || fail "an attention directive failed: [$_o]"
+grep -q 'set-option -p -t %2 @mux-attention agent' "$TMUXLOG" \
+  || fail "the attention class did not land on the pane it qualifies. The log
+said: $(grep 'mux-attention' "$TMUXLOG" || echo '(no call at all)')"
+
+# BOTH ON ONE PANE, which is the combination the design rests on and the one a
+# shared parser arm could silently collapse: a worker its supervisor may type
+# into AND that the human should still see.
+_o=$(build 'window main
+pane
+control agent
+attention human') || fail "declaring both failed: [$_o]"
+grep -q '@mux-control agent' "$TMUXLOG" \
+  || fail "control was lost when attention was declared beside it"
+grep -q '@mux-attention human' "$TMUXLOG" \
+  || fail "attention was lost when control was declared beside it"
+
+# AND A REFUSAL NAMES THE DIRECTIVE THAT CAUSED IT. The two share one parser
+# arm, which is not fusing the concepts (they are read by different
+# consumers) but it IS the one place a shared arm goes wrong: reporting
+# 'control' for an `attention` mistake sends the reader to the wrong line.
+r "'attention' with no pane" 'window main
+attention agent'
+r "'attention' wants human|agent|hybrid" 'window main
+pane
+attention supervisor'
 
 pass

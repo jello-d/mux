@@ -831,6 +831,22 @@ way to reclassify a pane somebody else created. Refused after
 .BR bottom ,
 and refused with no pane above it, because the directive is positional.
 .TP
+.B attention human | agent | hybrid
+Declare whose ATTENTION the pane declared immediately above is owed. The
+default is
+.BR human ,
+so the status strip, the notification path and
+.B mux next\-blocked
+report it. An
+.B agent
+pane is an orchestrated worker answering to its supervisor, so the human's
+surfaces leave it alone: without that, one worker waiting on a checkpoint
+paints its whole session blocked and rings a bell for a decision the human was
+never going to make. A SEPARATE question from
+.BR control ,
+and separate on purpose: an escalation moves attention to the human while the
+supervisor keeps the write access it needs to go on nudging.
+.TP
 .B bottom \fIN\fR | \fIMIN\-MAX\fR
 A full-width bottom shell pane, with a fixed or bounded height in lines.
 .PP
