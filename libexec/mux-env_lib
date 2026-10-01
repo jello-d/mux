@@ -310,9 +310,18 @@ EOF
 # removal mechanism beside `update-environment`, which is exactly what made
 # the original fault cost a long session to find: everything reported healthy.
 # The caller decides where that goes; this function just says what it did.
-mux_env_apply() {   # <session-or-empty> [-v] -> what it changed, one per line
+# `-n` REPORTS WITHOUT ACTING, and it has to live HERE rather than in the
+# caller. The first version had `mux update-env -n` print mux_env_plan
+# instead, and that was wrong in a way worth recording: the plan says what
+# RESOLVED and validated, while the decision to write also consults the
+# SESSION's existing value. So the dry run listed two names and the real run
+# changed three. A preview computed by a different code path from the action
+# is not a preview, and the comment claiming otherwise was the giveaway.
+mux_env_apply() {   # <session-or-empty> [-v|-n] -> what it changed/would
   _eas=${1:-}
   _eav=${2:-}
+  _ean=0
+  [ "$_eav" != -n ] || { _ean=1; _eav=-v; }
   mux_env_plan | while IFS=' ' read -r _eaverd _eaname _eaval; do
     [ -n "$_eaname" ] || continue
     # What this session holds right now. tmux answers three ways and they are
@@ -341,20 +350,24 @@ mux_env_apply() {   # <session-or-empty> [-v] -> what it changed, one per line
     # is here has been shown to be dead.
     case $_eaverd in
     set|keep)
-      if [ -n "$_eas" ]; then
-        tm set-environment -t "$_eas" "$_eaname" "$_eaval" 2>/dev/null || true
-      else
-        tm set-environment -g "$_eaname" "$_eaval" 2>/dev/null || true
+      if [ "$_ean" -eq 0 ]; then
+        if [ -n "$_eas" ]; then
+          tm set-environment -t "$_eas" "$_eaname" "$_eaval" 2>/dev/null || true
+        else
+          tm set-environment -g "$_eaname" "$_eaval" 2>/dev/null || true
+        fi
       fi
       [ -z "$_eav" ] || printf 'set %s\n' "$_eaname" ;;
     drop|none)
       # Only worth saying, and only worth clearing, when something dead is
       # actually here: an absent variable needs no announcement.
       if [ -n "$_eahave" ]; then
-        if [ -n "$_eas" ]; then
-          tm set-environment -t "$_eas" -u "$_eaname" 2>/dev/null || true
-        else
-          tm set-environment -g -u "$_eaname" 2>/dev/null || true
+        if [ "$_ean" -eq 0 ]; then
+          if [ -n "$_eas" ]; then
+            tm set-environment -t "$_eas" -u "$_eaname" 2>/dev/null || true
+          else
+            tm set-environment -g -u "$_eaname" 2>/dev/null || true
+          fi
         fi
         [ -z "$_eav" ] || printf 'dropped %s\n' "$_eaname"
       fi ;;
