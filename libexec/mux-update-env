@@ -42,7 +42,7 @@
 #
 # A WINDOW FIELD IS REFUSED RATHER THAN IGNORED. tmux's environment is per
 # SESSION and per server; there is no per-window environment for this to act
-# on. Accepting `work:api:2` and quietly treating it as `work:api` would be a
+# on. Accepting `work.api:2` and quietly treating it as `work.api` would be a
 # flag that parses and does nothing, which this package has already shipped
 # once and which is worse than a missing one, because the caller believes it
 # asked for something.
@@ -84,7 +84,7 @@ while [ $# -gt 0 ]; do
   --all) _all=1; shift ;;
   -n|--dry-run) _dry=1; shift ;;
   -h|--help)
-    echo "usage: mux update-env [[PARTITION]:[SESSION]] [--all] [-n]"
+    echo "usage: mux update-env [[PARTITION.]SESSION] [--all] [-n]"
     exit 0 ;;
   --) shift; break ;;
   -*) echo "mux: update-env: unknown option: $1" >&2; exit 2 ;;
@@ -119,8 +119,9 @@ elif [ -n "$_addr" ]; then
   [ -z "$MUX_ADDR_WIN" ] || {
     echo "mux: update-env: a window cannot be addressed here." >&2
     echo "mux: tmux keeps an environment per SESSION and per server, so" >&2
-    echo "mux: there is nothing per-window for this to act on. Drop the" >&2
-    echo "mux: last field: ${MUX_ADDR_PART}:${MUX_ADDR_SESS}" >&2
+    echo "mux: there is nothing per-window for this to act on. Try:" >&2
+    _twant=${MUX_ADDR_PART:+${MUX_ADDR_PART}.}$MUX_ADDR_SESS
+    echo "mux:   mux update-env $_twant" >&2
     exit 2; }
   _tpart=$MUX_ADDR_PART
   _tsess=$MUX_ADDR_SESS
@@ -135,7 +136,7 @@ if [ "$_tmode" = cur ]; then
   # not silently widen to everything: that would act on sessions the caller
   # never named, which is the worst of the three available answers.
   echo "mux: update-env: no session to act on." >&2
-  echo "mux: run it inside a session, name one ([PARTITION]:SESSION)," >&2
+  echo "mux: run it inside a session, name one ([PARTITION.]SESSION)," >&2
   echo "mux: or ask for every session with --all." >&2
   exit 2
 fi
@@ -159,8 +160,8 @@ EOF
   if [ -n "$_tsess" ]; then
     printf '%s\t%s\n' "$_tp" "$_tsess"
   else
-    # `work::` or `work:` is the whole partition, which is a deliberate
-    # form rather than an empty address: it says "every session here".
+    # `work.` is the whole partition: a deliberate form rather than an
+    # empty address, saying "every session here".
     _sessions_in "$_tp"
   fi
 }

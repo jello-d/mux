@@ -354,14 +354,19 @@ With no argument inside a session it acts on that session. Outside one it
 refuses rather than guessing or silently widening. An
 .I ADDRESS
 is
-.RB [ PARTITION ] : [ SESSION ],
+.RB [ PARTITION. ] SESSION,
 so
 .B api
 is a session in your partition,
-.B work:api
+.B work.api
 names its partition, and
-.B work::
-is every session there.
+.B work.
+is every session there. A bare name is always a SESSION, since that is the
+common case; the rare field carries the delimiter. The two separators are the
+only characters tmux refuses to store in a session name, which is what makes
+every address unambiguous, and
+.B api:2
+is byte\-identical to the window target tmux itself takes.
 .B --all
 sweeps every session in every partition, which is how a box whose sessions
 were poisoned before any of this existed is recovered.
