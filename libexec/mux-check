@@ -218,6 +218,54 @@ else
   warn "  turn it on with: mux scan --init"
 fi
 
+# 4a. THE SESSION POINTERS. R7: a withheld value must be VISIBLE. mux resolves
+# these at session build and attach, and a value that resolved but FAILED its
+# own validator is deliberately not written, which is exactly the kind of
+# silent decision that made the original fault cost a long session to find:
+# every agent pane on a box was running with no `SSH_AUTH_SOCK`, and
+# everything reported healthy.
+#
+# A WARN, NEVER A FAIL, and the reasoning is the same as discovery's one arm
+# up: a dead pointer is usually a fact about the MACHINE rather than about the
+# install. The compositor has exited, so WAYLAND_DISPLAY points at a socket
+# with nothing behind it; that is not mux being broken and a provisioner's
+# apply cannot repair it.
+#
+# READ-ONLY, which this file's contract demands and which is easy to get wrong
+# here: `mux_env_plan` resolves and validates and writes NOTHING, where
+# `mux_env_apply` is the one that acts. The same distinction that keeps this
+# check away from `mux agent-render`, which prunes.
+if [ -r "$(dirname "$0")/mux-env_lib" ]; then
+  # shellcheck source=/dev/null
+  . "$(dirname "$0")/mux-notice_lib"
+  # shellcheck source=/dev/null
+  . "$(dirname "$0")/mux-env_lib"
+  _envnames=$(mux_env_names 2>/dev/null | tr '\n' ' ')
+  if [ -z "${_envnames# }" ]; then
+    ok "no session pointers managed (envhooks.d is empty)"
+  else
+    _envbad=
+    while IFS=' ' read -r _ev _en _ex; do
+      [ -n "$_en" ] || continue
+      case $_ev in
+      drop) _envbad="$_envbad $_en" ;;
+      esac
+    done <<ENVEOF
+$(mux_env_plan 2>/dev/null)
+ENVEOF
+    if [ -n "$_envbad" ]; then
+      # NAMED, not counted, for the reason this package states about `mux
+      # resume`: "rebuilt 5" cannot say WHICH five, and the useful
+      # post-mortem is always about the one that is missing.
+      warn "session pointer(s) withheld:${_envbad}"
+      warn "  each resolved, and its own validator says that value is dead,"
+      warn "  so mux did not write it. Usually the thing it points at exited."
+    else
+      ok "session pointers (${_envnames% })"
+    fi
+  fi
+fi
+
 # 4b. view tension. Two clients of different SIZES attached to one server means
 # there is no window size that suits both, so tmux picks one and the windows
 # move as you cycle: the "why did that redraw" question. Advisory, never a
