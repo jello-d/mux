@@ -49,7 +49,22 @@ fresh() {
 tm() { tmux -L "$sock" "$@"; }
 
 wired() {   # is mux's fragment in force on this server?
-  tmux -L "$SOCK" list-keys -T prefix u >/dev/null 2>&1
+  # THE BINDING MUST MENTION MUX, not merely EXIST, and that is this
+  # package's own rule being relearned: `mux check`'s contract says it
+  # outright, that `(` is bound by DEFAULT so asserting the key exists
+  # proves nothing. This asked whether `prefix u` was bound at all, which
+  # is true on a bare tmux 3.7 (the macOS runner) and false on 3.4 and 3.6,
+  # so the precondition "a bare server is not wired" failed on macOS only
+  # and read as mux wiring a server it had never touched.
+  tmux -L "$SOCK" list-keys -T prefix 2>/dev/null | grep -q mux
+}
+# AND A SEPARATE PROBE FOR ONE SPECIFIC BINDING, because `wired` and "did a
+# re-source happen" are two different questions and sharing a probe between
+# them is what broke when `wired` was widened: the skip case removes `prefix u`
+# and asserts it STAYS removed, which a whole-server test can never show while
+# any other mux binding is present. One arm per question.
+ubound() {   # is `prefix u` bound to MUX specifically?
+  tmux -L "$SOCK" list-keys -T prefix u 2>/dev/null | grep -q mux
 }
 marker() { tmux -L "$SOCK" show-options -gqv @mux-wired 2>/dev/null || true; }
 
@@ -61,6 +76,23 @@ marker() { tmux -L "$SOCK" show-options -gqv @mux-wired 2>/dev/null || true; }
 fresh
 wired && fail "the bare server already had mux's bindings, so every
 assertion below would pass whatever mux_wire did"
+
+# AND `wired` MUST NOT BE FOOLED BY A BINDING THAT IS MERELY PRESENT, which is
+# the macOS condition reproduced LOCALLY rather than waited for: `prefix u` is
+# bound by default on the runner's tmux and not on 3.4 or 3.6, so the first
+# version of this helper (does `list-keys -T prefix u` succeed?) answered TRUE
+# on a bare server there and the precondition above failed on one platform
+# only. Measured both ways against a stand-in for that tmux: old helper TRUE,
+# new helper false. The rule is already in these notes for `mux check`, where
+# `(` is bound by default and so asserting the key exists proves nothing.
+# THE STAND-IN COMMAND MUST NOT CONTAIN THE WORD, which caught me: the first
+# version bound `display-message 'not mux'` and `wired` matched the FIXTURE's
+# own text rather than a binding.
+tmux -L "$SOCK" bind -T prefix u display-message hello
+wired && fail "a binding that merely EXISTS was read as mux's wiring, so this
+file would pass on any tmux whose defaults happen to include one of mux's
+keys, and fail on the ones where they do not"
+tmux -L "$SOCK" unbind -T prefix u
 [ -z "$(marker)" ] \
   || fail "a bare server already carries @mux-wired [$(marker)]"
 
@@ -84,7 +116,7 @@ so mux pin and the undo-pane trackers are absent"
 # idempotent, so a needless re-source is invisible to any other check.
 tmux -L "$SOCK" unbind -T prefix u
 mux_wire || fail "mux_wire failed on an already-wired server"
-wired && fail "mux_wire re-sourced a server already at $MUX_VERSION: the
+ubound && fail "mux_wire re-sourced a server already at $MUX_VERSION: the
 version marker is not being consulted, so every session-affecting verb pays a
 source-file it does not need"
 
@@ -95,7 +127,7 @@ source-file it does not need"
 # marker would have the same hole; the version is what makes it detectable.
 tmux -L "$SOCK" set -g @mux-wired 0.01
 mux_wire || fail "mux_wire failed over a stale marker"
-wired || fail "mux_wire did not re-source a server whose marker (0.01) is
+ubound || fail "mux_wire did not re-source a server whose marker (0.01) is
 older than this mux, so an upgrade leaves a live server on the old fragment"
 [ "$(marker)" = "$MUX_VERSION" ] \
   || fail "the stale marker was not advanced: [$(marker)]"
