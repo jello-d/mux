@@ -334,10 +334,47 @@ cycling. Per client, so monitors can differ.
 Clear this client's hidden sessions.
 .TP
 .B mux reload
-Re-source
+Re-source your
 .I tmux.conf
-on every running mux server (recompiling the palette), so a config or theme edit
-takes effect without a restart.
+if you have one, then mux's own fragment, on every running mux server
+(recompiling the palette), so a config or theme edit takes effect without a
+restart. mux's fragment is sourced last, so a mux binding wins over an earlier
+one of the same key, and the verb works on a machine with no
+.I tmux.conf
+at all: a mux install is complete on its own.
+.TP
+.B mux update-env " " [\fIADDRESS\fR] " " [\fB--all\fR] " " [\fB-n\fR]
+Bring a LIVE session's environment up to date. mux resolves the pointers a
+pane needs (an ssh agent socket, a display, a bus address) when a session is
+built or attached; this reaches sessions that were already running when a hook
+was added, or when a validator's bug was fixed.
+.RS
+.PP
+With no argument inside a session it acts on that session. Outside one it
+refuses rather than guessing or silently widening. An
+.I ADDRESS
+is
+.RB [ PARTITION ] : [ SESSION ],
+so
+.B api
+is a session in your partition,
+.B work:api
+names its partition, and
+.B work::
+is every session there.
+.B --all
+sweeps every session in every partition, which is how a box whose sessions
+were poisoned before any of this existed is recovered.
+.B -n
+shows what would change without changing it.
+.PP
+It only writes where a session LACKS a working value: one that passes its own
+validator is left alone, because two sessions with deliberately different
+environments must not collapse into each other. A process environment is fixed
+at exec, so this cannot reach a pane that is already running, and it NAMES the
+panes it could not fix rather than letting "updated" be read as "your running
+agent is fixed".
+.RE
 .TP
 .B mux kill " " \fINAME\fR ", " mux kill-all
 Tear down the named session, or (with a prompt) every session on this socket.
@@ -935,6 +972,100 @@ partition.
 .B mux only reflects a context; it enforces nothing.
 Whatever backs a boundary (a Unix group, an ACL, a namespace) lives in whatever
 supplies the token. The banner is a reminder, never permission.
+.SH SESSION ENVIRONMENT
+A pane inherits its environment from the tmux SERVER, not from whoever asked
+for the pane, so a pointer that is missing or stale there is missing in every
+pane built afterwards. Worse, attaching copies the attaching client's
+environment into the session, and copying an ABSENT variable records a
+REMOVAL, which masks the server-wide value: one attach from a client with no
+ssh agent can leave a healthy session unable to reach one.
+.PP
+mux therefore resolves these pointers when it builds or attaches a session,
+and validates them before writing. There is no cache: a tmux server routinely
+outlives the graphical session its pointers point at, so a value remembered at
+server start is the one most likely to be wrong.
+.SS Which variables, and what valid means
+Neither is mux's knowledge. One file per variable in
+.IR $MUX_DIR/envhooks.d/ ,
+named exactly as the variable is; the directory listing IS the set, so there is
+no separate list to drift from the hooks. mux ships a working set under
+.I share/envhooks.d
+and a file of yours with the same name wins.
+.PP
+The hook is run with the resolved value as
+.BR $1 .
+Exit
+.B 0
+if it is valid,
+.B 1
+if it is not, and
+.B anything else
+if it could not tell, which passes the value through unchanged. That third
+answer matters: a hook that is missing, errors, or runs out of time has made no
+finding, and treating that as "the value is dead" is the fault this feature
+exists to prevent, committed by another route.
+.PP
+Validation cannot be a fixed list of kinds, which is why it is a hook at all.
+Of the pointers this fleet needs, only an agent socket can be tested directly;
+a display is a NAME that must be joined to another variable's value first, and
+a bus address is a structured string whose path field has to be extracted. Each
+name is therefore resolved BEFORE any is validated, and the resolved set is
+offered to every hook as
+.IR MUX_RESOLVED_<NAME> ,
+so a hook can depend on another's value without declaring an order.
+.PP
+A validator is bounded and its stdin is closed, because the cost of an
+arbitrary hook is not mux's to predict and this runs on the path you type
+most. Nothing here may hang: the tool you reach for to fix a broken machine
+must not be the tool that will not start.
+.PP
+.RS
+.B env\-timeout
+.I <seconds>
+.RB "in " $MUX_DIR/config
+.RE
+.PP
+Two seconds by default, overridable per invocation with
+.BR $MUX_ENV_TIMEOUT :
+long enough to connect to a local socket, short enough that a wedged hook is
+not mistaken for a wedged mux. Raise it if a validator of yours has real work
+to do. A non\-numeric value is treated as absent rather than passed through,
+so a typo cannot quietly turn every answer into "could not tell".
+.SS Removing a value on purpose
+A hook in
+.I $MUX_DIR/envhooks.d/strip.d/
+answers a different question: should this value be removed? It is given the
+value as
+.BR $1 ;
+exit
+.B 0
+to strip it and anything else to keep it, so an unconditional
+.B exit 0
+means "I manage this one myself" and a
+.B case
+on
+.B $1
+strips only the values you name. Note the polarity is the OPPOSITE of a
+validator, deliberately: the question is "remove this?", and a file called
+.I strip.d
+whose "no" meant "strip it" would be a trap.
+.PP
+Anything other than 0 or 1 keeps the value, which is the only safe direction
+for a hook whose yes deletes data.
+.PP
+A declared strip is POLICY, not a finding, so mux acts on it quietly. A
+validator answering 1 says the value is BROKEN, and that is reported every
+time. Both remove the value; only one is news.
+.SS Reporting
+.B mux check
+names any pointer that resolved and then failed its own validator, as a WARN
+rather than a FAIL: a dead pointer is usually a fact about the machine, and a
+provisioner cannot repair it. mux also says so at the moment it withholds one,
+and again as it hands your terminal back, since a line printed before a session
+you then work in for a day is a line you will not see.
+.PP
+.B mux update-env
+applies the same decisions to sessions that are already running.
 .SH NOTIFICATIONS
 A desktop notification fires when an agent stops needing the CPU and starts
 needing YOU: a real transition out of
