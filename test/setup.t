@@ -92,35 +92,56 @@ grep -q 'setup.sh indicator' "$T/out" || fail "the notice did not name the
 command that fixes it; a gap named without a remedy invites two different fixes"
 rm -f "$T/bin/mux-indicator"
 
-# --- DISCOVERY HAS NO ROOTS: SAID, and NOT written ------------------------
+# --- DISCOVERY: WHAT THE INSTALL DOES ABOUT NO ROOTS ----------------------
 # mux used to SHIP `scan ~/src 3`, so this state was unreachable and every
 # machine without that directory got `[FAIL] scan root missing` from mux's own
-# check instead. Now the installer asks at a terminal and SAYS without one.
+# check instead.
 #
-# THE SECOND HALF IS THE LOAD-BEARING ONE: it must write NOTHING here. A
-# provisioner runs this on every sweep with no tty, and a silent write would
-# give one machine a scan root the human never named, which is this whole
-# defect wearing a different hat. The assertion is on the ABSENCE of the file.
-runmd() {   # the installer, with mux's config dir pinned where we can see it
+# AND HOME IS PINNED HERE, WHICH IT WAS NOT BEFORE. The earlier version of
+# this case let the installer see the REAL home directory, so which branch it
+# took depended on whether the developer happened to have ~/src: a test that
+# silently measures the machine it runs on rather than the code. Both branches
+# are driven explicitly now.
+runmd() {   # the installer, with mux's config dir and HOME pinned
   env PREFIX="$T" XDG_BIN_HOME="$T/bin" XDG_DATA_HOME="$T/share" NO_COLOR=1 \
-    MUX_DIR="$T/conf-mux" sh "$HERE/setup.sh" "$@"
+    MUX_DIR="$T/conf-mux" HOME="$1" sh "$HERE/setup.sh" install
 }
-runmd install >"$T/out" 2>&1 || fail "reinstall errored"
-grep -q 'discovery has no roots' "$T/out" || fail "with nothing configured the
-install said nothing about discovery, so a new user gets a mux whose \`mux go
-<name>\` finds no projects and no hint why: $(cat "$T/out")"
+
+# NOTHING TO OBSERVE: it must write NOTHING and say what to type. A
+# provisioner runs this on every sweep with no tty, and writing $HOME as a
+# scan root there would index a whole home directory on a guess, which is the
+# original defect wearing a different hat. The assertion is on the ABSENCE of
+# the file.
+mkdir -p "$T/h-bare"
+runmd "$T/h-bare" >"$T/out" 2>&1 || fail "reinstall errored"
+grep -q 'needs a terminal' "$T/out" || fail "with nothing configured and
+nothing to observe, the install said nothing about discovery, so a new user
+gets a mux whose \`mux go <name>\` finds no projects and no hint why:
+$(cat "$T/out")"
 grep -q 'mux scan --init' "$T/out" || fail "the notice did not name the command
 that fixes it; a gap named without a remedy invites two different fixes"
 [ -e "$T/conf-mux/partitions/global.partition" ] && fail "the installer WROTE a
-scan root with no terminal to ask at. A provisioner runs this on every sweep;
-inventing a location there is the defect this step exists to remove"
+scan root with no terminal and no ~/src to observe. A provisioner runs this on
+every sweep; indexing a whole \$HOME on a guess is the defect this removes"
+
+# AN EXISTING ~/src IS OBSERVED, NOT INVENTED, so the install records it even
+# with no terminal. THE ABSENCE OF THIS IS WHAT BROKE A PROVISIONED FLEET:
+# 0.85 removed the shipped default and left a migration that only ran at a
+# terminal, so the provisioner printed a line nobody read and discovery went
+# from working to off, silently, on every box.
+rm -rf "$T/conf-mux"
+mkdir -p "$T/h-src/src"
+runmd "$T/h-src" >"$T/out" 2>&1 || fail "reinstall errored"
+grep -qE "^scan[[:space:]]+$T/h-src/src 3\$" \
+  "$T/conf-mux/partitions/global.partition" 2>/dev/null \
+  || fail "with ~/src present the install recorded no scan root, so a
+provisioned box silently loses discovery:
+$(cat "$T/out")"
 
 # ... and SILENT once roots exist, or a re-install is noise people skip.
-mkdir -p "$T/conf-mux/partitions"
-printf 'scan\t%s 3\n' "$T" >"$T/conf-mux/partitions/global.partition"
-runmd install >"$T/out" 2>&1 || fail "reinstall errored"
-grep -q 'discovery has no roots' "$T/out" && fail "the discovery notice fired
-with a root already configured: $(cat "$T/out")"
+runmd "$T/h-src" >"$T/out" 2>&1 || fail "reinstall errored"
+grep -qE 'needs a terminal|no terminal to ask' "$T/out" && fail "the discovery
+step spoke again with a root already configured: $(cat "$T/out")"
 rm -rf "$T/conf-mux"
 
 # --- A LIVE SERVER IS RELOADED, because installing a file does not ----------
