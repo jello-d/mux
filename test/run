@@ -1,13 +1,111 @@
 #!/bin/sh
 # test/run - run every mux shell test (test/*.t) and report. Non-zero if any
 # test fails. POSIX sh, no dependency beyond a shell and the repo checkout.
+#
+# IT RUNS THEM IN PARALLEL, and the measurement is the whole reason: serial,
+# this suite takes 196s, and 85s of that is THREE tests that are SLEEP-bound
+# rather than CPU-bound (mux-latch-stall waits out real ssh timeouts at 40s,
+# mux-agent-doctor samples CPU over a window at 20s, mux-strip pays 23 forks
+# at 24s). Eight lanes brings the wall clock to 47s and twenty to 42s, which
+# is the floor: no arrangement beats the longest single test.
+#
+#     serial      196s
+#     -j 8         47s      measured green three times over
+#     -j 20        42s      the floor is mux-latch-stall alone
+#
+# `-j 1` IS EXACTLY THE OLD BEHAVIOUR and is the escape hatch, which matters
+# because this package has a recorded history of a real-tmux test flaking
+# under concurrent load (mux-undo-pane, four sightings, one of them caused by
+# a mutation sweep running alongside). If a flake ever appears here, reach for
+# `-j 1` to tell contention from a defect rather than re-running and hoping.
+#
+# OUTPUT IS GROUPED AND ORDERED, never interleaved: each test's output is
+# captured to its own file and printed in the SAME alphabetical order a serial
+# run uses, so a parallel run and a serial one are comparable line for line.
 set -eu
 _dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 _rc=0
 _silent=
+
+# --- how many lanes -------------------------------------------------------
+# Capped at 8 by default rather than set to the core count: the floor is the
+# longest test, so past 8 the extra lanes buy about 5s and cost contention on
+# a suite that has paid for contention before.
+_jobs=${MUX_TEST_JOBS:-}
+while [ $# -gt 0 ]; do
+  case $1 in
+  -j) shift; _jobs=${1:-1} ;;
+  -j*) _jobs=${1#-j} ;;
+  -h|--help)
+    echo "usage: sh test/run [-j N]   (N lanes; -j 1 is serial)"
+    exit 0 ;;
+  *) echo "test/run: unknown argument: $1" >&2; exit 2 ;;
+  esac
+  shift
+done
+if [ -z "$_jobs" ]; then
+  _jobs=$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)
+  [ "$_jobs" -le 8 ] 2>/dev/null || _jobs=8
+fi
+case $_jobs in
+''|*[!0-9]*) echo "test/run: -j wants a number, got [$_jobs]" >&2; exit 2 ;;
+esac
+[ "$_jobs" -ge 1 ] || _jobs=1
+
+# `xargs -P` IS FEATURE-DETECTED, not assumed, the same way the pty helper
+# detects which `script` it has: -P is not POSIX, and a box without it gets a
+# serial run rather than an error. Checked by USING it, since a usage probe
+# would not prove it actually forks.
+if [ "$_jobs" -gt 1 ] && ! printf 'x\n' | xargs -P 2 -I{} true 2>/dev/null
+then
+  _jobs=1
+fi
+
+# --- a scratch dir for the captured output --------------------------------
+# VERIFIED BEFORE THE TRAP IS ARMED, and the literal is baked in when arming,
+# per the standing rule in ~/src/CLAUDE.md. This package's own harness once
+# deleted this repository because an empty value reached `rm -rf` at trap
+# FIRE time; a runner that can delete the tree it is testing is the same bug
+# one layer out.
+_od=$(mktemp -d "${TMPDIR:-/tmp}/muxrun.XXXXXX") || _od=
+case ${_od:-} in
+/*) ;;
+*) echo "test/run: unusable scratch path: [${_od:-}]" >&2; exit 1 ;;
+esac
+[ -d "$_od" ] || { echo "test/run: [$_od] is not a directory" >&2; exit 1; }
+[ "$_od" != "$PWD" ] || { echo "test/run: scratch is the cwd" >&2; exit 1; }
+_ODQ="'$_od'"
+# shellcheck disable=SC2064  # EXPANDING NOW IS THE POINT: see above.
+trap "rm -rf $_ODQ" EXIT INT TERM
+
+# --- run them -------------------------------------------------------------
+# One file per test for stdout+stderr and one for the exit code, because the
+# verdict logic below needs both and a parallel run cannot use a variable.
+_names=
 for _t in "$_dir"/*.t; do
   [ -f "$_t" ] || continue
-  _n=$(basename "$_t" .t)
+  _names="$_names $(basename "$_t" .t)"
+done
+
+if [ "$_jobs" -gt 1 ]; then
+  # shellcheck disable=SC2086  # the split IS the list, one name per lane
+  printf '%s\n' $_names \
+    | xargs -P "$_jobs" -I{} sh -c \
+      'sh "$1/{}.t" >"$2/{}.out" 2>&1; printf %s $? >"$2/{}.rc"' \
+      _ "$_dir" "$_od"
+else
+  for _n in $_names; do
+    sh "$_dir/$_n.t" >"$_od/$_n.out" 2>&1 && printf 0 >"$_od/$_n.rc" \
+      || printf '%s' "$?" >"$_od/$_n.rc"
+  done
+fi
+
+# --- report, in the serial order ------------------------------------------
+for _n in $_names; do
+  _out=$(cat "$_od/$_n.out" 2>/dev/null || true)
+  _trc=$(cat "$_od/$_n.rc" 2>/dev/null || echo 1)
+  [ "$_trc" = 0 ] || _rc=1
+  printf '%s\n' "$_out"
   # EVERY TEST MUST REPORT A VERDICT, and a test that exits non-zero
   # WITHOUT printing one is the case this catches. It happened the moment
   # `mux why` started exiting 3: two files captured it in an unguarded
@@ -18,8 +116,6 @@ for _t in "$_dir"/*.t; do
   #
   # The same rule the suite applies to everything else, turned on itself:
   # a run that reached no verdict is a failure, and it has to say WHICH.
-  _out=$(sh "$_t" 2>&1) || _rc=1
-  printf '%s\n' "$_out"
   case $_out in
   *"ok   $_n"*|*"skip $_n"*|*FAIL*) ;;
   *) _rc=1; _silent="$_silent $_n" ;;
@@ -46,7 +142,9 @@ if [ -n "$_silent" ]; then
   # exactly this problem; `sh -x` gives every test the same thing for free and
   # keeps working on tests nobody has thought about yet.
   #
-  # ONLY ON THE FAILURE PATH, so a green run pays nothing.
+  # ONLY ON THE FAILURE PATH, so a green run pays nothing. SERIAL too: a
+  # silent death is the case where contention is a live suspect, so the
+  # re-run must not add any.
   for _n in $_silent; do
     printf '\n--- %s, last 15 lines of `sh -x` -------------------------\n' \
       "$_n"
