@@ -2452,3 +2452,37 @@ t mux-update-env
 -       dropped)  _l="drop ${_l#* }" ;;
 +       dropped)  : ;;
 m would dropped
+
+= check-notify-daemon-presence-only
+f libexec/mux-notify_lib
+t mux-check
+# A BUS THAT ANSWERS "NOBODY OWNS IT" IS A FINDING, not an unknown. Folding
+# `false` into the cannot-tell answer restores the exact bug this probe was
+# written for: notify-send present, no daemon owning the name, every
+# notification dying with `Message recipient disconnected from message bus
+# without replying`, and `mux check` reporting [OK] about it. A presence check
+# that passes on a fully installed and fully broken box is the failure the
+# marker contract exists to prevent, so having it inside the file that defines
+# that contract was the worst available place for it.
+-     *false*) return 1 ;;
++     *false*) return 2 ;;
+m NOBODY owns the notification
+
+= check-notify-daemon-unasked-is-broken
+f libexec/mux-check
+t mux-check
+# BEING UNABLE TO ASK IS NOT EVIDENCE OF A BROKEN DESKTOP. `mux check` over
+# ssh reaches no session bus, so treating the third answer as "nothing will
+# display it" is a confident false finding about a machine that is fine: the
+# same mistake the WAYLAND_DISPLAY validator shipped the same week, which
+# judged its own environment rather than the value it was handed. The test
+# asserts the ABSENCE of the warning, because the bug is an extra one.
+#
+# TARGETED AT THE HEDGE BRANCH rather than at the probe call, because the
+# corpus refused the first attempt: setting the verdict directly makes an
+# EARLIER case (notify-send with no closer, where the answer is also
+# cannot-tell) take the new branch, so the kill landed on the missing-closer
+# assertion and proved nothing about this one.
+-   elif [ "$_nd" -eq 2 ]; then
++   elif false; then
+m no bus to confirm

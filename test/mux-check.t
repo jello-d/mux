@@ -180,6 +180,56 @@ has "no notify-send" "silent about being unable to notify at all"
 printf '#!/bin/sh\nexit 0\n' >"$T/bin/notify-send"
 chmod +x "$T/bin/notify-send"
 
+# --- ... AND A THIRD HALF: can anything actually DISPLAY one? -------------
+# THIS MARKER SAID [OK] ON A BOX WHERE NOTIFICATIONS FAILED OUTRIGHT, which
+# is the marker contract broken inside the file that defines it: notify-send
+# was present, no daemon owned the name, and every notification died with
+# `Message recipient disconnected from message bus without replying`.
+#
+# The stub answers the BUS's NameHasOwner, which is what mux asks. Driven in
+# all three directions because they are three different bugs, and the middle
+# one is the bug that was shipped.
+_bus() {   # <reply-or-empty>: what every bus tool answers
+  for _bt in gdbus busctl dbus-send; do
+    if [ -n "${1:-}" ]; then
+      printf '#!/bin/sh\nprintf "%%s\\\\n" "%s"\n' "$1" >"$T/bin/$_bt"
+    else
+      printf '#!/bin/sh\nexit 0\n' >"$T/bin/$_bt"
+    fi
+    chmod +x "$T/bin/$_bt"
+  done
+}
+
+_bus '(false,)'
+check >/dev/null
+has "NOTHING DISPLAYS them" "a bus that says NOBODY owns the notification
+name means mux can raise and nothing will show it, which is the 'fully
+installed and fully broken' state this whole contract exists to catch"
+[ "$RC" -eq 0 ] || fail "which notification daemon runs is the user's
+desktop rather than mux's install, and a provisioner's apply cannot repair
+it, so this is a WARN and must never FAIL the audit"
+
+_bus '(true,)'
+check >/dev/null
+has "a live daemon" "a daemon that DOES own the name must be credited, or
+the marker is just as uninformative in the other direction"
+no_has "NOTHING DISPLAYS them" "a live daemon was reported as no daemon"
+
+# THE LOAD-BEARING ONE: the question could not be PUT. `mux check` over ssh
+# reaches no session bus at all, and reporting the desktop broken from a
+# context that cannot see it is exactly the false finding the WAYLAND_DISPLAY
+# validator shipped this week. Asserted as an ABSENCE, because the bug here
+# would be an extra warning rather than a missing one.
+_bus ''
+check >/dev/null
+no_has "NOTHING DISPLAYS them" "with no bus to ask, mux must not claim
+nothing will display a notification: that is a confident false finding about
+a machine that is very likely fine"
+has "no bus to confirm" "the hedge has to be SAID, or an [OK] here is
+indistinguishable from one backed by a real live daemon"
+[ "$RC" -eq 0 ] || fail "being unable to ask is not a failure"
+_bus '(true,)'
+
 # Both overrides set is a supported path; half an override is a mistake.
 check MUX_NOTIFY_SEND=true MUX_NOTIFY_CLOSE=true >/dev/null
 has "notifications overridden" "the override pair was not recognised"

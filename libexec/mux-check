@@ -110,12 +110,34 @@ if [ -n "${MUX_NOTIFY_SEND:-}${MUX_NOTIFY_CLOSE:-}" ]; then
       "other half on the built-in path"
   fi
 elif command -v notify-send >/dev/null 2>&1; then
+  # THE THIRD HALF, and it is the one this marker used to assume. Having
+  # notify-send says mux can RAISE; it says nothing about anything being able
+  # to DISPLAY. Found live: the binary present, no daemon owning the name, and
+  # every notification dying with `Message recipient disconnected from message
+  # bus without replying` while this line read [OK].
+  #
+  # `|| _nd=$?` AND NOT A BARE CALL: a three-answer function returns non-zero
+  # for two of its three answers, and this file runs under `set -e`. That
+  # exact shape truncated the whole environment plan a day ago.
+  _nd=0; mux_notify_daemon || _nd=$?
   _ncl=$(_mux_notify_closer)
-  if [ "$_ncl" = none ]; then
+  if [ "$_nd" -eq 1 ]; then
+    # A REAL FINDING, and a WARN rather than a FAIL for the reason the whole
+    # block is optional: which daemon runs is the user's desktop, not mux's
+    # install, and a provisioner's apply cannot repair it.
+    warn "notifications raise but NOTHING DISPLAYS them: no daemon owns" \
+      "org.freedesktop.Notifications on this session bus"
+  elif [ "$_ncl" = none ]; then
     warn "notifications raise but never clear: no gdbus, busctl," \
       "dbus-send or makoctl to close one with"
+  elif [ "$_nd" -eq 2 ]; then
+    # SAID, NOT GUESSED. Over ssh there is no session bus to ask, and
+    # reporting the desktop broken from a context that cannot see it is the
+    # mistake the WAYLAND_DISPLAY validator made this week.
+    ok "notifications (notify-send, cleared via $_ncl; no bus to" \
+      "confirm a daemon from here)"
   else
-    ok "notifications (notify-send, cleared via $_ncl)"
+    ok "notifications (notify-send -> a live daemon, cleared via $_ncl)"
   fi
 else
   warn "no notify-send: mux will not raise desktop notifications"

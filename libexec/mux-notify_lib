@@ -49,6 +49,80 @@ _mux_notify_closer() {
   printf '%s' "$MUX_NOTIFY_CLOSER"
 }
 
+# mux_notify_daemon -> is anything actually able to DISPLAY a notification?
+#
+#     0  a daemon owns org.freedesktop.Notifications
+#     1  a bus answered and NOBODY owns it: mux can raise and nothing shows
+#     2  cannot tell from here (no tool, or no session bus reachable)
+#
+# WHY THIS EXISTS. `mux check` reported `[OK] notifications` on the strength of
+# `command -v notify-send`, and on this box that was a lie: the binary was
+# there and a real notification died with
+#
+#     Failed to show notification: GDBus.Error:...NoReply: Message recipient
+#     disconnected from message bus without replying
+#
+# because no daemon owned the name (mako was being activated and dying at
+# once on a stale WAYLAND_DISPLAY). A presence check saying OK about a box
+# that is fully installed and fully broken is the exact failure the marker
+# contract exists to prevent, so having it inside the file that DEFINES that
+# contract was the worst available place for it.
+#
+# READ-ONLY, AND THAT WAS MEASURED, not assumed, because `mux check` must
+# never be able to actuate what it inspects and a bus call is the obvious way
+# to break that. `NameHasOwner` and `GetNameOwner` DO NOT ACTIVATE a dormant
+# service: driven against `ca.desrt.dconf` (activatable, not running) both
+# answered and it was still absent a second later. Only a call to the service
+# ITSELF activates, which is why this asks the BUS about the name rather than
+# asking the daemon anything.
+#
+# `NameHasOwner` RATHER THAN `GetNameOwner`, because it answers with a clean
+# boolean where the other raises `NameHasNoOwner` as an ERROR. That matters
+# for the third answer: it lets "nobody home" be a parsed `false` instead of
+# an error string, so an error can mean the one thing left, which is that the
+# question could not be put at all.
+#
+# THE THIRD ANSWER IS THE LOAD-BEARING ONE, and it is the lesson the
+# WAYLAND_DISPLAY hook cost: a probe run where it cannot see the desktop must
+# not report the desktop broken. `mux check` over ssh reaches no session bus,
+# so the query ERRORS, and calling that "nobody will display it" would be a
+# confident false finding about a machine that is fine.
+mux_notify_daemon() {
+  _ndn=org.freedesktop.Notifications
+  _ndo=
+  for _ndt in gdbus busctl dbus-send; do
+    command -v "$_ndt" >/dev/null 2>&1 || continue
+    case $_ndt in
+    gdbus)
+      _ndo=$(gdbus call --session \
+        --dest org.freedesktop.DBus \
+        --object-path /org/freedesktop/DBus \
+        --method org.freedesktop.DBus.NameHasOwner \
+        "$_ndn" 2>/dev/null) || _ndo= ;;
+    busctl)
+      _ndo=$(busctl --user call org.freedesktop.DBus \
+        /org/freedesktop/DBus org.freedesktop.DBus \
+        NameHasOwner s "$_ndn" 2>/dev/null) || _ndo= ;;
+    dbus-send)
+      _ndo=$(dbus-send --session --print-reply \
+        --dest=org.freedesktop.DBus /org/freedesktop/DBus \
+        org.freedesktop.DBus.NameHasOwner \
+        string:"$_ndn" 2>/dev/null) || _ndo= ;;
+    esac
+    # All three spell the answer differently and all three contain the word:
+    # `(true,)`, `b true`, `   boolean true`. Matched rather than parsed per
+    # tool, since the shapes agree on the only token that carries meaning.
+    case $_ndo in
+    *true*)  return 0 ;;
+    *false*) return 1 ;;
+    esac
+    # This tool could not put the question. Try the next one rather than
+    # concluding anything: a box can carry a gdbus that cannot reach a bus
+    # and a busctl that can.
+  done
+  return 2
+}
+
 # mux_notify_close ID: clear a notification mux raised, because the state
 # that raised it has passed. Never fails, and does nothing at all for an empty
 # ID (the common case: most state files carry no notification).
