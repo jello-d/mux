@@ -22,8 +22,31 @@ _s=$_d/$1
 [ -S "$_s" ] || exit 1
 # A CONNECT, by whichever tool is here. Absent all of them the answer is 2:
 # the socket exists and mux cannot say whether anyone is behind it.
+#
+# THE VALUE UNDER TEST MUST BE HANDED TO THE TOOL, and the first version of
+# this did not: a bare `wayland-info` probes whatever `$WAYLAND_DISPLAY` is in
+# the HOOK's own environment, which is exactly the thing being judged and is
+# routinely absent (a login shell over ssh, a systemd unit, an agent). It then
+# defaults to `wayland-0`, finds nothing, and reports the value it was ASKED
+# about as dead.
+#
+# MEASURED ON BOTH BOXES, where the live display is `wayland-1`:
+#
+#     WAYLAND_DISPLAY=wayland-1 wayland-info   rc 0   (live, and it is)
+#     wayland-info                             rc 1   (probed wayland-0)
+#
+# So mux declared a working display dead and `mux update-env --all` would have
+# REMOVED it from every session on a desktop that was using it. Worse than the
+# `[ -e ]` presence test this replaced: that was too lenient and this was
+# confidently wrong in the destructive direction.
+#
+# Timed out as well, because a compositor that accepts a connection and then
+# stops answering would otherwise hang the whole plan, and the plan runs on a
+# session build.
 if command -v wayland-info >/dev/null 2>&1; then
-  wayland-info >/dev/null 2>&1 || exit 1
+  _wi='wayland-info'
+  command -v timeout >/dev/null 2>&1 && _wi="timeout 5 wayland-info"
+  WAYLAND_DISPLAY=$1 XDG_RUNTIME_DIR=$_d $_wi >/dev/null 2>&1 || exit 1
   exit 0
 fi
 if command -v nc >/dev/null 2>&1; then

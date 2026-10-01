@@ -2412,3 +2412,43 @@ t mux-update-env
 -     exit 2; }
 +     : ; }
 m a WINDOW field must be refused
+
+= envhook-wayland-probes-its-own-environment
+f share/envhooks.d/WAYLAND_DISPLAY
+t mux-envhooks
+# THE VALUE UNDER TEST MUST BE HANDED TO THE TOOL. A bare `wayland-info`
+# probes `$WAYLAND_DISPLAY` from the HOOK's own environment, which is the very
+# thing being judged and is routinely absent (a login shell over ssh, a
+# systemd unit, an agent pane). It then defaults to wayland-0, finds nothing,
+# and calls the display it was ASKED about dead. Measured on both boxes, where
+# the live display is wayland-1, and `mux update-env --all` would then have
+# removed a working display from every session. The assertion is on what the
+# stub was ASKED, not on the verdict: an outcome check passes on the broken
+# code wherever the environment happens to name the right display.
+-   WAYLAND_DISPLAY=$1 XDG_RUNTIME_DIR=$_d $_wi >/dev/null 2>&1 || exit 1
++   $_wi >/dev/null 2>&1 || exit 1
+m PROBED THE WRONG DISPLAY
+
+= envhook-wayland-guesses-with-no-tool
+f share/envhooks.d/WAYLAND_DISPLAY
+t mux-envhooks
+# NO TOOL IS NOT A VERDICT. The socket exists and nothing on the box can say
+# whether anyone is behind it, so the answer is 2 and mux leaves the value
+# alone. Answering 1 makes a machine with neither wayland-info nor nc lose a
+# working display, which is latch's own recorded trap (a probe site that read
+# "cannot tell" as a decision) met from the other side.
+- exit 2
++ exit 1
+m CANNOT TELL (2)
+
+= update-env-preview-uses-the-past-tense
+f libexec/mux-update-env
+t mux-update-env
+# A PREVIEW MUST READ AS A PREVIEW. mux_env_apply reports what it DID, so
+# prefixing "would " onto its words printed `would dropped WAYLAND_DISPLAY`,
+# which is how it read on a live box. `set` is the only one of the three that
+# works in both tenses, which is exactly why this looked right for a release:
+# the common case is the one word that hides it.
+-       dropped)  _l="drop ${_l#* }" ;;
++       dropped)  : ;;
+m would dropped
