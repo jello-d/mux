@@ -345,8 +345,19 @@ EOF
       printf 'strip %s\n' "$_epn"; continue
     fi
     if [ -z "$_epv" ]; then printf 'none %s\n' "$_epn"; continue; fi
-    mux_env_validate "$_epn" "$_epv"
-    case $? in
+    # `|| _epvr=$?` AND NOT A BARE CALL, which is not style: under `set -e`
+    # a command returning non-zero outside a condition context KILLS the
+    # shell, and this loop runs inside `$( )` in callers that all use
+    # `set -eu`. A bare call therefore TRUNCATED THE PLAN at the first
+    # INVALID name, silently, so every name after it alphabetically was never
+    # considered. Measured: four names without `set -e`, two with it.
+    #
+    # Caught by `mux check` reporting [OK] about a pointer it should have
+    # warned on, one day after that marker was added, which is the marker
+    # earning its keep rather than decorating the file.
+    _epvr=0
+    mux_env_validate "$_epn" "$_epv" || _epvr=$?
+    case $_epvr in
     0) printf 'set %s %s\n'  "$_epn" "$_epv" ;;
     1) printf 'drop %s\n'    "$_epn" ;;
     *) printf 'keep %s %s\n' "$_epn" "$_epv" ;;
@@ -437,8 +448,13 @@ mux_env_apply() {   # <session-or-empty> [-v|-n] -> what it changed/would
 
     if [ -n "$_eahave" ]; then
       # A value is already here. Judge THAT before touching anything.
-      mux_env_validate "$_eaname" "$_eahave"
-      case $? in
+      # Guarded for the `set -e` reason given in mux_env_plan above, and this
+      # is the site where it mattered most: bin/mux calls this on every
+      # session build and attach, so a dead value here stopped the repair for
+      # every name after it.
+      _eavr=0
+      mux_env_validate "$_eaname" "$_eahave" || _eavr=$?
+      case $_eavr in
       0) continue ;;            # works: leave it exactly alone
       2) continue ;;            # cannot tell: no finding, so no action
       esac

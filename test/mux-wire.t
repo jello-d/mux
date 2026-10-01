@@ -235,4 +235,60 @@ mux_env_apply bare >/dev/null 2>&1 || true
 with a deliberately different environment cannot survive mux touching it"
 unset MUX_T_POINTER
 
+# --- AN INVALID NAME MUST NOT STOP THE ONES AFTER IT --------------------
+# THIS TEST FILE RUNS UNDER `set -eu`, which is the whole point of putting the
+# case here: so did the callers, and that is what the bug needed.
+#
+# `mux_env_plan` called its validator bare and then read `$?`. Under `set -e` a
+# non-zero return outside a condition context kills the shell, and the loop
+# runs inside `$( )`, so the plan TRUNCATED at the first INVALID name and
+# every name after it alphabetically was silently never considered. Measured
+# four names without `set -e` and two with it.
+#
+# The ORDER is the fixture: the dead name sorts FIRST, so a truncating loop
+# never reaches the live one. Without that, a passing test proves nothing,
+# which is how this survived its own non-vacuity check: the hooks it was
+# driven with all validated.
+fresh
+mkdir -p "$T/ordconf/envhooks.d"
+printf '#!/bin/sh\nexit 1\n' >"$T/ordconf/envhooks.d/MUX_T_AAA_DEAD"
+printf '#!/bin/sh\nexit 0\n' >"$T/ordconf/envhooks.d/MUX_T_ZZZ_LIVE"
+chmod +x "$T/ordconf/envhooks.d"/*
+MUX_DIR=$T/ordconf
+# MUX_SHARE IS PINNED TO AN EMPTY DIRECTORY, which the first version of this
+# case did not do and which made its own non-vacuity check unreadable: names
+# are the UNION of both envhooks.d directories, so the four SHIPPED names were
+# in the plan too, their validators probing this machine's real sockets. The
+# count then said 6 here and something else on a box with no wayland.
+_ordshare=$MUX_SHARE; MUX_SHARE=$T/noshare
+mkdir -p "$MUX_SHARE"
+MUX_T_AAA_DEAD=/a/dead/value;  export MUX_T_AAA_DEAD
+MUX_T_ZZZ_LIVE=/a/live/value;  export MUX_T_ZZZ_LIVE
+
+_ordn=$(mux_env_plan 2>/dev/null | wc -l)
+[ "$_ordn" -eq 2 ] || fail "the plan emitted $_ordn verdicts for two names, so
+it stopped early: a name ordered after an INVALID one is never considered, and
+mux silently repairs only part of the environment"
+
+# THE SESSION IS POISONED WITH THE DEAD NAME FIRST, because apply only
+# validates a value that is ALREADY THERE: with nothing to judge the validator
+# is never called, and the apply half of this case was unreachable. The corpus
+# said so, by SURVIVING.
+tmux -L "$SOCK" set-environment -t bare MUX_T_AAA_DEAD /a/dead/value
+# PIPED, NOT `|| true`, and that distinction is the whole reason the first
+# version proved nothing. POSIX says `set -e` is IGNORED for the left operand
+# of an AND-OR list, so `mux_env_apply ... || true` runs the function with the
+# very protection this case exists to remove. `bin/mux` PIPES it into a
+# reader, and a pipeline component is a subshell with -e live, so this is
+# production's shape. Measured: piped, the mutation applies NOTHING.
+mux_env_apply bare -v 2>/dev/null | cat >/dev/null
+[ "$(tmux -L "$SOCK" show-environment -t bare MUX_T_ZZZ_LIVE)" \
+  = "MUX_T_ZZZ_LIVE=/a/live/value" ] \
+  || fail "a valid pointer ordered AFTER an invalid one was not applied, so
+one dead value stops the repair for everything alphabetically after it:
+[$(tmux -L "$SOCK" show-environment -t bare MUX_T_ZZZ_LIVE 2>&1)]"
+unset MUX_T_AAA_DEAD MUX_T_ZZZ_LIVE
+MUX_SHARE=$_ordshare
+
+
 pass
