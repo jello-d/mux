@@ -2634,3 +2634,36 @@ t mux-check
 -     mux_sess_name_clean "$_s" || _unaddr="$_unaddr[$_s] "
 +     :
 m cannot be named in
+
+= log-header-not-gated-on-a-terminal
+f libexec/mux-log
+t mux-log
+# THE QUIET HALF IS THE CONTRACT. The path is not log content, so a pipe, a
+# redirect and a `2>&1` capture must all be byte-identical to before.
+# Ungating this was the FIRST version and the suite killed it immediately: an
+# earlier case in the same file counts `-n 2` through a helper that folds
+# stderr into stdout, and it saw three lines. Any real consumer reading
+# `mux log 2>&1` would gain a line the same way.
+#
+# THE KILL LANDS ON THAT PRE-EXISTING CASE rather than on the one written for
+# this feature, and the `m` names it deliberately: an EXISTING consumer
+# breaking is better evidence than a new assertion agreeing with its author.
+- [ -t 2 ] && printf 'mux: log at %s\n' "$_f" >&2
++ printf 'mux: log at %s\n' "$_f" >&2
+m did not return 2 lines
+
+= readme-clobbers-a-human-edit
+f setup.sh
+t setup
+# THE ONE UNRECOVERABLE MISTAKE AVAILABLE HERE. The README is mux-generated
+# and refreshed on install, which is only safe while the marker line is the
+# gate: strip the marker and the file is the user's. Without this guard an
+# install silently overwrites whatever somebody wrote in its place, which is
+# the same failure `mux setup claude` is careful about with another program's
+# config, and worse than a stale README by a wide margin.
+#
+# RE-ANCHORED when test/lint.t refused the line for a missing `--` on a grep
+# pattern taken from a variable: the dash-name rule, catching its own author.
+-      && ! grep -qxF -- "$_README_MARK" "$_cr_f" 2>/dev/null; then
++      && false; then
+m OVERWROTE a README

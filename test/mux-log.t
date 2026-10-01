@@ -177,4 +177,56 @@ so the cap is not firing and an always-on log is unbounded"
 # entry has to survive, or the cap destroys exactly what you came to read.
 has "$(cat "$L")" "entry number 39" "the newest entry did not survive the cap"
 
+# --- IT NAMES THE FILE, FOR A HUMAN, WITHOUT TOUCHING A CAPTURE -----------
+# It always said where the log was when there was NO log, then printed the
+# contents of a file it never identified: the one case where you already knew
+# the path was the only case it told you.
+#
+# GATED ON A TERMINAL, which the suite is what established: an unconditional
+# stderr header broke an earlier case here, because `rd` folds stderr into
+# stdout and `-n 2` then returned three lines. Anything reading
+# `mux log 2>&1` would have gained a line the same way. So the quiet half is
+# asserted FIRST and in every stream, since that is the half a script
+# depends on.
+: >"$L"
+lg latch 'one line only'
+_so=$(env MUX_STATE="$T/state" "$HERE/bin/mux" log -n 5 2>/dev/null)
+no_has "$_so" 'log at' "the path leaked into STDOUT, so anything capturing the
+log carries mux's own chatter in it"
+_both=$(env MUX_STATE="$T/state" "$HERE/bin/mux" log -n 5 2>&1)
+no_has "$_both" 'log at' "a 2>&1 capture gained a line, which is how the first
+version of this broke an existing case in this very file"
+case $_so in
+*'one line only'*) ;;
+*) fail "stdout no longer carries the log lines: [$_so]" ;;
+esac
+
+# ... AND AT A TERMINAL IT SAYS SO, which needs a pty: the whole point is the
+# case a human is in, and asserting only the quiet half would leave the
+# feature itself unexercised. Same device the palette grid and latch's
+# spinner already need.
+if [ "$T_PTY" = none ]; then
+  printf 'note %s: no script(1), the tty header is unchecked\n' "$_name"
+else
+  t_pty "$T/pty.out" \
+    "env MUX_STATE='$T/state' '$HERE/bin/mux' log -n 5 >/dev/null" || true
+  case $(cat "$T/pty.out" 2>/dev/null) in
+  *"$L"*) ;;
+  *) fail "at a terminal the reader still does not name the file it printed,
+so the path is only discoverable by reading source: [$(cat "$T/pty.out")]" ;;
+  esac
+fi
+
+# --- --path ANSWERS EVEN WITH NO LOG YET ----------------------------------
+# "Where would it be" is valid on a box that has correctly never written one,
+# so it is answered BEFORE the existence checks. Failing it because the file
+# is absent would make the flag useless in exactly the case somebody is
+# hunting for the path. On stdout alone, so it works in a substitution.
+rm -f "$L"
+_pp=$(env MUX_STATE="$T/state" "$HERE/bin/mux" log --path 2>/dev/null) \
+  || fail "--path failed with no log present, the case it is most needed in"
+[ "$_pp" = "$L" ] || fail "--path printed [$_pp], want [$L]"
+_pe=$(env MUX_STATE="$T/state" "$HERE/bin/mux" log --path 2>&1 >/dev/null)
+[ -z "$_pe" ] || fail "--path wrote to stderr too: [$_pe]"
+
 pass
