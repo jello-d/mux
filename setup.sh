@@ -244,6 +244,54 @@ _retire_old_layout() {
   echo "$PKG: retired the old layout at $_oldlib"
 }
 
+# _adopt_runtime_state: move per-pane agent records from the pre-2026-10-01
+# `$XDG_RUNTIME_DIR/agent-state` to the namespaced `.../mux/agent-state`, once,
+# HERE, because the install is the only moment atomic with the switchover:
+# before it the old writers write the old path, after it the new ones write the
+# new path, so moving what exists at this instant leaves no second copy to go
+# stale. A hook firing mid-move costs one record one event, self-healing on the
+# next lifecycle event, which is the bound every record already carries.
+#
+# IT USED TO LIVE IN `mux_agent_dir`, where it was a reader taking a snapshot;
+# that lib's comment carries the measured failure and the reason it must not
+# come back.
+#
+# A DESTINATION THAT ALREADY EXISTS IS KEPT, NOT COMPARED, and the remedy is
+# named rather than guessed at. The new path is what every reader uses from
+# here on, so the old file will never be read again and holding both is the
+# two-copies hazard; but whether the kept record is ACCURATE is a question no
+# timestamp can answer (a beat refreshes mtime without advancing the epoch), so
+# it belongs to the verb built for that verdict.
+_adopt_runtime_state() {
+  _rt=${XDG_RUNTIME_DIR:-}
+  [ -n "$_rt" ] && [ -d "$_rt/agent-state" ] || return 0
+  _moved=0 _kept=0
+  for _nsd in "$_rt"/agent-state/*; do
+    [ -d "$_nsd" ] || continue
+    _nd=$_rt/mux/agent-state/${_nsd##*/}
+    mkdir -p "$_nd" 2>/dev/null || continue
+    for _r in "$_nsd"/*; do
+      [ -f "$_r" ] || continue
+      if [ -e "$_nd/${_r##*/}" ]; then
+        rm -f -- "$_r" && _kept=$((_kept + 1))
+      else
+        mv -- "$_r" "$_nd/" 2>/dev/null && _moved=$((_moved + 1))
+      fi
+    done
+    # `rmdir`, NEVER a recursive delete, and not only for the obvious reason:
+    # it REFUSES a directory that still holds something, so anything this did
+    # not understand is kept rather than destroyed, and no delete here runs
+    # against an expanded variable.
+    rmdir "$_nsd" 2>/dev/null || :
+  done
+  rmdir "$_rt/agent-state" 2>/dev/null || :
+  [ "$_moved" -eq 0 ] || echo "$PKG: adopted $_moved agent record(s)"
+  [ "$_kept" -eq 0 ] || { echo "$PKG: $_kept agent record(s) were already at"\
+    "the new path; if a session reads busy and is not, run"\
+    "'mux agent-doctor --repair'"; }
+  :
+}
+
 do_install() {
   mkdir -p "$_bin" "$_shr"
   _payload_stage || return 1
@@ -254,6 +302,7 @@ do_install() {
   done
   _retire_old_layout
   echo "$PKG: installed to $_pay (+ bin and man links in $PREFIX)"
+  _adopt_runtime_state
   _reload_live
   _tmux_conf_notice
   _config_readme

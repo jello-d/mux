@@ -4,9 +4,13 @@
 _name=setup
 . "$(dirname "$0")/harness_lib"     # HERE=repo root, T=scratch, fail/pass
 
+# XDG_RUNTIME_DIR comes from harness_lib ($T/run) and is NOT re-derived here:
+# `install` moves live agent records, so an unpinned run would reach into the
+# developer's own. Named rather than inherited silently, because the pin is
+# what makes the adoption case below safe to write at all.
 run() {
   env PREFIX="$T" XDG_BIN_HOME="$T/bin" XDG_DATA_HOME="$T/share" NO_COLOR=1 \
-    sh "$HERE/setup.sh" "$@"
+    XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" sh "$HERE/setup.sh" "$@"
 }
 
 # --- INSTALL IS ONE PAYLOAD TREE PLUS TWO LINKS ---------------------------
@@ -291,6 +295,50 @@ the reload never fires on a real machine: status-right is [$(_sr)]" ;;
     tmux_drop_socket default
   fi
 fi
+
+# --- THE INSTALL ADOPTS LIVE AGENT RECORDS, ONCE -------------------------
+# WHY HERE AND NOT IN THE LIB: the install is the only moment atomic with the
+# writer switching over. `mux_agent_dir` did this for one afternoon and the
+# measured cost was a session stuck reading `working` with an epoch 51 minutes
+# stale, because a READER that migrates takes a snapshot and the old writer
+# kept going. mux-agent-rank.t holds the other half (that the lib touches
+# nothing); this holds the half that has to still work.
+_old=$XDG_RUNTIME_DIR/agent-state/global
+_new=$XDG_RUNTIME_DIR/mux/agent-state/global
+mkdir -p "$_old" "$_new"
+agent_rec "$_old/1" working %1 100 moving      # no destination: moves
+agent_rec "$_old/2" working %2 100 superseded  # destination exists: kept
+agent_rec "$_new/2" idle    %2 900 superseded
+run install >"$T/aout" 2>&1 || fail "install errored: $(cat "$T/aout")"
+
+grep -q 'moving' "$_new/1" 2>/dev/null \
+  || fail "a record with no counterpart was not adopted, so every live pane
+draws the no-record glyph until its agent's next lifecycle hook"
+[ ! -e "$_old/1" ] || fail "the adopted record was COPIED, not moved. Two
+copies and only one reader is how the stale-working bug happened"
+
+# THE SUPERSEDED ONE KEEPS THE NEW PATH'S CONTENT, and no timestamp rule is
+# applied: a beat refreshes mtime without advancing the epoch, so the stale
+# copy can legitimately be the NEWER file. The installer therefore declines
+# to judge and names the verb that can.
+grep -q 'idle' "$_new/2" || fail "the installer overwrote a record already at
+the new path. It cannot tell a snapshot from a live record, so it must not try"
+[ ! -e "$_old/2" ] || fail "the superseded old record was left behind"
+grep -q 'agent-doctor --repair' "$T/aout" \
+  || fail "a kept record was not reported with its remedy: $(cat "$T/aout")"
+
+# THE OLD TREE IS GONE, which is what stops a second install finding it again,
+# and `rmdir` is what makes that safe: it refuses a directory still holding
+# something, so anything unrecognised is kept rather than destroyed.
+[ ! -e "$XDG_RUNTIME_DIR/agent-state" ] \
+  || fail "the old state tree survived: $(ls -A "$XDG_RUNTIME_DIR/agent-state")"
+
+# IDEMPOTENT, and silent the second time: nothing to adopt is not news.
+run install >"$T/aout2" 2>&1 || fail "second install errored"
+grep -q 'adopted' "$T/aout2" && fail "the install claimed an adoption with no
+old path present: $(cat "$T/aout2")"
+grep -q 'moving' "$_new/1" \
+  || fail "a second install disturbed an adopted record"
 
 # --- UNINSTALL REMOVES CODE, KEEPS YOUR FILES, AND SAYS WHICH ------------
 # Keeping config, state and cache is right: a session set and a log are not

@@ -152,17 +152,23 @@ case $_o in
 *) fail "with no state at all, --all said [$_o]" ;;
 esac
 
-# --- THE RUNTIME PATH IS NAMESPACED, AND A LIVE SESSION IS ADOPTED -------
+# --- THE RUNTIME PATH IS NAMESPACED, AND A READER NEVER MIGRATES ----------
 # It used to sit at `$XDG_RUNTIME_DIR/agent-state`, directly beside `at-spi`,
 # `bus`, `dbus-1`, `dconf`, `doc` and `gcr`, under a GENERIC name any other
 # agent tool could claim. Every other location mux owns was namespaced; this
 # was the one that was not (fleet install-placement rule, 2026-10-01).
 #
-# ADOPTION IS THE HALF THAT MATTERS. Sessions already running have their
-# records at the OLD path, and without carrying them over every live pane
-# draws the no-record glyph until its agent's next lifecycle hook fires,
-# which on an idle session can be hours. That is a regression caused by a
-# tidy-up, which is the worst kind.
+# THIS CASE USED TO ASSERT THE OPPOSITE, and that is the point of keeping it.
+# For one afternoon the summary verb DID adopt the old path, because the
+# adoption sat in `mux_agent_dir`, which every read-only consumer calls. A
+# READER THAT MIGRATES TAKES A SNAPSHOT: the first one to run copied the old
+# tree, the still-deployed old writer carried on updating the original, and at
+# the next install the frozen copy became authoritative. Measured on
+# manifestor: a session reading `working` with an epoch 51 minutes stale,
+# every beat refreshing it, no transition logged because there was nothing
+# left to transition from. The assertion below is the inverse of the one that
+# shipped the bug, and `setup.t` holds the adoption itself, at the install,
+# which is the only moment atomic with the writer switching over.
 _nr=$T/nsrun
 mkdir -p "$_nr/agent-state/global"
 agent_rec "$_nr/agent-state/global/p1" blocked %1 100 oldsess x
@@ -170,21 +176,15 @@ agent_rec "$_nr/agent-state/global/p1" blocked %1 100 oldsess x
 _no=$(env XDG_RUNTIME_DIR="$_nr" "$HERE/bin/mux" agent-summary global 2>&1) \
   || fail "agent-summary failed over an old-layout runtime dir: [$_no]"
 case $_no in
-'blocked 1'*) ;;
-*) fail "a record at the OLD runtime path was not adopted, so every session
-that was already running goes dark until its next hook: [$_no]" ;;
+'none 0'*) ;;
+*) fail "the summary READ the old runtime path, or adopted it. It must do
+neither: a read-only verb that migrates state takes a snapshot that goes
+stale the moment the old writer moves again. Got [$_no]" ;;
 esac
 
-# IT COPIES RATHER THAN MOVES, and the old tree is left alone on purpose:
-# several processes call this concurrently (an emit from a hook, a render per
-# client per status-interval) and `mv old new` against a `new` another process
-# just created nests the old directory INSIDE it. No cleanup is owed either,
-# because this is the RUNTIME dir and a reboot clears it.
-[ -f "$_nr/agent-state/global/p1" ] \
-  || fail "adoption MOVED the old records, which races a concurrent reader
-and is why this is a copy"
-[ -f "$_nr/mux/agent-state/global/p1" ] \
-  || fail "the record was not carried to the namespaced path"
+[ ! -e "$_nr/mux" ] || fail "a read-only verb CREATED [$_nr/mux]. The status
+strip calls this per client per status-interval and 'mux check' calls it too,
+and neither may mutate what it inspects."
 
 # AND A FRESH BOX WRITES ONLY THE NEW PATH, so the old one is not recreated
 # by a mux that has never seen it.

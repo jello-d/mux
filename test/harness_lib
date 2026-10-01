@@ -221,6 +221,20 @@ trap "rm -rf $_CLEAN" EXIT INT TERM
 # (`MUX_SHARE="$HERE/share"`) or clears it (`env -u MUX_SHARE`).
 unset TMUX TMUX_PANE MUX_SHARE
 
+# AND `XDG_RUNTIME_DIR` IS THE THIRD HOLE, found 2026-10-01 the same way. The
+# HOME pin cannot cover it: it is an absolute path of its own, so every test
+# wanting agent state pinned it BY NAME, which is the fragility this file's own
+# opening paragraph warns about, and 95 fixture lines did it in four different
+# spellings. Nothing had written there from a path no individual test pinned,
+# until `setup.sh install` grew the agent-state adoption: run unpinned, the
+# install case would have MOVED the developer's own live per-pane records out
+# from under six running sessions. Pin the ROOT, so the next path mux derives
+# under it is covered before anybody writes to it.
+XDG_RUNTIME_DIR=$T/run
+export XDG_RUNTIME_DIR
+mkdir -p "$XDG_RUNTIME_DIR"
+chmod 700 "$XDG_RUNTIME_DIR"
+
 # The session set, pinned explicitly as well. HOME above already keeps it inside
 # T, but a fixture is easier to read as $T/state/sessions.global than as
 # $T/home/.local/state/mux/sessions.global, and it mirrors how each test pins

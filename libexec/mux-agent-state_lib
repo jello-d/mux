@@ -59,29 +59,25 @@ mux_agent_dir() {
   # owns was already namespaced; this was the one that was not.
   _ad=$_rt/mux/agent-state/$_ns
 
-  # ADOPTION, best effort, for sessions that are ALREADY RUNNING. Their
-  # records are at the old path and the strip reads the new one, so without
-  # this every live pane draws the no-record glyph until its agent's next
-  # lifecycle hook fires, which on an idle session can be a long time.
+  # THIS FUNCTION DERIVES A PATH AND TOUCHES NOTHING. It briefly adopted the
+  # old directory from here, and that was wrong twice over; the adoption
+  # lives in `setup.sh` now (`_adopt_runtime_state`), which is the only moment
+  # that is atomic with the writer switching over. Do not put it back:
   #
-  # NO CLEANUP IS OWED, which is what keeps this simple and safe: this is the
-  # RUNTIME dir, cleared at reboot, so the old tree disappears by itself and
-  # nothing here has to delete anything. That is the whole reason adoption
-  # can be a COPY rather than a move.
+  # A READER THAT MIGRATES TAKES A SNAPSHOT. Eleven of this function's twelve
+  # callers are read-only, so the FIRST of them to run copied the old
+  # directory, the still-deployed old writer carried on updating the original
+  # for another 32 minutes, and when the install finally moved the writer over
+  # the frozen copy became authoritative. Measured on manifestor the day it
+  # shipped: a session reading `working` with an epoch 51 minutes stale, every
+  # beat refreshing it, and NO transition ever logged, because there was
+  # nothing left to transition from. That is the inversion this package calls
+  # worse than a stale idle, since a session that looks busy is one you
+  # deliberately leave alone.
   #
-  # A COPY, NOT A MOVE, deliberately. Several processes call this
-  # concurrently (an emit from a hook, a render per client per
-  # status-interval), and `mv old new` when another process has just created
-  # `new` nests the old directory INSIDE it. Copying is idempotent and the
-  # worst a lost race costs is one record written twice with the same
-  # contents. Records are rewritten by the next emit in any case.
-  if [ ! -d "$_ad" ]; then
-    _ao=$_rt/agent-state/$_ns
-    if [ -d "$_ao" ]; then
-      mkdir -p "$_ad" 2>/dev/null \
-        && cp "$_ao"/* "$_ad"/ 2>/dev/null || :
-    fi
-  fi
+  # AND A COPY CANNOT BE JUDGED AFTERWARDS: a beat refreshes mtime without
+  # advancing the epoch, so the snapshot had the NEWER mtime and the staler
+  # content, and no timestamp rule can tell the two apart.
   printf '%s' "$_ad"
 }
 
