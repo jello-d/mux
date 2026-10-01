@@ -162,6 +162,40 @@ _timed() {   # <test file>
   fi
 }
 
+# _baseline TEST -> 0 if that test passes on the UNMUTATED tree. MEMOISED for
+# the length of one run, which is where this driver's time was going.
+#
+# MEASURED BEFORE CHANGING ANYTHING (2026-10-01): a full run is 354 records
+# naming only 52 DISTINCT tests, so it was doing 708 test runs where 406 would
+# do, and the redundancy is not spread evenly. `mux-indicator`'s baseline ran
+# 59 times at 3.71s, `mux-latch`'s 45 times at 5.69s and `mux-agent`'s 33
+# times at 5.36s: those three alone are about ELEVEN MINUTES of re-proving
+# that an unmutated tree is green. The tree COPY, which looks like the
+# expensive part, is 0.01s and was never worth touching.
+#
+# A FILE PER TEST, because POSIX sh has no associative array and the verdict
+# has to survive the subshell each record runs in.
+#
+# AND IT ASSUMES THE TREE IS STILL FOR THE RUN, which is not a new assumption:
+# a mutation run already means nothing if the tree moves under it, which is
+# exactly what `muster stamp` brackets it to prove. If that ever stops being
+# true the memo is the second thing to go wrong, not the first.
+_baseline() {   # <test name>
+  _bf=$T/baseline/$1
+  # A JUNK OR EMPTY MEMO RE-RUNS rather than being believed. `return ""` is
+  # an illegal number, so an interrupted write would otherwise turn a cache
+  # miss into a confusing driver error about something else entirely.
+  if [ -f "$_bf" ]; then
+    _bv=$(cat "$_bf" 2>/dev/null)
+    case $_bv in 0|1) return "$_bv" ;; esac
+  fi
+  mkdir -p "$T/baseline"
+  if sh "$HERE/test/$1.t" >/dev/null 2>&1 </dev/null; then
+    printf '0' >"$_bf"; return 0
+  fi
+  printf '1' >"$_bf"; return 1
+}
+
 _err() { printf 'ERROR    %s\n' "$1"; shift
   for _l in "$@"; do printf '         %s\n' "$_l"; done
   ERR=$((ERR + 1)); }
@@ -225,8 +259,9 @@ _run_one() {   # name file tests old new msg
       return; }
     # BASELINE FIRST. "The test failed" only means the mutation did
     # it if the test passed before; otherwise a pre-existing
-    # failure is counted as coverage.
-    if ! sh "$HERE/test/$_t.t" >/dev/null 2>&1 </dev/null; then
+    # failure is counted as coverage. Memoised per run: see
+    # `_baseline`, where the measurement that justifies it lives.
+    if ! _baseline "$_t"; then
       _err "$_n: test '$_t' FAILS on the unmutated tree" \
         "A test that is already red cannot tell you anything" \
         "about this guard. Fix the baseline first."
