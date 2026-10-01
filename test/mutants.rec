@@ -2587,3 +2587,50 @@ t mux-resume
 -   rs_focus=$MUX_ADDR_SESS
 +   rs_focus=
 m nothing was switched to it
+
+= sess-name-colon-silently-rewritten
+f bin/mux
+t mux-rename
+# A NAME THE USER TYPED IS REFUSED, never quietly rewritten. mux RESERVES the
+# colon for addressing, and handing back a different session from the one
+# asked for is this package's signature failure: plausible, wrong and silent.
+# The fold is still there for a DERIVED name, so deleting the refusal does not
+# break anything loudly, it just gives you `a-b` when you asked for `a:b`.
+-   mux_sess_name_clean "$_new" || {
++   [ -n x ] || {
+m must be refused with 2
+
+= sess-name-rule-refuses-an-address
+f bin/mux
+t mux-resume
+# THE RESERVATION MUST NOT EAT THE GRAMMAR IT PROTECTS. This block is the
+# SHARED name resolution, so without the `resume` exclusion the colon rule
+# refused `work::api`, which is the qualified ADDRESS form and the whole
+# reason the colon is reserved in the first place. Caught by the suite within
+# a minute of being written.
+-   [ "$cmd" = resume ] || mux_sess_name_clean "$name_arg" || {
++   mux_sess_name_clean "$name_arg" || {
+m an unknown partition should exit 3
+
+= sess-name-clean-accepts-a-colon
+f libexec/mux-sessions_lib
+t mux-rename
+# THE RULE ITSELF, in the one place it now lives. It was open-coded as
+# `tr ':.' '--'` in FIVE places in bin/mux with no test anywhere, which is
+# the shape that drifts; a mutation here reaches every caller at once.
+-   *:*) return 1 ;;
++   *:*) return 0 ;;
+m must be refused with 2
+
+= check-blind-to-an-unaddressable-session
+f libexec/mux-check
+t mux-check
+# THE GAP THE REFUSALS LEAVE: a session made with RAW tmux, which only became
+# possible at all in tmux 3.7 (it sanitises session names NOT AT ALL, where
+# 3.4 and 3.6 fold a colon). Nothing else in the audit can see it, and the
+# session works perfectly while being impossible to name in an address, so
+# this is the marker contract's "fully installed and fully broken" shape
+# narrowed to one name.
+-     mux_sess_name_clean "$_s" || _unaddr="$_unaddr[$_s] "
++     :
+m cannot be named in

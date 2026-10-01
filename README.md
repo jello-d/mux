@@ -451,9 +451,11 @@ mux resume work::api  # that partition, landing on `api`
 
 The argument is mux's one **address**, `[PARTITION::]SESSION`: a bare word is
 a session, since that is the common case, and the rare field carries a DOUBLED
-separator. `:` is the only character tmux refuses to store in a session name on
-every version (3.4, 3.6, 3.7c), so `::` cannot arise from a name and is
-unambiguous by construction, while `api:2` is identical
+separator. **mux reserves the colon** in a session name: every verb refuses to
+create one that holds it, so `::` cannot arise from a name. That guarantee used
+to be tmux's (it folded a colon up to 3.6 and, measured, sanitises session
+names not at all from 3.7), and it costs nothing to keep because a colon is
+tmux's own window separator anyway. `api:2` is identical
 to the window target tmux itself takes (resume has no window, so it refuses
 one rather than dropping it). A partition nothing knows exits 3 rather
 than resuming an empty set and reporting "no sessions recorded", which reads
