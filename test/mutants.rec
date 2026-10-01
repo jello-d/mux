@@ -130,6 +130,34 @@ t mux-theme
 +     [ "$_idx" -eq 0 ] && _j=1 || _j=$((_idx % _n + 2))
 m next from aaa
 
+= env-replaces-a-working-value
+f libexec/mux-env_lib
+t mux-wire
+# R9. Converging every session onto one answer would make two deliberately
+# different environments silently collapse into each other. The four variables
+# that prompted this are box-wide pointers, so nothing breaks today, but the
+# set is extensible ON PURPOSE and the first genuinely per-session variable
+# would. The job is to stop a pane starting BROKEN, not to enforce uniformity.
+-       0) continue ;;            # works: leave it exactly alone
++       0) : ;;
+m passes its own validator was REPLACED
+
+= env-does-not-repair-a-poisoned-session
+f libexec/mux-env_lib
+t mux-wire
+# THE WHOLE FAULT. An agent-less attach records `-NAME`, which MASKS the server
+# global, so there is no lower layer to fall back on and every pane created
+# afterwards starts without the pointer. Measured on a real box: every agent
+# pane running with no SSH_AUTH_SOCK, git push failing in every repo, and the
+# box otherwise healthy.
+#
+# THE WRITE ITSELF IS THE ANCHOR, not the dry-run guard above it: that guard
+# appears in both the write and the clear branches, so the corpus correctly
+# refused it as ambiguous.
+-           tm set-environment -t "$_eas" \
++           true \
+m poisoned session was not repaired
+
 = wire-sources-the-fragment
 f bin/mux
 t mux-wire

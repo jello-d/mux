@@ -1324,6 +1324,56 @@ tm() {
 # status-interval, and a round trip there is paid forever. So such a server is
 # wired the first time a mux verb acts on it, which is the first moment mux is
 # entitled to an opinion about it.
+# --- the session pointers a pane must not start without -------------------
+# R1 and R2 from the environment work. A pane's environment comes from the
+# SERVER, not from whoever asked for the pane (measured: a client holding a
+# good value still got the server's value in a new window), so no caller can
+# fix this from outside and it has to happen here.
+#
+# AND AN ATTACH DESTROYS, which is why this runs on BOTH paths rather than
+# only at creation. tmux's `update-environment` copies the attaching client's
+# environment into the session, and copying an ABSENT variable records a
+# REMOVAL (`-SSH_AUTH_SOCK`), which then MASKS the server global. One attach
+# from a client with no agent turns a healthy session into a broken one. On the
+# box this was found on, that client was an ssh from another machine while the
+# box sat at its login greeter, so any cross-box attach does it.
+#
+# THE LIBS ARE SOURCED LAZILY, INSIDE THE FUNCTION, and that is deliberate
+# rather than lazy writing. `mux agent-render` runs per client every
+# status-interval, and a `.` at the top of this file is parsed on every
+# invocation including those. Sourcing here costs the hot paths nothing,
+# because they never call this. Functions defined by a `.` inside a function
+# are global afterwards, so the guard only has to fire once.
+_mux_env_loaded=0
+mux_env_ensure() {   # <session>
+  [ -n "${1:-}" ] || return 0
+  if [ "$_mux_env_loaded" -eq 0 ]; then
+    for _eel in mux-paths_lib mux-conf_lib mux-notice_lib mux-env_lib; do
+      [ -r "$LIBEXEC/$_eel" ] || return 0
+      # shellcheck source=/dev/null
+      . "$LIBEXEC/$_eel"
+    done
+    _mux_env_loaded=1
+  fi
+  # R7: A WITHHELD VALUE IS VISIBLE. Three outcomes come back and they are
+  # reported differently on purpose:
+  #
+  #   dropped   a FINDING: resolved, failed its validator, so not written.
+  #             Announced, because otherwise this becomes a second silent
+  #             removal mechanism beside `update-environment`, which is what
+  #             made the original fault cost a long session to find.
+  #   stripped  the human's own POLICY, declared in envhooks.d/strip.d. Not
+  #             news, and announcing it every run would be noise about a
+  #             decision they already made.
+  #   set       the repair working. Quiet by design: a session starting
+  #             correctly is not an event.
+  mux_env_apply "$1" -v 2>/dev/null | while IFS=' ' read -r _eev _een; do
+    [ "$_eev" = dropped ] || continue
+    mux_notice startup "$_een was withheld from '$1': it resolved," \
+      "but its own validator says that value is dead."
+  done
+}
+
 mux_wire() {
   [ -n "${MUX_SHARE:-}" ] && [ -f "$MUX_SHARE/mux.tmux" ] || return 0
   # No server yet is not a failure: there is simply nothing to wire.
@@ -2280,6 +2330,12 @@ mux_attach() {
   # nothing after them runs. An attach is one of the two moments mux is
   # entitled to an opinion about a server it may not have created.
   mux_wire || true
+  # THE ATTACH IS BOTH THE DAMAGE AND THE OPPORTUNITY:
+  # `update-environment` has just copied this client environment into
+  # the session, removals included, so this is the moment to put back
+  # what it took. Before the exec, since every branch below replaces
+  # this process.
+  mux_env_ensure "$name" || true
   cur=${TMUX:-}                   # our client, if any: socket,pid,session
   cur=${cur%%,*}                  # -> just the socket path
   if _attach_in_pane; then
@@ -3119,6 +3175,10 @@ while read -r verb rest; do
       # not. Everything built below (the layout, the theme, the agent
       # panes) then runs against a server that has mux's hooks.
       mux_wire || true
+      # AND THE ENVIRONMENT, before anything is built in the session:
+      # the agent panes below inherit it, and a pane environment is
+      # fixed at exec, so after the build is too late for them.
+      mux_env_ensure "$name" || true
       win=$(tm display-message -p -t "$name:" \
         '#{window_index}')
       firstwin=$win

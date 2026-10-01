@@ -181,4 +181,58 @@ if tmux -L "$_down" list-sessions >/dev/null 2>&1; then
 fi
 tmux_drop_socket "$_down"
 
+# --- THE ENVIRONMENT IS APPLIED, which is the fix the wiring exists for ---
+# R1 and R2. A pane's environment comes from the SERVER, and an agent-less
+# attach records a REMOVAL (`-SSH_AUTH_SOCK`) that MASKS the server global, so
+# a session can be poisoned into a state no lower layer rescues. This asserts
+# the repair through the same function bin/mux calls on both the build and the
+# attach path.
+#
+# DRIVEN WITH A HOOK THAT ALWAYS VALIDATES, not with the real ones: whether
+# this box has a live ssh agent is a fact about the box, and a test that
+# depends on it measures the machine rather than the code. The shipped
+# validators have their own coverage.
+fresh
+mkdir -p "$T/envconf/envhooks.d"
+printf '#!/bin/sh\nexit 0\n' >"$T/envconf/envhooks.d/MUX_T_POINTER"
+chmod +x "$T/envconf/envhooks.d/MUX_T_POINTER"
+MUX_DIR=$T/envconf
+MUX_T_POINTER=/a/resolvable/value; export MUX_T_POINTER
+# shellcheck source=/dev/null
+. "$HERE/libexec/mux-paths_lib"
+# shellcheck source=/dev/null
+. "$HERE/libexec/mux-conf_lib"
+# shellcheck source=/dev/null
+. "$HERE/libexec/mux-notice_lib"
+# shellcheck source=/dev/null
+. "$HERE/libexec/mux-env_lib"
+
+# THE POISONED SESSION, written exactly as tmux writes it: `-NAME` is the
+# REMOVAL marker, which is a third state beside set and absent and is the one
+# that masks the global.
+tmux -L "$SOCK" set-environment -t bare -r MUX_T_POINTER
+case $(tmux -L "$SOCK" show-environment -t bare MUX_T_POINTER) in
+-MUX_T_POINTER) ;;
+*) fail "the fixture did not poison the session, so the assertion below would
+pass against a session that was never broken" ;;
+esac
+
+mux_env_apply bare >/dev/null 2>&1 || true
+[ "$(tmux -L "$SOCK" show-environment -t bare MUX_T_POINTER)" \
+  = "MUX_T_POINTER=/a/resolvable/value" ] \
+  || fail "a poisoned session was not repaired: [$(tmux -L "$SOCK" \
+show-environment -t bare MUX_T_POINTER)]. Every pane created in it from now
+on starts without the pointer, which is the whole fault this exists for."
+
+# ... AND A WORKING VALUE IS LEFT ALONE (R9), because converging every session
+# onto one answer would make two deliberately different environments collapse
+# into each other.
+tmux -L "$SOCK" set-environment -t bare MUX_T_POINTER /somebody/elses/choice
+mux_env_apply bare >/dev/null 2>&1 || true
+[ "$(tmux -L "$SOCK" show-environment -t bare MUX_T_POINTER)" \
+  = "MUX_T_POINTER=/somebody/elses/choice" ] \
+  || fail "a value that passes its own validator was REPLACED, so a session
+with a deliberately different environment cannot survive mux touching it"
+unset MUX_T_POINTER
+
 pass

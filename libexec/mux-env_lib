@@ -450,7 +450,8 @@ mux_env_apply() {   # <session-or-empty> [-v|-n] -> what it changed/would
     set|keep)
       if [ "$_ean" -eq 0 ]; then
         if [ -n "$_eas" ]; then
-          tm set-environment -t "$_eas" "$_eaname" "$_eaval" 2>/dev/null || true
+          tm set-environment -t "$_eas" \
+            "$_eaname" "$_eaval" 2>/dev/null || true
         else
           tm set-environment -g "$_eaname" "$_eaval" 2>/dev/null || true
         fi
