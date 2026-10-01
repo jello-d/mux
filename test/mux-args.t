@@ -85,7 +85,7 @@ grep -q '^lay ' "$T/conf/profiles" || fail "positional: no row for lay"
 # (three is too many) and the first argument is checked as a PARTITION:
 # positionally, never by guessing which of the words names one.
 no resume-arity  "resume [PARTITION [SESSION]]" resume a b c
-no resume-part   "no such partition"            resume nosuchpartition
+no resume-part   "no such partition"            resume nosuchpartition.
 no resume-flag   "--resume is only for go"   resume --resume
 no resume-flag2  "--resume is only for go"   new --resume lay5
 no list-gate     "--list is only for resume" kill --list lay4

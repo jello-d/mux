@@ -2196,16 +2196,13 @@ t mux-latch
 # test
 # dies before the grammar block is reached. Naming the grammar assertion would
 # make this record fail for being caught too early.
-- *) _sess=$_arg2 ;;
-+ *) _part=$_arg2 ;;
+#
+# RE-ANCHORED when arg 2 moved to the shared parser: the case arm became an
+# assignment from MUX_ADDR_SESS, and the rider caught the rewording on the
+# next suite run rather than letting the record silently stop matching.
+-   _sess=$MUX_ADDR_SESS
++   _part=$MUX_ADDR_SESS
 m host and session were not substituted
-
-= latch-partition-takes-the-first-colon
-f libexec/mux-latch
-t mux-latch
-- *:*) _part=${_arg2%%:*}; _sess=${_arg2#*:} ;;
-+ *:*) _part=${_arg2%:*}; _sess=${_arg2##*:} ;;
-m only the FIRST colon splits partition from session
 
 = latch-lock-key-keeps-the-session
 f libexec/mux-latch
@@ -2556,3 +2553,37 @@ t mux-addr
 -   *) _aprest=$_apa ;;
 +   *) _aprest= ;;
 m session: got
+
+= resume-two-fields-read-as-an-address
+f bin/mux
+t mux-resume
+# THE DISCRIMINATOR IS THE ARGUMENT COUNT, NOT EMPTINESS. `mux resume PART ''`
+# is a deliberate two-field call naming a partition and no focus, which is
+# the shape an older `mux latch` composes; reading it as an address turns it
+# into the SESSION `PART`, silently, and that is the whole class of bug this
+# grammar change exists to avoid rather than create.
+- if [ "$cmd" = resume ] && [ "$#" -le 1 ] && [ -n "$rs_want" ]; then
++ if [ "$cmd" = resume ] && [ -z "$rs_focus" ] && [ -n "$rs_want" ]; then
+m EMPTY focus must still resume
+
+= resume-window-field-ignored
+f bin/mux
+t mux-resume
+# A WINDOW IS REFUSED RATHER THAN IGNORED. resume rebuilds a session SET and
+# lands on one of them, so there is nothing per-window for it to do, and a
+# field it silently drops is a flag that parses and does nothing: worse than
+# a missing one, because the caller believes it asked for something.
+-   [ -z "$MUX_ADDR_WIN" ] || {
++   [ -n x ] || {
+m window field must be refused
+
+= resume-address-drops-the-session
+f bin/mux
+t mux-resume
+# The session half of the one-argument address. Losing it makes every
+# addressed resume rebuild the set and land nowhere, which looks like success
+# and is the `mux latch box` bug this package already shipped once: a default
+# that succeeded at the wrong thing and said nothing.
+-   rs_focus=$MUX_ADDR_SESS
++   rs_focus=
+m nothing was switched to it
