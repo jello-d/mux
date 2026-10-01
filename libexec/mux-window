@@ -1,0 +1,123 @@
+#!/bin/sh
+# mux-window: open a window in an existing session, and GO THERE.
+#
+#     mux window NAME                   in the session you are in
+#     mux window SESSION:NAME           in that session, wherever you are
+#     mux window PARTITION::SESSION:NAME
+#
+# THE HUMAN PRESENTER of the engine in mux-window_lib; `mux agent open` is the
+# other. They differ on three axes, which is more than a flag's worth: this
+# one CREATES AND SWITCHES, prints prose, and may refuse out loud, while the
+# machine one creates DETACHED, prints JSON always, and never prompts. Focus
+# is the load-bearing difference: a program that moves the human's view
+# mid-turn is an interrupt nobody asked for, and a human who typed this
+# obviously wants to go there.
+#
+# THE ADDRESS IS RIGHT-ANCHORED HERE, which is the one place mux's grammar is
+# read from the other end, and it is deliberate: a verb whose subject is a
+# WINDOW takes a bare word as a window, exactly as `tmux select-window -t foo`
+# does. The parser is still the single one in mux-addr_lib; what differs is
+# the reinterpretation of its answer, in one place, below.
+#
+# AND A PARTITION WITHOUT A SESSION IS REFUSED rather than guessed at. Naming
+# a partition means you are not in it, so there is no "the session I am in"
+# over there to default to. Guessing would dial a session that exists and is
+# not the one meant, which is this codebase's signature failure.
+set -eu
+
+_lib=$(dirname "$0")
+for _l in mux-addr_lib mux-sessions_lib mux-window_lib mux-context_lib; do
+  [ -r "$_lib/$_l" ] || {
+    echo "mux: $_l missing (incomplete install)" >&2; exit 1; }
+  # shellcheck source=/dev/null
+  . "$_lib/$_l"
+done
+
+_usage() {
+  echo "usage: mux window [[PARTITION::]SESSION:]NAME [--dir DIR]" >&2
+  echo "                  [--cmd COMMAND] [--control CLASS]" >&2
+  echo "                  [--attention CLASS]" >&2
+  exit 2
+}
+
+_addr= _dir= _cmd= _ctl= _attn=
+while [ "$#" -gt 0 ]; do
+  case $1 in
+  --dir)       _dir=${2:-}; shift 2 || _usage ;;
+  --cmd)       _cmd=${2:-}; shift 2 || _usage ;;
+  --control)   _ctl=${2:-}; shift 2 || _usage ;;
+  --attention) _attn=${2:-}; shift 2 || _usage ;;
+  -h|--help)   _usage ;;
+  -*)          echo "mux: unknown option: $1" >&2; exit 2 ;;
+  *) [ -z "$_addr" ] || { echo "mux: one address, not two: $1" >&2; exit 2; }
+     _addr=$1; shift ;;
+  esac
+done
+[ -n "$_addr" ] || _usage
+
+mux_addr_parse "$_addr" || exit 2
+
+# THE REINTERPRETATION, in one place and nowhere else. The shared parser reads
+# a bare word as a SESSION, because every other verb's subject is one; here
+# the subject is a window, so the LAST field is the name and an omitted
+# session means the one we are in.
+_wpart=$MUX_ADDR_PART
+_wsess=$MUX_ADDR_SESS
+_wname=$MUX_ADDR_WIN
+if [ -z "$_wname" ]; then
+  _wname=$_wsess
+  _wsess=
+fi
+[ -n "$_wname" ] || _usage
+
+if [ -z "$_wsess" ]; then
+  [ -z "$_wpart" ] || {
+    echo "mux: naming a partition needs the session too:" >&2
+    echo "mux: mux window $_wpart::SESSION:$_wname" >&2
+    exit 2; }
+  # THE SESSION DEFAULTS ONLY FROM A LIVE $TMUX, and where there is none this
+  # REFUSES rather than letting tmux pick. tmux's own default target is the
+  # most recently CREATED session, so an unqualified call outside tmux would
+  # open a window in whichever session happened to be newest and say nothing:
+  # plausible, wrong, silent, with tmux supplying the plausibility.
+  [ -n "${TMUX:-}" ] || {
+    echo "mux: no session to open a window in. Name one:" >&2
+    echo "mux: mux window SESSION:$_wname" >&2
+    exit 2; }
+  _wsess=$(tmux display-message -p '#{session_name}' 2>/dev/null || true)
+  [ -n "$_wsess" ] || {
+    echo "mux: could not resolve the current session. Name one:" >&2
+    echo "mux: mux window SESSION:$_wname" >&2
+    exit 2; }
+fi
+
+# THE PARTITION, from the address or from the context, and a CROSSING IS
+# REFUSED for the human verb too. mux cannot enforce the boundary (same uid is
+# full reach) so what it does is decline to be the instrument, and opening a
+# window RUNS A COMMAND in a server whose children hold whatever that
+# partition's boundary grants. Refusing is the direction that can be relaxed
+# later; a human who means it can switch partitions.
+if [ -z "$_wpart" ]; then
+  mux_ctx_resolve 2>/dev/null && _wpart=$MUX_CTX_PARTITION
+fi
+mux_ctx_crossing "${_wpart:-global}" 'open a window across' || {
+  echo "mux: refusing to open a window in $_wsess: $MUX_CTX_CROSS" >&2
+  exit 2; }
+
+_wrc=0
+mux_window_open "${_wpart:-global}" "$_wsess" "$_wname" "$_dir" \
+  "$_cmd" "$_ctl" "$_attn" 1 || _wrc=$?
+case $_wrc in
+0) ;;
+3) echo "mux: $MUX_WIN_ERR" >&2; exit 3 ;;
+*) echo "mux: $MUX_WIN_ERR" >&2; exit 2 ;;
+esac
+
+# AND GO THERE, which is the whole difference from the machine verb. The
+# engine already selected it WITHIN the session (it was asked not to detach);
+# this moves the CLIENT, which is what matters when the target session is not
+# the one you are looking at. Best effort: with nothing attached there is no
+# client to move and the window is still made, which is the honest outcome
+# rather than a failure.
+tmux -L "${_wpart:-global}" switch-client -t "=$MUX_WIN_OUT" 2>/dev/null || :
+echo "mux: opened $MUX_WIN_OUT"

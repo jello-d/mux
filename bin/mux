@@ -237,6 +237,7 @@ even contract 1
 undo-pane contract 1
 unknown-name contract 1
 agent contract 2
+window contract 1
 skill contract 2
 setup contract 1
 demo contract 1
@@ -396,6 +397,7 @@ setup)         shift; exec "$LIBEXEC/mux-setup" "$@" ;;
 demo)          shift; exec "$LIBEXEC/mux-demo" "$@" ;;
 keys)          shift; exec "$LIBEXEC/mux-keys" "$@" ;;
 even)          shift; exec "$LIBEXEC/mux-even" "$@" ;;
+window)        shift; exec "$LIBEXEC/mux-window" "$@" ;;
 undo-pane)     shift; exec "$LIBEXEC/mux-undo-pane" "$@" ;;
 host-color)    shift; exec "$LIBEXEC/mux-host-color" "$@" ;;
 log)           shift; exec "$LIBEXEC/mux-log" "$@" ;;
@@ -697,6 +699,10 @@ usage: mux [OPTION] [VERB] [NAME] [PROFILE]  (OPTION may follow VERB too)
   agent-doctor               does recorded agent state match reality? (--repair)
   log [-n N] [-f] [SUBSYS]   what mux changed, and what it could not do
   agent-hook EVENT           an agent lifecycle event (wiring calls this)
+  window [[PART::]SESS:]NAME
+                             open a window in an existing session and go
+                             there. --control/--attention declare what it
+                             is for; `mux agent open` is the detached form
   even [--all]               put panes back to the declared shape (prefix-E)
   undo-pane                  put back the pane you just closed (prefix-u)
   check                      audit mux's install: package data, deps, overlay

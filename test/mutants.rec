@@ -3040,3 +3040,46 @@ t mux-agent
 -         _se=$(mux_agent_state_win "$_dir" "$_s" "$_wi")
 +         _se=$(mux_agent_state "$_dir" "$_s")
 m peers-win-state
+
+= window-human-verb-detaches
+f libexec/mux-window
+t mux-window
+# THE WHOLE DIFFERENCE BETWEEN THE TWO PRESENTERS. `mux window` is what a
+# HUMAN types, so it creates AND goes there; `mux agent open` is what a
+# program calls, so it creates detached. Flip the engine's switch argument
+# and the human gets a window made somewhere they are not, which is the
+# mirror of the defect vicus's hand-rolled copy had in the other direction.
+-   "$_cmd" "$_ctl" "$_attn" 1 || _wrc=$?
++   "$_cmd" "$_ctl" "$_attn" 0 || _wrc=$?
+m the human verb detached
+
+= window-guesses-a-session-outside-tmux
+f libexec/mux-window
+t mux-window
+# DOING NOTHING IS NOT NEUTRAL HERE, which is why the guard exists at all:
+# tmux's own default target is the most recently CREATED session (measured
+# while chasing even-only-current-window), so an unqualified call outside
+# tmux hands the window to whichever session happened to be newest and says
+# nothing. Plausible, wrong, silent, with tmux supplying the plausibility.
+# The refusal prints the qualified spelling instead.
+-   [ -n "${TMUX:-}" ] || {
++   true || {
+m outside tmux a bare name must be refused
+
+= window-bare-word-is-a-session
+f libexec/mux-window
+t mux-window
+# THE REINTERPRETATION, and the one place mux's address grammar is read from
+# the other end. The shared parser reads a bare word as a SESSION, because
+# every other verb's subject is one; this verb's subject is a WINDOW, so the
+# last field is the name. Without the swap `mux window build` asks for a
+# session called `build` and opens a window there: it SUCCEEDS, at the wrong
+# thing, which is the 0.32 `mux latch HOST` bug exactly.
+#
+# THE MUTATION KEEPS THE SESSION rather than dropping the swap, because the
+# arity guard below (`[ -n "$_wname" ] || _usage`) catches a missing name and
+# turns every simpler mutation into a usage error, which proves nothing about
+# WHICH field the word became.
+-   _wsess=
++   _wsess=$_wsess
+m did not open in the current session
