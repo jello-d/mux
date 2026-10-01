@@ -1466,8 +1466,8 @@ is_shell() {
 emit_window() {
   tm list-panes -t "$1" -F \
    "#{pane_index}|#{@mux-bottom}|#{@mux-agent}|#{@mux-control}|\
-#{pane_current_command}" \
-  | sort -t'|' -k1,1n | while IFS='|' read -r _pi _pb _pa _pk _pc; do
+#{@mux-attention}|#{pane_current_command}" \
+  | sort -t'|' -k1,1n | while IFS='|' read -r _pi _pb _pa _pk _pn _pc; do
     [ -z "$_pb" ] || continue
     # @mux-agent, set at build: an agent that has exited (or was
     # never installed) looks exactly like a shell here, so without
@@ -1486,6 +1486,14 @@ emit_window() {
     # decision.
     case $_pk in
     agent|hybrid) printf 'control %s\n' "$_pk" ;;
+    esac
+    # AND THE SAME FOR ATTENTION, separately rather than in one arm with the
+    # line above: the two markers answer different questions and a session
+    # can easily declare one and not the other (an agent-supervised worker
+    # the human still wants to SEE is `control agent` with attention left
+    # alone). Folding them would make that unsayable.
+    case $_pn in
+    agent|hybrid) printf 'attention %s\n' "$_pn" ;;
     esac
   done
   tm list-panes -t "$1" -F '#{@mux-bottom}|#{pane_current_command}' \
@@ -3102,7 +3110,17 @@ while read -r verb rest; do
     }
     v_panes=$((v_panes + 1))
     ;;
-  control)
+  control|attention)
+    # TWO MARKERS, ONE GRAMMAR, and the directive name IS the option suffix
+    # (`control` -> `@mux-control`), so a third pane class costs one word
+    # here. SHARING THE ARM IS NOT FUSING THE CONCEPTS: they answer different
+    # questions and are read by different consumers (`control` by the send
+    # gate, `attention` by the strip, the notification path and
+    # `next-blocked`), which is the whole point of their being two. They
+    # merely happen to take the same three words today. If one ever gains a
+    # value the other must not, split this arm; nothing else here couples
+    # them.
+    #
     # QUALIFIES THE PANE JUST DECLARED, which is the shape `bottom` already
     # uses, because `pane`'s argument is the COMMAND and a modifier cannot
     # ride it without colliding with an arbitrary command line.
@@ -3119,7 +3137,7 @@ while read -r verb rest; do
     # also the line that keeps this safe: there is deliberately no way here
     # to reclassify a pane somebody else created.
     [ "$v_panes" -gt 0 ] || {
-      echo "mux: 'control' with no pane in $profile" >&2
+      echo "mux: '$verb' with no pane in $profile" >&2
       exit 1
     }
     # REFUSED AFTER `bottom` for the same reason `pane` is: the builder
@@ -3127,7 +3145,7 @@ while read -r verb rest; do
     # longer the pane a reader of this file would expect. Silently marking
     # the wrong pane is the failure this package keeps paying for.
     [ "$v_bottom" -eq 0 ] || {
-      echo "mux: 'control' after 'bottom' in $profile" >&2
+      echo "mux: '$verb' after 'bottom' in $profile" >&2
       exit 1
     }
     # THE VOCABULARY LIVES HERE. `libexec/mux-agent`'s `agent|hybrid` is NOT
@@ -3136,7 +3154,7 @@ while read -r verb rest; do
     case $rest in
     human|agent|hybrid) ;;
     *)
-      echo "mux: 'control' wants human|agent|hybrid: $rest" >&2
+      echo "mux: '$verb' wants human|agent|hybrid: $rest" >&2
       exit 1 ;;
     esac
     ;;
@@ -3355,13 +3373,13 @@ while read -r verb rest; do
     fi
     paneseen=$((paneseen + 1))
     ;;
-  control)
+  control|attention)
     # THE VALIDATOR ABOVE READS THE SAME `$flat` AND RUNS FIRST, so a pane
     # precedes this and the value is one of the three. Re-checking here would
     # be a second guard for one condition, which makes NEITHER killable: this
     # package has measured that twice and deleted the redundant half both
     # times.
-    tm set-option -p -t "$thispane" @mux-control "$rest"
+    tm set-option -p -t "$thispane" "@mux-$verb" "$rest"
     ;;
   bottom)
     # N pins the height; MIN-MAX tracks the window between those

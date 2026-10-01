@@ -2850,33 +2850,33 @@ m kept a record unjudged and said so only on stdout
 
 = control-class-not-written
 f bin/mux
-t mux-control-class
+t mux-pane-class
 # THE PRODUCER ITSELF. `libexec/mux-agent` reads `@mux-control` in two places
 # to decide whether a send may proceed, and before this nothing in the tree
 # wrote it, so the send policy's `control:agent` grant was unreachable: a
 # root-owned line nobody could satisfy. With this gone it is unreachable
 # again, and silently, because a pane with no option reads as `human`, which
 # is a REFUSAL and therefore looks like the policy working.
--     tm set-option -p -t "$thispane" @mux-control "$rest"
+-     tm set-option -p -t "$thispane" "@mux-$verb" "$rest"
 +     :
 m there was no @mux-control call at all
 
 = control-class-marks-the-wrong-pane
 f bin/mux
-t mux-control-class
+t mux-pane-class
 # MARKING THE WRONG PANE IS THE SIGNATURE FAILURE: plausible, wrong, silent.
 # `control` qualifies the pane just declared, so the builder must use the
 # pane it last created; `$firstpane` is a real variable in scope and the
 # mutation is one word. A fixture answering `%1` to every pane_id query
 # could not tell these apart, which is why this file's stub counts panes
 # rather than queries.
--     tm set-option -p -t "$thispane" @mux-control "$rest"
-+     tm set-option -p -t "$firstpane" @mux-control "$rest"
+-     tm set-option -p -t "$thispane" "@mux-$verb" "$rest"
++     tm set-option -p -t "$firstpane" "@mux-$verb" "$rest"
 m the class landed on the wrong pane
 
 = control-class-accepts-any-word
 f bin/mux
-t mux-control-class
+t mux-pane-class
 # AN UNKNOWN WORD MUST BE LOUD. Accepting it writes an option every reader
 # falls through on, so the pane reads as `human`: the layout would read as a
 # grant and behave as a refusal, which is the worst available answer. Same
@@ -2898,3 +2898,31 @@ t mux-save
 -     agent|hybrid) printf 'control %s\n' "$_pk" ;;
 +     agent|hybrid) ;;
 m came back unclassed
+
+= pane-class-refusal-names-the-wrong-directive
+f bin/mux
+t mux-pane-class
+# THE ONE RISK OF A SHARED PARSER ARM. `control` and `attention` are two
+# markers answering two questions, read by different consumers, and they
+# share one validator arm only because they happen to take the same three
+# words. The arm reports `$verb` so a mistake names the line the author
+# actually wrote; hardcoding either directive sends the reader to the wrong
+# one, which is the whole cost of merging them and the reason this is
+# guarded rather than trusted.
+-       echo "mux: '$verb' with no pane in $profile" >&2
++       echo "mux: 'control' with no pane in $profile" >&2
+m 'attention' with no pane
+
+= attention-class-lost-on-save
+f bin/mux
+t mux-save
+# THE SECOND MARKER'S ROUND TRIP, and its own record rather than a shared
+# one, because the two are emitted by two `case` arms on purpose: a pane can
+# declare one and not the other, and the combination that proves it (a
+# worker its supervisor may type into AND the human should still see) is
+# exactly what a folded emitter would make unsayable. Dropping this hands a
+# worker back to the human's strip, notifications and next-blocked on the
+# next build: the inversion R2 exists to prevent.
+-     agent|hybrid) printf 'attention %s\n' "$_pn" ;;
++     agent|hybrid) ;;
+m 'attention agent' was dropped
