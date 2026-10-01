@@ -118,7 +118,9 @@ tmux -L "$SOCK" unbind -T prefix u
 mux_wire || fail "mux_wire failed on an already-wired server"
 ubound && fail "mux_wire re-sourced a server already at $MUX_VERSION: the
 version marker is not being consulted, so every session-affecting verb pays a
-source-file it does not need"
+source-file it does not need.
+  prefix u: [$(tmux -L "$SOCK" list-keys -T prefix u 2>&1)]
+  tmux:     [$(tmux -V)]"
 
 # --- A MARKER FROM AN OLDER MUX RE-SOURCES -------------------------------
 # THE STALENESS CASE, and it closes a bug this package shipped: `mux check`
@@ -128,7 +130,12 @@ source-file it does not need"
 tmux -L "$SOCK" set -g @mux-wired 0.01
 mux_wire || fail "mux_wire failed over a stale marker"
 ubound || fail "mux_wire did not re-source a server whose marker (0.01) is
-older than this mux, so an upgrade leaves a live server on the old fragment"
+older than this mux, so an upgrade leaves a live server on the old fragment.
+  marker now:  [$(marker)]  (want $MUX_VERSION)
+  prefix u:    [$(tmux -L "$SOCK" list-keys -T prefix u 2>&1)]
+  mux binds:   [$(tmux -L "$SOCK" list-keys -T prefix 2>/dev/null \
+                  | grep -c mux)]
+  tmux:        [$(tmux -V)]"
 [ "$(marker)" = "$MUX_VERSION" ] \
   || fail "the stale marker was not advanced: [$(marker)]"
 
