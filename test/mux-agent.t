@@ -618,4 +618,60 @@ for _args in 'status' 'nosuchverb' 'status --nope' ''; do
   esac
 done
 
+# --- A SEND MAY NOT CROSS A PARTITION BOUNDARY ---------------------------
+# FOUND BY THE USER ASKING whether mux pokes a hole in the boundary a
+# partition mechanism exists to keep. It did. Every token on a policy line is
+# ANDed, so `send-blocked control:agent`, the one grant that makes a village
+# of generated worker names workable at all, carries NO partition token and
+# therefore reached agents in EVERY partition.
+#
+# AND THE CROSSING IS REAL. A partition is a tmux `-L` socket owned by the
+# login user, so same-uid means full reach; where the boundary is a GROUP
+# acquired per session, the pane on the other side HOLDS that group and
+# typing into it runs commands with privileges this side was refused.
+#
+# `wsess` IS THE RIGHT FIXTURE PRECISELY BECAUSE IT IS `idle`: idle and
+# working bypass the override machinery entirely, which is how my first
+# version of the gate (inside `_refuse`) guarded the two rare states and
+# missed the common one. A fixture in a blocked state would have passed
+# against that broken code.
+WATCHED=global run send wsess 'rm -rf /' --partition work; unset WATCHED
+eq "cross-rc" "$RC" 1
+eq "cross-status" "$(jq 'd["status"]')" refused
+eq "cross-reason" "$(jq 'd["reason"]')" cross-partition
+# NO OVERRIDE EXISTS, and that is the point of the field: there is
+# deliberately no flag and no policy token that opens this, so a caller
+# discovering the refusal must not be told to go and ask for a grant.
+eq "cross-override" "$(jq 'd["override"]')" none
+
+# AND IT IS NOT MERELY REPORTED: nothing may reach the pane. Asserted on the
+# capture log rather than on the verdict, because a refusal that prints the
+# right JSON after already pasting the text is the one failure that matters
+# here, and no status assertion can see it.
+CAPLOG=$T/crosslog WATCHED=global run send wsess 'rm -rf /' \
+  --partition work --answer-prompt --blind; unset CAPLOG WATCHED
+[ ! -s "$T/crosslog" ] || fail "text was sent into another partition even
+though the call was refused, and the override flags must not be a way
+through: [$(cat "$T/crosslog")]"
+
+# THE SAME-PARTITION CASE MUST STILL WORK, or the gate is just a break.
+# Asserted in both directions because they are different bugs: crossing is a
+# boundary hole, refusing your own partition is the feature deleted.
+CLASS=agent run send bravo 'still fine'; unset CLASS
+eq "same-partition-rc" "$RC" 0
+
+# A FAILED CONTEXT COMMAND REFUSES rather than assuming the baseline, because
+# `mux_ctx_resolve` answers 0 with `global` for a hook that EXITED NON-ZERO
+# (measured), so its status alone cannot tell "no hook" from "the hook
+# broke". Failing OPEN is the one answer an actuating verb must never give.
+printf '#!/bin/sh\nexit 1\n' >"$MUX_DIR/ccfail"
+chmod +x "$MUX_DIR/ccfail"
+cp "$MUX_DIR/config" "$T/config.keep" 2>/dev/null || : >"$T/config.keep"
+printf 'context-command ccfail\n' >"$MUX_DIR/config"
+CLASS=agent run send bravo 'should not land'; unset CLASS
+eq "ctxfail-rc" "$RC" 1
+eq "ctxfail-reason" "$(jq 'd["reason"]')" cross-partition
+cp "$T/config.keep" "$MUX_DIR/config"
+
+
 pass

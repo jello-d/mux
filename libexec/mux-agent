@@ -308,6 +308,63 @@ if [ "$_verb" = send ]; then
   *) _sclass=human ;;
   esac
 
+  # A SEND MAY NOT LEAVE THE CALLER'S OWN PARTITION, refused structurally
+  # and before the policy, for exactly the reason `human` is.
+  #
+  # THE HOLE THIS CLOSES was found by the user asking whether mux pokes a
+  # hole in the boundary a partition mechanism is there to keep. It does,
+  # and the measurement is unambiguous: every token on a policy line is
+  # ANDed, so the one grant that makes a village workable at all,
+  #
+  #     send-blocked control:agent
+  #
+  # carries NO partition token and therefore reaches agents in EVERY
+  # partition. One root-owned line, written for a perfectly good reason,
+  # crosses the wall.
+  #
+  # AND CROSSING IT IS REAL RATHER THAN THEORETICAL. A partition is a tmux
+  # `-L` socket, `/tmp/tmux-<uid>` is `drwx------ <user>` and the sockets
+  # inside are the login user's, so same-uid means full reach. Where the
+  # boundary is a GROUP acquired per session (which is how a kernel-enforced
+  # work/personal split does it), the pane on the other side HOLDS that
+  # group: typing into it executes commands with privileges this side was
+  # refused. mux did not create that capability (`tmux -L other send-keys`
+  # always had it) but blessing it through a policy would be mux endorsing
+  # it, which is worse than leaving it to the raw tool.
+  #
+  # STRUCTURAL, NOT A POLICY TOKEN, and that is the same argument the class
+  # gate already makes one line down: a grant that names only a class or
+  # only a window would otherwise cross a boundary BY OMISSION, and the
+  # omission is the easy mistake rather than the hard one.
+  #
+  # A FAILED CONTEXT COMMAND REFUSES rather than assuming the baseline,
+  # because `mux_ctx_resolve` answers 0 with `global` for a hook that
+  # EXITED NON-ZERO (measured) and so cannot be distinguished by its
+  # status alone. `MUX_CTX_SRC` is what separates them: `baseline` is no
+  # hook at all and `declined` is a real answer, while `failed` is the
+  # ABSENCE of one. Failing OPEN is the single answer an actuating verb
+  # must never give, which is the call `mux resume` already makes.
+  #
+  # COSTS NOTHING ON A BOX WITH NO PARTITIONS, which is most of them:
+  # no hook answers `baseline` with `global`, the target resolves to
+  # `global` too, and the comparison passes.
+  _sown=global
+  if [ -r "$_lib/mux-context_lib" ]; then
+    # shellcheck source=/dev/null
+    . "$_lib/mux-context_lib"
+    mux_ctx_resolve 2>/dev/null || true
+    _sown=${MUX_CTX_PARTITION:-global}
+  fi
+  _scross=
+  if [ "${MUX_CTX_SRC:-baseline}" = failed ]; then
+    _scross="the context command failed, so mux cannot tell which"
+    _scross="$_scross partition this call is being made from"
+  elif [ "${_rp:-global}" != "$_sown" ]; then
+    _scross="it is in partition ${_rp:-global} and this call is from"
+    _scross="$_scross $_sown; mux does not type across a partition"
+    _scross="$_scross boundary"
+  fi
+
   # _refuse WHAT ACK: the target needs an override. Reports whether one
   # is AVAILABLE, which is the whole point of answering rather than just
   # refusing: a caller that does not know discovers the capability in one
@@ -316,7 +373,11 @@ if [ "$_verb" = send ]; then
   _refuse() {   # <what> <ack-flag-name>
     _rf_av=none
     _rf_why=
-    if [ "$_sclass" = human ]; then
+    if [ -n "$_scross" ]; then
+      # NEVER, and no override exists to report: there is deliberately
+      # no flag and no policy token that opens this.
+      _rf_why=$_scross
+    elif [ "$_sclass" = human ]; then
       # NEVER, and the policy is not consulted. Structural
       # rather than a token an operator has to remember: a
       # grant naming only a window would otherwise reach a
@@ -343,6 +404,14 @@ if [ "$_verb" = send ]; then
       "$(mux_json_str "$_ssess: $_rf_why")"
     exit 1
   }
+
+  # THE BOUNDARY GATE RUNS UNCONDITIONALLY AND FIRST, which is where my
+  # own first version of it was wrong: it sat inside `_refuse`, and
+  # `idle|working` never reach `_refuse` at all (an ordinary queued
+  # instruction needs no override), so it guarded the two RARE states and
+  # missed the common one. A structural refusal that only fires on the
+  # unusual path is not structural.
+  [ -z "$_scross" ] || _refuse cross-partition ''
 
   # THE STATE DECIDES WHETHER AN OVERRIDE IS NEEDED AT ALL. idle and
   # working are ordinary: a turn that is running buffers the text and

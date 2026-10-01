@@ -1771,8 +1771,11 @@ m DEFAULT tmux socket
 = agent-send-human-gate-removed
 f libexec/mux-agent
 t mux-agent
--     if [ "$_sclass" = human ]; then
-+     if false; then
+# The anchor reads `elif` since the partition boundary gate took the first
+# branch; the rider caught that rewording on the next suite run, which is the
+# fourth time it has told a real record from a plausible one by machine.
+-     elif [ "$_sclass" = human ]; then
++     elif false; then
 m blk-msg
 
 = agent-send-ack-not-required
@@ -2486,3 +2489,48 @@ t mux-check
 -   elif [ "$_nd" -eq 2 ]; then
 +   elif false; then
 m no bus to confirm
+
+= send-crosses-a-partition-boundary
+f libexec/mux-agent
+t mux-agent
+# THE SECURITY GATE ITSELF. Every token on a policy line is ANDed, so
+# `send-blocked control:agent`, the grant that makes a village of generated
+# worker names workable, carries no partition token and reaches agents in
+# EVERY partition. A partition is a tmux `-L` socket owned by the login user,
+# so same-uid is full reach, and where the boundary is a GROUP acquired per
+# session the pane on the far side HOLDS that group: typing into it runs
+# commands with privileges this side was refused.
+#
+# AND THE IDLE FIXTURE IS WHAT MAKES THIS PROVE THE PLACEMENT AS WELL. My
+# first version of the gate sat inside `_refuse`, which `idle|working` never
+# reach, so it guarded the two rare states and left the common one open.
+# `wsess` is idle, so this record SURVIVES against that version: no separate
+# record is needed, and one is not expressible as a single-line replacement
+# without simply being this one.
+-   [ -z "$_scross" ] || _refuse cross-partition ''
++   :
+m cross-rc
+
+= send-trusts-a-failed-context-command
+f libexec/mux-agent
+t mux-agent
+# FAILING OPEN IS THE ONE ANSWER AN ACTUATING VERB MUST NOT GIVE.
+# `mux_ctx_resolve` answers 0 with `global` for a hook that EXITED NON-ZERO
+# (measured), so its status alone cannot tell "no hook" from "the hook
+# broke", and treating the second as the baseline would let a box whose
+# boundary mechanism is broken type anywhere. `MUX_CTX_SRC` is the
+# discriminator, and this is the call `mux resume` already makes.
+-   if [ "${MUX_CTX_SRC:-baseline}" = failed ]; then
++   if false; then
+m ctxfail-rc
+
+= send-compares-the-partition-backwards
+f libexec/mux-agent
+t mux-agent
+# BOTH DIRECTIONS IN ONE LINE, which is why the test asserts both: inverting
+# it lets a cross-partition send through AND refuses a send inside your own
+# partition, so a test that only checked one would read as coverage while the
+# feature was deleted in the other direction.
+-   elif [ "${_rp:-global}" != "$_sown" ]; then
++   elif [ "${_rp:-global}" = "$_sown" ]; then
+m send-rc

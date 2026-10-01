@@ -149,6 +149,26 @@ neither is enough alone: the policy grants it, and you say explicitly that you
 mean to. The flag is not permission - it is you acknowledging what you are
 doing, and it is recorded.
 
+### One refusal has no override at all
+
+A partition is a boundary between worlds, and on some machines it is enforced
+by the kernel rather than by convention: the panes on the other side hold
+privileges yours was refused. So `mux agent send` never types across one, and
+unlike the case above there is no flag and no policy line that opens it:
+
+```json
+{"status":"refused","reason":"cross-partition","override":"none",
+ "message":"wsess: it is in partition work and this call is from
+            personal; mux does not type across a partition boundary"}
+```
+
+You will also see it when mux cannot tell which partition *you* are in. That
+is deliberate: guessing would mean guessing which side of a boundary a command
+lands on.
+
+Reading across a partition is fine and supported (`peers --partition NAME`).
+It is only typing that stops.
+
 `override: none` means there is no permission for this pane. Do not look for
 another route to the same effect. `tmux send-keys` would work, and doing it
 would be deliberately defeating a guard a human put there - and it leaves

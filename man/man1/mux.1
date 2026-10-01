@@ -1967,6 +1967,21 @@ and
 are ordinary: a running turn buffers the text and picks it up when it ends,
 which is the natural "queue the next instruction" case.
 .IP
+AND IT NEVER TYPES ACROSS A PARTITION, which is the one refusal with no
+override of any kind. A partition can be a boundary enforced by the kernel
+rather than by convention, in which case the pane on the far side holds
+privileges this side was refused, so typing into it would run commands across
+the wall. The gate is structural: it is applied before the policy is
+consulted, because every token on a policy line is required to match and a
+grant naming only a
+.B control
+class therefore carries no partition at all, so it would cross a boundary by
+OMISSION. A partition mux cannot determine refuses for the same reason, since
+guessing would mean guessing which side of a boundary a command lands on.
+READING across a partition is unaffected (see
+.BR peers );
+it is only typing that stops.
+.IP
 AN OVERRIDE NEEDS TWO THINGS THAT CANNOT SUBSTITUTE FOR EACH OTHER: a grant in
 .IR /etc/mux/send-policy ,
 which is root\-owned and so outside the agent's reach, and an explicit
