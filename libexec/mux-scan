@@ -111,18 +111,50 @@ case "${1:-}" in
   _def=$HOME
   [ -d "$HOME/src" ] && _def=$HOME/src
   if [ -z "$_want" ]; then
-    # WITHOUT A TERMINAL IT REFUSES rather than inferring consent, the same
-    # call `mux setup claude` makes: a provisioner runs the installer on every
-    # sweep, and inventing a location there is how one machine silently
-    # indexes a tree the human never named.
+    # WITHOUT A TERMINAL THE ANSWER DEPENDS ON WHETHER THERE IS ANYTHING TO
+    # ASK ABOUT, and the first version of this got that wrong by treating both
+    # cases alike. It refused outright, reasoning that "inventing a location
+    # is how one machine silently indexes a tree the human never named".
+    #
+    # THAT REASONING IS RIGHT ABOUT $HOME AND WRONG ABOUT ~/src, which is the
+    # distinction it missed: $HOME is INVENTED, a claim about the machine that
+    # nobody made; `~/src` EXISTING is OBSERVED, a narrow checkable fact.
+    # Those do not deserve the same answer.
+    #
+    # AND THE COST OF CONFLATING THEM WAS A SILENT REGRESSION, reported by the
+    # user on 2026-09-30. 0.85 removed the shipped `scan ~/src 3` default,
+    # correctly, because a shipped LOCATION fails on every box that keeps work
+    # elsewhere. But the replacement could only ever run at a terminal, and on
+    # this fleet mux is installed by a provisioner that has none: it printed a
+    # note nobody was there to read and did nothing. So discovery went from
+    # working to OFF on every provisioned box, and the first anybody knew was
+    # `mux go <newrepo>` failing. A migration that cannot run on the only
+    # install path there is, is not a migration.
+    #
+    # So: with `~/src` present, record it and SAY so, terminal or not. With no
+    # `~/src`, keep refusing, because falling back to $HOME would index a
+    # whole home directory on a guess.
     if [ ! -t 0 ] || [ ! -t 1 ]; then
-      echo "mux: scan --init needs a terminal to ask, or a directory:" >&2
-      echo "mux:   mux scan --init $_def" >&2
-      exit 2
+      if [ "$_def" = "$HOME" ]; then
+        echo "mux: scan --init needs a terminal to ask, or a directory:" >&2
+        echo "mux:   mux scan --init $_def" >&2
+        echo "mux: ($HOME/src does not exist here, and indexing a whole" >&2
+        echo "mux:  home directory is too big a guess to make unasked.)" >&2
+        exit 2
+      fi
+      _want=$_def
+      echo "mux: no terminal to ask, and $_want exists, so using it."
+      echo "mux: change it by editing the partition file named below."
     fi
-    printf 'mux: where do you keep your projects? [%s] ' "$_def"
-    read -r _want || _want=
-    [ -n "$_want" ] || _want=$_def
+    # GUARDED, because the no-terminal branch above may already have decided.
+    # Without this the prompt is printed into nothing and the `read` from a
+    # closed stdin overwrites the answer with an empty string, which only
+    # LOOKED correct because the fallback happens to be the same value.
+    if [ -z "$_want" ]; then
+      printf 'mux: where do you keep your projects? [%s] ' "$_def"
+      read -r _want || _want=
+      [ -n "$_want" ] || _want=$_def
+    fi
   fi
   case $_want in
   "~") _want=$HOME ;;

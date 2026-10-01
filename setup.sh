@@ -192,15 +192,22 @@ _scan_root_step() {
   # re-install silent: `mux scan --init` is idempotent and says so itself, so
   # this only has to decide whether to ASK.
   "$_bin/$PKG" scan --roots >/dev/null 2>&1 && return 0
-  if [ -t 0 ] && [ -t 1 ]; then
-    "$_bin/$PKG" scan --init || true
-    return 0
-  fi
-  echo "$PKG: NOTE discovery has no roots yet, so \`mux go <name>\` cannot" >&2
-  echo "$PKG:      find your projects. When you are at a terminal:" >&2
-  echo "$PKG:" >&2
-  echo "$PKG:        mux scan --init        # asks where they are" >&2
-  echo "$PKG:        mux scan --init DIR    # or say so outright" >&2
+  # THE DECISION BELONGS TO `scan --init`, NOT HERE, which is a correction.
+  # This used to test for a terminal itself and merely PRINT A NOTE without
+  # one, and that note is why discovery silently went off across a provisioned
+  # fleet: the provisioner has no terminal, so on every sweep it printed a
+  # line nobody was there to read and did nothing. A migration that cannot run
+  # on the only install path there is, is not a migration.
+  #
+  # `scan --init` now distinguishes the two cases properly ($HOME is invented,
+  # an existing ~/src is observed), so the installer can just call it and let
+  # it decide. Keeping a second copy of that judgement here is how the two
+  # would drift.
+  #
+  # `|| true` because discovery is OPTIONAL: a box with no obvious project
+  # directory still gets a working mux, and `scan --init` has already said
+  # what to type. An install must not fail over a convenience.
+  "$_bin/$PKG" scan --init || true
 }
 
 # AN INSTALLED INDICATOR IS A SECOND PACKAGE THAT TALKS TO THIS ONE, and core

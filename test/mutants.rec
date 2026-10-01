@@ -2232,13 +2232,33 @@ m did not round-trip
 = scan-init-writes-without-a-terminal
 f libexec/mux-scan
 t mux-scan-init
-# A provisioner runs `setup.sh install` on every sweep with no tty. Without this
-# refusal `read` takes EOF, the sniffed default is written unasked, and one
-# machine quietly indexes a tree the human never named: the same defect as the
-# shipped `scan ~/src 3`, reached from the other side.
+# A provisioner runs `setup.sh install` on every sweep with no tty. Without
+# this branch `read` takes EOF and the default is written unasked, so with no
+# ~/src a machine would index its whole HOME: the same defect as the shipped
+# `scan ~/src 3`, reached from the other side.
+#
+# NOTE THE REFUSAL IS NO LONGER UNCONDITIONAL, which this comment used to
+# imply. With ~/src PRESENT the no-terminal path deliberately records it, and
+# `scan-init-no-terminal-records-src` below guards that half. The split exists
+# because $HOME is invented and an existing ~/src is observed.
 -     if [ ! -t 0 ] || [ ! -t 1 ]; then
 +     if false; then
 m must exit 2
+
+= scan-init-no-terminal-records-src
+f libexec/mux-scan
+t mux-scan-init
+# THE OTHER HALF OF THE NO-TERMINAL SPLIT, and the regression it closes was
+# reported from a real box. 0.85 removed the shipped `scan ~/src 3`, correctly,
+# because a shipped LOCATION fails on every machine that keeps work elsewhere.
+# But the replacement could only run at a terminal, and the only install path
+# on a provisioned fleet has none: it printed a note nobody read and did
+# nothing, so discovery went from working to OFF and `mux go <newrepo>` stopped
+# finding anything. Making the refusal unconditional again restores exactly
+# that silence.
+-       if [ "$_def" = "$HOME" ]; then
++       if true; then
+m with ~/src present and no terminal it must record
 
 = scan-init-is-not-idempotent
 f libexec/mux-scan
@@ -2265,9 +2285,17 @@ t mux-scan-init
 # `~/src` is OFFERED when it exists and never assumed. Hardcoding it is the
 # original defect: a location nobody chose, which then failed mux's own check on
 # every machine that keeps work somewhere else.
+#
+# THE KILL MOVED when the no-terminal branch was split by whether ~/src
+# exists, and the record was updated rather than the code: hardcoding the
+# default now means `$_def` is never equal to `$HOME`, so the refusal is
+# skipped entirely and the run dies on `[ -d "$_want" ]` instead. It still
+# exits 2, so the exit-code assertion passes and the one about the refusal's
+# WORDING is what fires. Reported by the corpus as a wrong-reason kill, which
+# the anchor rider cannot see.
 -   [ -d "$HOME/src" ] && _def=$HOME/src
 +   _def=$HOME/src
-m with no ~/src the default
+m the refusal did not say why
 
 = install-never-mentions-discovery
 f setup.sh

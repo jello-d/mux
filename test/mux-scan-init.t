@@ -43,30 +43,61 @@ roots configured, or setup.sh cannot tell whether to ask"
 [ ! -s "$T/out" ] || fail "--roots printed something with nothing configured:
 $(cat "$T/out")"
 
-# --- WITHOUT A TERMINAL IT REFUSES, and names the remedy -----------------
-# The same call `mux setup claude` makes. A provisioner runs the installer on
-# every sweep, so a prompt would hang it and a silent write would hand one
-# machine a root the human never named.
+# --- NO TERMINAL AND NOTHING TO OBSERVE: IT REFUSES ----------------------
+# The two no-terminal cases are NOT the same, which the first version of this
+# got wrong by treating them alike, and the cost was a silent regression
+# reported from a real box: $HOME is INVENTED, a claim about the machine
+# nobody made, while an existing ~/src is OBSERVED. With nothing to observe
+# this still refuses, because falling back to $HOME would index a whole home
+# directory on a guess.
 _rc=0
 mux scan --init >"$T/out" 2>&1 || _rc=$?
-[ "$_rc" = 2 ] || fail "no terminal and no directory must exit 2, got $_rc:
+[ "$_rc" = 2 ] || fail "no terminal, no ~/src and no directory must exit 2,
+got $_rc:
 $(cat "$T/out")"
 grep -q 'needs a terminal' "$T/out" || fail "the refusal did not say why:
 $(cat "$T/out")"
-
-# --- THE DEFAULT IS SNIFFED, NOT HARDCODED -------------------------------
-# Asserted through the refusal, which prints the exact command it would have
-# offered. Both directions, because "it suggested something" is equally true of
-# a hardcoded answer: with no ~/src the default is HOME, with one it is that.
+[ ! -e "$MD/partitions/global.partition" ] || fail "it WROTE a partition file
+with no terminal and nothing to observe, which is the half a provisioner
+depends on: a box would silently index a tree nobody named"
+# AND THE SUGGESTION IS SNIFFED, not hardcoded: with no ~/src it offers $HOME.
 grep -q "mux scan --init $H\$" "$T/out" || fail "with no ~/src the default
 should be \$HOME, but the refusal offered:
 $(grep 'scan --init' "$T/out")"
 
+# --- NO TERMINAL BUT ~/src EXISTS: IT RECORDS, AND SAYS SO ---------------
+# THE CASE THAT WAS MISSING, and its absence is why discovery silently went
+# off across a provisioned fleet. 0.85 removed the shipped `scan ~/src 3`
+# default, correctly, because a shipped LOCATION fails on every box that keeps
+# work elsewhere. But the replacement could only run at a terminal, and a
+# provisioner has none: it printed a note nobody read and did nothing, so
+# `mux go <newrepo>` stopped finding anything.
+#
+# ASSERTED ON THE RECORDED ROOT rather than on a suggestion, which is a
+# stronger claim than the old test made: it proves the sniffing by its OUTCOME
+# ($H/src, not $H) instead of by the text of a refusal.
+# A FRESH $MUX_DIR, because this case CONSUMES the no-roots-yet state and
+# `--init` is idempotent: without it the next case's `--init DIR` would
+# correctly add nothing and then fail asserting its own root is there. Found
+# by that case going red, which is the isolation working.
+_mdsave=$MD
+MD=$T/cnotty
 mkdir -p "$H/src"
-mux scan --init >"$T/out2" 2>&1 || true
-grep -q "mux scan --init $H/src\$" "$T/out2" || fail "with a ~/src present it
-should be preferred, but the refusal offered:
-$(grep 'scan --init' "$T/out2")"
+_rc=0
+mux scan --init >"$T/out2" 2>&1 || _rc=$?
+[ "$_rc" = 0 ] || fail "with ~/src present and no terminal it must record,
+got $_rc:
+$(cat "$T/out2")"
+_got=$(mux scan --roots 2>/dev/null | head -1)
+[ "$_got" = "$H/src 3" ] || fail "it recorded [$_got], want [$H/src 3]: the
+default is hardcoded rather than sniffed, or nothing was written"
+# AND IT IS NOT SILENT, because a value chosen without asking has to be
+# visible: this is the one path where mux decides for you.
+grep -q 'no terminal to ask' "$T/out2" || fail "it recorded a root without
+saying so, so a provisioned box gets a location nobody chose and no record of
+the choice:
+$(cat "$T/out2")"
+MD=$_mdsave
 
 # --- A DIRECTORY NAMED OUTRIGHT IS RECORDED ------------------------------
 mkdir -p "$H/projects"
