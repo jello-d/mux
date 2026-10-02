@@ -340,6 +340,39 @@ old path present: $(cat "$T/aout2")"
 grep -q 'moving' "$_new/1" \
   || fail "a second install disturbed an adopted record"
 
+# --- A VENV INSIDE THE PAYLOAD SURVIVES A RESTAGE ------------------------
+# WHY THIS IS NOT HYPOTHETICAL: the indicator's venv folds into the payload,
+# the swap REMOVES the old payload, and the two steps are separate modules in
+# a provisioner. So a core install alone (every sweep that does not also touch
+# the indicator) destroyed the venv and left `bin/mux-indicator` pointing at
+# nothing, with `mux check` unable to say so because the indicator is a
+# different package.
+#
+# MOVED RATHER THAN COPIED, so the swap stays atomic over a tree that is tens
+# of megabytes; `_place-conversion.md` names hush's version as the one to copy
+# and this is it.
+mkdir -p "$_pay/venv/bin"
+printf '#!/bin/sh\necho venv\n' >"$_pay/venv/bin/mux-indicator"
+chmod +x "$_pay/venv/bin/mux-indicator"
+printf 'carried\n' >"$_pay/venv/marker"
+run install >"$T/vout" 2>&1 || fail "install errored: $(cat "$T/vout")"
+[ -x "$_pay/venv/bin/mux-indicator" ] \
+  || fail "the restage destroyed the payload's venv, so the indicator's unit
+and its bin link now point at nothing until something rebuilds it"
+grep -qx carried "$_pay/venv/marker" \
+  || fail "the venv was recreated rather than carried, which loses whatever
+was installed into it"
+
+# AND THE PAYLOAD IS STILL FRESH AROUND IT: carrying the venv must not carry
+# anything else, or a deleted file would survive forever.
+[ ! -e "$_pay/stale-probe" ] || fail "a planted stale file survived"
+printf 'x\n' >"$_pay/stale-probe"
+run install >/dev/null 2>&1 || fail "install errored with a stale file"
+[ ! -e "$_pay/stale-probe" ] \
+  || fail "the restage kept a file that is not in the repo, so the payload is
+no longer a copy of exactly the shipped tree"
+[ -x "$_pay/venv/bin/mux-indicator" ] || fail "the venv went with it"
+
 # --- THE NOTICES REACH THE LOG, AND ONLY AS EVENTS ------------------------
 # WHY: measured 2026-10-01, a provisioner swallows this script's output
 # entirely, so its log held one line of its own about mux and NOT ONE of

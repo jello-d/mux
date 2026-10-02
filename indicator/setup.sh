@@ -63,6 +63,25 @@ _retire_old_venv() {
   "$HOME"/.venvs/?*) ;;
   *) return 0 ;;
   esac
+  # AND THE NEW VENV MUST BE THE REAL ONE, not a scratch prefix's. `OLD_VENV`
+  # ignores PREFIX because the old path never had one, so a verification run
+  # against a throwaway prefix would build a venv there, satisfy the check
+  # above, and then delete the LIVE venv it has no business touching. That is
+  # not hypothetical: it is what bt-sane's conversion did to itself on
+  # 2026-10-01, mid-verification, and `_place-conversion.md` records it as a
+  # gotcha for exactly this function in every venv package.
+  # THE LITERAL REAL PATH, not `${XDG_DATA_HOME:-...}`, which was the first
+  # version and was no gate at all: a verification run overrides XDG_DATA_HOME
+  # too (the recipe's own step 1 does), so the comparison would hold against a
+  # throwaway prefix and delete the live venv anyway.
+  #
+  # THE COST IS THE SAFE ONE: somebody whose XDG_DATA_HOME genuinely points
+  # elsewhere never gets the retire, and keeps a stale directory that nothing
+  # reads. Deleting a live venv is the other kind of wrong.
+  case $VENV in
+  "$HOME"/.local/share/mux/venv) ;;
+  *) return 0 ;;
+  esac
   rm -rf -- "$OLD_VENV"
   rmdir "$HOME/.venvs" 2>/dev/null || :
   echo "mux-indicator: retired the old venv at $OLD_VENV"
