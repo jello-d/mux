@@ -236,7 +236,7 @@ agent-hook contract 1
 even contract 1
 undo-pane contract 1
 unknown-name contract 1
-agent contract 2
+agent contract 3
 window contract 1
 skill contract 2
 setup contract 1
@@ -419,7 +419,7 @@ fi
 # mode, a data resolver has none (it would silently resolve nothing), so a
 # missing lib is a broken install and says so.
 for _l in mux-paths_lib mux-data_lib mux-profiles_lib mux-scan_lib \
-    mux-sessions_lib mux-log_lib; do
+    mux-sessions_lib mux-class_lib mux-log_lib; do
   [ -r "$LIBEXEC/$_l" ] || {
     echo "mux: $LIBEXEC/$_l missing (incomplete install)" >&2
     exit 1; }
@@ -3154,15 +3154,15 @@ while read -r verb rest; do
       echo "mux: '$verb' after 'bottom' in $profile" >&2
       exit 1
     }
-    # THE VOCABULARY LIVES HERE. `libexec/mux-agent`'s `agent|hybrid` is NOT
-    # a second copy of it: that is the narrower set a policy may GRANT, since
-    # `human` is refused before the policy file is read at all.
-    case $rest in
-    human|agent|hybrid) ;;
-    *)
+    # THE VOCABULARY LIVES IN `mux-class_lib` NOW, with its ORDERING, because
+    # `mux agent class` needs the direction and three copies of a word list
+    # with a direction attached is how the three disagree. `mux-agent`'s
+    # `agent|hybrid` is still NOT a shorter spelling of it: that is the
+    # narrower set a POLICY may grant, since `human` is refused before the
+    # policy file is read at all.
+    mux_class_valid "$rest" || {
       echo "mux: '$verb' wants human|agent|hybrid: $rest" >&2
-      exit 1 ;;
-    esac
+      exit 1; }
     ;;
   bottom)
     [ "$v_panes" -gt 0 ] || {

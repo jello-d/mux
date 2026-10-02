@@ -68,6 +68,11 @@ case "$*" in
 # arm below would answer it and swallow the write. Most specific arm first,
 # which is this stub's own header rule, met again.
 *set-option*)    printf 'TMUX %s\n' "$*" >>"$CAPLOG" ;;
+# ATTENTION NEEDS ITS OWN ARM, and its absence made a whole case vacuous:
+# `class` reads the pane's CURRENT class to decide the direction, an
+# unanswered query falls back to `human`, so "escalate to human" was a
+# no-op and passed whichever way the comparison ran. The corpus said so.
+*@mux-attention*) printf '%s\n' "${ATTN:-}" ;;
 *@mux-control*)  printf '%s\n' "${CLASS:-}" ;;
 *load-buffer*|*paste-buffer*|*send-keys*|*delete-buffer*)
   printf 'TMUX %s\n' "$*" >>"$CAPLOG" ;;
@@ -97,7 +102,7 @@ run() {   # <args...> -> stdout in $OUT, exit in $RC
     CAPLOG="${CAPLOG:-/dev/null}" CLASS="${CLASS:-}" \
     WINNAME="${WINNAME:-main}" MUX_LOG="$T/log" \
     CLASS1="${CLASS1:-}" CLASS2="${CLASS2:-}" \
-    NOSERVER="${NOSERVER:-}" NOSESSION="${NOSESSION:-}" \
+    NOSERVER="${NOSERVER:-}" NOSESSION="${NOSESSION:-}" ATTN="${ATTN:-}" \
     NEWIDX="${NEWIDX:-3}" \
     MUX_SEND_POLICY_FILE="$T/etc/send-policy" \
     "$HERE/bin/mux" agent "$@" 2>"$T/err") || RC=$?
@@ -798,5 +803,100 @@ _sq='[x["state"] for x in d["peers"]'
 _sq="$_sq"' if x["session"]=="alpha" and x["window"]==0][0]'
 eq "peers-win0-state" "$(jq "$_sq")" blocked
 rm -f "$XDG_RUNTIME_DIR/mux/agent-state/global/p9"
+
+
+# --- `class`: R3, the transition that is ESCALATION -----------------------
+# vicus's R3: "the answer can change during a session's life, and the surfaces
+# follow it without the agent being restarted". A supervisor that cannot
+# resolve something hands it to the human, and at that instant the worker must
+# become visible on the human's surfaces, so a value fixed at creation cannot
+# express it.
+#
+# ONE WAY FOR A MACHINE: toward the human is free, the reverse needs a human.
+# The direction is what makes that safe rather than a judgement about intent:
+# tightening only ever REMOVES this side's permission and ADDS the human's
+# sight of the pane, while relaxing GRANTS, and granting is the laundering
+# move the send gate exists to refuse.
+: >"$CAPLOG"
+ATTN=agent run class alpha --attention human; unset ATTN
+[ "$RC" = 0 ] || fail "escalating to the human was refused: rc=$RC $OUT"
+eq "class-status" "$(jq 'd["status"]')" ok
+eq "class-attention" "$(jq 'd["attention"]')" human
+eq "class-control-untouched" "$(jq 'd["control"]')" None
+case "$(cat "$CAPLOG")" in
+*'@mux-attention human'*) ;;
+*) fail "the escalation set nothing on the pane: $(cat "$CAPLOG")" ;;
+esac
+# AND IT LEFT `control` ALONE, which is the point of their being two markers:
+# the supervisor keeps the write access it needs to go on nudging while the
+# human is looking.
+case "$(cat "$CAPLOG")" in
+*'@mux-control'*) fail "changing attention also wrote control, so an
+escalation silently revokes the supervisor's ability to type at the exact
+moment it is handing over: $(cat "$CAPLOG")" ;;
+esac
+
+# AND IT IS LOGGED, which for the relax direction below IS the gate's value:
+# the check is organisational, so the record of a change having happened is
+# the part that survives somebody working around it.
+grep -q 'alpha attention .* -> human via class' "$T/log" \
+  || fail "the transition was not logged: $(cat "$T/log" 2>/dev/null)"
+
+# --- RELAXING IS REFUSED WITHOUT A HUMAN ---------------------------------
+# No tty here (the suite runs with stdin on a pipe), so this is the machine
+# path, and it must refuse even though the caller asked plainly.
+: >"$CAPLOG"
+ATTN=human run class alpha --attention agent; unset ATTN
+[ "$RC" = 1 ] || fail "relaxing must be refused with 1, got $RC: $OUT"
+eq "relax-status" "$(jq 'd["status"]')" refused
+eq "relax-reason" "$(jq 'd["reason"]')" relax
+case "$(jq 'd["override"]')" in
+*terminal*) ;;
+*) fail "the refusal did not say what override exists, so a caller has to
+guess: $OUT" ;;
+esac
+case "$(cat "$CAPLOG")" in
+*set-option*) fail "it refused and wrote the option anyway: $(cat "$CAPLOG")" ;;
+esac
+
+# AND `--yes` ALONE IS NOT ENOUGH, which is the half that makes the flag mean
+# anything: a flag is forgeable (the agent composes its own argv), so it
+# grants nothing on its own. Same reasoning the send policy already uses.
+: >"$CAPLOG"
+ATTN=human run class alpha --attention agent --yes; unset ATTN
+[ "$RC" = 1 ] || fail "--yes without a terminal must still refuse, got $RC"
+case "$(cat "$CAPLOG")" in
+*set-option*) fail "--yes alone was accepted: $(cat "$CAPLOG")" ;;
+esac
+
+# ... AND WITH BOTH, IT GOES THROUGH. Driven under a pty, because the gate is
+# `[ -t 0 ]` and no piped test can enter that branch: without this the whole
+# relax path would be asserted only by its refusals, which is the vacuous
+# shape this suite keeps finding.
+if [ "$T_PTY" = none ]; then
+  printf 'note %s: no script(1), the relax-allowed path is unchecked\n' "$_name"
+else
+  : >"$CAPLOG"
+  t_pty "$T/pty.log" "env -u TMUX -u MUX_SHARE MUX_DIR='$MUX_DIR' \
+MUX_CACHE='$MUX_CACHE' XDG_RUNTIME_DIR='$XDG_RUNTIME_DIR' \
+PATH='$T/bin:$PATH' CAPLOG='$CAPLOG' ATTN=human MUX_LOG='$T/log' \
+'$HERE/bin/mux' agent class alpha --attention agent --yes" >/dev/null 2>&1
+  case "$(cat "$CAPLOG")" in
+  *'@mux-attention agent'*) ;;
+  *) fail "with a terminal AND --yes the relax was still refused, so the
+override exists in the message and nowhere else: $(cat "$CAPLOG")" ;;
+  esac
+fi
+
+# --- A SESSION WITH NO TRACKED AGENT IS no-such-name --------------------
+run class nosuch --attention human
+[ "$RC" = 3 ] || fail "an unknown session must exit 3, got $RC: $OUT"
+
+# --- AND IT REFUSES TO CROSS A PARTITION -------------------------------
+# Reclassifying decides who may TYPE into a pane, so doing it across a
+# boundary is the laundering move with an extra step.
+run class wsess --partition work --attention human
+[ "$RC" = 1 ] || fail "a cross-partition class must exit 1, got $RC: $OUT"
+eq "class-cross" "$(jq 'd["reason"]')" cross-partition
 
 pass

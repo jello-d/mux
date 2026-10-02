@@ -816,6 +816,25 @@ a specific agent, and a bare
 .B pane
 a plain shell.
 .TP
+.B mux agent class \fISESSION\fR [\fIoptions\fR]
+Change a LIVE pane's class, with
+.B \-\-control
+and
+.B \-\-attention
+taking one of the three words and
+.B \-\-window
+picking one worker. This is how an escalation takes effect without restarting
+the agent. A machine may only ever move a pane TOWARD the human
+(\fBagent\fR -> \fBhybrid\fR -> \fBhuman\fR): that direction removes its own
+permission and adds the human's sight of the pane. The reverse GRANTS, so it is
+refused with
+.B reason: relax
+unless a human is at a terminal and passes
+.BR \-\-yes .
+Organisational rather than a sandbox, which is why every change is logged: an
+agent can set the option with tmux directly, and what this buys is that the
+dangerous direction is not the easy one and a bypass is visible.
+.TP
 .B mux window [[\fIPARTITION\fB::]\fISESSION\fB:]\fINAME\fR
 Open a window in a session that already EXISTS, and switch to it. The address
 is read from the RIGHT here, which is the one place mux's grammar is: this

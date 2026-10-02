@@ -3,6 +3,10 @@
 # only); the two verbs that present it are `mux window` (human) and
 # `mux agent open` (machine).
 #
+# IT NEEDS `mux-class_lib` AND `mux-sessions_lib`, and says so rather than
+# relying on whoever sources first: that is how a standalone helper stops
+# being standalone, which this tree has already paid for once.
+#
 # WHY MUX OWNS THIS AT ALL, when it had no verb for it: without one, the layer
 # above reimplements it. vicus already did, as its single documented exemption
 # from "never sidestep mux to reach tmux", and the copy was already wrong in
@@ -77,12 +81,14 @@ mux_window_open() {
     MUX_WIN_ERR="a window name may not contain a colon: $_mwname"
     return 2
   fi
+  # THE VOCABULARY LIVES IN `mux-class_lib`, which a caller sources: an
+  # empty value means "leave it undeclared" and is this function's own
+  # business, so only a non-empty one is put to the shared rule.
   for _mwc in "$_mwctl" "$_mwattn"; do
-    case $_mwc in
-    ''|human|agent|hybrid) ;;
-    *) MUX_WIN_ERR="a class is human|agent|hybrid, not: $_mwc"
-       return 2 ;;
-    esac
+    [ -z "$_mwc" ] && continue
+    mux_class_valid "$_mwc" || {
+      MUX_WIN_ERR="a class is human|agent|hybrid, not: $_mwc"
+      return 2; }
   done
 
   # THE SESSION MUST ALREADY EXIST, and this is checked rather than left to
