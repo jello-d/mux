@@ -347,6 +347,67 @@ case $_vo in
 there unnoticed as a second copy nothing resolves through: [$_vo]" ;;
 esac
 
+# AND A SCRATCH-PREFIX RUN MUST NOT RETIRE A LIVE VENV, which is the gotcha
+# `_place-conversion.md` records because bt-sane's conversion did exactly this
+# to itself, mid-verification, on 2026-10-01: `OLD_VENV` ignores PREFIX (the
+# old path never had one), so a verification run that builds a venv in a
+# throwaway prefix satisfies the "new one works" check and then deletes the
+# real `~/.venvs/<pkg>` it has no business touching.
+#
+# THE GATE IS THE LITERAL REAL PATH, not `${XDG_DATA_HOME:-...}`, because a
+# verification run overrides THAT too (the recipe's own step 1 does), so a
+# comparison against the variable is no gate at all. Here HOME is pinned to
+# the sandbox while XDG_DATA_HOME points somewhere else entirely, which is
+# the shape of the run that caused the incident.
+# DRIVEN THROUGH `app`, WHICH IS THE ONLY CALLER, and the first version of
+# this case drove `check` instead: the retire never ran, so the assertion
+# passed with the guard deleted. The corpus said SURVIVED, which is the one
+# thing that tells a covering assertion from a decorative one.
+#
+# AND AGAINST A COPY of the installer, because `PKG_DIR` is derived from the
+# script's own location and is not overridable, and `app` does
+# `rm -rf "$PKG_DIR/build"`: run against the real file it would reach outside
+# the sandbox this harness promises not to leave.
+#
+# THE VENV IS PRE-CREATED with a stub `pip`, so `app` skips `python3 -m venv`
+# and makes no network call. That is not testing the stub: the venv BUILD is
+# this file's documented gap, and what is under test here is the guard that
+# runs AFTER it.
+mkdir -p "$T/pkg" "$_vh/.venvs/mux-indicator" "$T/scratch/mux/venv/bin"
+cp "$SETUP" "$T/pkg/setup.sh"
+printf 'live\n' >"$_vh/.venvs/mux-indicator/marker"
+for _f in pip mux-indicator; do
+  printf '#!/bin/sh\n:\n' >"$T/scratch/mux/venv/bin/$_f"
+  chmod +x "$T/scratch/mux/venv/bin/$_f"
+done
+# PATH KEEPS THE STUB FIRST AND THE REAL TOOLS AFTER. The curated
+# `PATH="$T/bin"` the cases above use has no `mkdir` or `ln`, so `app` died
+# on its first line and the `|| true` hid it: the control below is what
+# caught that, which is the whole reason a control is here.
+env PATH="$T/bin:$PATH" HOME="$_vh" XDG_CONFIG_HOME="$T/xdg" \
+  XDG_DATA_HOME="$T/scratch" MUX_INDICATOR_BIN="$T/bin" \
+  SCTL="$SCTL" SCTL_ENABLED=disabled SCTL_PID=0 \
+  sh "$T/pkg/setup.sh" app >/dev/null 2>&1 || true
+[ -f "$_vh/.venvs/mux-indicator/marker" ] \
+  || fail "a run against a scratch XDG_DATA_HOME deleted the LIVE venv at
+$_vh/.venvs/mux-indicator. That is bt-sane's incident, in the function this
+package shares the shape with."
+
+# AND THE CONTROL: with the venv at its REAL path the retire DOES fire, or
+# the assertion above would hold for a gate that never lets anything through.
+mkdir -p "$_vh/.local/share/mux/venv/bin"
+for _f in pip mux-indicator; do
+  printf '#!/bin/sh\n:\n' >"$_vh/.local/share/mux/venv/bin/$_f"
+  chmod +x "$_vh/.local/share/mux/venv/bin/$_f"
+done
+env PATH="$T/bin:$PATH" HOME="$_vh" XDG_CONFIG_HOME="$T/xdg" \
+  XDG_DATA_HOME="$_vh/.local/share" MUX_INDICATOR_BIN="$T/bin" \
+  SCTL="$SCTL" SCTL_ENABLED=disabled SCTL_PID=0 \
+  sh "$T/pkg/setup.sh" app >/dev/null 2>&1 || true
+[ ! -d "$_vh/.venvs/mux-indicator" ] \
+  || fail "control: at the REAL payload path the old venv was NOT retired, so
+the gate refuses everything and the assertion above proves nothing"
+
 # ... AND SAYING SO IS NOT AN [OK]. A marker that announces its own existence
 # on every clean box is noise, and it broke this file's own premise that
 # nothing should read [OK] when nothing is installed.

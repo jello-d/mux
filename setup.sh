@@ -253,12 +253,49 @@ _payload_stage() {
   for _f in mux.tmux mux-opinions.tmux; do
     [ -f "$_ps_new/share/$_f" ] && ln -sfn "share/$_f" "$_ps_new/$_f"
   done
+  # THE VENV IS CARRIED ACROSS, because the swap below removes the old
+  # payload and the venv lives INSIDE it. Without this every re-install
+  # destroys the indicator's venv and `~/.local/bin/mux-indicator` dangles
+  # until something rebuilds it: measured in a scratch prefix, planted venv
+  # gone and the link pointing at nothing.
+  #
+  # IT MATTERS BECAUSE THE TWO STEPS ARE SEPARATE. A provisioner installs the
+  # package from its pin and runs the indicator's own step afterwards, as a
+  # DIFFERENT module, so between them the unit's ExecStart resolves to
+  # nothing; run the core install alone (which is every sweep that does not
+  # also touch the indicator) and it stays that way. `mux check` would not
+  # catch it either: the indicator is a separate package and core's check
+  # only reports that it is behind.
+  #
+  # MOVED RATHER THAN COPIED, which keeps the swap atomic: the venv is tens
+  # of megabytes and a copy would double the window in which neither tree is
+  # complete. This is hush's shape (f39b763) rather than an invention of
+  # mine; `_place-conversion.md` names it as the one to copy, and bt-sane
+  # converged on it independently.
+  #
+  # AND THE ROLLBACK BELOW PUTS IT BACK, because it restores the whole old
+  # tree: the venv has already moved into `.new`, so a failed swap would
+  # otherwise lose it while appearing to recover.
+  if [ -d "$_pay/venv" ] && [ ! -e "$_ps_new/venv" ]; then
+    mv -- "$_pay/venv" "$_ps_new/venv" || {
+      bad "could not carry the venv across"; rm -rf -- "$_ps_new"
+      return 1; }
+  fi
   if [ -e "$_pay" ] || [ -L "$_pay" ]; then
     mv -- "$_pay" "$_ps_old" || { bad "could not move the old payload"; \
       return 1; }
   fi
   mv -- "$_ps_new" "$_pay" || { bad "could not swap in the new payload"
-    [ -e "$_ps_old" ] && mv -- "$_ps_old" "$_pay"
+    # THE ROLLBACK HAS TO UNDO THE VENV MOVE TOO, and writing the comment
+    # above was what exposed that it did not: restoring the old tree puts
+    # back a payload whose venv has already been moved into `.new`, which
+    # the next run's first line deletes. So the recovery looked complete and
+    # lost tens of megabytes it had just finished protecting.
+    if [ -e "$_ps_old" ]; then
+      mv -- "$_ps_old" "$_pay"
+      [ -d "$_ps_new/venv" ] && [ ! -e "$_pay/venv" ] \
+        && mv -- "$_ps_new/venv" "$_pay/venv"
+    fi
     return 1; }
   rm -rf -- "$_ps_old"
 }

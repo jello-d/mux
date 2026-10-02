@@ -3089,3 +3089,36 @@ t mux-window
 -   _wsess=
 +   _wsess=$_wsess
 m did not open in the current session
+
+= payload-restage-destroys-the-venv
+f setup.sh
+t setup
+# THE VENV LIVES INSIDE THE PAYLOAD and the swap REMOVES the old payload, so
+# without the carry every re-install destroys it and `bin/mux-indicator`
+# points at nothing. It bites because the two steps are SEPARATE modules in a
+# provisioner: a core install alone (every sweep that does not also touch the
+# indicator) leaves the unit's ExecStart dangling, and `mux check` cannot say
+# so because the indicator is a different package.
+#
+# `_place-conversion.md` named this against mux specifically and left it as
+# mux's call; this is the call. hush's shape (f39b763), which that file says
+# to copy rather than inventing one.
+-   if [ -d "$_pay/venv" ] && [ ! -e "$_ps_new/venv" ]; then
++   if false && [ ! -e "$_ps_new/venv" ]; then
+m the restage destroyed the payload's venv
+
+= retire-deletes-a-live-venv-from-a-scratch-prefix
+f indicator/setup.sh
+t mux-indicator-setup
+# bt-sane's INCIDENT, in the function this package shares the shape with:
+# `OLD_VENV` ignores PREFIX because the old path never had one, so a
+# verification run that builds a venv in a throwaway prefix satisfies the
+# "the new one works" check above and then deletes the real `~/.venvs/<pkg>`.
+# It happened mid-verification on 2026-10-01.
+#
+# THE GATE IS THE LITERAL REAL PATH on purpose: a comparison against
+# `${XDG_DATA_HOME:-...}` is no gate at all, because a verification run
+# overrides that too, which was this fix's own first version.
+-   "$HOME"/.local/share/mux/venv) ;;
++   *) ;;
+m deleted the LIVE venv
