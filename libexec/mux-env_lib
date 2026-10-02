@@ -45,14 +45,21 @@
 #               because the value is usually not the thing to check.
 #
 # WHY VALIDATION CANNOT BE A CLOSED VOCABULARY, which is the one design point
-# worth reading twice. Of the four real variables, only ONE validates directly:
+# worth reading twice. Of the five real variables, only TWO validate directly:
 #
 #     SSH_AUTH_SOCK    /run/user/1000/gcr/ssh    the value itself
+#     WAYFIRE_SOCKET   /run/user/1000/wayfire-wayland-1-.socket  likewise
 #     WAYLAND_DISPLAY  wayland-1                 $XDG_RUNTIME_DIR/$v
 #     DBUS_..._ADDRESS unix:path=/run/user/.../bus  its unix:path= field
 #     DISPLAY          :0                        /tmp/.X11-unix/X0
 #
-# Three of four need a TRANSFORM before anything can be checked, and two of
+# VALIDATING DIRECTLY IS NOT THE SAME AS VALIDATING CHEAPLY, which the two
+# path-shaped ones disagree about: SSH_AUTH_SOCK stops at presence on purpose,
+# WAYFIRE_SOCKET must CONNECT, because a wayfire socket is not removed when
+# its compositor exits and an agent's is. Read both hooks before copying
+# either.
+#
+# Three of five need a TRANSFORM before anything can be checked, and two of
 # those transforms need ANOTHER variable's resolved value. A vocabulary of
 # kinds (socket, file, dir) cannot express that. So every name is resolved
 # BEFORE any is validated, and the resolved set is exported to each hook under

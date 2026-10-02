@@ -27,7 +27,7 @@ _name=mux-envhooks
 
 H=$HERE/share/envhooks.d
 for _h in SSH_AUTH_SOCK XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS \
-          WAYLAND_DISPLAY; do
+          WAYLAND_DISPLAY WAYFIRE_SOCKET; do
   [ -x "$H/$_h" ] || fail "share/envhooks.d/$_h is missing or not executable,
 so mux ships a name it cannot judge and every value for it reads as
 undetermined"
@@ -144,6 +144,51 @@ environment rather than the value under test. With WAYLAND_DISPLAY unset (ssh,
 a unit, an agent pane) that means reporting a LIVE display dead, and
 'mux update-env' then removes a working one from every session."
 
+# --- WAYFIRE_SOCKET --------------------------------------------------------
+# THE VALUE IS THE PATH, like SSH_AUTH_SOCK, but the verdict follows
+# WAYLAND_DISPLAY: this socket lives in XDG_RUNTIME_DIR and OUTLIVES its
+# compositor, so a presence test says yes about a session that ended hours
+# ago. Leniency is right for an agent socket, which dies with its session,
+# and wrong here.
+[ "$(run WAYFIRE_SOCKET)" = 1 ] || fail "an empty socket path must be DEAD (1)"
+[ "$(run WAYFIRE_SOCKET "$T/nope.sock")" = 1 ] \
+  || fail "an absent socket must be DEAD (1)"
+[ "$(run WAYFIRE_SOCKET "$T/plain")" = 1 ] \
+  || fail "a plain FILE is not a socket and must be DEAD (1)"
+# THE ASSERTION THAT MATTERS, and the one a presence test fails: dead.sock was
+# bound and abandoned above, so it exists, is a socket, and has nobody behind
+# it. `[ -S ]` calls that live; this hook must not.
+[ "$(run WAYFIRE_SOCKET "$T/dead.sock")" = 1 ] \
+  || fail "WAYFIRE_SOCKET accepted a socket with NO LISTENER. That is the one
+case the hook exists for: wayfire's socket is not removed when the compositor
+exits, so a presence test keeps a dead session's path alive in every pane and
+wf-view then dies blaming the ipc plugin."
+
+# ...AND A LIVE ONE MUST BE LIVE, or the hook is broken in the safe direction
+# and withholds a working value from every session. Served by a listener this
+# test owns, so it needs no compositor.
+if command -v nc >/dev/null 2>&1; then
+  rm -f "$T/live.sock" "$T/up"
+  python3 -c '
+import socket, sys, time
+s = socket.socket(socket.AF_UNIX)
+s.bind(sys.argv[1]); s.listen(1)
+open(sys.argv[2], "w").write("up")
+time.sleep(20)
+' "$T/live.sock" "$T/up" &
+  _srv=$!
+  _i=0
+  while [ ! -f "$T/up" ] && [ "$_i" -lt 50 ]; do _i=$((_i + 1)); sleep 0.1; done
+  _lrc=$(run WAYFIRE_SOCKET "$T/live.sock")
+  kill "$_srv" 2>/dev/null || true
+  wait "$_srv" 2>/dev/null || true
+  if [ -f "$T/up" ]; then
+    [ "$_lrc" = 0 ] || fail "a socket with a real listener must be LIVE (0),
+got $_lrc: the hook is rejecting working values, which would remove a usable
+WAYFIRE_SOCKET from every pane."
+  fi
+fi
+
 # --- NO TOOL IS NOT A VERDICT ---------------------------------------------
 # The case that must not degrade to a guess: the socket is there and mux has
 # no way to ask whether anyone is behind it. 2, never 1.
@@ -156,6 +201,24 @@ _rc=0
 env -u WAYLAND_DISPLAY PATH="$T/bare" \
   MUX_RESOLVED_XDG_RUNTIME_DIR="$T" \
   "$H/WAYLAND_DISPLAY" wayland-7 >/dev/null 2>&1 || _rc=$?
+# THE SAME CONTRACT ON THE PATH-SHAPED HOOK: the socket is present, nothing
+# can ask whether it is served, so CANNOT TELL and never dead.
+_wrc=0
+env -u WAYLAND_DISPLAY PATH="$T/bare" \
+  "$H/WAYFIRE_SOCKET" "$T/dead.sock" >/dev/null 2>&1 || _wrc=$?
+[ "$_wrc" = 2 ] || fail "WAYFIRE_SOCKET with no connect tool on PATH must say
+CANNOT TELL (2), got $_wrc: reading that as dead makes a box without nc lose a
+working compositor socket from every pane."
+# AND WITH NO TOOL, A NON-SOCKET IS STILL DEAD, which is the one case where
+# the `-S` test earns its keep rather than being belt and braces: with a
+# connect available `nc` rejects a plain file anyway, so only this path can
+# tell `-S` from `-e`. A plain file is not "cannot tell", it is wrong.
+_prc=0
+env -u WAYLAND_DISPLAY PATH="$T/bare" \
+  "$H/WAYFIRE_SOCKET" "$T/plain" >/dev/null 2>&1 || _prc=$?
+[ "$_prc" = 1 ] || fail "with no connect tool a PLAIN FILE must still be DEAD
+(1), got $_prc: that is knowable without any tool, and answering CANNOT TELL
+passes a value that can never work."
 [ "$_rc" = 2 ] || fail "with no connect tool on PATH the socket exists and
 nothing can say whether it is served, so the answer is CANNOT TELL (2). This
 returned $_rc; reading that as dead makes a box without wayland-info or nc
