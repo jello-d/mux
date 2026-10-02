@@ -1601,8 +1601,8 @@ m the answer did not parse
 = agent-status-word-ignored
 f libexec/mux-agent
 t mux-agent
--   _out usage 2 "usage: mux agent <status|peers|read|wait|send|open> ..."
-+   _out ok 2 "usage: mux agent <status|peers|read|wait|send> ..."
+-   _out usage 2 "usage: mux agent <$_uv> ..."
++   _out ok 2 "usage: mux agent <$_uv> ..."
 m noverb-status
 
 = agent-exit-disagrees-with-status
@@ -2881,7 +2881,7 @@ t mux-pane-class
 m the class landed on the wrong pane
 
 = control-class-accepts-any-word
-f bin/mux
+f libexec/mux-class_lib
 t mux-pane-class
 # AN UNKNOWN WORD MUST BE LOUD. Accepting it writes an option every reader
 # falls through on, so the pane reads as `human`: the layout would read as a
@@ -2889,8 +2889,8 @@ t mux-pane-class
 # call `notify` makes about its two words and `mux agent-hook` makes about an
 # unknown event: an UNSET thing says nothing because nobody asked, a NAMED
 # one mux cannot honour is an author claiming a contract that does not exist.
--     human|agent|hybrid) ;;
-+     human|agent|hybrid|supervisor) ;;
+-   human|agent|hybrid) return 0 ;;
++   human|agent|hybrid|supervisor) return 0 ;;
 m was accepted and should be refused
 
 = control-class-lost-on-save
@@ -3122,3 +3122,43 @@ t mux-indicator-setup
 -   "$HOME"/.local/share/mux/venv) ;;
 +   *) ;;
 m deleted the LIVE venv
+
+= class-relax-needs-a-human
+f libexec/mux-agent
+t mux-agent
+# THE SECURITY-RELEVANT HALF OF R3. A machine may move a pane TOWARD the
+# human freely, because that only removes its own permission and adds the
+# human's sight of it; the reverse GRANTS, and relaxing a pane to `agent` is
+# precisely the laundering move (promote a human's pane, then send into it
+# wherever a `control:agent` grant is in force).
+#
+# THE GATE IS ORGANISATIONAL and the source says so: an agent can allocate a
+# pty and can call `tmux set-option` directly today. What it buys is that the
+# dangerous direction stops being the easy one, which is exactly what this
+# record protects: with the gate gone, relaxing is a plain machine call.
+-       if [ ! -t 0 ] || [ -z "$_clyes" ]; then
++       if false; then
+m relaxing must be refused with 1
+
+= class-direction-inverted
+f libexec/mux-agent
+t mux-agent
+# THE DIRECTION IS THE WHOLE RULE, so inverting it is the mutation that
+# matters most: escalation (the case R3 was written for) would then need a
+# human at a terminal, and relaxing a pane to `agent` would be free to any
+# machine. Both halves wrong at once, from one comparison.
+-     if [ "$(mux_class_rank "$_mv")" -lt "$(mux_class_rank "$_was")" ]; then
++     if [ "$(mux_class_rank "$_mv")" -gt "$(mux_class_rank "$_was")" ]; then
+m escalating to the human was refused
+
+= class-transition-not-logged
+f libexec/mux-agent
+t mux-agent
+# FOR THE RELAX DIRECTION THE LOG IS THE GATE'S VALUE, which is why this is
+# guarded rather than treated as a nicety: the check itself is organisational,
+# so the record of a change having happened is the part that survives somebody
+# working around it. `_mux-partition-security.md` carries the open half of
+# this (the log is the agent's own file, so it can erase its own tracks).
+-     mux_log agent "$_clsess $_mk $_was -> $_mv via class"
++     :
+m the transition was not logged

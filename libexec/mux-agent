@@ -37,6 +37,12 @@ set -eu
 _lib=$(dirname "$0")
 . "$_lib/mux-json_lib"
 . "$_lib/mux-send-policy_lib"
+# The pane class vocabulary and its ORDERING, which `class` turns on and
+# `open` validates against. Core to this file, so unconditional.
+. "$_lib/mux-class_lib"
+# `class` and `send` both record a transition, and the log is the half of the
+# relax gate that survives somebody working around it.
+. "$_lib/mux-log_lib"
 
 # THE STATUS ENUMERATION, and its one rule: each value maps to exactly one of
 # mux's four exit codes, never the reverse. Several statuses may share a code
@@ -59,7 +65,12 @@ _out() {   # <status> <exit> <message>
 }
 
 _usage() {
-  _out usage 2 "usage: mux agent <status|peers|read|wait|send|open> ..."
+  # THE VERB LIST IN A VARIABLE so the `_out` call stays on ONE line: a
+  # mutation record cannot anchor a line ending in a continuation backslash,
+  # and the guard that the status WORD is honoured is worth keeping killable.
+  # Same move as the `untrusted` reason in mux-latch, for the same reason.
+  _uv='status|peers|read|wait|send|open|class'
+  _out usage 2 "usage: mux agent <$_uv> ..."
 }
 
 _verb=${1:-}
@@ -67,7 +78,7 @@ _verb=${1:-}
 shift
 
 case $_verb in
-status|peers|read|wait|send|open) ;;
+status|peers|read|wait|send|open|class) ;;
 *) _out usage 2 "unknown agent verb: $_verb" ;;
 esac
 
@@ -102,7 +113,7 @@ _tx() {
 }
 
 case $_verb in
-read|wait|send)
+read|wait|send|class)
   . "$_lib/mux-paths_lib"
   . "$_lib/mux-agent-state_lib" ;;
 esac
@@ -525,6 +536,128 @@ $MUX_CTX_CROSS")"
   printf '"control":%s,"attention":%s}\n' \
     "$([ -n "$_octl" ] && mux_json_str "$_octl" || printf null)" \
     "$([ -n "$_oattn" ] && mux_json_str "$_oattn" || printf null)"
+  exit 0
+fi
+
+if [ "$_verb" = class ]; then
+  # --- class ---------------------------------------------------------
+  # Change a LIVE pane's class, which is vicus's R3: "the answer can change
+  # during a session's life, and the surfaces follow it without the agent
+  # being restarted". ESCALATION IS THAT TRANSITION. A supervisor that
+  # cannot resolve something hands it to the human, and at that instant the
+  # worker has to become visible on the human's surfaces; a value fixed when
+  # the pane was created cannot express it.
+  #
+  # ONE WAY FOR A MACHINE (the user's call): a machine may only ever move a
+  # pane TOWARD THE HUMAN. More visible, more restricted:
+  # `agent -> hybrid -> human` is free, and the reverse needs a human.
+  #
+  # WHY THAT ASYMMETRY IS THE WHOLE DESIGN: moving toward the human only ever
+  # REMOVES this side's permission and ADDS the human's sight of the pane, so
+  # it cannot be a way to reach anything. The reverse GRANTS: relaxing a pane
+  # to `agent` is precisely the laundering move (promote a human's pane, then
+  # send into it wherever a `control:agent` grant is in force). So creation
+  # declares freely, a machine may tighten, and only a human may relax.
+  #
+  # THE RELAX GATE IS A tty PLUS `--yes`, the shape `mux setup claude`
+  # already uses: without both it REFUSES rather than inferring consent.
+  # Said plainly because the man page must not overclaim: an agent can
+  # allocate a pty and can call `tmux set-option` directly today, so this is
+  # ORGANISATIONAL, not a sandbox. What it buys is that the dangerous
+  # direction stops being the easy one and that a bypass leaves the log,
+  # which is why the log line below is not optional.
+  _clsess= _clwin= _clpart= _clctl= _clattn= _clyes=
+  while [ "$#" -gt 0 ]; do
+    case $1 in
+    --partition) _clpart=${2:-}; shift 2 || _usage ;;
+    --window)    _clwin=${2:-}; shift 2 || _usage ;;
+    --control)   _clctl=${2:-}; shift 2 || _usage ;;
+    --attention) _clattn=${2:-}; shift 2 || _usage ;;
+    --yes)       _clyes=1; shift ;;
+    -*) _out usage 2 "unknown option: $1" ;;
+    *)  [ -z "$_clsess" ] || _out usage 2 "one session, not two: $1"
+        _clsess=$1; shift ;;
+    esac
+  done
+  [ -n "$_clsess" ] || _out usage 2 "usage: mux agent class SESSION \
+[--window N] [--partition P] [--control CLASS] [--attention CLASS] [--yes]"
+  [ -n "$_clctl$_clattn" ] || _out usage 2 \
+    "nothing to change: give --control and/or --attention"
+  for _c in "$_clctl" "$_clattn"; do
+    [ -z "$_c" ] && continue
+    mux_class_valid "$_c" \
+      || _out usage 2 "a class is human|agent|hybrid, not: $_c"
+  done
+
+  _resolve "$_clsess" "$_clpart"
+
+  if [ -r "$_lib/mux-context_lib" ]; then
+    # shellcheck source=/dev/null
+    . "$_lib/mux-context_lib"
+    mux_ctx_crossing "${_rp:-global}" 'reclassify a pane across' || {
+      printf '{"status":%s,"reason":%s,"override":%s,"message":%s}\n' \
+        "$(mux_json_str refused)" \
+        "$(mux_json_str cross-partition)" \
+        "$(mux_json_str none)" \
+        "$(mux_json_str "refusing to reclassify $_clsess: $MUX_CTX_CROSS")"
+      exit 1
+    }
+  fi
+
+  # THE PANE IS RESOLVED HERE, from the state record, never taken from the
+  # caller: an id cached from an earlier `peers` can have died and been
+  # replaced, and reclassifying the wrong pane is a wrong answer wearing the
+  # shape of a right one. `--window` narrows it, which is how a supervisor
+  # names ITS worker rather than the session's worst agent.
+  if [ -n "$_clwin" ]; then
+    _clpane=$(mux_agent_pane_win "$_rd" "$_clsess" "$_clwin")
+  else
+    _clpane=$(mux_agent_pane "$_rd" "$_clsess")
+  fi
+  [ -n "$_clpane" ] || _out no-such-name 3 \
+    "no tracked agent in $_clsess${_clwin:+ window $_clwin}"
+
+  # EACH MARKER IS JUDGED ON ITS OWN, because a caller may tighten one and
+  # leave the other alone, and that combination is the point of their being
+  # two: an escalation moves ATTENTION to the human while the supervisor
+  # keeps the write access it needs to go on nudging.
+  _clout=
+  for _m in control:"$_clctl" attention:"$_clattn"; do
+    _mk=${_m%%:*} _mv=${_m#*:}
+    [ -z "$_mv" ] && continue
+    _was=$(_tx display-message -p -t "$_clpane" \
+      "#{@mux-$_mk}" 2>/dev/null || true)
+    mux_class_valid "$_was" || _was=human
+    if [ "$(mux_class_rank "$_mv")" -lt "$(mux_class_rank "$_was")" ]; then
+      # RELAXING. A tty AND an explicit flag, or refuse and say which
+      # override exists, so a caller learns it in one round trip instead of
+      # guessing.
+      if [ ! -t 0 ] || [ -z "$_clyes" ]; then
+        printf '{"status":%s,"reason":%s,"override":%s,"message":%s}\n' \
+          "$(mux_json_str refused)" \
+          "$(mux_json_str relax)" \
+          "$(mux_json_str 'a human at a terminal with --yes')" \
+          "$(mux_json_str "$_clsess $_mk $_was -> $_mv moves AWAY from the \
+human, which only a human may do")"
+        exit 1
+      fi
+    fi
+    _tx set-option -p -t "$_clpane" "@mux-$_mk" "$_mv" 2>/dev/null || :
+    # LOGGED, ALWAYS, and for the relax direction that log IS the gate's
+    # value: the check itself is organisational, so the record of a change
+    # having happened is the part that survives somebody working around it.
+    mux_log agent "$_clsess $_mk $_was -> $_mv via class"
+    _clout="$_clout$_mk"
+  done
+
+  printf '{"status":%s,"partition":%s,"session":%s,"pane":%s,' \
+    "$(mux_json_str ok)" \
+    "$(mux_json_str "${_rp:-global}")" \
+    "$(mux_json_str "$_clsess")" \
+    "$(mux_json_str "$_clpane")"
+  printf '"control":%s,"attention":%s}\n' \
+    "$([ -n "$_clctl" ] && mux_json_str "$_clctl" || printf null)" \
+    "$([ -n "$_clattn" ] && mux_json_str "$_clattn" || printf null)"
   exit 0
 fi
 

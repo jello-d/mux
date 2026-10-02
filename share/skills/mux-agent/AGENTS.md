@@ -148,6 +148,29 @@ It answers with the window it made:
   outright, with no flag and no policy that opens it. Opening runs a COMMAND,
   so it crosses harder than sending text does.
 
+## Escalating a worker to the human
+
+```sh
+mux agent class api --window 3 --attention human
+```
+
+Changes a LIVE pane's class, which is how an escalation works: you could not
+resolve something, so the human has to see it, and that must take effect
+without restarting the agent.
+
+- **You may always move a pane TOWARD the human** (`agent` -> `hybrid` ->
+  `human`), on either marker. That direction only ever removes your own
+  permission and adds their sight of the pane, so it is always allowed.
+- **You may not move it away from the human.** Relaxing a pane back to
+  `agent` grants something, and it is refused with `reason: relax` unless a
+  HUMAN is at a terminal and passes `--yes`. Do not try to work around that;
+  tell the human what you need instead.
+- The two markers are judged separately, which is the point of their being
+  two: escalate `--attention` and keep `--control agent`, and the human sees
+  the worker while you can still type into it.
+- `--window` picks one worker; without it the session's worst agent is used.
+- Every change is logged, including yours.
+
 ## The rule that matters
 
 **Never answer another agent's permission prompt.**

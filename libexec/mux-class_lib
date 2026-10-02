@@ -1,0 +1,53 @@
+#!/bin/sh
+# mux-class_lib: the PANE CLASS vocabulary and its ordering. Sourced
+# (functions only).
+#
+# TWO MARKERS SHARE THIS, and they are still two questions:
+#
+#     @mux-control    who may TYPE into this pane        (the send gate)
+#     @mux-attention  whose attention is OWED            (strip, notifications,
+#                                                         next-blocked)
+#
+# WHY A LIB NOW, when the three words were fine open-coded twice: the ORDERING
+# is new, and an ordering is a RULE rather than a default. This tree's own
+# guidance is to centralise a rule and leave a default alone, and to do it at
+# the moment logic appears rather than before; `mux agent class` is that
+# moment. Before it there were two copies of a word list with a clean record;
+# after it there would have been three copies of something with a direction.
+#
+# NOT THE GRANTABLE SUBSET. `libexec/mux-agent` tests `agent|hybrid` where it
+# decides whether a POLICY may grant a send, and that is a different rule
+# living in the right place: `human` is refused there before the policy file
+# is read at all, so it is not a shorter spelling of this list.
+
+# mux_class_valid CLASS -> 0 when it is one of the three.
+mux_class_valid() {
+  case ${1:-} in
+  human|agent|hybrid) return 0 ;;
+  esac
+  return 1
+}
+
+# mux_class_rank CLASS -> 0 agent, 1 hybrid, 2 human. Higher is CLOSER TO THE
+# HUMAN, and that single direction is what the one-way rule turns on, for both
+# markers at once:
+#
+#   control    human is the most RESTRICTED (refused to every sender)
+#   attention  human is the most VISIBLE (it reaches their surfaces)
+#
+# So "toward the human" means more restricted AND more visible, and a machine
+# may always move that way: it only ever removes its own permission and adds
+# the human's sight of the pane. The reverse GRANTS something, which is why it
+# needs a human (see `mux agent class`).
+#
+# AN UNKNOWN WORD RANKS LOWEST on purpose, so it can never read as a move
+# toward the human. Callers validate first and this is the second line of
+# defence, deliberately in the safe direction rather than loud: a rank
+# function with an error path would have two answers for one question.
+mux_class_rank() {
+  case ${1:-} in
+  human)  echo 2 ;;
+  hybrid) echo 1 ;;
+  *)      echo 0 ;;
+  esac
+}
