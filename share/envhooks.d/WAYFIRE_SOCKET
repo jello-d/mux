@@ -1,0 +1,52 @@
+#!/bin/sh
+# envhooks.d/WAYFIRE_SOCKET - is this compositor IPC socket actually answering?
+#
+# 0 valid, 1 invalid, anything else "could not tell" (mux passes the value
+# through unchanged). See libexec/mux-env_lib for why the third answer exists.
+#
+# WHERE THE VALUE COMES FROM, because it is the least obvious of the five and
+# because nothing in a shell can produce it: wayfire's ipc plugin invents the
+# path itself and setenv()s it AFTER the compositor starts
+# (plugins/ipc/ipc.cpp), as $XDG_RUNTIME_DIR/wayfire-$WAYLAND_DISPLAY-.socket,
+# or /tmp/wayfire-<display>-<pid>.socket with no runtime dir. So no rc file, no
+# environment.d and no session script can supply it: a client descended from
+# the compositor has it and one that is not, does not. That is precisely the
+# shape this feature exists for, and it is why the variable was missing from
+# every pane while the other four were fine.
+#
+# THE VALUE IS THE PATH, so this needs no transform and no second variable,
+# unlike the WAYLAND_DISPLAY hook beside it.
+#
+# BUT IT STILL HAS TO CONNECT, and that is WAYLAND_DISPLAY's lesson rather
+# than SSH_AUTH_SOCK's. This socket lives in XDG_RUNTIME_DIR and OUTLIVES its
+# compositor: the file sits there until the runtime dir is cleared, so a
+# presence test says yes about a session that ended hours ago. Measured
+# 2026-10-02 against a deliberately stale socket (bound, then abandoned
+# without unlinking) and against the live one:
+#
+#     [ -S <stale> ]    says VALID   <- wrong, and this is the whole reason
+#     nc -zU <stale>    rc 1            the hook cannot stop at presence
+#     nc -zU <live>     rc 0
+#
+# SO LENIENCY IS WRONG HERE, where it is right for SSH_AUTH_SOCK, and the
+# difference is which way the error falls. ssh names its own missing agent
+# plainly, so a false LIVE there costs one clear message. A false live here
+# makes wf-view, wf-overview and expo-toggle die blaming "the ipc plugin",
+# which sends the reader at the compositor when the value is merely stale.
+#
+# nc AND NOT wf-msg, though wf-msg is wayfire's own tool and would speak the
+# real protocol: mux must not take a dependency on a particular compositor's
+# utilities, and this generic connect is the same one the WAYLAND_DISPLAY hook
+# already falls back to. With no nc the answer is 2, never a guess.
+#
+# NO TIMEOUT, unlike that hook's wayland-info branch, and deliberately: `-z`
+# is connect-and-close with no read, so there is no handshake to hang on. A
+# unix connect either succeeds at once or fails.
+set -eu
+[ -n "${1:-}" ] || exit 1
+[ -S "$1" ] || exit 1
+if command -v nc >/dev/null 2>&1; then
+  nc -zU "$1" >/dev/null 2>&1 || exit 1
+  exit 0
+fi
+exit 2
