@@ -29,7 +29,8 @@
 #    advice about the far side being up when etserver was simply stopped.
 # 3. THE REMOTE EXIT STATUS IS NOT PROPAGATED. `mux resume nosuchpartition`
 #    exits 3, ssh passes that through, and et 7.0.0 exits 0 regardless. So
-#    mux's own codes never arrive and arms for 2, 3, 126 and 127 cannot fire.
+#    mux's own codes never arrive and arms for 2, 3, 4, 126 and 127 cannot
+#    fire.
 #    (master's source returns `remoteExitStatus`, which is what the first
 #    version relied on. The release does not.)
 #
@@ -45,6 +46,11 @@
 #     deliberately. The far side's own message is on YOUR TERMINAL, where et put
 #     it, so you are not blind, but latch cannot quote it and cannot act on
 #     it. This is the one thing to fix if et ever propagates the status.
+#     THE SHARPEST CASE IS THE READINESS REFUSAL (mux exit 4): a host that has
+#     rebooted and is waiting for its session environment is asking to be
+#     RETRIED, and over ET that reads as `ended`, so latch stops. Over ssh it
+#     retries by itself. Until et propagates the status, a latch to a box that
+#     declares `env-ready` wants the ssh transport.
 #   - LATCH CANNOT QUOTE THE TRANSPORT'S REASON. Over ssh a failure report
 #     carries ssh's own words; over ET there is nothing in stderr to carry.
 set -eu

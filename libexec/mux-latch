@@ -40,6 +40,25 @@
 #             permanent change costs a short delay before the human is told,
 #             while not retrying a transient one leaves a roaming attachment
 #             dead until somebody notices.
+#   settling  the far side ANSWERED and asked to be tried again: it has no
+#             server for the partition yet (so it has not been set up since it
+#             came up) and a pointer its own `env-ready` declaration names has
+#             not arrived. It refused to rebuild rather than baking that
+#             absence into every pane it would create, which nothing could
+#             repair afterwards because an environment is fixed at exec.
+#             RETRY, and the retry is the whole mechanism: each attempt is a
+#             new remote process with a new login shell, so it re-reads the
+#             environment rather than remembering the one it started with.
+#             ITS OWN STATE rather than `probing`, because the two are opposite
+#             facts about the host: probing cannot reach it, this one was
+#             answered by it. Reporting the second as the first would send a
+#             human to look at the network.
+#             UNBOUNDED, the user's call (2026-10-03): the client is in reach
+#             and a 60s poll costs nothing, so there is no escalation and
+#             therefore no flag to carry over the wire. That matters more than
+#             it reads: exit 2 classifies as `refused`, which is TERMINAL, so
+#             a flag an older remote did not know would make latch give up for
+#             good. Not sending one removes the hazard entirely.
 #   unknown   cannot determine. Never reported as usable and never as blocked;
 #             retried with more patience. On a real fleet this is COMMON, not
 #             exotic: an MTU blackhole passes every cheap liveness probe.
@@ -221,6 +240,22 @@ _hook_must_run "$RESTORE" restore
 BACKOFF=${MUX_LATCH_BACKOFF:-2}
 BACKOFF_MAX=${MUX_LATCH_BACKOFF_MAX:-60}
 BLOCKED_WAIT=${MUX_LATCH_BLOCKED_WAIT:-5}
+# HOW MANY ATTEMPTS AT EACH RUNG before the delay doubles. Pure doubling
+# reached the cap in SIX waits and 62 seconds, which is faster than the thing
+# it is waiting for: a rebooting box answers again at about 90s, by which
+# point the delay was already 60, so you waited a minute for a host that had
+# been up for most of it. Holding each rung means a 90s outage is still in the
+# 8s or 16s rung when the far side returns, and the cap still arrives (after
+# about five minutes) for an outage that really is long.
+#
+# IT IS THE SHORT BLIP THIS PROTECTS, which is the same case the progress reset
+# was added for: that one only fires when an attempt RAN LONG, so a run of fast
+# failures still climbed. The two are complementary rather than overlapping.
+#
+# NOTE FOR ANYONE SETTING MAX_TRIES: it counts ATTEMPTS, so the same number now
+# covers much less wall-clock time than it did. The default is 0 (forever), so
+# nothing changes unless you set it.
+BACKOFF_RUNG=${MUX_LATCH_BACKOFF_RUNG:-5}
 MAX_TRIES=${MUX_LATCH_MAX_TRIES:-0}         # 0 = forever
 # HOW MANY TIMES AN IDENTITY MISMATCH IS RETRIED before it is called
 # permanent. Four attempts on the normal backoff is a couple of minutes,
@@ -600,8 +635,13 @@ _auth_state() { _ask "$AUTH" "$_host"; }
 
 _classify_state() {   # <exit> <stderr file>
   _cs=$($CLASSIFY "$1" "$2" 2>/dev/null || true)
+  # THE ALLOWLIST IS ALSO THE COMPATIBILITY STORY, which is worth knowing
+  # before adding a word to it: a state this latch does not know degrades to
+  # `unknown`, which is RETRIED. So a newer classifier answering an older
+  # latch is safe by construction, and the two halves of a new state can ship
+  # in either order. `settling` arrived that way (mux exit 4).
   case ${_cs:-} in
-  probing|blocked|denied|untrusted|unknown|ended|gone|refused)
+  probing|blocked|denied|untrusted|unknown|ended|gone|refused|settling)
     printf '%s' "$_cs"; return 0 ;;
   esac
   # A classifier that answered with something meaningless has not answered,
@@ -834,8 +874,10 @@ _remote_cmd() {   # -> sets $_cmd
 _state=probing
 _tries=0
 _untrusted=0      # identity mismatches seen, capped by UNTRUSTED_TRIES
+_settled=0        # settling attempts; the far side's report is quoted once
 _attempts=0       # transport attaches made; 0 means the next is the first
 _delay=$BACKOFF
+_rung=0           # attempts spent at this delay, see _backoff
 
 # A COUNTDOWN IS THE ANIMATION. It ticks once a second, which needs only whole
 # seconds and so stays portable, and a number that changes is better evidence of
@@ -905,6 +947,11 @@ _errsaw() {   # <fixed string>
 # drift: they were written with the doubling on opposite sides of the wait, so
 # one of them slept BACKOFF first and the other 2*BACKOFF.
 _backoff() {
+  # HOLD THE RUNG FIRST. BACKOFF_RUNG attempts at each delay before doubling,
+  # so the ladder is 2 2 2 2 2 4 4 4 4 4 8 ... rather than 2 4 8 16 32 60.
+  _rung=$((_rung + 1))
+  [ "$_rung" -ge "$BACKOFF_RUNG" ] || return 0
+  _rung=0
   _delay=$(( _delay * 2 > BACKOFF_MAX ? BACKOFF_MAX : _delay * 2 ))
 }
 
@@ -1012,7 +1059,9 @@ while :; do
     # (10s in the shipped one), so an attempt lasting PROGRESS
     # seconds or more reached the far side, and whatever the backoff
     # had grown to before that is stale information.
-    [ "$_el" -ge "$PROGRESS" ] && _delay=$BACKOFF
+    # BOTH, or the next failure doubles straight off a reset delay: the rung
+    # counter is half of where the ladder IS, so resetting one resets nothing.
+    if [ "$_el" -ge "$PROGRESS" ]; then _delay=$BACKOFF; _rung=0; fi
   fi
 
   # PUT THE TERMINAL BACK FIRST, before classifying, reporting or waiting.
@@ -1135,6 +1184,36 @@ while :; do
     # Only reachable from a classifier that says "no credential yet"
     # rather than "rejected". Waiting is right; attempting is not.
     _say blocked "$(_errline)"
+    continue ;;
+  settling)
+    # THE FAR SIDE'S REPORT IS QUOTED, AND ONLY ONCE. Quoted because
+    # `_errline` is wrong for this one in the way 0.71 already
+    # documents: it takes the LAST line, which is right for a tool
+    # that warns before it fails and wrong for one that writes a
+    # REPORT. mux's refusal ends with the override command, so the
+    # last line is the remedy and the names it is waiting for sit
+    # above it. Once, because this polls on the ladder and repeating
+    # four lines every few seconds trains the eye to skip them.
+    if [ "$_settled" -eq 0 ]; then
+      _say settling "the far side is up and asked to be retried:"
+      _sl=0
+      while IFS= read -r _sline; do
+        [ -n "$_sline" ] || continue
+        _sl=$((_sl + 1))
+        [ "$_sl" -le 20 ] || break
+        _say settling "  $_sline"
+      done <"$_errf"
+    fi
+    _settled=$((_settled + 1))
+    # NOT counted against UNTRUSTED_TRIES and not bounded here: nothing
+    # about this is suspicious, and nothing about it is spent. It shares
+    # the ladder rather than getting a curve of its own, which with the
+    # rungs held is already fast where it matters: a 90s reboot leaves
+    # the delay at 8s or 16s, so the sessions come back within seconds
+    # of the display arriving rather than up to a minute after it.
+    _wait "$_delay" settling \
+      "host reachable, waiting on the session environment"
+    _backoff
     continue ;;
   *)
     # The transport's OWN first line, when it left one. "the transport

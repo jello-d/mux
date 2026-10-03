@@ -1905,8 +1905,8 @@ m not quoted
 = latch-backoff-reset-on-progress
 f libexec/mux-latch
 t mux-latch
--     [ "$_el" -ge "$PROGRESS" ] && _delay=$BACKOFF
-+     [ "$_el" -ge "$PROGRESS" ] && :
+-     if [ "$_el" -ge "$PROGRESS" ]; then _delay=$BACKOFF; _rung=0; fi
++     if [ "$_el" -ge "$PROGRESS" ]; then :; fi
 m did not reset the
 
 = latch-untrusted-reason-whole
@@ -3279,3 +3279,45 @@ t mux-check
 -       if [ "$_envrc" -eq 2 ]; then
 +       if false; then
 m the typo was not reported as a
+
+# mux exit 4 is the far side saying NOT YET, TRY AGAIN. Classified as
+# `probing` a human is sent to look at a network that is fine; as
+# `refused` latch stops, and the retry IS the mechanism (each attempt
+# is a new remote process that re-reads the environment).
+= latch-notready-classified-as-a-reachability-problem
+f share/latch/ssh-classify
+t mux-latch
+-   printf 'settling' ;;
++   printf 'probing' ;;
+m exit 4 must classify as its own state
+
+# AND THE ALLOWLIST HAS TO KNOW THE WORD. A state latch does not know
+# degrades to `unknown`, which is why the two halves can ship in
+# either order, and also why forgetting this half is silent: it still
+# retries, just reporting a reachability problem that is not one.
+= latch-settling-missing-from-the-state-allowlist
+f libexec/mux-latch
+t mux-latch
+-   probing|blocked|denied|untrusted|unknown|ended|gone|refused|settling)
++   probing|blocked|denied|untrusted|unknown|ended|gone|refused)
+m exit 4 must classify as its own state
+
+# The report is quoted ONCE. This polls on the ladder, so repeating
+# four lines every couple of seconds trains the eye to skip them.
+= latch-settling-report-repeated-every-poll
+f libexec/mux-latch
+t mux-latch
+-     if [ "$_settled" -eq 0 ]; then
++     if true; then
+m it should be quoted once
+
+# THE LADDER HOLDS EACH RUNG. Pure doubling reached the cap in six
+# waits and 62 seconds, which is faster than the thing it waits for: a
+# rebooting box answers at about 90s, by which point the delay was
+# already 60, so you waited a minute for a host already up.
+= latch-backoff-doubles-every-attempt
+f libexec/mux-latch
+t mux-latch
+-   [ "$_rung" -ge "$BACKOFF_RUNG" ] || return 0
++   [ 1 = 1 ] || return 0
+m rung is not being held
