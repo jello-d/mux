@@ -155,18 +155,24 @@ a unit, an agent pane) that means reporting a LIVE display dead, and
   || fail "an absent socket must be DEAD (1)"
 [ "$(run WAYFIRE_SOCKET "$T/plain")" = 1 ] \
   || fail "a plain FILE is not a socket and must be DEAD (1)"
-# THE ASSERTION THAT MATTERS, and the one a presence test fails: dead.sock was
-# bound and abandoned above, so it exists, is a socket, and has nobody behind
-# it. `[ -S ]` calls that live; this hook must not.
-[ "$(run WAYFIRE_SOCKET "$T/dead.sock")" = 1 ] \
-  || fail "WAYFIRE_SOCKET accepted a socket with NO LISTENER. That is the one
-case the hook exists for: wayfire's socket is not removed when the compositor
-exits, so a presence test keeps a dead session's path alive in every pane and
-wf-view then dies blaming the ipc plugin."
-
-# ...AND A LIVE ONE MUST BE LIVE, or the hook is broken in the safe direction
-# and withholds a working value from every session. Served by a listener this
-# test owns, so it needs no compositor.
+# CAN THIS `nc` ANSWER ABOUT A UNIX SOCKET AT ALL? Probed against a listener
+# this test owns, and probed DIRECTLY rather than through the hook, which is
+# what keeps it from being circular: the detector tests the TOOL and the
+# assertions below test the HOOK. Where nc works, a hook that got it wrong
+# still fails; where nc cannot answer, both assertions are skipped and said.
+#
+# IT IS NOT HYPOTHETICAL. macOS CI failed here on 2026-10-02 with the LIVE
+# case reading `dead`, and measured on Linux (OpenBSD netcat 1.234) the probe
+# is right: `-zU` gives 0 live and 1 stale, while dropping `-z` HANGS on a
+# live socket (rc 124 under `timeout 3`), exactly as the hook's own comment
+# predicts. So `-z` is necessary and the hook is correct for the fleet; what
+# differs is whether a given nc implements that flag pair for unix sockets.
+#
+# AND GATING *BOTH* ASSERTIONS IS THE POINT. The dead-socket case used to run
+# unconditionally, so on a platform where every `nc -zU` fails it passed for
+# the WRONG REASON: the one assertion this hook exists for was decoration
+# there. A vacuous pass is worse than a skip, because it reads as coverage.
+_NC_UNIX=no
 if command -v nc >/dev/null 2>&1; then
   rm -f "$T/live.sock" "$T/up"
   python3 -c '
@@ -179,14 +185,37 @@ time.sleep(20)
   _srv=$!
   _i=0
   while [ ! -f "$T/up" ] && [ "$_i" -lt 50 ]; do _i=$((_i + 1)); sleep 0.1; done
+  if [ -f "$T/up" ] && nc -zU "$T/live.sock" >/dev/null 2>&1; then
+    _NC_UNIX=yes
+  fi
+  # THE HOOK IS ASKED WHILE THE LISTENER IS STILL UP, so the live assertion
+  # below needs no second server.
   _lrc=$(run WAYFIRE_SOCKET "$T/live.sock")
   kill "$_srv" 2>/dev/null || true
   wait "$_srv" 2>/dev/null || true
-  if [ -f "$T/up" ]; then
-    [ "$_lrc" = 0 ] || fail "a socket with a real listener must be LIVE (0),
-got $_lrc: the hook is rejecting working values, which would remove a usable
+fi
+
+if [ "$_NC_UNIX" = no ]; then
+  printf 'note %s: this nc cannot answer for a unix socket, so the LIVE and\n' \
+    "$_name"
+  printf 'note %s: DEAD verdicts are unchecked here (the hook falls to 1)\n' \
+    "$_name"
+else
+  # THE ASSERTION THAT MATTERS, and the one a presence test fails: dead.sock
+  # was bound and abandoned above, so it exists, is a socket, and has nobody
+  # behind it. `[ -S ]` calls that live; this hook must not.
+  [ "$(run WAYFIRE_SOCKET "$T/dead.sock")" = 1 ] \
+    || fail "WAYFIRE_SOCKET accepted a socket with NO LISTENER. That is the
+one case the hook exists for: wayfire's socket is not removed when the
+compositor exits, so a presence test keeps a dead session's path alive in
+every pane and wf-view then dies blaming the ipc plugin."
+
+  # ...AND A LIVE ONE MUST BE LIVE, or the hook is broken in the safe
+  # direction and withholds a working value from every session.
+  [ "$_lrc" = 0 ] || fail "a socket with a real listener must be LIVE (0), got
+$_lrc, while a direct \`nc -zU\` on the same socket answered 0. So the tool can
+see the listener and the hook cannot, which would remove a usable
 WAYFIRE_SOCKET from every pane."
-  fi
 fi
 
 # --- NO TOOL IS NOT A VERDICT ---------------------------------------------
