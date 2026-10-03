@@ -3162,3 +3162,21 @@ t mux-agent
 -     mux_log agent "$_clsess $_mk $_was -> $_mv via class"
 +     :
 m the transition was not logged
+
+= envhook-wayfire-presence-read-as-liveness
+f share/envhooks.d/WAYFIRE_SOCKET
+t mux-envhooks
+# THE ONE CASE THE HOOK EXISTS FOR. wayfire's ipc socket is NOT removed when
+# the compositor exits, so the file sits in XDG_RUNTIME_DIR until the runtime
+# dir is cleared: a presence test says "valid" about a session that ended
+# hours ago, and wf-view then dies blaming the ipc plugin, which sends the
+# reader at the compositor when the value is merely stale. `[ -S ]` is already
+# two lines up and is deliberately not the answer.
+#
+# AND THE ASSERTION IT KILLS WAS PASSING VACUOUSLY ON macOS until 2026-10-02:
+# it ran unconditionally, so on a platform whose `nc` cannot answer for a unix
+# socket the hook fell to 1 and the dead case was satisfied for the wrong
+# reason. Both verdicts are gated on a direct nc probe now, and announced.
+-   nc -zU "$1" >/dev/null 2>&1 || exit 1
++   nc -zU "$1" >/dev/null 2>&1 || :
+m accepted a socket with NO LISTENER
