@@ -3321,3 +3321,25 @@ t mux-latch
 -   [ "$_rung" -ge "$BACKOFF_RUNG" ] || return 0
 +   [ 1 = 1 ] || return 0
 m rung is not being held
+
+# THE RUNG IS A CONFIG KEY, not just an env var, because it is the one
+# bound that is a POLICY: how hard this machine should try to get an
+# attachment back is a per-box answer you set once. Env-only, it is
+# something you have to type on every invocation, which is not a
+# setting at all.
+= latch-rung-not-settable-in-config
+f libexec/mux-latch
+t mux-latch
+- BACKOFF_RUNG=$(_seam "${MUX_LATCH_BACKOFF_RUNG:-}" latch-backoff-rung 5)
++ BACKOFF_RUNG=${MUX_LATCH_BACKOFF_RUNG:-5}
+m was not read, so the delay never
+
+# A BARE `--max-tries` IS GUARDED rather than left to `shift 2`, which
+# is a shell error that ALSO exits 2: the right code for the wrong
+# reason, so the message is what the test has to assert.
+= latch-max-tries-bare-flag-unguarded
+f libexec/mux-latch
+t mux-latch
+-     [ "$#" -ge 2 ] || { echo "mux: latch: --max-tries needs a count" >&2
++     [ 1 = 1 ] || { echo "mux: latch: --max-tries needs a count" >&2
+m exited 2 without saying why

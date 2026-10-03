@@ -77,10 +77,10 @@ latch() {
     MUX_LATCH_STATUS="$T/bin/status" \
     MUX_LATCH_SLEEP="$T/bin/nosleep" \
     MUX_LATCH_BACKOFF=1 MUX_LATCH_BLOCKED_WAIT=1 \
-    MUX_LATCH_MAX_TRIES="${MAXT:-6}" \
     MUX_LATCH_UNTRUSTED_TRIES="${UT:-4}" \
     MUX_LATCH_PROGRESS="${PROG:-30}" \
-    "$HERE/libexec/mux-latch" "$@" >/dev/null 2>&1 || _lr=$?
+    "$HERE/libexec/mux-latch" \
+      --max-tries "${MAXT:-6}" "$@" >/dev/null 2>&1 || _lr=$?
   echo "$_lr"
 }
 seq_of()  { tr '\n' ' ' <"$STATES"; }
@@ -158,8 +158,9 @@ _run_drops() {   # <progress> <max tries> <rung> -> stderr of a dropping run
     MUX_LATCH_AUTH="$T/bin/auth" MUX_LATCH_PROBE="$T/bin/probe" \
     MUX_LATCH_SLEEP="$T/bin/nosleep" MUX_LATCH_BACKOFF=1 \
     MUX_LATCH_BACKOFF_RUNG="$3" \
-    MUX_LATCH_PROGRESS="$1" MUX_LATCH_MAX_TRIES="$2" \
-    "$HERE/libexec/mux-latch" box proj >/dev/null 2>"$T/bo" || true
+    MUX_LATCH_PROGRESS="$1" \
+    "$HERE/libexec/mux-latch" \
+      --max-tries "$2" box proj >/dev/null 2>"$T/bo" || true
   cat "$T/bo"
 }
 
@@ -273,8 +274,8 @@ env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
   MUX_LATCH_TRANSPORT="$T/bin/transport %h %s" \
   MUX_LATCH_AUTH="$T/bin/auth" MUX_LATCH_PROBE="$T/bin/probe" \
   MUX_LATCH_SLEEP="$T/bin/nosleep" MUX_LATCH_BACKOFF=1 \
-  MUX_LATCH_UNTRUSTED_TRIES=1 MUX_LATCH_MAX_TRIES=4 \
-  "$HERE/libexec/mux-latch" box proj >/dev/null 2>"$_err" || true
+  MUX_LATCH_UNTRUSTED_TRIES=1 \
+  "$HERE/libexec/mux-latch" --max-tries 4 box proj >/dev/null 2>"$_err" || true
 grep -q 'REMEDY-LINE-HERE' "$_err" || fail "the transport's own report was
 not quoted, so the fingerprint and the remedy it printed are lost. Got:
 $(cat "$_err")"
@@ -293,8 +294,8 @@ env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" \
   TRIES="$TRIES" AUTHLOG="$AUTHLOG" SCRIPT="$SCRIPT" \
   MUX_LATCH_TRANSPORT="$T/bin/transport %h %s" \
   MUX_LATCH_AUTH="$T/bin/auth" MUX_LATCH_PROBE="$T/bin/probe" \
-  MUX_LATCH_SLEEP="$T/bin/nosleep" MUX_LATCH_MAX_TRIES=3 \
-  "$HERE/libexec/mux-latch" box proj >/dev/null 2>"$_err" || true
+  MUX_LATCH_SLEEP="$T/bin/nosleep" \
+  "$HERE/libexec/mux-latch" --max-tries 3 box proj >/dev/null 2>"$_err" || true
 grep -q 'retrying a rejected credential forever' "$_err" \
   || fail "the denied explanation was cut off; a wrapped _say call must
 still print whole. Got:
@@ -313,9 +314,9 @@ env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
   TRIES="$TRIES" AUTHLOG="$AUTHLOG" SCRIPT="$SCRIPT" \
   MUX_LATCH_TRANSPORT="$T/bin/transport %h %s" \
   MUX_LATCH_AUTH="$T/bin/auth" MUX_LATCH_PROBE="$T/bin/probe" \
-  MUX_LATCH_SLEEP="$T/bin/nosleep" MUX_LATCH_MAX_TRIES=4 \
+  MUX_LATCH_SLEEP="$T/bin/nosleep" \
   MUX_LATCH_UNTRUSTED_TRIES=1 \
-  "$HERE/libexec/mux-latch" box proj >/dev/null 2>"$_err" || true
+  "$HERE/libexec/mux-latch" --max-tries 4 box proj >/dev/null 2>"$_err" || true
 grep -q 'or its key really changed' "$_err" \
   || fail "the untrusted explanation was cut off mid-sentence; _wait uses
 \$3 only, so the reason must be ONE argument. Got:
@@ -399,8 +400,8 @@ _lo=$(env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" \
   MUX_LATCH_AUTH=true \
   MUX_LATCH_STATUS="$T/bin/status" \
   MUX_LATCH_SLEEP="$T/bin/nosleep" \
-  MUX_LATCH_BACKOFF=1 MUX_LATCH_MAX_TRIES=3 \
-  "$HERE/libexec/mux-latch" box proj 2>&1) || _lr=$?
+  MUX_LATCH_BACKOFF=1 \
+  "$HERE/libexec/mux-latch" --max-tries 3 box proj 2>&1) || _lr=$?
 [ "$_lr" = 0 ] || fail "with no probe configured latch should just attempt and
 report the session ending; got exit $_lr and states [$(seq_of)]
 latch said: ${_lo:-<nothing>}"
@@ -508,8 +509,8 @@ amb() {   # -> stderr of a run with the given env
     MSG="${A_MSG:-}" XRC="${A_XRC:-1}" \
     MUX_LATCH_TRANSPORT="$T/bin/ambig %h sh -lc %c" \
     MUX_LATCH_AUTH=true MUX_LATCH_RESTORE=true \
-    MUX_LATCH_SLEEP="$T/bin/nosleep" MUX_LATCH_MAX_TRIES=1 \
-    "$HERE/libexec/mux-latch" box k 2>&1 >/dev/null
+    MUX_LATCH_SLEEP="$T/bin/nosleep" \
+    "$HERE/libexec/mux-latch" --max-tries 1 box k 2>&1 >/dev/null
 }
 
 # THE FAR SIDE'S OWN MESSAGE IS NEVER REPLACED BY A GUESS. This is the
@@ -659,8 +660,7 @@ env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
   TRIES="$TRIES" \
   MUX_LATCH_TRANSPORT="$T/bin/argv -t %h sh -lc %c" \
   MUX_LATCH_AUTH=true MUX_LATCH_SLEEP="$T/bin/nosleep" \
-  MUX_LATCH_MAX_TRIES=1 \
-  "$HERE/libexec/mux-latch" box proj >/dev/null 2>&1 || true
+  "$HERE/libexec/mux-latch" --max-tries 1 box proj >/dev/null 2>&1 || true
 _got=$(cat "$TRIES.argv" 2>/dev/null || true)
 [ "$_got" = 'n=5 last=[mux go proj]' ] \
   || fail "%c must arrive as ONE argv element. Wanted
@@ -677,8 +677,7 @@ env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
   TRIES="$TRIES" \
   MUX_LATCH_TRANSPORT="$T/bin/argv -t %h sh -lc %q" \
   MUX_LATCH_AUTH=true MUX_LATCH_SLEEP="$T/bin/nosleep" \
-  MUX_LATCH_MAX_TRIES=1 \
-  "$HERE/libexec/mux-latch" box proj >/dev/null 2>&1 || true
+  "$HERE/libexec/mux-latch" --max-tries 1 box proj >/dev/null 2>&1 || true
 _got=$(cat "$TRIES.argv" 2>/dev/null || true)
 [ "$_got" = "n=5 last=['mux go proj']" ] \
   || fail "%q must be one element AND quoted for the remote shell. Wanted
@@ -702,8 +701,9 @@ env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
   SCRIPT="$SCRIPT" TRIES="$TRIES" \
   MUX_LATCH_TRANSPORT="$T/bin/transport %h %s" \
   MUX_LATCH_CLASSIFY=no-such-hook-anywhere \
-  MUX_LATCH_SLEEP="$T/bin/nosleep" MUX_LATCH_MAX_TRIES=2 \
-  "$HERE/libexec/mux-latch" box proj >/dev/null 2>"$_err" || _rc=$?
+  MUX_LATCH_SLEEP="$T/bin/nosleep" \
+  "$HERE/libexec/mux-latch" \
+    --max-tries 2 box proj >/dev/null 2>"$_err" || _rc=$?
 [ "$_rc" = 2 ] \
   || fail "a named hook that does not resolve is a config error (exit 2),
 got $_rc"
@@ -764,8 +764,8 @@ env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
   MUX_LATCH_RESTORE="$T/bin/restore" \
   MUX_LATCH_STATUS="$T/bin/orderstatus" \
   MUX_LATCH_SLEEP="$T/bin/nosleep" \
-  MUX_LATCH_BACKOFF=1 MUX_LATCH_MAX_TRIES=3 \
-  "$HERE/libexec/mux-latch" box proj >/dev/null 2>&1 || true
+  MUX_LATCH_BACKOFF=1 \
+  "$HERE/libexec/mux-latch" --max-tries 3 box proj >/dev/null 2>&1 || true
 
 # The first thing after a drop must be the repair, and the report after it.
 _seq=$(tr '\n' ' ' <"$ORDER")
@@ -793,8 +793,8 @@ env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
   MUX_LATCH_TRANSPORT="$T/bin/transport %h %s" \
   MUX_LATCH_AUTH=true \
   MUX_LATCH_RESTORE="$T/bin/restore" \
-  MUX_LATCH_SLEEP="$T/bin/nosleep" MUX_LATCH_MAX_TRIES=1 \
-  "$HERE/libexec/mux-latch" box proj >/dev/null 2>&1 || true
+  MUX_LATCH_SLEEP="$T/bin/nosleep" \
+  "$HERE/libexec/mux-latch" --max-tries 1 box proj >/dev/null 2>&1 || true
 grep -q restore "$ORDER" \
   || fail "the terminal repair was skipped on a clean end. A quit through a
 dying connection leaves the same wreckage, and the repair is idempotent."
@@ -823,8 +823,7 @@ sent() {   # <target> [session] -> the remote command latch composed
     CMDS="$CMDS" \
     MUX_LATCH_TRANSPORT="$T/bin/echocmd %h sh -lc %c" \
     MUX_LATCH_AUTH=true MUX_LATCH_SLEEP="$T/bin/nosleep" \
-    MUX_LATCH_MAX_TRIES=1 \
-    "$HERE/libexec/mux-latch" "$@" >/dev/null 2>&1 || true
+    "$HERE/libexec/mux-latch" --max-tries 1 "$@" >/dev/null 2>&1 || true
   head -1 "$CMDS"
 }
 
@@ -884,7 +883,7 @@ for _old in 'work:' 'work:api'; do
   _crc=0
   env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
     MUX_LATCH_TRANSPORT="$T/bin/echocmd %h sh -lc %c" MUX_LATCH_AUTH=true \
-    MUX_LATCH_MAX_TRIES=1 "$HERE/libexec/mux-latch" box "$_old" \
+    "$HERE/libexec/mux-latch" --max-tries 1 box "$_old" \
     >"$T/colout" 2>&1 || _crc=$?
   [ "$_crc" = 2 ] || fail "[$_old] must exit 2 rather than latching somewhere
 plausible, got $_crc: [$(head -2 "$T/colout")]"
@@ -902,7 +901,7 @@ done
 _orc=0
 env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
   MUX_LATCH_TRANSPORT="$T/bin/echocmd %h sh -lc %c" MUX_LATCH_AUTH=true \
-  MUX_LATCH_MAX_TRIES=1 "$HERE/libexec/mux-latch" box:work \
+  "$HERE/libexec/mux-latch" --max-tries 1 box:work \
   >"$T/oldout" 2>&1 || _orc=$?
 [ "$_orc" = 2 ] || fail "the pre-0.84 target form must exit 2, got $_orc"
 grep -q 'a partition is the SECOND argument' "$T/oldout" \
@@ -922,8 +921,8 @@ argv() {   # <template> <target> [session] -> the argv the transport got
   _tpl=$1; shift
   env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
     CMDS="$CMDS" MUX_LATCH_TRANSPORT="$_tpl" MUX_LATCH_AUTH=true \
-    MUX_LATCH_SLEEP="$T/bin/nosleep" MUX_LATCH_MAX_TRIES=1 \
-    "$HERE/libexec/mux-latch" "$@" >/dev/null 2>&1 || true
+    MUX_LATCH_SLEEP="$T/bin/nosleep" \
+    "$HERE/libexec/mux-latch" --max-tries 1 "$@" >/dev/null 2>&1 || true
   head -1 "$CMDS"
 }
 cat >"$T/bin/echoargv" <<'EOF'
@@ -967,8 +966,8 @@ got [$_got]"
 # the wrong thing while looking like it understood.
 _rc=0
 env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
-  MUX_LATCH_SLEEP="$T/bin/nosleep" MUX_LATCH_MAX_TRIES=1 \
-  "$HERE/libexec/mux-latch" box a b >/dev/null 2>&1 || _rc=$?
+  MUX_LATCH_SLEEP="$T/bin/nosleep" \
+  "$HERE/libexec/mux-latch" --max-tries 1 box a b >/dev/null 2>&1 || _rc=$?
 [ "$_rc" = 2 ] || fail "three arguments must be a usage error, got $_rc"
 
 # --- ATTACH-ONLY IS NEGOTIATED, NOT ASSUMED --------------------------
@@ -1012,8 +1011,8 @@ neg() {   # CAPRC CAPOUT -> the command used on the SECOND attempt
     MUX_LATCH_TRANSPORT="$T/bin/negotiate %h sh -lc %c" \
     MUX_LATCH_AUTH=true \
     MUX_LATCH_SLEEP="$T/bin/nosleep" \
-    MUX_LATCH_BACKOFF=1 MUX_LATCH_MAX_TRIES=3 \
-    "$HERE/libexec/mux-latch" box proj >/dev/null 2>&1 || true
+    MUX_LATCH_BACKOFF=1 \
+    "$HERE/libexec/mux-latch" --max-tries 3 box proj >/dev/null 2>&1 || true
   grep -v capabilities "$CMDLOG" | tail -1
 }
 
@@ -1045,8 +1044,8 @@ env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
   CMDLOG="$CMDLOG" ONCE="$ONCE" CAPRC=0 CAPOUT='attach-only 1' \
   MUX_LATCH_TRANSPORT="$T/bin/negotiate %h sh -lc %c" \
   MUX_LATCH_AUTH=true MUX_LATCH_SLEEP="$T/bin/nosleep" \
-  MUX_LATCH_BACKOFF=1 MUX_LATCH_MAX_TRIES=1 \
-  "$HERE/libexec/mux-latch" box proj >/dev/null 2>&1 || true
+  MUX_LATCH_BACKOFF=1 \
+  "$HERE/libexec/mux-latch" --max-tries 1 box proj >/dev/null 2>&1 || true
 _first=$(grep -v capabilities "$CMDLOG" | head -1)
 [ "$_first" = 'mux go proj' ] \
   || fail "the FIRST attempt must create even when the remote supports
@@ -1060,8 +1059,8 @@ env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
   CMDLOG="$CMDLOG" ONCE="$ONCE" CAPRC=255 CAPOUT= DROPS=3 \
   MUX_LATCH_TRANSPORT="$T/bin/negotiate %h sh -lc %c" \
   MUX_LATCH_AUTH=true MUX_LATCH_SLEEP="$T/bin/nosleep" \
-  MUX_LATCH_BACKOFF=1 MUX_LATCH_MAX_TRIES=4 \
-  "$HERE/libexec/mux-latch" box proj >/dev/null 2>&1 || true
+  MUX_LATCH_BACKOFF=1 \
+  "$HERE/libexec/mux-latch" --max-tries 4 box proj >/dev/null 2>&1 || true
 [ "$(grep -c capabilities "$CMDLOG")" -ge 2 ] \
   || fail "an unreachable capability query must leave the question OPEN and
 ask again, not cache 'no' from a network failure. It asked
@@ -1077,8 +1076,8 @@ env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
   CMDLOG="$CMDLOG" ONCE="$ONCE" CAPRC=0 CAPOUT='attach-only 1' DROPS=3 \
   MUX_LATCH_TRANSPORT="$T/bin/negotiate %h sh -lc %c" \
   MUX_LATCH_AUTH=true MUX_LATCH_SLEEP="$T/bin/nosleep" \
-  MUX_LATCH_BACKOFF=1 MUX_LATCH_MAX_TRIES=4 \
-  "$HERE/libexec/mux-latch" box proj >/dev/null 2>&1 || true
+  MUX_LATCH_BACKOFF=1 \
+  "$HERE/libexec/mux-latch" --max-tries 4 box proj >/dev/null 2>&1 || true
 [ "$(grep -c capabilities "$CMDLOG")" = 1 ] \
   || fail "an ANSWERED capability query must be cached for the run, and it
 was asked $(grep -c capabilities "$CMDLOG") times across $(grep -vc \
@@ -1129,8 +1128,9 @@ MAXT=1 env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
   MUX_LATCH_TRANSPORT="$T/bin/slowtransport %h %s" \
   MUX_LATCH_AUTH="$T/bin/auth" MUX_LATCH_PROBE="$T/bin/probe" \
   MUX_LATCH_STATUS="$T/bin/status" MUX_LATCH_SLEEP="$T/bin/nosleep" \
-  MUX_LATCH_BACKOFF=1 MUX_LATCH_MAX_TRIES=1 \
-  "$HERE/libexec/mux-latch" hostwith 'part::sess' >/dev/null 2>&1 || :
+  MUX_LATCH_BACKOFF=1 \
+  "$HERE/libexec/mux-latch" \
+    --max-tries 1 hostwith 'part::sess' >/dev/null 2>&1 || :
 # THE PATH IT READ IS THE ASSERTION, and it carries the SESSION:
 # `hostwith_part_sess`, not `hostwith_part`. The session left the target string
 # in 0.56, so a lock keyed on the target alone would make two latches to one
@@ -1215,6 +1215,91 @@ $_rc. Exit 0 here is the dangerous one: it reports a session that never was."
     || fail "$_opt did not say it was an unknown option"
 done
 
+# --- --max-tries is a TESTING flag, and it validates its argument ----------
+# It replaced MUX_LATCH_MAX_TRIES, which is gone: latch never gives up on a
+# retryable state, so a cap is a thing a test passes and not a thing a machine
+# is configured with. The suite still needs it, because a test for a bound that
+# stops working HANGS the runner rather than failing it.
+#
+# A BARE FLAG IS GUARDED rather than left to `shift 2`, which would be a shell
+# error that ALSO exits 2: the right code for the wrong reason, and one no
+# mutation of the real guard could be told apart from. Asserted on the message
+# for exactly that reason.
+_rc=0
+env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
+  "$HERE/libexec/mux-latch" --max-tries >"$T/mt.out" 2>&1 || _rc=$?
+[ "$_rc" = 2 ] || fail "a bare --max-tries must exit 2, got $_rc"
+grep -q 'needs a count' "$T/mt.out" \
+  || fail "a bare --max-tries exited 2 without saying why, which is what a
+shell error from a bare \`shift 2\` would also have done:
+$(cat "$T/mt.out")"
+
+# AND A NON-NUMBER IS REFUSED HERE, not left to surface as a shell error deep
+# inside the retry loop, which exits 2 from a place that says nothing about the
+# argument that caused it.
+_rc=0
+env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
+  "$HERE/libexec/mux-latch" --max-tries nine >"$T/mt.out" 2>&1 || _rc=$?
+[ "$_rc" = 2 ] || fail "--max-tries nine must exit 2, got $_rc"
+grep -q 'wants a number' "$T/mt.out" \
+  || fail "a non-numeric count was not refused with a reason:
+$(cat "$T/mt.out")"
+[ ! -e "$T/run/mux-latch/--max-tries.lock" ] \
+  || fail "--max-tries was treated as a target: it took a LOCK"
+
+# --- the rung is a CONFIG key, not just an env var ------------------------
+# It is the one bound that is a POLICY rather than a mechanism: it says how
+# hard this machine should try to get an attachment back, which is a per-box
+# answer you set once. So it goes through the same `_seam` precedence as the
+# five hook seams (environment wins, then $MUX_DIR/config, then the default)
+# rather than being env-only like BACKOFF and PROGRESS.
+#
+# OBSERVED THROUGH THE REPORTED DELAY, which is the only thing a caller can
+# see: with a rung of 1 the delay doubles every attempt, so 1s becomes 2s.
+_rung_run() {           # <env rung, or empty> -> stderr of a 3-drop run
+  : >"$SCRIPT"
+  _i=0; while [ "$_i" -lt 6 ]; do _i=$((_i + 1))
+    printf '%s\n' "$_drop" >>"$SCRIPT"
+  done
+  env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
+    T_AUTH="$T_AUTH" T_PROBE="$T_PROBE" STATES="$STATES" \
+    TRIES="$TRIES" AUTHLOG="$AUTHLOG" SCRIPT="$SCRIPT" \
+    MUX_LATCH_TRANSPORT="$T/bin/transport %h %s" \
+    MUX_LATCH_AUTH="$T/bin/auth" MUX_LATCH_PROBE="$T/bin/probe" \
+    MUX_LATCH_SLEEP="$T/bin/nosleep" MUX_LATCH_BACKOFF=1 \
+    MUX_LATCH_BACKOFF_RUNG="$1" MUX_LATCH_PROGRESS=9999 \
+    "$HERE/libexec/mux-latch" --max-tries 3 box >/dev/null 2>"$T/ro" || true
+  cat "$T/ro"
+}
+
+cp "$T/conf/config" "$T/conf/config.keep" 2>/dev/null \
+  || : >"$T/conf/config.keep"
+printf 'latch-backoff-rung 1\n' >>"$T/conf/config"
+_o=$(_rung_run '')
+case $_o in
+*'retrying in 2s'*) ;;
+*) fail "a rung of 1 in \$MUX_DIR/config was not read, so the delay never
+doubled across 3 attempts: this bound is settable once per box or it is not
+a policy at all:
+$_o" ;;
+esac
+
+# AND THE ENVIRONMENT WINS OVER IT, which is the precedence every other latch
+# seam follows. Without this the config would be authoritative and a test (or
+# a one-off run) could not override it.
+_o=$(_rung_run 5)
+case $_o in
+*'retrying in 2s'*) fail "the environment did not win over the config key: a
+rung of 5 was asked for and the delay doubled within 3 attempts anyway:
+$_o" ;;
+esac
+case $_o in
+*'retrying in 1s'*) ;;
+*) fail "no retry was reported at all, so the case above asserts nothing:
+$_o" ;;
+esac
+mv -f "$T/conf/config.keep" "$T/conf/config"
+
 # --- mux clears the litter mux makes --------------------------------------
 # NOTHING reaped a stale lock before this. The trap covers every exit path the
 # process controls, but a SIGKILL, a reboot mid-latch or an OOM kill leaves the
@@ -1275,8 +1360,8 @@ saymsg() {   # <script line...> [MAXT] -> latch's stderr
     MUX_LATCH_TRANSPORT="$T/bin/transport %h %s" \
     MUX_LATCH_AUTH="$T/bin/auth" MUX_LATCH_PROBE="$T/bin/probe" \
     MUX_LATCH_STATUS="$T/bin/status" MUX_LATCH_SLEEP="$T/bin/nosleep" \
-    MUX_LATCH_BACKOFF=1 MUX_LATCH_MAX_TRIES=1 \
-    "$HERE/libexec/mux-latch" box >/dev/null 2>"$T/say.err" || :
+    MUX_LATCH_BACKOFF=1 \
+    "$HERE/libexec/mux-latch" --max-tries 1 box >/dev/null 2>"$T/say.err" || :
   cat "$T/say.err"
 }
 
@@ -1342,8 +1427,8 @@ env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \\
   MUX_LATCH_TRANSPORT="$T/bin/transport %h %s" \\
   MUX_LATCH_AUTH="$T/bin/auth" MUX_LATCH_PROBE="$T/bin/probe" \\
   MUX_LATCH_STATUS="$T/bin/status" MUX_LATCH_SLEEP="$T/bin/nosleep" \\
-  MUX_LATCH_BACKOFF=4 MUX_LATCH_BLOCKED_WAIT=1 MUX_LATCH_MAX_TRIES=2 \\
-  "$HERE/libexec/mux-latch" box proj
+  MUX_LATCH_BACKOFF=4 MUX_LATCH_BLOCKED_WAIT=1 \\
+  "$HERE/libexec/mux-latch" --max-tries 2 box proj
 exit 0
 EOF
   chmod +x "$T/bin/spinrun"
@@ -1414,8 +1499,8 @@ env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
   MUX_LATCH_TRANSPORT="$T/bin/transport %h %s" \
   MUX_LATCH_AUTH="$T/bin/auth" MUX_LATCH_PROBE="$T/bin/probe" \
   MUX_LATCH_STATUS="$T/bin/status" MUX_LATCH_SLEEP="$T/bin/nosleep" \
-  MUX_LATCH_BACKOFF=1 MUX_LATCH_MAX_TRIES=3 \
-  "$HERE/libexec/mux-latch" box proj >/dev/null 2>"$T/so" || true
+  MUX_LATCH_BACKOFF=1 \
+  "$HERE/libexec/mux-latch" --max-tries 3 box proj >/dev/null 2>"$T/so" || true
 
 case "$(seq_of)" in
 *settling*) ;;
