@@ -247,6 +247,7 @@ attach-only contract 1
 latch-fallback none
 agent-emit internal
 agent-render internal
+landing internal
 click internal
 cycle internal
 migrate-profiles internal
@@ -358,6 +359,7 @@ cycle)         shift; exec "$LIBEXEC/mux-cycle" "$@" ;;
 click)         shift; exec "$LIBEXEC/mux-click" "$@" ;;
 refresh)       shift; exec "$LIBEXEC/mux-refresh" "$@" ;;
 pin)           shift; exec "$LIBEXEC/mux-pin" "$@" ;;
+landing)       shift; exec "$LIBEXEC/mux-landing" "$@" ;;
 style)         shift; exec "$LIBEXEC/mux-style" "$@" ;;
 status-banner) shift; exec "$LIBEXEC/mux-status-banner" "$@" ;;
 agent-render)  shift; exec "$LIBEXEC/mux-agent-state-render" "$@" ;;
@@ -2796,9 +2798,32 @@ $2
 EOF
 }
 
-# The first recorded session that is actually up. Insertion order makes that
-# the oldest, usually the one you think of as primary.
-_resume_landing() {     # <recorded names> -> a live session name, or empty
+# Where to land: the session you were last on, else the first recorded one
+# that is actually up.
+#
+# THE FOCUS MARK FIRST, and it is the whole reason this function is not one
+# line. Insertion order is CREATION order, which says nothing about where you
+# were working, and resume used to land on the oldest entry that came back.
+# Found live rather than reasoned about: a box rebooted, latch reattached, and
+# the human came back on a session they had not touched in days, so the next
+# thing they typed was addressed to the wrong agent. The mark is written by the
+# client-session-changed hook (see `mux landing`), so it covers tmux's own
+# switches too, not just mux's verbs.
+#
+# CHECKED FOR LIFE, NOT FOR MEMBERSHIP, and the order matters: this runs AFTER
+# the rebuild, so a marked session that was rebuildable is up by now, and one
+# whose root moved is not. Liveness answers both at once, which is why no
+# second test against the recorded set is needed (and a session made with raw
+# tmux is still a legitimate place to have been).
+#
+# ABSENT MARK IS TODAY'S BEHAVIOUR, which is what makes this safe to ship: a
+# box upgrading mid-session, or one where nobody has switched since the server
+# started, falls through to the insertion-order rule unchanged.
+_resume_landing() {     # <recorded names> [key] -> a live session, or empty
+  _rl=$(mux_landing_get "${2:-}")
+  if [ -n "$_rl" ] && tm has-session -t "=$_rl" 2>/dev/null; then
+    printf '%s' "$_rl"; return 0
+  fi
   while IFS= read -r _rn; do
     [ -n "$_rn" ] || continue
     if tm has-session -t "=$_rn" 2>/dev/null; then
@@ -2868,7 +2893,7 @@ cmd_resume() {
     mux_log resume "could NOT build:$(printf '%s' "$rs_failed" \
       | tr '\n' ' ')"
   fi
-  name=$(_resume_landing "$rs_set")
+  name=$(_resume_landing "$rs_set" "$rs_key")
   [ -n "$name" ] || { echo "mux: nothing to attach" >&2; exit 1; }
   mux_attach
 }

@@ -203,6 +203,32 @@ set-hook -g client-resized  'run-shell -b "mux pin"'
 # third.
 set-hook -g window-layout-changed 'run-shell -b "mux pin"'
 
+# --- where you were: the landing spot for the next `mux resume` -----------
+# The session set is insertion-ordered, so resume used to land on the OLDEST
+# session that came back. Creation order is not where you were working: after
+# a reboot a latch reattached onto a session untouched for days, and the next
+# thing typed went to the wrong agent. So remember the current session as it
+# changes, and resume lands there instead.
+#
+# client-session-changed IS THE COMPLETE WRITER, which is why this is a hook
+# and not a line inside mux's own switch verbs. Measured: it fires on an
+# ATTACH as well as on switch-client, so `prefix B` (switch-client -l, tmux's
+# own), the session picker and `prefix ( )` are all covered without mux being
+# involved in the switch at all.
+#
+# `-g`, NOT `-ag`. This fragment's idempotence is a tested property (sourcing
+# it twice must leave the server identical), and appending would add a second
+# copy of this hook per source, i.e. another fork per switch, for ever.
+#
+# Firing BEFORE the rescale, the objection that disqualified this hook for
+# `mux pin` above, does not apply: the client's session is already the new one
+# by the time it runs, and a name has no geometry to be stale about.
+#
+# `-b` is safe here for a reason specific to how the recorder works: it ASKS
+# the server for the current session rather than being handed it, so a job
+# that runs late still reads the session you ended on. See `mux landing`.
+set-hook -g client-session-changed 'run-shell -b "mux landing --record"'
+
 # --- undo-pane: keep a "before" picture, fork-free ------------------------
 # ^D is one keystroke from detach and closes a pane instead. `mux undo-pane`
 # (prefix-u) puts it back, and these lines are what make that possible.

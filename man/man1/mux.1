@@ -78,7 +78,13 @@ are identical. A row is written only when
 is not what this directory already derives.
 .TP
 .B mux resume " [" \-\-list "] [" \fIADDRESS\fR ]
-Rebuild every session a partition had recorded, then attach the first.
+Rebuild every session a partition had recorded, then attach the one you were
+last on. That landing spot is remembered as you switch sessions, in
+.IR $MUX_STATE/landing.<socket> ,
+and a box that has never switched since the server started falls back to the
+oldest recorded session. Name an
+.I ADDRESS
+to land somewhere else.
 Sessions are recorded automatically as you open them and forgotten on
 .BR "mux kill" ,
 so after a reboot this brings back what you had. The set is state, not config:

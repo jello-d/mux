@@ -453,10 +453,13 @@ one of the same name.
 ### Session sets
 
 The sessions you have open are recorded as you open them, per socket, in
-`$MUX_STATE/sessions.<socket>`: one `NAME<TAB>ROOT` per line. After a reboot:
+`$MUX_STATE/sessions.<socket>`: one `NAME<TAB>ROOT` per line. Which one you
+were last on is remembered beside it, in `$MUX_STATE/landing.<socket>`, so a
+resume puts you back where you left off rather than on whichever session you
+happened to open first. After a reboot:
 
 ```sh
-mux resume            # rebuild them all, then attach the first
+mux resume            # rebuild them all, land where you left off
 mux resume --list     # just show what would be rebuilt
 mux resume api        # ... and land on `api` when it is done
 mux resume work::     # another PARTITION's set, not the one you are in

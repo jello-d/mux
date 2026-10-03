@@ -36,8 +36,13 @@
 # an evidence source in its own right: `mux go <name>` can resolve through it
 # exactly as it resolves through a profile or the discovery map.
 #
-# Insertion-ordered, so a resume rebuilds in the order you first opened them
-# and lands you on the oldest, which is usually the one you think of as primary.
+# Insertion-ordered, so a resume rebuilds in the order you first opened them.
+# THAT ORDER DOES NOT SAY WHERE TO LAND, and this file used to claim it did
+# ("lands you on the oldest, which is usually the one you think of as
+# primary"). Creation order has nothing to do with where you were: reported
+# live after a reboot, a latch came back on the oldest session while the human
+# had been working in the newest, so the message they typed went to the wrong
+# agent. The landing spot is its own fact, recorded separately below.
 #
 # Keyed on the PARTITION, so each isolated namespace resumes only its own.
 
@@ -151,5 +156,71 @@ mux_sess_drop() {       # <name> [key]
 # mux_sess_clear [key] -> forget the whole set (kill --all).
 mux_sess_clear() {      # [key]
   rm -f "$(mux_sess_file "${1:-}")" 2>/dev/null || true
+  return 0
+}
+
+# --- the LANDING MARK: which session you were last on -----------------------
+# WHERE YOU WERE, which the set above cannot answer. It is insertion-ordered,
+# and the order you first opened things is not the order you care about them.
+#
+# STATE, not cache, by this package's own does-it-rebuild test: once the server
+# is gone NOTHING can reconstruct which session had the client, so losing this
+# file loses the answer at the exact moment it is asked, which is the `mux
+# resume` after a reboot. Same directory and the same partition key as the set,
+# because it is the same question's second half.
+#
+# A SIDECAR RATHER THAN A SIXTH FIELD on the set's lines, the call 0.49 already
+# made for the beat mark: the set is read by `cut`/`awk` in several programs and
+# widening a record format has cost this project a day before now. It is also a
+# different SHAPE: the set is a list, this is one value for the whole partition.
+#
+# ONE LINE, THE SESSION NAME, and only line 1 is ever read. A session name can
+# hold a space (which is why the set is tab-separated), so the whole line is
+# the value and nothing splits it.
+
+# mux_landing_file [key] -> the landing mark for a partition.
+mux_landing_file() {      # [partition]
+  _lk=${1:-${MUX_CTX_PARTITION:-global}}
+  mux_state_path "landing.$_lk"
+}
+
+# mux_landing_get [key] -> the session last active there, or empty.
+#
+# NO LIVENESS TEST HERE, deliberately: this library cannot ask tmux anything
+# (it is sourced by programs that run with no server at all), and the caller
+# has to check anyway, since the named session may have been killed or may
+# have failed to rebuild. Answering "what was recorded" is the whole job.
+mux_landing_get() {       # [key]
+  _lf=$(mux_landing_file "${1:-}")
+  [ -f "$_lf" ] || return 0
+  # Redirect LAST: `read ... <"$f" 2>/dev/null` silences nothing, because
+  # redirections apply left to right and a failing open happens while stderr
+  # is still the terminal. A rule this suite greps for in test/lint.t.
+  IFS= read -r _ln 2>/dev/null <"$_lf" || return 0
+  printf '%s' "${_ln:-}"
+}
+
+# mux_landing_set NAME [key] -> remember NAME as the last active session.
+#
+# BEST EFFORT, like every other write here: this is a convenience about where
+# to land, so a read-only state dir must never cost anybody a session switch.
+# Atomic through a temp and a rename, for the reason the undo record learned
+# the hard way: a reader that sees a created-but-not-yet-written file reads an
+# empty value and silently falls back.
+mux_landing_set() {       # <name> [key]
+  [ -n "${1:-}" ] || return 0
+  _lf=$(mux_landing_file "${2:-}")
+  mkdir -p "$(dirname "$_lf")" 2>/dev/null || return 0
+  _lt=$_lf.tmp.$$
+  # stderr FIRST, then the target: `>"$_lt" 2>/dev/null` silences nothing,
+  # because redirections apply left to right and the failing OPEN happens
+  # while stderr is still the terminal. Caught here by the unwritable-state
+  # case in test/mux-landing.t, having written the same warning two functions
+  # up and then got it the wrong way round.
+  if printf '%s\n' "$1" 2>/dev/null >"$_lt"; then
+    mv -f "$_lt" "$_lf" 2>/dev/null || rm -f "$_lt" 2>/dev/null || true
+  else
+    rm -f "$_lt" 2>/dev/null || true
+  fi
   return 0
 }

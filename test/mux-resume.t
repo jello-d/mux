@@ -53,6 +53,18 @@ case "$*" in
   # parameter in bash, which is macOS's /bin/sh.
   _t=$*; _t=${_t##*=}
   printf '%s\n' "$_t" >>"${FOCUSLOG:-/dev/null}" ;;
+*attach-session*)
+  # THE LANDING, and its own arm rather than sharing FOCUSLOG with
+  # switch-client above: resume both focuses (switch-client) and lands
+  # (attach-session), and the comment above records what conflating them
+  # already cost. ONE ARM PER QUESTION.
+  _t=$*; _t=${_t##*=}
+  printf '%s\n' "$_t" >>"${ATTACHLOG:-/dev/null}" ;;
+*client_session*)
+  # What `mux landing --record` asks the server. Its own pattern rather than a
+  # bare *display-message*, which would also swallow the two format queries
+  # below and answer them with a session name.
+  printf '%s\n' "${WANTSESS:-}" ;;
 *window_index*) printf '0\n' ;;
 *pane_id*)      printf '%%1\n' ;;
 esac
@@ -61,6 +73,7 @@ EOF
 chmod +x "$T/bin/tmux"
 LIVE=$T/live; : >"$LIVE"; export LIVE
 FOCUSLOG=$T/focus; : >"$FOCUSLOG"; export FOCUSLOG
+ATTACHLOG=$T/attach; : >"$ATTACHLOG"; export ATTACHLOG
 PATH=$T/bin:$PATH; export PATH
 
 mux() {
@@ -393,5 +406,89 @@ rm -f "$T/conf/config"
 [ "$_rc" = 1 ] || fail "a FAILED context-command should refuse, got $_rc"
 grep -q "context-command FAILED" "$T/out" \
   || fail "the refusal did not say why: $(cat "$T/out")"
+
+# --- WHERE YOU WERE: resume lands on the last active session ---------------
+# The set is insertion-ordered and resume used to land on the first entry that
+# came back, i.e. the OLDEST. Reported live: a box rebooted, latch reattached,
+# and the human came back on a session untouched for days, so what they typed
+# next went to the wrong agent.
+#
+# THE FIXTURE'S TWO ANSWERS MUST DIFFER, which is the whole reason it is built
+# fresh here: `bravo` is the oldest and `delta` is the marked one, so the
+# landing can tell them apart. A fixture whose value coincides with the
+# obvious constant is a test that proves nothing, which the case above this
+# one learned from the corpus.
+rm -f "$T"/state/sessions.* "$T"/state/landing.*
+: >"$LIVE"
+mkdir -p "$T/tree/delta"; git init -q "$T/tree/delta"
+mux "$T/tree/bravo" go >/dev/null || fail "landing seed: go bravo failed"
+mux "$T/tree/delta" go >/dev/null || fail "landing seed: go delta failed"
+_set=$(mux "$T/elsewhere" resume --list | tr '\n' ' ')
+[ "$_set" = "bravo delta " ] \
+  || fail "precondition: the set is not oldest-first: [$_set]"
+
+# THE MARK IS WRITTEN THROUGH THE SHIPPED WRITER, never by hand. A fixture
+# that spells the file itself encodes the format independently of the code and
+# can then drift without ever going red, which is the rule this suite already
+# states about the agent record. So this drives the real `mux landing` as
+# the client-session-changed hook does, with $TMUX naming the partition's
+# socket, which is also what proves the key is derived from the server rather
+# than re-resolved from a context command.
+_fkey=$(mux "$T/elsewhere" why 2>/dev/null \
+  | awk '$1 == "partition" { print $2; exit }')
+[ -n "$_fkey" ] || fail "could not learn the fixture's partition"
+mkdir -p "$T/fakesock"
+marklanding() {           # <session name to be current>
+  ( cd "$T/elsewhere" && env -u MUX_SHARE MUX_DIR="$T/conf" \
+    MUX_CACHE="$T/cache" GIT_CEILING_DIRECTORIES="$T" \
+    TMUX="$T/fakesock/$_fkey,1,0" WANTSESS="$1" \
+    "$HERE/bin/mux" landing --record ) 2>&1
+}
+
+# A RECORDER THAT PRINTS ANYTHING FREEZES THE PANE: tmux run-shell shows a
+# command's output in a view-mode buffer over the active pane, even with -b,
+# until a key is pressed. So silence is a contract, not a style, and it is
+# asserted on BOTH streams because a diagnostic on stderr would reach the
+# same place.
+_o=$(marklanding delta 2>&1)
+[ -z "$_o" ] || fail "\`mux landing --record\` must print NOTHING, or every
+session switch pops a view-mode buffer over the pane: [$_o]"
+[ "$(mux "$T/elsewhere" landing)" = delta ] \
+  || fail "the mark did not read back as delta:
+[$(mux "$T/elsewhere" landing)]"
+[ -f "$T/state/landing.$_fkey" ] \
+  || fail "the mark was not filed under the partition the socket names:
+state holds [$(ls "$T/state" | tr '\n' ' ')]"
+
+: >"$LIVE"; : >"$ATTACHLOG"
+mux "$T/elsewhere" resume >"$T/out" 2>&1 || fail "resume failed:
+$(cat "$T/out")"
+grep -qxF delta "$ATTACHLOG" || fail "resume landed somewhere other than the
+session last active: the mark said delta and the landing was
+[$(cat "$ATTACHLOG")]. Insertion order is CREATION order, so bravo here is
+the oldest and exactly the wrong answer."
+
+# THE CONTROL, which is what makes the case above mean anything: with NO mark
+# the oldest is still correct, so the assertion is reading the mark rather
+# than a fixture that can only ever say delta.
+rm -f "$T/state/landing.$_fkey"
+: >"$LIVE"; : >"$ATTACHLOG"
+mux "$T/elsewhere" resume >"$T/out" 2>&1 || fail "resume with no mark failed:
+$(cat "$T/out")"
+grep -qxF bravo "$ATTACHLOG" || fail "with no mark recorded, the landing must
+fall back to the oldest recorded session, which is what every install does
+before this feature exists: [$(cat "$ATTACHLOG")]"
+
+# AND A MARK NAMING A SESSION THAT DID NOT COME BACK falls back too. Checked
+# for LIFE rather than membership, and after the rebuild, so a root that moved
+# and a session killed from raw tmux are both covered by the one test.
+marklanding ghost >/dev/null
+[ "$(mux "$T/elsewhere" landing)" = ghost ] || fail "seed: the ghost mark"
+: >"$LIVE"; : >"$ATTACHLOG"
+mux "$T/elsewhere" resume >"$T/out" 2>&1 || fail "resume with a dead mark
+failed: $(cat "$T/out")"
+grep -qxF bravo "$ATTACHLOG" || fail "the mark named a session that never came
+back, so the landing must fall through to the oldest live one rather than
+attaching to a name that does not exist: [$(cat "$ATTACHLOG")]"
 
 pass

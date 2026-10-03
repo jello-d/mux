@@ -3180,3 +3180,51 @@ t mux-envhooks
 -   nc -zU "$1" >/dev/null 2>&1 || exit 1
 +   nc -zU "$1" >/dev/null 2>&1 || :
 m accepted a socket with NO LISTENER
+
+# Resume lands where you WERE, not on the oldest session it rebuilt.
+# Insertion order is CREATION order; the two differ and the second is
+# the wrong answer. Found live after a reboot: latch reattached onto a
+# session untouched for days and the next thing typed went to the wrong
+# agent. The fixture makes the oldest (bravo) and the marked one
+# (delta) DIFFERENT, or neither of these could be killed.
+= resume-lands-on-oldest-not-last-active
+f bin/mux
+t mux-resume
+-   _rl=$(mux_landing_get "${2:-}")
++   _rl=
+m session last active: the mark said delta
+
+# ... and the mark is checked for LIFE, not just for presence. A name
+# whose root moved, or a session killed from raw tmux, is still in the
+# file; attaching to it would fail where falling through cannot.
+= resume-landing-not-checked-for-life
+f bin/mux
+t mux-resume
+-   if [ -n "$_rl" ] && tm has-session -t "=$_rl" 2>/dev/null; then
++   if [ -n "$_rl" ]; then
+m fall through to the oldest live one rather than
+
+# The mark is filed under the partition the SOCKET names, which is
+# what $TMUX carries. Re-resolving a partition inside a hook's
+# run-shell child answers `global` wherever the context cannot tell,
+# and this package has shipped the wrong-socket bug three times. The
+# fixture's socket is deliberately NOT global: in mux-resume.t it is,
+# so this mutation would be a no-op there and report SURVIVED.
+= landing-key-from-the-context-not-the-socket
+f libexec/mux-landing
+t mux-landing
+-   _key=${_sockpath##*/}
++   _key=global
+m a record made inside the 'work' server
+
+# AND RECORDING IS SILENT, which is a contract rather than a style:
+# tmux run-shell displays a command's output in a view-mode buffer
+# over the active pane, even with -b, until a key is pressed. So a
+# recorder that prints would freeze the pane on EVERY session switch.
+# Nothing else in the tree enforces this, which is why it is here.
+= landing-record-breaks-its-silence
+f libexec/mux-landing
+t mux-landing
+-   mux_landing_set "$_s" "$_key"
++   mux_landing_set "$_s" "$_key"; echo recorded
+m recording must be silent, printed
