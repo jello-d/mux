@@ -130,6 +130,28 @@ MUX_VERSION=0.86
 # still on stderr.
 MUX_EX_NONAME=3
 
+# 4 = NOT READY YET, AND TRY AGAIN. The second cross-cutting condition, added
+# for the same reason as 3: a decision on another machine must not depend on
+# the WORDING of a message, and a code cannot be reworded.
+#
+# IT EXISTS FOR THE LATCH-AFTER-A-REBOOT CASE. A host that has no server for
+# this partition and whose declared session pointers have not arrived refuses
+# rather than rebuilding every session into an environment that is still
+# starting. The client already owns waiting, bounding and reporting, so the
+# host says "not yet" and stays stateless about it.
+#
+# AND THE RETRY IS THE MECHANISM, which is why a code beats blocking here:
+# each attempt is a NEW remote process with a new login shell, so it re-reads
+# the environment rather than remembering the one it started with. That is this
+# package's re-derive-never-remember rule falling out of the shape.
+#
+# IT DEGRADES IN BOTH DIRECTIONS WITH NO NEGOTIATION, which is what makes it
+# safe to add: a latch that does not know 4 falls through to `unknown` and
+# RETRIES, which is the behaviour wanted anyway, and an older remote never
+# emits it. Still a small set, so 126, 127 and 255 remain unambiguously not
+# mux.
+MUX_EX_NOTREADY=4
+
 MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
 TMUX_CONF=${XDG_CONFIG_HOME:-$HOME/.config}/tmux/tmux.conf
 
@@ -686,7 +708,9 @@ usage: mux [OPTION] [VERB] [NAME] [PROFILE]  (OPTION may follow VERB too)
   edit [NAME]                open a profile in $EDITOR
   resume [PARTITION [SESSION]]
                              rebuild a partition's sessions (--list to see
-                             them); SESSION is where to focus afterwards
+                             them); SESSION is where to focus afterwards.
+                             --no-wait-env builds them even when a declared
+                             session pointer has not arrived yet
   sane                       put the terminal back after a wedged session
   skill [NAME]               print the agent instructions for this mux
   demo                       a throwaway mux to look at (--stop)
@@ -743,6 +767,7 @@ attachonly=0
 noattach=0
 all=0
 listing=0
+nowaitenv=0
 resume=0
 force=0
 persist=0
@@ -756,6 +781,11 @@ while [ "$#" -gt 0 ]; do
     --no-attach)  noattach=1; shift ;;
     --all)        all=1; shift ;;
     --list)       listing=1; shift ;;
+    # THE HUMAN OVERRIDE for the readiness gate below. Needed because a
+    # person typing `mux resume` at a terminal meets the same refusal a
+    # latch does, and the refusal names this flag rather than leaving it
+    # to be discovered.
+    --no-wait-env) nowaitenv=1; shift ;;
     --resume)     resume=1; shift ;;
     --force)      force=1; shift ;;
     --persist|-p) persist=1; shift ;;   # retired: now the default
@@ -1413,16 +1443,23 @@ tm() {
 # because they never call this. Functions defined by a `.` inside a function
 # are global afterwards, so the guard only has to fire once.
 _mux_env_loaded=0
+# ONE LOADER, TWO CALLERS, and extracted rather than copied the moment the
+# second one appeared: `cmd_resume`'s readiness gate needs the same libs, and a
+# second copy of this list is the thing that drifts when a lib is added.
+# Non-zero means an incomplete install; each caller decides what that costs.
+_mux_env_load() {
+  [ "$_mux_env_loaded" -eq 0 ] || return 0
+  for _eel in mux-paths_lib mux-conf_lib mux-notice_lib mux-env_lib; do
+    [ -r "$LIBEXEC/$_eel" ] || return 1
+    # shellcheck source=/dev/null
+    . "$LIBEXEC/$_eel"
+  done
+  _mux_env_loaded=1
+  return 0
+}
 mux_env_ensure() {   # <session>
   [ -n "${1:-}" ] || return 0
-  if [ "$_mux_env_loaded" -eq 0 ]; then
-    for _eel in mux-paths_lib mux-conf_lib mux-notice_lib mux-env_lib; do
-      [ -r "$LIBEXEC/$_eel" ] || return 0
-      # shellcheck source=/dev/null
-      . "$LIBEXEC/$_eel"
-    done
-    _mux_env_loaded=1
-  fi
+  _mux_env_load || return 0
   # R7: A WITHHELD VALUE IS VISIBLE. Three outcomes come back and they are
   # reported differently on purpose:
   #
@@ -2862,6 +2899,67 @@ cmd_resume() {
     echo "mux: partition '$rs_key' has:" >&2
     printf '%s\n' "$rs_set" | sed 's/^/mux:   /' >&2
     exit "$MUX_EX_NONAME"
+  fi
+  # THE HOST-RELATCH GATE. A TMUX SERVER CANNOT OUTLIVE THE BOOT, so no
+  # server for this partition means this host has not been set up since it came
+  # up. That one fact separates the two kinds of relatch: a NETWORK event (the
+  # server is still there, so reconnect at once, there is nothing to wait for)
+  # from a HOST event (the machine restarted), and only the second can be
+  # racing a graphical session that is still starting.
+  #
+  # IT IS A RACE AND NOT A TIMING BUG: sshd answers seconds after boot while
+  # the session is still initialising, and the two are concurrent, so starting
+  # the session earlier changes the odds and not the shape. Measured here: the
+  # sessions were rebuilt 39 minutes before the compositor started, and a
+  # pane's environment is fixed at exec, so nothing could repair them after.
+  #
+  # AFTER THE FOCUS CHECK, deliberately. A focus name that is not in the set is
+  # a TYPO and will never become valid, so reporting it first means a latch
+  # gives up (exit 3 reads as `gone`) instead of retrying until the display
+  # arrives and only then telling you.
+  #
+  # COSTS NOTHING IN THE OTHER THREE CASES: a present server skips it, and on a
+  # box that is merely idle (a killed server, a first-ever latch) the declared
+  # pointers are already live, so it is asked once and answered yes.
+  if [ "$nowaitenv" -eq 0 ] && ! tm list-sessions >/dev/null 2>&1 \
+     && _mux_env_load; then
+    rs_decl=$(mux_ctx_conf env-ready)
+    rs_erc=0
+    # WORD-SPLIT ON PURPOSE: the directive is a space-separated list, and
+    # every element is a variable NAME, so none can contain whitespace.
+    # shellcheck disable=SC2086
+    mux_env_ready $rs_decl || rs_erc=$?
+    if [ "$rs_erc" -eq 2 ]; then
+      # A DECLARED NAME NOTHING MANAGES is a typo, and its failure mode is a
+      # full timeout on every host relatch with nothing said, so it is loud
+      # HERE rather than discovered after a reboot. The same rule latch
+      # applies to a named hook that does not resolve.
+      # ONLY WHEN THE GATE ENGAGES, which is deliberate rather than an
+      # oversight: on a box whose server is up the condition short-circuits
+      # before any of this, so resume never pays for it, and a typo can only
+      # do harm in the case the gate exists for. `mux check` validates the
+      # declaration UNCONDITIONALLY, which is the better place to find one,
+      # because it is found while somebody is looking rather than during the
+      # one event it would spoil.
+      echo "mux: env-ready names nothing manages:$MUX_ENV_UNMANAGED" >&2
+      echo "mux: envhooks.d manages:" >&2
+      mux_env_names | sed 's/^/mux:   /' >&2
+      exit 2
+    fi
+    if [ "$rs_erc" -eq 1 ]; then
+      echo "mux: this host has no server for '$rs_key' yet, and the" \
+        "session environment has not arrived:$MUX_ENV_UNREADY" >&2
+      echo "mux: rebuilding now would bake that absence into every pane," \
+        "which nothing can repair afterwards." >&2
+      echo "mux: a latch retries, and each attempt re-reads the" \
+        "environment. To build them anyway:" >&2
+      echo "mux:   mux resume --no-wait-env" >&2
+      # LOGGED ON THE HOST, because the whole window is otherwise
+      # unobservable: this is the evidence for the next time it is argued
+      # about, and `mux log` is already where that lives.
+      mux_log resume "not ready, refused to rebuild '$rs_key':$MUX_ENV_UNREADY"
+      exit "$MUX_EX_NOTREADY"
+    fi
   fi
   _resume_rebuild "$rs_key" "$rs_set"
   printf 'mux: resumed %s, %s already up\n' "$rs_built" "$rs_up"

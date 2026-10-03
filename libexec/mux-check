@@ -267,10 +267,19 @@ if [ -r "$(dirname "$0")/mux-env_lib" ]; then
     ok "no session pointers managed (envhooks.d is empty)"
   else
     _envbad=
+    _envnone=
     while IFS=' ' read -r _ev _en _ex; do
       [ -n "$_en" ] || continue
       case $_ev in
       drop) _envbad="$_envbad $_en" ;;
+      # RESOLVED TO NOTHING AT ALL, which this marker used to pass over in
+      # silence: it collected `drop` only, so a managed pointer that does
+      # not EXIST was listed among the healthy ones and the whole line read
+      # `[OK]`. That is the state a box is in between booting and its
+      # graphical session starting, so the check called the environment
+      # healthy during exactly the window where it was not. Fully installed
+      # and fully broken, in the file that defines the rule.
+      none) _envnone="$_envnone $_en" ;;
       esac
     done <<ENVEOF
 $(mux_env_plan 2>/dev/null)
@@ -282,8 +291,38 @@ ENVEOF
       warn "session pointer(s) withheld:${_envbad}"
       warn "  each resolved, and its own validator says that value is dead,"
       warn "  so mux did not write it. Usually the thing it points at exited."
-    else
+    fi
+    if [ -n "$_envnone" ]; then
+      # A SEPARATE WARN, not folded into the one above, because the remedy
+      # differs: a WITHHELD value exists and is dead (whatever it points at
+      # exited), while an ABSENT one was never published, which on a desktop
+      # box usually means the graphical session has not started yet. One
+      # sentence covering both would be wrong about one of them.
+      warn "session pointer(s) absent:${_envnone}"
+      warn "  nothing resolved them, so mux has nothing to propagate and"
+      warn "  any pane built now cannot gain them later (an environment is"
+      warn "  fixed at exec). Usually: the session that publishes them has"
+      warn "  not started."
+    fi
+    if [ -z "$_envbad" ] && [ -z "$_envnone" ]; then
       ok "session pointers (${_envnames% })"
+    fi
+    # AND THE READINESS DECLARATION IS CHECKED HERE, where it is cheap, rather
+    # than being found by a latch timing out after a reboot: a name in
+    # `env-ready` that nothing manages is a typo whose only symptom is a wait
+    # that never ends.
+    _envdecl=$(mux_ctx_conf env-ready 2>/dev/null || true)
+    if [ -n "$_envdecl" ]; then
+      _envrc=0
+      # Word-split on purpose: a space-separated list of variable names.
+      # shellcheck disable=SC2086
+      mux_env_ready $_envdecl || _envrc=$?
+      if [ "$_envrc" -eq 2 ]; then
+        bad "env-ready names nothing manages:$MUX_ENV_UNMANAGED"
+        bad "  mux resume would refuse on this box until it is fixed"
+      else
+        ok "env-ready declared ($_envdecl)"
+      fi
     fi
   fi
 fi

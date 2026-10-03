@@ -100,9 +100,9 @@ never whichever word happens to name one: that magic changes meaning the day a
 partition is added, and a session sharing a partition's name would resume the
 wrong set and say nothing.
 .I PARTITION
-must be one
-.B mux partitions
-lists, or the exit is 3 (the name is not known here) rather than an empty
+must be one the
+.B context
+hook reports, or the exit is 3 (the name is not known here) rather than an empty
 rebuild reporting
 .RB \(lq "no sessions recorded" \(rq,
 which reads as data loss when the truth is a typo.
@@ -2221,7 +2221,7 @@ verbs are mux's own plumbing (called by tmux hooks, the status bar and the
 tray), and mean "about agent state", which is a different thing from "for
 an agent to call".
 .SH EXIT STATUS
-mux uses exactly four codes, and the absence of every other one is part of the
+mux uses exactly five codes, and the absence of every other one is part of the
 contract.
 .TP
 .B 0
@@ -2254,6 +2254,18 @@ all return it, because it is one CONDITION rather than one verb's failure, and
 a caller should not have to learn six spellings of the same answer. The reason
 is still written out: a code is an addition to the explanation, not a
 replacement for it.
+.TP
+.B 4
+NOT READY YET, AND TRY AGAIN. The host has no server for the partition asked
+for, so it has not been set up since it came up, and a pointer its
+.B env-ready
+declaration names has not arrived. Rebuilding then would bake that absence
+into every pane it creates, and a process environment is fixed at exec, so
+nothing could repair them afterwards. Only
+.B resume
+returns it. A client that retries needs no other handling: each attempt is a
+new process, so it re-reads the environment. Override with
+.BR "mux resume \-\-no\-wait\-env" .
 .PP
 THE ABSENCE OF EVERYTHING ELSE IS LOAD-BEARING.
 .B ssh
@@ -2268,6 +2280,7 @@ ssh host mux agent-list
   1      mux refused; the reason is on stderr
   2      that mux is too old to know the verb
   3      the name is not known on that host
+  4      that host is not ready yet; try again
   255    the transport, not mux
   127    mux is not on that host's PATH
 .EE
@@ -2453,8 +2466,27 @@ User session profiles (\c
 .BR save " writes here)."
 .TP
 .I $MUX_DIR/config
-Invariants; today just
-.BR context\-command .
+Invariants:
+.BR context\-command ,
+the
+.B latch\-*
+seams, and
+.BR env\-ready .
+.IP
+.B env\-ready
+.I NAME ...
+names the session pointers this machine cannot usefully work without. When
+.B resume
+finds no server for a partition (so this host has not been set up since it came
+up) and one of these has not arrived, it exits 4 rather than rebuilding every
+session into an environment that is still starting. Each name is checked by
+running its OWN hook in
+.IR envhooks.d ,
+so there is no second copy of the liveness question, and a name nothing manages
+is a typo reported at once by
+.B mux check
+rather than as a wait that never ends. Absent, nothing waits, which is every
+machine's behaviour until it opts in.
 .TP
 .I $MUX_DIR/partitions/<name>.partition
 Settings shared by everything in a partition.

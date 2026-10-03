@@ -496,3 +496,81 @@ mux_env_apply() {   # <session-or-empty> [-v|-n] -> what it changed/would
     esac
   done
 }
+
+# --- READINESS: has this box's environment arrived yet? --------------------
+# THE QUESTION A LATCH NEEDS ANSWERED AFTER A REBOOT. sshd answers seconds
+# after boot, so a latch reconnects and its remote `mux resume` rebuilds every
+# session while the graphical session is still starting. Measured on this box:
+# the sessions were rebuilt at 23:42:11 and the compositor started at 00:21:29,
+# 39 minutes later, so six of seven sessions held no display pointers and
+# their panes never could, since a process environment is fixed at exec.
+#
+# IT IS A RACE AND NOT A TIMING BUG: sshd coming up and the session
+# initialising are concurrent, so starting the session earlier changes the odds
+# and not the shape. The answer is to WAIT, which means something has to be
+# able to ASK.
+#
+# DECLARED, NEVER DETECTED, and this is the decision the whole design rests on.
+# mux must not learn what Wayland is, and it cannot know which pointers a given
+# box will ever hold: `envhooks.d` is the SHIPPED tree, identical everywhere,
+# so requiring all of it would make any machine that will never have a
+# WAYFIRE_SOCKET (a different compositor, a headless server, a CI runner) fail
+# readiness PERMANENTLY. So the caller passes the names it considers
+# load-bearing HERE, and with none passed this is free and answers yes.
+#
+# THE NAME IS THE DECLARATION AND THE HOOK IS THE TEST (the user's design, and
+# it is what keeps this honest): a declared name is checked by running ITS OWN
+# hook, through the plan above, so there is no second copy of the liveness
+# question. Presence is not liveness is precisely why those hooks exist, and a
+# socket left behind by the previous graphical session is exactly the value
+# that would satisfy a presence test while being dead.
+#
+# `keep` COUNTS AS READY, which is the three-state contract answered for THIS
+# caller rather than by the hook's own certainty. A hook that cannot tell must
+# not park a latch in a backoff for ever: that is the error `et-probe` refuses
+# to make where `ssh-probe` makes the opposite call, and the deciding question
+# is always what the CALLER does with each state. Waiting costs you the box;
+# proceeding costs a pointer that may be stale, which is today's behaviour.
+#
+# Sets MUX_ENV_UNREADY (names that are not) and MUX_ENV_UNMANAGED (names
+# nothing manages, which is a typo and is reported separately: its failure mode
+# is a full timeout on every host relatch, silently, so it must be loud at the
+# moment it is read rather than discovered after a reboot).
+#
+# RETURNS A CODE, so call it as `_rc=0; mux_env_ready $names || _rc=$?`. A bare
+# call under `set -e` takes the shell down, which is how the plan loop in this
+# very file was once truncated.
+mux_env_ready() {       # <declared name>... -> 0 ready, 1 not, 2 unmanaged
+  MUX_ENV_UNREADY=
+  MUX_ENV_UNMANAGED=
+  # NOTHING DECLARED IS NOT A FAILURE, and the early return is also what keeps
+  # this off the cost of a plan (a systemctl call plus a hook per name) for
+  # every box that has not opted in.
+  [ "$#" -gt 0 ] || return 0
+
+  _erdm=$(mux_env_names | tr '\n' ' ')
+  for _erdn in "$@"; do
+    [ -n "$_erdn" ] || continue
+    case " $_erdm " in
+    *" $_erdn "*) ;;
+    *) MUX_ENV_UNMANAGED="$MUX_ENV_UNMANAGED $_erdn" ;;
+    esac
+  done
+  [ -z "$MUX_ENV_UNMANAGED" ] || return 2
+
+  # ONE plan for the whole set, not one per name: it is a single systemctl
+  # read plus one hook per managed name, and asking per declared name would
+  # re-run all of it each time.
+  _erdp=$(mux_env_plan 2>/dev/null)
+  for _erdn in "$@"; do
+    [ -n "$_erdn" ] || continue
+    _erdv=$(printf '%s\n' "$_erdp" \
+      | awk -v n="$_erdn" '$2==n{print $1; exit}')
+    case $_erdv in
+    set|keep) ;;
+    *) MUX_ENV_UNREADY="$MUX_ENV_UNREADY $_erdn" ;;
+    esac
+  done
+  [ -z "$MUX_ENV_UNREADY" ] || return 1
+  return 0
+}

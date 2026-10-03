@@ -3228,3 +3228,54 @@ t mux-landing
 -   mux_landing_set "$_s" "$_key"
 +   mux_landing_set "$_s" "$_key"; echo recorded
 m recording must be silent, printed
+
+# THE HOST-RELATCH GATE. A tmux server cannot outlive the boot, so no
+# server for this partition means this host has not been set up since
+# it came up. Without that half the gate keys on readiness ALONE and
+# stalls every NETWORK relatch for ever, which is the case the fixture
+# with a live server covers.
+= resume-gate-ignores-whether-a-server-exists
+f bin/mux
+t mux-resume
+-   if [ "$nowaitenv" -eq 0 ] && ! tm list-sessions >/dev/null 2>&1 \
++   if [ "$nowaitenv" -eq 0 ] && true \
+m NETWORK relatch (server already up) must not wait
+
+# ... and the refusal itself. Rebuilding into an environment that has
+# not arrived bakes the absence into every pane, which nothing can
+# repair afterwards, since a process environment is fixed at exec.
+= resume-rebuilds-before-the-environment-arrives
+f bin/mux
+t mux-resume
+-     if [ "$rs_erc" -eq 1 ]; then
++     if false; then
+m exit 4 (not ready, try again)
+
+# A declared name nothing manages is a TYPO, and its only symptom is a
+# wait that never ends after the next reboot, so it is loud at once.
+= resume-unmanaged-env-ready-name-accepted
+f bin/mux
+t mux-resume
+-     if [ "$rs_erc" -eq 2 ]; then
++     if false; then
+m declared name with no hook should exit 2
+
+# `mux check` collected `drop` verdicts only, so a managed pointer that
+# resolved to NOTHING was listed among the healthy ones and the line
+# read [OK]. That is the state of a box between booting and its
+# graphical session starting: healthy exactly when it is not.
+= check-absent-session-pointer-reads-as-healthy
+f libexec/mux-check
+t mux-check
+-       none) _envnone="$_envnone $_en" ;;
++       none) : ;;
+m unresolvable managed pointer must be
+
+# And the declaration is validated where it is cheap rather than by a
+# latch timing out after a reboot.
+= check-accepts-an-unmanaged-env-ready-name
+f libexec/mux-check
+t mux-check
+-       if [ "$_envrc" -eq 2 ]; then
++       if false; then
+m the typo was not reported as a
