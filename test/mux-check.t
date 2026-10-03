@@ -540,4 +540,48 @@ are about a server nobody asked for."
   tmux_drop_socket "$_sock"
 fi
 
+# --- a managed pointer that does not EXIST is a finding, not silence -------
+# This marker used to collect `drop` verdicts only, so a name mux manages that
+# resolved to NOTHING was listed among the healthy ones and the line read
+# [OK]. That is precisely the state of a desktop box between booting and its
+# graphical session starting, which is when a latch rebuilds every session, so
+# the check called the environment healthy during exactly the window where it
+# was not.
+#
+# THE FIXTURE PRODUCES IT FOR FREE: the curated PATH has no `systemctl` and no
+# `env`, so nothing resolves any of the shipped names, which is the same shape
+# as a pointer whose publisher has not run yet.
+check >/dev/null
+has "session pointer(s) absent" "an unresolvable managed pointer must be
+reported rather than passed over"
+has "WAYLAND_DISPLAY" "the absent pointers must be NAMED, since the useful
+question is always WHICH one is missing"
+no_has "[OK]   session pointers" "it reported the pointers healthy while one
+of them does not exist at all, which is the fully-installed-and-fully-broken
+state this marker contract exists to catch"
+
+# --- and the readiness declaration is validated here, cheaply --------------
+# A name in `env-ready` that nothing manages is a typo whose only symptom is a
+# latch waiting for ever after the next reboot. Catching it in `mux check`
+# means it is found while someone is looking, rather than during the one event
+# it would ruin.
+printf 'context-command cc\nenv-ready WAYLAND_DISPLAY\n' >"$T/conf/config"
+check >/dev/null
+has "[OK]   env-ready declared" "a declaration naming a MANAGED pointer is
+well formed, whether or not that pointer happens to be live right now"
+
+printf 'context-command cc\nenv-ready NOSUCHPOINTER\n' >"$T/conf/config"
+check >/dev/null
+# THE EXIT CODE IS DELIBERATELY NOT ASSERTED HERE. By this point in the
+# fixture an earlier case has taken `tmux` off the curated PATH, so the check
+# already exits non-zero for a reason that has nothing to do with this, and
+# `[ "$RC" != 0 ]` would pass whether the new marker fires or not. A vacuous
+# assertion reads as coverage, so the claim is the MARKER, and that it is a
+# `[FAIL]` rather than a warn is what carries the exit code (asserted as a
+# property of the marker contract elsewhere in this file).
+has "[FAIL] env-ready names nothing manages" "the typo was not reported as a
+FAIL, so the check would pass on a box where mux resume refuses"
+has "NOSUCHPOINTER" "the refusal did not name the offending declaration"
+printf 'context-command cc\n' >"$T/conf/config"
+
 pass

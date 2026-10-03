@@ -491,4 +491,83 @@ grep -qxF bravo "$ATTACHLOG" || fail "the mark named a session that never came
 back, so the landing must fall through to the oldest live one rather than
 attaching to a name that does not exist: [$(cat "$ATTACHLOG")]"
 
+# --- THE HOST-RELATCH GATE: do not rebuild into an environment that is still
+# --- starting ---------------------------------------------------------------
+# A latch reconnects seconds after boot and its remote command is `mux resume`,
+# so without this the sessions are rebuilt while the graphical session is still
+# coming up and every pane keeps that absence for ever. The discriminator is
+# that a TMUX SERVER CANNOT OUTLIVE THE BOOT, so no server for this partition
+# means this host has not been set up since it came up.
+#
+# THE DECLARATION IS WHAT MAKES IT ASKABLE. mux must not learn what a display
+# is, so the box names the pointers it considers load-bearing and mux runs
+# each one's OWN hook. Here that is a hook in the overlay for a name nothing
+# will ever resolve, which is the shape of a compositor pointer before the
+# compositor exists.
+mkdir -p "$T/conf/envhooks.d"
+printf '#!/bin/sh\nexit 0\n' >"$T/conf/envhooks.d/MUX_T_NOPOINTER"
+chmod +x "$T/conf/envhooks.d/MUX_T_NOPOINTER"
+printf 'env-ready MUX_T_NOPOINTER\n' >"$T/conf/config"
+
+# RE-EXPORTED, because an earlier case in this file `unset`s it once it is
+# done with the log. Set rather than assumed: the first run of these cases
+# died on `MUX_LOG: parameter not set` under `set -u`.
+MUX_LOG=$T/resume.log; export MUX_LOG
+
+# A: no server, and the declared pointer has not arrived -> refuse with 4.
+: >"$LIVE"; : >"$MUX_LOG"
+_rc=0
+mux "$T/elsewhere" resume >"$T/out" 2>&1 || _rc=$?
+[ "$_rc" = 4 ] || fail "a host relatch before the environment arrived must
+exit 4 (not ready, try again), got $_rc: $(cat "$T/out")"
+grep -q MUX_T_NOPOINTER "$T/out" || fail "the refusal did not NAME what it is
+waiting for, so a human cannot tell a slow display from a typo:
+$(cat "$T/out")"
+grep -q -- "--no-wait-env" "$T/out" || fail "the refusal must PRESCRIBE the
+override, or it names a gap without saying how to close it: $(cat "$T/out")"
+[ ! -s "$LIVE" ] || fail "it refused and rebuilt anyway: [$(cat "$LIVE")]"
+grep -q "not ready" "$MUX_LOG" || fail "the refusal was not logged on the
+host, which is the only record that the window happened at all:
+[$(cat "$MUX_LOG")]"
+
+# B: ... and the human override builds them anyway.
+: >"$LIVE"
+_rc=0
+mux "$T/elsewhere" resume --no-wait-env >"$T/out" 2>&1 || _rc=$?
+[ "$_rc" = 0 ] || fail "--no-wait-env should build them anyway, got $_rc:
+$(cat "$T/out")"
+[ -s "$LIVE" ] || fail "--no-wait-env refused as well, so the override is
+not an override: $(cat "$T/out")"
+
+# C: THE LOAD-BEARING CASE, and the whole point of the discriminator. With a
+# server ALREADY UP this is a NETWORK relatch: the far side never went away,
+# so there is nothing to wait for and the unready pointer is irrelevant. A
+# gate keyed on readiness ALONE would stall every reconnect for ever.
+_rc=0
+mux "$T/elsewhere" resume >"$T/out" 2>&1 || _rc=$?
+[ "$_rc" = 0 ] || fail "a NETWORK relatch (server already up) must not wait
+on the environment, got $_rc: $(cat "$T/out")"
+
+# D: nothing declared is not a failure, so a box that has not opted in is
+# unaffected even with no server at all.
+rm -f "$T/conf/config"
+: >"$LIVE"
+_rc=0
+mux "$T/elsewhere" resume >"$T/out" 2>&1 || _rc=$?
+[ "$_rc" = 0 ] || fail "with no env-ready declared the gate must not engage,
+got $_rc: $(cat "$T/out")"
+[ -s "$LIVE" ] || fail "an undeclared box was refused: $(cat "$T/out")"
+
+# E: a declared name nothing manages is a TYPO, and it is loud at once rather
+# than discovered as a wait that never ends after the next reboot.
+printf 'env-ready MUX_T_NOSUCHHOOK\n' >"$T/conf/config"
+: >"$LIVE"
+_rc=0
+mux "$T/elsewhere" resume >"$T/out" 2>&1 || _rc=$?
+[ "$_rc" = 2 ] || fail "a declared name with no hook should exit 2, got $_rc:
+$(cat "$T/out")"
+grep -q MUX_T_NOPOINTER "$T/out" || fail "the refusal must list what IS
+managed, or the typo is named without a way to correct it: $(cat "$T/out")"
+rm -f "$T/conf/config"
+
 pass
