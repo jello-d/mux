@@ -118,8 +118,8 @@ _eo=$(env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
   ETLOG="$T/argv" \
   MUX_LATCH_TRANSPORT="$_stub_line" \
   MUX_LATCH_CLASSIFY=et-classify \
-  MUX_LATCH_AUTH=true MUX_LATCH_MAX_TRIES=1 \
-  "$HERE/libexec/mux-latch" box proj 2>&1) || true
+  MUX_LATCH_AUTH=true \
+  "$HERE/libexec/mux-latch" --max-tries 1 box proj 2>&1) || true
 _got=$(cat "$T/argv" 2>/dev/null || true)
 [ -n "$_got" ] || fail "the stubbed et was never invoked, so the argv assertion
 below would prove nothing. latch may have refused before attempting.

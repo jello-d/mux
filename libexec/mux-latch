@@ -237,6 +237,8 @@ _hook_must_run "$STATUS" status
 _hook_must_run "$RESTORE" restore
 
 # Backoff, and every bound is overridable so a test does not have to sleep.
+# There is no cap on ATTEMPTS here and that is deliberate: see `MAX_TRIES`
+# above, which is a testing flag rather than one of these.
 BACKOFF=${MUX_LATCH_BACKOFF:-2}
 BACKOFF_MAX=${MUX_LATCH_BACKOFF_MAX:-60}
 BLOCKED_WAIT=${MUX_LATCH_BLOCKED_WAIT:-5}
@@ -252,11 +254,13 @@ BLOCKED_WAIT=${MUX_LATCH_BLOCKED_WAIT:-5}
 # was added for: that one only fires when an attempt RAN LONG, so a run of fast
 # failures still climbed. The two are complementary rather than overlapping.
 #
-# NOTE FOR ANYONE SETTING MAX_TRIES: it counts ATTEMPTS, so the same number now
-# covers much less wall-clock time than it did. The default is 0 (forever), so
-# nothing changes unless you set it.
-BACKOFF_RUNG=${MUX_LATCH_BACKOFF_RUNG:-5}
-MAX_TRIES=${MUX_LATCH_MAX_TRIES:-0}         # 0 = forever
+# A CONFIG KEY AND NOT JUST AN ENV VAR, unlike the bounds around it, because
+# this one is a POLICY rather than a mechanism: it says how hard this machine
+# should try to get an attachment back, which is a per-box answer you set once
+# and not something to type on every invocation. Same precedence as the five
+# seams (environment wins, then $MUX_DIR/config, then the default), through the
+# same helper, so there is one rule for "where does a latch setting come from".
+BACKOFF_RUNG=$(_seam "${MUX_LATCH_BACKOFF_RUNG:-}" latch-backoff-rung 5)
 # HOW MANY TIMES AN IDENTITY MISMATCH IS RETRIED before it is called
 # permanent. Four attempts on the normal backoff is a couple of minutes,
 # which covers a path that is being interfered with while still telling a
@@ -271,7 +275,27 @@ SLEEP=${MUX_LATCH_SLEEP:-sleep}
 _usage() {
   echo "usage: mux latch [HOST[:PORT]] [[PARTITION::]SESSION]"
   echo "  hold an attachment to a remote mux session open across drops"
+  echo "  --max-tries N   stop after N attempts (testing; default: never)"
 }
+
+# A TESTING AFFORDANCE, NOT A SETTING, and that distinction is the whole reason
+# it is a FLAG rather than an environment variable or a `latch-` config key.
+#
+# LATCH NEVER GIVES UP ON A RETRYABLE STATE (the user's call, 2026-10-03), and
+# that is the point of the thing: it holds an attachment across disruptions it
+# cannot resolve, so stopping by itself is the one behaviour it must not have.
+# `^C` is the escape hatch and it reaches latch during any wait, because no
+# transport is holding the terminal then. There was a `MUX_LATCH_MAX_TRIES`
+# here and it is gone: a knob implies a reason to set it, and on a real machine
+# there is none.
+#
+# THE SUITE STILL NEEDS A BOUND, for a reason this project has already paid
+# for: a test for a bound that stops working HANGS the runner rather than
+# failing it, and one hung for 151s before anybody noticed. So the cap survives
+# as something a test PASSES, where it cannot be mistaken for configuration.
+# The states that genuinely stop are unaffected: `ended`, `gone`, `refused`,
+# `denied`, and `untrusted` once its own bound is spent.
+MAX_TRIES=0
 
 # OPTIONS ARE OPTIONS. Without this, `mux latch --help` took `--help` as the
 # HOSTNAME: it tried to ssh there, wrote a lock called `--help.lock`, and
@@ -286,6 +310,22 @@ _usage() {
 while [ "$#" -gt 0 ]; do
   case $1 in
   -h|--help) _usage; exit 0 ;;
+  --max-tries)
+    # GUARDED, NOT `shift 2`: a bare `--max-tries` makes the shift a shell
+    # error that also exits 2, which is the right code for the wrong reason
+    # and one no mutation of a real guard could be told apart from.
+    [ "$#" -ge 2 ] || { echo "mux: latch: --max-tries needs a count" >&2
+      _usage >&2; exit 2; }
+    MAX_TRIES=$2
+    # VALIDATED, because an unparseable value would otherwise surface much
+    # later as a shell error inside the retry loop, exiting 2 from a place
+    # that says nothing about the argument that caused it.
+    case $MAX_TRIES in
+    ''|*[!0-9]*)
+      echo "mux: latch: --max-tries wants a number: $MAX_TRIES" >&2
+      exit 2 ;;
+    esac
+    shift ;;
   --) shift; break ;;
   -*) echo "mux: latch: unknown option: $1" >&2; _usage >&2; exit 2 ;;
   *)  break ;;

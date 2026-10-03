@@ -2464,19 +2464,40 @@ key in
 where the environment wins. Described under
 .BR LATCH .
 .BR MUX_LATCH_BACKOFF ,
-.BR MUX_LATCH_BACKOFF_MAX ,
-.B MUX_LATCH_BLOCKED_WAIT
+.B MUX_LATCH_BACKOFF_MAX
 and
-.B MUX_LATCH_MAX_TRIES
-bound the retry loop (0 tries means forever),
+.B MUX_LATCH_BLOCKED_WAIT
+shape the retry loop,
 .B MUX_LATCH_BACKOFF_RUNG
 is how many attempts are made at each delay before it doubles (default 5, so
 the ladder is 2 2 2 2 2 4 4 ... rather than 2 4 8 16 32 60: pure doubling
 reached the cap in six waits, which is sooner than a rebooting box comes back,
-so you waited a minute for a host that had been up for most of it). Note it
-counts ATTEMPTS, so a
-.B MUX_LATCH_MAX_TRIES
-you set covers less wall-clock time than it used to,
+so you waited a minute for a host that had been up for most of it). That one is
+also a
+.B latch\-backoff\-rung
+key in
+.IR $MUX_DIR/config ,
+because it is the one bound that is a policy rather than a mechanism: how hard
+this machine should try to get an attachment back is a per-box answer you set
+once.
+.IP
+LATCH NEVER GIVES UP ON A RETRYABLE STATE, deliberately: it exists to hold an
+attachment across disruptions it cannot resolve, so stopping by itself is the
+one behaviour it must not have, and
+.B ^C
+is the way out (it reaches latch during any wait, because no transport is
+holding the terminal then). The states that DO stop still stop:
+.BR ended ,
+.BR gone ,
+.BR refused ,
+.BR denied ,
+and
+.B untrusted
+once its own bound is spent. A
+.B \-\-max\-tries
+flag exists for the test suite, which needs a bound because a test for a bound
+that stops working hangs the runner rather than failing it; it is not a
+setting, which is why it is not an environment variable or a config key,
 .B MUX_LATCH_UNTRUSTED_TRIES
 bounds how many times an identity mismatch is retried before it is called
 permanent (default 4),
