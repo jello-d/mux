@@ -1,0 +1,92 @@
+#!/bin/sh
+# mux-landing - WHERE YOU WERE, so a `mux resume` after a reboot lands there.
+#
+#   mux landing           print the session last active in this partition
+#   mux landing --record  remember the one that is current now
+#
+# WHY IT EXISTS. The session set (mux-sessions_lib) is insertion-ordered, and
+# resume used to land on the first entry that came back, i.e. the OLDEST.
+# Creation order has nothing to do with where you were working. Found live: a
+# box rebooted, latch reattached, and the human came back on a session they had
+# not touched in days, so the next thing they typed went to the wrong agent.
+#
+# --record IS WHAT THE HOOK CALLS, from client-session-changed in
+# share/mux.tmux. Three properties it needs, none of them obvious:
+#
+#   SILENT. tmux run-shell displays a command's output in a view-mode buffer
+#   over the active pane, even with -b, freezing it until a key is pressed. So
+#   a recorder that prints anything would hang the pane on every switch.
+#
+#   IT ASKS, rather than being TOLD. The hook could pass '#{client_session}'
+#   as an argument (measured: tmux expands it in the hook string and it
+#   survives a session name containing a space). Asking is better for two
+#   reasons. A name never crosses a shell word, so a quote in it cannot break
+#   the call. And the value is read at RUN time rather than at FIRE time, which
+#   makes the backgrounded hook race-free: switch twice quickly and both jobs
+#   read the session you ended on, so whichever lands last is still right.
+#   Told the name, the first job would carry a stale one and could land last.
+#
+#   IT TRUSTS $TMUX FOR THE KEY, not a context command. In a hook's run-shell
+#   child $TMUX is set (measured; TMUX_PANE is not) and names the server we are
+#   actually in, where re-resolving a partition from that child is a guess that
+#   can answer `global` inside another partition's server. This project has
+#   shipped the wrong-socket bug three times (agent read/send, mux even,
+#   next-blocked) and every time the cause was one answer derived in two
+#   places.
+set -eu
+
+# Sibling libs in this script's own (colocated) libexec dir. paths first:
+# mux-sessions_lib calls mux_state_path, and a lib that needs another must say
+# so rather than relying on whoever sources first.
+_lib=$(dirname "$0")
+for _l in mux-paths_lib mux-sessions_lib; do
+  [ -r "$_lib/$_l" ] || {
+    echo "mux: $_lib/$_l missing (incomplete install)" >&2
+    exit 1; }
+  # shellcheck source=/dev/null
+  . "$_lib/$_l"
+done
+
+_rec=0
+while [ $# -gt 0 ]; do
+  case $1 in
+  --record) _rec=1 ;;
+  -h|--help)
+    echo "usage: mux landing [--record]"
+    exit 0 ;;
+  *)
+    echo "mux: unknown argument: $1" >&2
+    echo "usage: mux landing [--record]" >&2
+    exit 2 ;;
+  esac
+  shift
+done
+
+# THE SOCKET IS THE PARTITION. mux_ctx_socket is the identity function on the
+# partition name, so a socket's basename IS the key the session set and this
+# mark are filed under: one mapping, nothing to drift against.
+_sockpath=
+_key=
+if [ -n "${TMUX:-}" ]; then
+  _sockpath=${TMUX%%,*}                 # socket,serverpid,sessionid
+  _key=${_sockpath##*/}
+fi
+# Outside tmux there is no server to ask, so fall back to the ambient context
+# for the READ. The record path refuses instead (below): there is nothing to
+# record about a server we are not in.
+[ -n "$_key" ] || _key=${MUX_CTX_PARTITION:-global}
+
+if [ "$_rec" -eq 1 ]; then
+  [ -n "$_sockpath" ] || exit 0
+  # -S (the socket PATH $TMUX just handed us) rather than -L (a NAME resolved
+  # against TMUX_TMPDIR): the path is already exact, and resolving a name again
+  # is another chance to answer about a different server.
+  _s=$(tmux -S "$_sockpath" display-message -p '#{client_session}' \
+    2>/dev/null) || exit 0
+  mux_landing_set "$_s" "$_key"
+  exit 0
+fi
+
+_m=$(mux_landing_get "$_key")
+[ -n "$_m" ] || exit 0
+printf '%s\n' "$_m"
