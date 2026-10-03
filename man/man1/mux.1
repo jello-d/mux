@@ -1475,6 +1475,28 @@ the LAST line, which is right for a tool that warns before it fails and wrong
 for one that writes a report. mux does not learn ssh's wording to pick the
 useful lines out: it hands the whole thing over, bounded.
 .TP
+.B settling
+The far side ANSWERED and asked to be tried again: it has no server for the
+partition yet, so it has not been set up since it came up, and a pointer its
+own
+.B env\-ready
+declaration names has not arrived (see FILES). It refused to rebuild rather
+than baking that absence into every pane it would create, which nothing could
+repair afterwards because an environment is fixed at exec. Retried, and
+UNBOUNDED: each attempt is a new remote process with a new login shell, so it
+re-reads the environment rather than remembering the one it started with. Its
+own state rather than
+.BR probing ,
+because the two are opposite facts about the host: probing cannot reach it,
+this one was answered by it.
+.IP
+Over ET this reads as
+.B ended
+instead, because et 7.0.0 does not propagate the remote status, so a latch to a
+box that declares
+.B env\-ready
+wants the ssh transport.
+.TP
 .B unknown
 Cannot be determined. Never reported as usable and never as blocked; retried
 with more patience. On a real fleet this is common rather than exotic: an MTU
@@ -2447,6 +2469,14 @@ where the environment wins. Described under
 and
 .B MUX_LATCH_MAX_TRIES
 bound the retry loop (0 tries means forever),
+.B MUX_LATCH_BACKOFF_RUNG
+is how many attempts are made at each delay before it doubles (default 5, so
+the ladder is 2 2 2 2 2 4 4 ... rather than 2 4 8 16 32 60: pure doubling
+reached the cap in six waits, which is sooner than a rebooting box comes back,
+so you waited a minute for a host that had been up for most of it). Note it
+counts ATTEMPTS, so a
+.B MUX_LATCH_MAX_TRIES
+you set covers less wall-clock time than it used to,
 .B MUX_LATCH_UNTRUSTED_TRIES
 bounds how many times an identity mismatch is retried before it is called
 permanent (default 4),

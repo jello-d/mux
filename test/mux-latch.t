@@ -144,9 +144,11 @@ esac
 # Asserted through the REPORTED DELAY, because that is the observable: the
 # transport stub returns instantly, so PROGRESS is what decides whether an
 # attempt counted as having had a session.
-_run_drops() {   # <progress threshold> -> stderr of a 3-drop run
+_run_drops() {   # <progress> <max tries> <rung> -> stderr of a dropping run
   : >"$SCRIPT"
-  _i=0; while [ "$_i" -lt 6 ]; do _i=$((_i + 1))
+  # One scripted drop per attempt, with slack: the stub reads a line per
+  # attempt and running out would end the run for the wrong reason.
+  _i=0; while [ "$_i" -lt $(( $2 + 4 )) ]; do _i=$((_i + 1))
     printf '%s\n' "$_drop" >>"$SCRIPT"
   done
   env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
@@ -155,7 +157,8 @@ _run_drops() {   # <progress threshold> -> stderr of a 3-drop run
     MUX_LATCH_TRANSPORT="$T/bin/transport %h %s" \
     MUX_LATCH_AUTH="$T/bin/auth" MUX_LATCH_PROBE="$T/bin/probe" \
     MUX_LATCH_SLEEP="$T/bin/nosleep" MUX_LATCH_BACKOFF=1 \
-    MUX_LATCH_PROGRESS="$1" MUX_LATCH_MAX_TRIES=3 \
+    MUX_LATCH_BACKOFF_RUNG="$3" \
+    MUX_LATCH_PROGRESS="$1" MUX_LATCH_MAX_TRIES="$2" \
     "$HERE/libexec/mux-latch" box proj >/dev/null 2>"$T/bo" || true
   cat "$T/bo"
 }
@@ -163,7 +166,7 @@ _run_drops() {   # <progress threshold> -> stderr of a 3-drop run
 # With a threshold above any attempt, nothing counts as progress and the delay
 # GROWS. This is the pre-existing behaviour, asserted so the reset cannot be
 # mistaken for "the backoff stopped working".
-_o=$(_run_drops 9999)
+_o=$(_run_drops 9999 3 1)
 case $_o in
 *'retrying in 2s'*) ;;
 *) fail "with no attempt counting as progress the backoff must still double;
@@ -173,7 +176,7 @@ esac
 
 # With a threshold of 0 every attempt counts, so the delay must RETURN to
 # BACKOFF each time and never reach 2s.
-_o=$(_run_drops 0)
+_o=$(_run_drops 0 3 1)
 case $_o in
 *'retrying in 2s'*) fail "an attempt that counted as progress did not reset the
 backoff: the delay kept growing, which is the ratchet this fixes:
@@ -182,6 +185,36 @@ esac
 case $_o in
 *'retrying in 1s'*) ;;
 *) fail "no retry was reported at all, so this asserts nothing:
+$_o" ;;
+esac
+
+# --- the ladder HOLDS each rung before doubling ---------------------------
+# Pure doubling reached the 60s cap in six waits and 62 seconds, which is
+# faster than the thing it waits for: a rebooting box answers again at about
+# 90s, by which point the delay was already 60, so you waited a minute for a
+# host that had been up for most of it. Holding each rung keeps the early
+# retries fast, where the short blip lives.
+#
+# BOTH DIRECTIONS, because one of them alone is satisfied by a ladder that is
+# simply broken: "it does not double by attempt 4" also describes a delay that
+# never grows at all, which is the other failure and is worse.
+_o=$(_run_drops 9999 4 5)
+case $_o in
+*'retrying in 2s'*) fail "the delay doubled within 4 attempts at a rung of 5,
+so the rung is not being held and the ladder is still the old one:
+$_o" ;;
+esac
+case $_o in
+*'retrying in 1s'*) ;;
+*) fail "no retry at the opening delay was reported, so the case above
+asserts nothing: $_o" ;;
+esac
+
+_o=$(_run_drops 9999 6 5)
+case $_o in
+*'retrying in 2s'*) ;;
+*) fail "after a full rung of 5 the delay must still double; never reaching
+2s means the growth is gone and a long outage would hammer for ever:
 $_o" ;;
 esac
 
@@ -1355,5 +1388,65 @@ SC1003 bug 0.45 shipped: '\\\\' inside single quotes is two characters" ;;
 else
   printf 'skip %s: no script(1) for a pty\n' "$_name" >&2
 fi
+
+# --- settling: the far side ANSWERED and asked to be retried --------------
+# mux exits 4 when it has no server for a partition yet AND a pointer its own
+# `env-ready` declaration names has not arrived, rather than rebuilding every
+# session into an environment that is still starting. A pane's environment is
+# fixed at exec, so that absence could never be repaired afterwards.
+#
+# THE SHIPPED CLASSIFIER IS THE ONE UNDER TEST HERE: no overlay hook is in
+# place at this point in the file, so exit 4 goes through share/latch/
+# ssh-classify for real.
+: >"$SCRIPT"
+# The SHAPE of mux's refusal, which is what makes the quoting assertion mean
+# something: several lines, with the REMEDY last and the reason above it.
+_nr='4 mux: this host has no server yet, and the session environment has not'
+_nr="$_nr arrived: WAYLAND_DISPLAY\nmux: rebuilding now would bake that"
+_nr="$_nr absence into every pane\nmux:   mux resume --no-wait-env"
+_i=0; while [ "$_i" -lt 3 ]; do _i=$((_i + 1))
+  printf '%s\n' "$_nr" >>"$SCRIPT"
+done
+: >"$STATES"; : >"$TRIES"; : >"$AUTHLOG"
+env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
+  T_AUTH="$T_AUTH" T_PROBE="$T_PROBE" STATES="$STATES" TRIES="$TRIES" \
+  AUTHLOG="$AUTHLOG" SCRIPT="$SCRIPT" \
+  MUX_LATCH_TRANSPORT="$T/bin/transport %h %s" \
+  MUX_LATCH_AUTH="$T/bin/auth" MUX_LATCH_PROBE="$T/bin/probe" \
+  MUX_LATCH_STATUS="$T/bin/status" MUX_LATCH_SLEEP="$T/bin/nosleep" \
+  MUX_LATCH_BACKOFF=1 MUX_LATCH_MAX_TRIES=3 \
+  "$HERE/libexec/mux-latch" box proj >/dev/null 2>"$T/so" || true
+
+case "$(seq_of)" in
+*settling*) ;;
+*) fail "exit 4 must classify as its own state: probing would send a human to
+look at a network that is fine, and refused would stop. [$(seq_of)]" ;;
+esac
+
+# THE LOAD-BEARING ONE. If exit 4 fell through to `refused` latch would exit
+# after the FIRST attempt, and the host's whole design is that the retry is
+# the mechanism: each attempt is a new remote process that re-reads the
+# environment.
+# ATTEMPTS, via the `attaching` events, NOT `n_tries`: the lazy attach-only
+# negotiation runs through the transport too, so a 3-attempt run shows 5
+# invocations and counting those reads as a bug in the retry.
+[ "$(n_state attaching)" = 3 ] \
+  || fail "a settling host must be RETRIED, got $(n_state attaching)
+attempt(s) where 3 were scripted: exit 4 is the far side asking to be tried
+again, and classifying it as terminal would stop after the first"
+
+# THE REPORT IS QUOTED, NOT ITS LAST LINE. `_errline` takes the last non-empty
+# line, which is right for a tool that warns before it fails and wrong for one
+# that writes a REPORT: mux's refusal ends with the override command, so the
+# last line is the remedy and the names it is waiting for sit above it.
+grep -q "session environment has not" "$T/so" \
+  || fail "the far side's REASON was not quoted, so the human sees the remedy
+without the names it is waiting for: $(cat "$T/so")"
+
+# ... AND ONCE, not per poll. This polls on the ladder, so repeating the whole
+# report every couple of seconds trains the eye to skip it.
+_nq=$(grep -c "session environment has not" "$T/so" || true)
+[ "$_nq" = 1 ] || fail "the report was quoted $_nq times across 3 attempts;
+it should be quoted once and then counted down quietly"
 
 pass
