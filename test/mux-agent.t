@@ -30,6 +30,33 @@ agent_rec "$XDG_RUNTIME_DIR/mux/agent-state/global/p1" blocked %1 100 alpha x
 agent_rec "$XDG_RUNTIME_DIR/mux/agent-state/global/p2" working %2 200 bravo x
 agent_rec "$XDG_RUNTIME_DIR/mux/agent-state/work/p1"   idle    %3 300 wsess x
 
+# THE LIVE WINDOW TOPOLOGY, one row per pane: session, window id, window
+# name, pane, partition. The resolver reads membership from HERE (via the
+# stub) rather than from the records above, which is the R9 fix: a record's
+# window field is an INDEX, and an index is a recyclable slot.
+#
+# THE PARTITION COLUMN IS LOAD-BEARING, not bookkeeping. tmux's `list-panes
+# -a` is per SERVER, so a stub answering every socket the same thing would
+# have put `global`'s pane %7 into `work`'s listing and quietly contradicted
+# the stale-pane fixture below, which needs a pane that is in no window.
+PANESFILE=$T/panes; export PANESFILE
+printf '%s\t%s\t%s\t%s\t%s\n' \
+  alpha @1 main   %1 global \
+  bravo @2 main   %2 global \
+  odd   @7 odd    %7 global \
+  ahead @8 ahead  %8 global \
+  fresh @5 fresh  %5 global \
+  alpha @9 worker %9 global \
+  wsess @3 main   %3 work >"$PANESFILE"
+
+# A RECORD WHOSE PANE IS GONE, which is a separate fixture now rather than an
+# accident of the stub being thin. It used to be `wsess`, which the old stub
+# simply did not list; the stub answers the live topology honestly now, so the
+# case needs a pane that genuinely is not there. The two facts it proves are
+# different: a live pane with no class is `human` (the default), a pane that
+# does not exist is `null` (unknowable).
+agent_rec "$XDG_RUNTIME_DIR/mux/agent-state/work/p7" idle %7 300 dead x
+
 # The same one-question tmux as mux-agent-summary.t: does partition X have a
 # client attached? $WATCHED is the set that does.
 cat >"$T/bin/tmux" <<'EOF'
@@ -55,13 +82,35 @@ case "$*" in
 *capture-pane*)
   printf 'CAPTURED %s\n' "$*" >>"$CAPLOG"
   printf 'line one\nhe said "hi" \\ there\n' ;;
+# TWO list-panes QUESTIONS NOW, SO TWO ARMS, which is this stub's own rule.
+# `-a` is SERVER-WIDE (peers asks the class of every pane); `-s` is
+# SESSION-SCOPED, and that is how the window resolver gets membership from
+# the live server instead of from a record's window field, which is a
+# recyclable INDEX. The -s arm comes first, since both match *list-panes*.
+*list-panes*-s*)
+  [ -z "${NOSERVER:-}" ] || exit 1
+  # `_j=$*` FIRST. POSIX applies pattern removal on `$*` to EACH parameter,
+  # so `${*##pat}` answers the whole argv under macOS /bin/sh (bash 3.2) and
+  # the stripped first word under dash. test/lint.t refuses the shape.
+  _j=$*; _ss=${_j##*-t =}; _ss=${_ss%% *}
+  awk -F'\t' -v s="$_ss" -v k="$_sock" \
+    '$1 == s && $5 == k { print $2 "\t" $3 "\t" $4 }' \
+    "${PANESFILE:-/dev/null}" ;;
 *list-panes*)
-  # One line per pane: id TAB class. $PANECLASS is "id=class,..." and
+  # One line per pane: id TAB class TAB window-id TAB window-name.
   # $NOSERVER makes the query FAIL, which is a different answer from an
   # empty one and the whole reason peers reports null rather than a
   # default.
+  #
+  # DERIVED FROM THE SAME FIXTURE as the -s arm, so the two answers cannot
+  # disagree about the topology. This file has already paid once for two
+  # definitions of one fixture being two tools.
   [ -z "${NOSERVER:-}" ] || exit 1
-  printf '%%1\t%s\n%%2\t%s\n' "${CLASS1:-}" "${CLASS2:-}" ;;
+  awk -F'\t' -v c1="${CLASS1:-}" -v c2="${CLASS2:-}" -v k="$_sock" \
+    '$5 != k { next }
+     { c = ""; if ($4 == "%1") c = c1; if ($4 == "%2") c = c2;
+       print $4 "\t" c "\t" $2 "\t" $3 }' \
+    "${PANESFILE:-/dev/null}" ;;
 *window_name*)   printf '%s\n' "${WINNAME:-main}" ;;
 # BEFORE the `@mux-control` arm, and that ordering is the point: a
 # `set-option ... @mux-control agent` MENTIONS the option name, so the query
@@ -83,9 +132,18 @@ case "$*" in
 # new-window answers with the index it made, because `open` asks the CREATE
 # for it (`-P -F`) rather than querying afterwards: a follow-up query would
 # be about "the current window", which `-d` has just declined to change.
+# TWO FIELDS, because the create is asked for both (`-P -F '#{window_index}
+# #{window_id}'`): an index is a recyclable slot, so a caller handed only one
+# has nothing stable to pass back to `--window`.
 *new-window*)
   printf 'TMUX %s\n' "$*" >>"$CAPLOG"
-  printf '%s\n' "${NEWIDX:-3}" ;;
+  # `NEWWID=none` answers the INDEX ALONE, which is the one-field answer the
+  # create refuses: there is no fallback target, so accepting it would write
+  # the class against an empty one.
+  case ${NEWWID:-@3} in
+  none) printf '%s\n' "${NEWIDX:-3}" ;;
+  *)    printf '%s %s\n' "${NEWIDX:-3}" "${NEWWID:-@3}" ;;
+  esac ;;
 esac
 exit 0
 EOF
@@ -103,7 +161,8 @@ run() {   # <args...> -> stdout in $OUT, exit in $RC
     WINNAME="${WINNAME:-main}" MUX_LOG="$T/log" \
     CLASS1="${CLASS1:-}" CLASS2="${CLASS2:-}" \
     NOSERVER="${NOSERVER:-}" NOSESSION="${NOSESSION:-}" ATTN="${ATTN:-}" \
-    NEWIDX="${NEWIDX:-3}" \
+    NEWIDX="${NEWIDX:-3}" PANESFILE="${PANESFILE:-/dev/null}" \
+    NEWWID="${NEWWID:-@3}" \
     MUX_SEND_POLICY_FILE="$T/etc/send-policy" \
     "$HERE/bin/mux" agent "$@" 2>"$T/err") || RC=$?
 }
@@ -248,7 +307,7 @@ eq peers-root \
 # would make a leaked epoch and a genuine 55-year age indistinguishable. This
 # one was written just now, so an age is single digits and an epoch is 1.7
 # billion: no threshold to tune, and the two cannot be confused.
-agent_rec "$XDG_RUNTIME_DIR/mux/agent-state/global/p9" idle %9 \
+agent_rec "$XDG_RUNTIME_DIR/mux/agent-state/global/p9" idle %5 \
   "$(date +%s)" fresh x
 printf 'fresh	/srv/fresh
 ' >>"$MUX_STATE/sessions.global"
@@ -295,8 +354,8 @@ eq peers-headless-state \
   blocked
 
 # A PANE THAT IS GONE but whose record is not: the class is unknowable, which
-# is null rather than the default. `wsess` records pane %3, which the stub
-# does not list.
+# is null rather than the default. `dead` records pane %7, which is in no
+# window of the live listing.
 CLASS2=agent run peers --partition work; unset CLASS2
 # STATUS BEFORE PAYLOAD, at the FIRST use of the flag. This is the rule the
 # contract gives a consumer, and it is what makes a failure legible: a mutation
@@ -307,8 +366,13 @@ CLASS2=agent run peers --partition work; unset CLASS2
 # runs first; the full corpus said so both times.
 eq peers-part-status "$(jq 'd["status"]')" ok
 eq peers-stale-pane \
-  "$(jq '[p["control"] for p in d["peers"] if p["session"]=="wsess"][0]')" \
+  "$(jq '[p["control"] for p in d["peers"] if p["session"]=="dead"][0]')" \
   None
+# AND THE CONTROL BESIDE IT, or the case passes for a fixture that cannot
+# fail: a live pane in the same partition must still report its class.
+eq peers-live-pane-not-null \
+  "$(jq '[p["control"] for p in d["peers"] if p["session"]=="wsess"][0]')" \
+  human
 
 # --- peers is scoped to ONE partition, and --all widens it ----------------
 run peers
@@ -322,7 +386,7 @@ run peers --partition work
 # Traceback" rather than on anything named. The full corpus reported it as a
 # record dying for the wrong reason, which is the driver doing its job.
 eq peers-other-status "$(jq 'd["status"]')" ok
-eq peers-other-n "$(jq 'len(d["peers"])')" 1
+eq peers-other-n "$(jq 'len(d["peers"])')" 2
 eq peers-other "$(jq 'set(p["partition"] for p in d["peers"])')" "{'work'}"
 run peers --all
 eq peers-all "$(jq 'sorted(set(p["partition"] for p in d["peers"]))')" \
@@ -716,6 +780,10 @@ run open alpha --name build-1 --dir "$T" --cmd 'make watch' \
 [ "$RC" = 0 ] || fail "open failed: rc=$RC $(cat "$T/err") $OUT"
 eq "open-status" "$(jq 'd["status"]')" ok
 eq "open-window" "$(jq 'd["window"]')" 3
+# AND THE STABLE HANDLE. The index is for display; this is what `--window`
+# takes, and without it a caller would have to go back through `peers` to
+# address the window it had just created.
+eq "open-window-id" "$(jq 'd["window_id"]')" @3
 eq "open-session" "$(jq 'd["session"]')" alpha
 eq "open-control" "$(jq 'd["control"]')" agent
 eq "open-attention" "$(jq 'd["attention"]')" agent
@@ -736,13 +804,37 @@ case "$(cat "$CAPLOG")" in
 esac
 # And both classes are declared on the window it just made, not on whatever
 # pane happened to be current.
+#
+# BY ID, NOT BY INDEX, which is the one thing that can go wrong between the
+# create and this write: an index renumbers (`renumber-windows`, or a
+# concurrent kill), and the declaration then lands on somebody else's pane.
+# Measured that `set-option -p -t @N` resolves that window's active pane and
+# leaves the neighbouring window untouched.
 case "$(cat "$CAPLOG")" in
-*'set-option -p -t =alpha:3 @mux-control agent'*) ;;
-*) fail "the control class was not set on the new window: $(cat "$CAPLOG")" ;;
+*'set-option -p -t @3 @mux-control agent'*) ;;
+*) fail "the control class was not set on the new window BY ID:
+$(cat "$CAPLOG")" ;;
 esac
 case "$(cat "$CAPLOG")" in
-*'set-option -p -t =alpha:3 @mux-attention agent'*) ;;
+*'set-option -p -t @3 @mux-attention agent'*) ;;
 *) fail "attention was not set on the new window: $(cat "$CAPLOG")" ;;
+esac
+
+# A ONE-FIELD ANSWER IS REFUSED. The create asks tmux for the index AND the
+# id, so a server answering one is incoherent rather than old, and there is
+# deliberately no fallback to the index: that fallback could not be reached
+# by any live tmux, so it would be an unkillable guard, and this package's
+# rule for those is to delete the code rather than test harder.
+: >"$CAPLOG"
+NEWWID=none run open alpha --name w; unset NEWWID
+[ "$RC" = 2 ] || fail "a create that named no window id must refuse,
+got rc=$RC: $OUT"
+eq "open-halfanswer" "$(jq '"did not say which" in d["message"]')" True
+# AND IT DECLARED NOTHING, which is the half that matters: a class written
+# against an empty target is the plausible-wrong-answer shape.
+case "$(cat "$CAPLOG")" in
+*set-option*) fail "it refused the create and set a class anyway:
+$(cat "$CAPLOG")" ;;
 esac
 
 # IT NEVER CREATES A SESSION, which is a different job (`mux go`). A missing
@@ -817,6 +909,12 @@ rm -f "$XDG_RUNTIME_DIR/mux/agent-state/global/p9"
 # tightening only ever REMOVES this side's permission and ADDS the human's
 # sight of the pane, while relaxing GRANTS, and granting is the laundering
 # move the send gate exists to refuse.
+#
+# THE BARE FORM IS CORRECT HERE because the section above removed the second
+# window, so `alpha` holds exactly one agent. R9's refusal and the `--window`
+# form are asserted at the end of this file, against a session that holds
+# two, which is a precondition that section builds for itself rather than
+# inheriting from here.
 : >"$CAPLOG"
 ATTN=agent run class alpha --attention human; unset ATTN
 [ "$RC" = 0 ] || fail "escalating to the human was refused: rc=$RC $OUT"
@@ -880,6 +978,7 @@ else
   t_pty "$T/pty.log" "env -u TMUX -u MUX_SHARE MUX_DIR='$MUX_DIR' \
 MUX_CACHE='$MUX_CACHE' XDG_RUNTIME_DIR='$XDG_RUNTIME_DIR' \
 PATH='$T/bin:$PATH' CAPLOG='$CAPLOG' ATTN=human MUX_LOG='$T/log' \
+PANESFILE='$PANESFILE' \
 '$HERE/bin/mux' agent class alpha --attention agent --yes" >/dev/null 2>&1
   case "$(cat "$CAPLOG")" in
   *'@mux-attention agent'*) ;;
@@ -898,5 +997,141 @@ run class nosuch --attention human
 run class wsess --partition work --attention human
 [ "$RC" = 1 ] || fail "a cross-partition class must exit 1, got $RC: $OUT"
 eq "class-cross" "$(jq 'd["reason"]')" cross-partition
+
+
+# --- R9: WHICH WINDOW, AND WHY AN INDEX IS NOT AN ANSWER -------------------
+# `alpha` holds two agent windows by now: @1 `main` (pane %1, blocked) and @9
+# `worker` (pane %9, idle). That is the shape a supervisor actually runs in,
+# and every assertion in this section is about mux refusing to guess inside
+# it rather than answering a different question confidently.
+
+# THE BARE FORM REFUSES. It used to take the session's WORST agent, so
+# `class alpha --attention human` escalated whichever worker happened to be
+# worst, and `read alpha` captured it. Both succeed at the wrong thing, which
+# is this codebase's signature failure, so the answer is a refusal.
+# THE PRECONDITION IS BUILT HERE, not inherited: the class section above
+# deliberately removes this record, and a fixture that depends on what three
+# sections up happened to leave behind is one that breaks for reasons that
+# have nothing to do with it.
+agent_rec "$XDG_RUNTIME_DIR/mux/agent-state/global/p9" idle %9 400 alpha x
+python3 - "$XDG_RUNTIME_DIR/mux/agent-state/global/p9" <<'PY'
+import sys
+# agent_rec writes window 0, and this pane is alpha's SECOND window. The
+# field has to be set because `peers` still enumerates windows from the
+# RECORDS while the resolver reads them from live tmux, so a fixture that
+# left it at 0 would make the two disagree about one session. That
+# disagreement is also the argument for `window_id`: a record's index names
+# a SLOT, and an id does not.
+p = sys.argv[1]
+f = open(p).read().split()
+f[1] = "7"
+open(p, "w").write(" ".join(f) + "\n")
+PY
+_read alpha
+[ "$RC" = 1 ] || fail "the bare form must refuse with two agent windows,
+got rc=$RC: $OUT"
+eq r9-bare-status "$(jq 'd["status"]')" refused
+eq r9-bare-count "$(jq '"2 agent windows" in d["message"]')" True
+# AND IT CARRIES WHAT RESOLVES IT. A refusal naming the candidate ids is
+# recoverable in one step; one that merely says "ambiguous" sends the caller
+# back to `peers` to work out what mux already knew.
+eq r9-bare-lists-ids "$(jq 'd["message"].count("@") >= 2')" True
+eq r9-bare-names-flag "$(jq '"--window" in d["message"]')" True
+
+# A NAME RESOLVES, and so does the id, to the SAME pane. The name is the
+# convenience and the id is the handle; if they disagreed, one of them would
+# be a second rule for the same question.
+_read alpha --window worker
+[ "$RC" = 0 ] || fail "--window by name was refused: $OUT"
+eq r9-name-pane "$(jq 'd["pane"]')" %9
+eq r9-name-wid "$(jq 'd["window"]')" @9
+_read alpha --window @9
+[ "$RC" = 0 ] || fail "--window by id was refused: $OUT"
+eq r9-id-pane "$(jq 'd["pane"]')" %9
+_read alpha --window main
+eq r9-other-pane "$(jq 'd["pane"]')" %1
+
+# AN UNKNOWN NAME REFUSES, which is the whole reason mux matches names itself
+# instead of handing them to tmux: tmux's own name resolution FAILS OPEN.
+# Measured 2026-10-04, `-t sess:nosuchname` resolves to a DIFFERENT window and
+# exits 0, so a typo would read somebody else's screen and report success.
+_read alpha --window nosuchwindow
+[ "$RC" = 1 ] || fail "an unknown window NAME must refuse, got rc=$RC: $OUT"
+eq r9-badname-status "$(jq 'd["status"]')" refused
+eq r9-badname-quotes "$(jq '"nosuchwindow" in d["message"]')" True
+# AND IT DID NOT CAPTURE ANYTHING, asserted separately because the refusal
+# message and the absence of an answer are different bugs: a verb that
+# refuses and answers anyway has told the caller two things.
+eq r9-badname-no-text "$(jq '"text" not in d')" True
+
+# AN UNKNOWN ID REFUSES TOO, and the message says the thing that makes an id
+# trustworthy: it is never reused, so a stale one names NOTHING rather than
+# whatever took the slot.
+_read alpha --window @99
+[ "$RC" = 1 ] || fail "an unknown window ID must refuse, got rc=$RC: $OUT"
+eq r9-badid-status "$(jq 'd["status"]')" refused
+
+# AN ID FROM ANOTHER SESSION REFUSES. A window id is server-global, so this
+# is the one way an id can be precise and still wrong, and it is the case a
+# caller reaches by pasting from a `peers --all`. @2 is bravo's.
+_read alpha --window @2
+[ "$RC" = 1 ] || fail "a foreign window id must refuse, got rc=$RC: $OUT"
+eq r9-foreign-id "$(jq 'd["status"]')" refused
+# The control: that same id DOES work for the session that owns it, so the
+# refusal above is about membership and not about the id being unreadable.
+_read bravo --window @2
+[ "$RC" = 0 ] || fail "the owning session could not use its own id: $OUT"
+eq r9-owner-id-pane "$(jq 'd["pane"]')" %2
+
+# THE SEND GATE JUDGES THE PANE IT WILL TYPE INTO, not the session's worst.
+# Those differ exactly when it matters: `main` is blocked and `worker` is
+# idle, so a session-wide verdict would either lock the idle worker out or,
+# worse, let a charge through to the blocked one with no acknowledgement.
+pol 'send-blocked control:agent'
+: >"$CAPLOG"
+CLASS=agent run send alpha --window worker 'queued'; unset CLASS
+[ "$RC" = 0 ] || fail "an idle worker was refused because a SIBLING window is
+blocked, which is the session-wide verdict leaking into a per-window ask:
+rc=$RC $OUT"
+: >"$CAPLOG"
+CLASS=agent run send alpha --window main 'queued'; unset CLASS
+[ "$RC" = 1 ] || fail "a blocked pane accepted a charge with no
+acknowledgement, got rc=$RC: $OUT"
+eq r9-send-blocked "$(jq 'd["reason"]')" blocked
+case "$(cat "$CAPLOG")" in
+*send-keys*) fail "it refused and typed anyway: $(cat "$CAPLOG")" ;;
+esac
+
+# `peers` CARRIES BOTH, which is the answer side: a caller that cannot read
+# the id cannot use the interface above.
+run peers
+eq r9-peers-wid \
+  "$(jq 'sorted(p["window_id"] for p in d["peers"] \
+if p["session"]=="alpha")')" "['@1', '@9']"
+eq r9-peers-wname \
+  "$(jq 'sorted(p["window_name"] for p in d["peers"] \
+if p["session"]=="alpha")')" "['main', 'worker']"
+
+# --- AN AMBIGUOUS NAME IS REFUSED, NOT RESOLVED ---------------------------
+# ONLY ACT ON UNIQUENESS, rather than enforcing it: mux does not rename a
+# window to keep names unique, because a caller that chose the name has to be
+# able to re-derive it, and a suffix mux invented is not something it can
+# know. So a duplicate is legal and merely unaddressable BY NAME.
+printf 'alpha\t@11\tworker\t%%11\tglobal\n' >>"$PANESFILE"
+agent_rec "$XDG_RUNTIME_DIR/mux/agent-state/global/pb" idle %11 400 alpha x
+_read alpha --window worker
+[ "$RC" = 1 ] || fail "a name matching two windows must refuse rather than
+pick one, got rc=$RC: $OUT"
+eq r9-ambig-status "$(jq 'd["status"]')" refused
+eq r9-ambig-says-two "$(jq '"2 windows" in d["message"]')" True
+# AND THE IDS ARE IN IT, which is what keeps an ambiguous name RECOVERABLE
+# rather than a dead end: this is the one refusal whose remedy the caller
+# cannot work out for itself.
+eq r9-ambig-lists "$(jq 'all(w in d["message"] for w in ("@9", "@11"))')" True
+# ... and the id still works, which is the recovery actually happening.
+_read alpha --window @11
+[ "$RC" = 0 ] || fail "the id did not resolve an ambiguously named window,
+so the refusal above is a dead end: $OUT"
+eq r9-ambig-recover "$(jq 'd["pane"]')" %11
 
 pass

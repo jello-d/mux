@@ -41,14 +41,26 @@ has one window per worker, and each answers for itself:
 
 ```json
 {"status":"ok","peers":[
-  {"partition":"global","session":"api","window":0,"state":"working",
-   "age":42,"control":"agent","root":"/home/you/src/api"}
+  {"partition":"global","session":"api","window":0,"window_id":"@4",
+   "window_name":"build-1","state":"working","age":42,"control":"agent",
+   "root":"/home/you/src/api"}
 ]}
 ```
 
-- `window` is the tmux window index. Pass it back to nothing: it is here so
-  you can tell one worker from another, and every verb that acts resolves its
-  own target rather than trusting an id you cached.
+- `window_id` IS THE HANDLE. Pass it to `--window` on `read`, `send` and
+  `class`. A tmux window id is never reused, so a stale one names nothing
+  rather than whatever took its place.
+- `window` is the tmux window INDEX, and it is for DISPLAY ONLY. An index is
+  a recyclable slot: kill the window at index 2 and the next one created
+  takes it, so acting on a remembered index types into a different worker and
+  reports success. Never pass it to `--window`.
+- `window_name` is what the window is called, and `--window` takes it too.
+  It is the convenient form and the id is the precise one: mux acts on a name
+  only while it is UNIQUE in that session, and refuses with the candidate ids
+  listed when it is not. Nothing stops two windows sharing a name, so if you
+  chose the name and need certainty, use the id.
+- `window_id` and `window_name` are `null` when mux could not reach that
+  server, for the same reason `control` is: unknowable, never defaulted.
 - `state` is `blocked`, `working` or `idle`. **`blocked` means it is waiting
   on a human** - a permission prompt, a question - not that it is stuck.
 - `age` is SECONDS in that state, already computed. Never treat it as a
@@ -68,16 +80,22 @@ reach into one you were not pointed at.
 ## Reading what an agent is doing
 
 ```sh
-mux agent read api            # what is on its screen now
-mux agent read api -n 200     # plus 200 lines of scrollback
+mux agent read api                     # what is on its screen now
+mux agent read api -n 200              # plus 200 lines of scrollback
+mux agent read api --window @7 -n 50   # one worker in a supervised session
 ```
 
-Returns `{"status":"ok","pane":"%4","text":"..."}`. The visible pane by
-default, because an agent's scrollback can be enormous.
+Returns `{"status":"ok","window":"@7","pane":"%4","text":"..."}`. The visible
+pane by default, because an agent's scrollback can be enormous.
 
 Do not remember the `pane` id to use later. mux resolves the right pane each
 time it acts; a pane can die and be replaced, and a stale id points somewhere
-real and wrong.
+real and wrong. A `window_id` is different and IS worth keeping: tmux never
+reuses one, so it either names the window you meant or names nothing.
+
+WITH SEVERAL AGENT WINDOWS, `--window` IS REQUIRED. The bare form refuses
+rather than reading whichever worker ranks worst, and the refusal lists the
+ids to choose from.
 
 ## Waiting for an agent
 
@@ -113,6 +131,17 @@ use for anything long:
 printf '%s' "$charge" | mux agent send api -
 ```
 
+`--window` picks one worker, by id or by name, and is required once the
+session holds more than one:
+
+```sh
+mux agent send api --window @7 'rerun just the failing case'
+```
+
+THE GATE JUDGES THE PANE YOU NAMED, not the session. One worker sitting at a
+permission prompt does not make its idle siblings unwritable, and an idle
+session does not let a charge through to a `blocked` worker.
+
 Sending to a `working` agent is fine: the text queues and it picks it up when
 its turn ends. That is the normal way to give an agent its next instruction.
 
@@ -128,8 +157,12 @@ It answers with the window it made:
 
 ```json
 {"status":"ok","partition":"global","session":"api","window":3,
- "control":"agent","attention":"agent"}
+ "window_id":"@7","control":"agent","attention":"agent"}
 ```
+
+- KEEP `window_id`. It is the handle for every later call about this worker,
+  and it is why the create answers it: an index alone would send you back
+  through `peers` to learn what the create already knew.
 
 - It never creates a session. That is a different job, and if `api` is not
   there you get `no-such-name` rather than a surprise session.
@@ -151,7 +184,7 @@ It answers with the window it made:
 ## Escalating a worker to the human
 
 ```sh
-mux agent class api --window 3 --attention human
+mux agent class api --window @7 --attention human
 ```
 
 Changes a LIVE pane's class, which is how an escalation works: you could not
@@ -168,7 +201,11 @@ without restarting the agent.
 - The two markers are judged separately, which is the point of their being
   two: escalate `--attention` and keep `--control agent`, and the human sees
   the worker while you can still type into it.
-- `--window` picks one worker; without it the session's worst agent is used.
+- `--window` NAMES THE WORKER, by `window_id` (`@7`) or by window name. It
+  is not optional where there is more than one: with several agent windows in
+  the session the bare form REFUSES, naming the candidate ids, rather than
+  acting on the session's worst agent. That refusal is deliberate. Guessing
+  would escalate somebody else's worker and report success.
 - Every change is logged, including yours.
 
 ## The rule that matters

@@ -30,7 +30,9 @@ printf '%s\n' "$*" >>"$LOG"
 case "$*" in
 *has-session*) [ -z "${NOSESSION:-}" ] || exit 1 ;;
 *session_name*) printf '%s\n' "${CURSESS:-here}" ;;
-*new-window*)  printf '%s\n' "${NEWIDX:-4}" ;;
+# THE INDEX AND THE ID, which is what the create asks for: an index is a
+# recyclable slot, so the class declaration targets the id instead.
+*new-window*)  printf '%s %s\n' "${NEWIDX:-4}" "${NEWWID:-@4}" ;;
 esac
 exit 0
 EOF
@@ -46,6 +48,7 @@ win() {
   OUT=$(env -u MUX_SHARE MUX_DIR="$T/conf" MUX_CACHE="$T/cache" \
     TMUX="${FAKE_TMUX-$T/global,1,0}" LOG="$LOG" \
     NOSESSION="${NOSESSION:-}" NEWIDX="${NEWIDX:-4}" \
+    NEWWID="${NEWWID:-@4}" \
     CURSESS="${CURSESS:-here}" \
     "$HERE/bin/mux" window "$@" 2>&1) || RC=$?
 }

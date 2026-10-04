@@ -1664,8 +1664,8 @@ m peers-n
 = agent-read-pane-not-resolved
 f libexec/mux-agent
 t mux-agent
--   _pane=$(mux_agent_pane "$_rd" "$_rsess")
-+   _pane=$(printf %%1)
+-   _pane=$_ws_pane
++   _pane=%1
 m read-pane
 
 = agent-read-defaults-to-scrollback
@@ -3017,9 +3017,9 @@ t mux-agent
 # sets it on whatever window the session happens to have current, which with
 # `-d` is NOT the one just created, so the worker stays `human` (refused to
 # every sender) while some other pane silently becomes agent-controlled.
--     _mwt set-option -p -t "=$_mwsess:$_mwidx" \
+-     _mwt set-option -p -t "$_mwid" \
 +     _mwt set-option -p -t "=$_mwsess" \
-m the control class was not set on the new window
+m the control class was not set on the new window BY ID
 
 = open-crosses-a-partition-boundary
 f libexec/mux-agent
@@ -3377,3 +3377,46 @@ t mux-strip
 - trap "rm -f '$tmpf' '$recs'" EXIT INT HUP TERM
 + trap "rm -f '$tmpf' '$recs'" EXIT
 m a SIGNALLED render leaked its scratch
+
+= agent-window-bare-form-picks-one
+f libexec/mux-agent
+t mux-agent
+-   if [ "$_ws_n" -gt 1 ]; then
++   if [ "$_ws_n" -gt 99 ]; then
+m the bare form must refuse
+= agent-window-refusal-omits-the-ids
+f libexec/mux-agent
+t mux-agent
+-     _ws_ids=$(printf '%s' "$_ws_wins" | tr '\n' ' ')
++     _ws_ids=
+m r9-bare-lists-ids
+= agent-window-id-not-matched
+f libexec/mux-agent
+t mux-agent
+-     @*) [ "$_wi" = "$2" ] || continue ;;
++     @*) : ;;
+m --window by id was refused
+= agent-send-judges-the-session-not-the-pane
+f libexec/mux-agent
+t mux-agent
+-   _sstate=$_ws_state
++   _sstate=$(mux_agent_state "$_rd" "$_ssess"); _sstate=${_sstate%% *}
+m SIBLING
+= peers-omits-the-window-id
+f libexec/mux-agent
+t mux-agent
+-             -F'\t' -v k="$_pn" '$1 == k { print $3; exit }')
++             -F'\t' -v k="$_pn" '$1 == k { print ""; exit }')
+m r9-peers-wid
+
+= open-accepts-a-half-answer
+f libexec/mux-window_lib
+t mux-agent
+# A CREATE THAT NAMED NO WINDOW ID has no usable target: the class write
+# would land on the empty string, so the declaration silently does not
+# happen while the verb reports success. There is deliberately no fallback
+# to the index, because no live tmux can produce this answer and the
+# fallback would therefore be unkillable.
+-   [ -n "$_mwidx" ] && [ "$_mwid" != "$_mwpair" ] || {
++   [ -n "$_mwidx" ] || {
+m a create that named no window id must refuse

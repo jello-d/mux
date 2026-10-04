@@ -828,8 +828,11 @@ Change a LIVE pane's class, with
 and
 .B \-\-attention
 taking one of the three words and
-.B \-\-window
-picking one worker. This is how an escalation takes effect without restarting
+.BI \-\-window " NAME" \fR| @\fIID\fR
+naming one worker (required where the session holds several; see
+.B The agent contract
+for why an index is not accepted). This is how an escalation takes effect
+without restarting
 the agent. A machine may only ever move a pane TOWARD the human
 (\fBagent\fR -> \fBhybrid\fR -> \fBhuman\fR): that direction removes its own
 permission and adds the human's sight of the pane. The reverse GRANTS, so it is
@@ -2038,7 +2041,7 @@ it prints the block and says where it goes.
 .B mux agent " " \fIVERB\fR " [" \fIoptions\fR ]
 THE MACHINE CONTRACT: a surface a program is invited to depend on, and
 deliberately a different contract from the rest of mux rather than a second
-spelling of it. Two verbs so far.
+spelling of it. Seven verbs so far.
 .B mux agent status
 answers what is going on as JSON: the same question
 .B mux agent-summary \-\-all \-\-attached
@@ -2046,10 +2049,13 @@ answers, in the contract's shape;
 .B \-\-any
 widens it to every partition rather than only the ones somebody is watching.
 .B mux agent peers
-lists every session with a tracked agent and what it is doing, one object per
-session carrying its
+lists every WINDOW with a tracked agent and what it is doing, each object
+carrying its
 .BR partition ,
 .BR session ,
+.BR window ,
+.BR window_id ,
+.BR window_name ,
 .BR state ,
 .BR age ,
 .B control
@@ -2065,6 +2071,46 @@ returns what is on that agent's screen, and
 blocks until it gets there, and
 .B mux agent send " " \fISESSION\fR " " \fITEXT\fR
 types into that agent's pane.
+.IP
+WHICH WINDOW, AND WHY NOT BY INDEX.
+.BR read ,
+.B send
+and
+.B class
+take
+.BI \-\-window " NAME" \fR| @\fIID\fR,
+and
+.B window_id
+is the handle: a tmux window id is never REUSED, so a stale one names nothing
+rather than something else. An INDEX is a recyclable slot, measured: kill the
+window at index 2 and the next one created takes it, so a caller acting on a
+remembered index types into a different worker and is told it succeeded. The
+.B window
+field is therefore for DISPLAY only, and
+.B mux agent open
+answers
+.B window_id
+beside it so a create needs no follow-up query.
+.IP
+A NAME IS NEVER HANDED TO TMUX AS A TARGET, because tmux's own name
+resolution fails OPEN: measured,
+.B \-t session:nosuchname
+resolves to a DIFFERENT window and exits 0. mux matches the name against a
+session-scoped listing itself and acts only while the name is UNIQUE,
+refusing with the candidate ids listed when it is not. Nothing enforces
+uniqueness, since a caller that chose a name must be able to re-derive it and
+a suffix mux invented is not something it can know; only ACTING is restricted
+to the unique case.
+.IP
+AND THE BARE FORM REFUSES where a session holds more than one agent window,
+rather than acting on its worst-ranked agent. Membership comes from live tmux
+and never from the record's window field, which is an index, and the gate on
+.B send
+judges the pane NAMED rather than the session: one worker at a permission
+prompt does not lock out its idle siblings, and an idle session does not let
+a charge through to a
+.B blocked
+worker unacknowledged.
 .IP
 .B send
 IS A HOOK FOR A HIGHER LAYER, not orchestration. mux already knows which pane
@@ -2226,7 +2272,7 @@ to exactly one exit code; several may share one.
 THE SHAPE IS STABLE OR THE CAPABILITY NUMBER MOVES.
 .B mux capabilities
 declares
-.BR "agent contract 1" ,
+.BR "agent contract 4" ,
 and a breaking change to any of these documents is a new number there,
 which is how a consumer finds out without sniffing a version string.
 .IP

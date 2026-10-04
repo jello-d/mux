@@ -24,7 +24,7 @@
 #      the reader, and neither has to be widened to serve the other.
 #
 #   3. THE SHAPE IS STABLE OR THE CAPABILITY NUMBER MOVES. `mux capabilities`
-#      declares `agent contract 1`; a breaking change to any of these
+#      declares `agent contract 4`; a breaking change to any of these
 #      documents is a new number there, which is how a consumer finds out
 #      without sniffing a version string.
 #
@@ -112,6 +112,136 @@ _tx() {
   tmux -L "${_rp:-global}" "$@"
 }
 
+# --- WHICH WINDOW, AND WHY NOT AN INDEX ------------------------------------
+# `--window` takes a NAME or a tmux window ID (`@7`). Never an index, and that
+# is a measurement rather than taste: AN INDEX IS A RECYCLABLE SLOT. Measured
+# 2026-10-04 on windows a@1 b@2 c@3: kill b, create d, and index 2 IS d (id
+# @4). A caller holding an index types into a different worker believing it is
+# the one it named, which is the same class as the undo-pane bug where a
+# recycled `@0` restored a dead server's pane.
+#
+# AN ID IS NOT REUSED (@2 retired permanently), and the asymmetry that decides
+# everything here is what a STALE handle does:
+#
+#     a killed or unknown @N       resolves to NOTHING
+#     an unknown NAME, via tmux    resolves to the CURRENT window
+#
+# So A NAME IS NEVER HANDED TO tmux AS A TARGET: its own name resolution fails
+# OPEN. mux matches the name here, against a listing, and acts only when
+# exactly one window answers. ONLY ACT ON UNIQUENESS rather than enforcing it
+# (the user's call, 2026-10-04): no new invariant to maintain, no renaming that
+# would stop a caller re-deriving the name it chose, and an ambiguous name
+# stays RECOVERABLE because the ID is accepted too.
+#
+# THE EXIT CODE SAYS NOTHING. All four of those tmux calls exit 0, including
+# the invalid ones, so every check below is on the ANSWER and never on `$?`.
+#
+# MEMBERSHIP COMES FROM LIVE tmux, never from the record's window field: that
+# field is an INDEX, so a record left by a dead pane in a since-recycled slot
+# would match. Records are found by PANE id, which is unique and never reused.
+#
+# AND THE SESSION IS VALIDATED BY CONSTRUCTION, which an ID needs: `@N` is
+# server-global, so `--window @5` could name a window in another session.
+# The listing is session-scoped, so filtering it answers both questions at
+# once.
+# It reads `$_rd` and `$_rp` from `_resolve`, which every caller has already
+# run, and sets `_ws_pane`, `_ws_wid` and `_ws_state`. It REFUSES rather than
+# returning: every caller's answer to "which window" being unanswerable is
+# the same, and an engine that reports a reason cannot be called in `$( )`.
+_winsel() {   # <session> <selector-or-empty>
+  _ws_pane= _ws_wid= _ws_state= _ws_cand=
+  # WHICH PANES HAVE A RECORD, read from the records themselves rather than
+  # from their FILENAMES: a record's name is not its pane id (the enumerator
+  # is a bare glob and the pane is field 3), so a filename join would find
+  # nothing and refuse every window. Caught by the suite the first time this
+  # ran.
+  _ws_rp=" " _ws_recs=
+  for _ws_f in "$_rd"/*; do
+    [ -f "$_ws_f" ] || continue
+    read -r _ws_x1 _ws_x2 _ws_x3 _ws_junk 2>/dev/null <"$_ws_f" || continue
+    _ws_rp="$_ws_rp$_ws_x3 "
+    _ws_recs="$_ws_recs$_ws_x3 $_ws_x1
+"
+  done
+  _ws_raw=$(_tx list-panes -s -t "=$1" \
+    -F '#{window_id}	#{window_name}	#{pane_id}' \
+    2>/dev/null) || _ws_raw=
+  # A window answers as an AGENT window when one of its LIVE panes has a
+  # record. One line per matching agent pane: "<window-id> <name> <pane>".
+  while IFS="	" read -r _wi _wn _wp; do
+    [ -n "$_wp" ] || continue
+    # LIVE tmux DECIDES THE SESSION, not the record's session field, which is
+    # a cache: a pane is in the session tmux says it is in. The record only
+    # has to EXIST for the pane to count as an agent's.
+    case $_ws_rp in
+    (*" $_wp "*) ;;
+    (*) continue ;;
+    esac
+    case $2 in
+    '') ;;
+    @*) [ "$_wi" = "$2" ] || continue ;;
+    *)  [ "$_wn" = "$2" ] || continue ;;
+    esac
+    _ws_cand="$_ws_cand$_wi $_wn $_wp
+"
+  done <<WSEOF
+$_ws_raw
+WSEOF
+
+  # DISTINCT WINDOWS is the number that decides. Several agent panes in ONE
+  # window is not ambiguity: that is a window with two agents, and the
+  # worst-ranked one wins there as it always has.
+  _ws_wins=$(printf '%s' "$_ws_cand" | awk '$1 != "" { print $1 }' | sort -u)
+  _ws_n=$(printf '%s' "$_ws_wins" | awk 'NF { n++ } END { print n + 0 }')
+
+  # ONE STRING PER MESSAGE, assembled before the call. `_out` takes exactly
+  # three parameters and prints `$3`, so a reason split across several
+  # arguments is SILENTLY truncated at the first: this printed "name one" and
+  # stopped. Same bug `mux-latch`'s `_wait` shipped once, met again by the
+  # person who wrote that note down.
+  if [ "$_ws_n" -eq 0 ]; then
+    case $2 in
+    ('') _ws_m="no agent pane recorded for $1" ;;
+    (@*) _ws_m="no agent window $2 in $1. A window id is never reused, so"
+         _ws_m="$_ws_m a stale one names nothing rather than whatever took"
+         _ws_m="$_ws_m the slot" ;;
+    (*)  _ws_m="no agent window named '$2' in $1" ;;
+    esac
+    _out refused 1 "$_ws_m"
+  fi
+  if [ "$_ws_n" -gt 1 ]; then
+    # THE REFUSAL CARRIES WHAT RESOLVES IT, which is the whole reason the ID
+    # is accepted at all: an ambiguous name is then recoverable in one step
+    # rather than a dead end.
+    _ws_ids=$(printf '%s' "$_ws_wins" | tr '\n' ' ')
+    case $2 in
+    ('') _ws_m="$1 holds $_ws_n agent windows ($_ws_ids); name one with"
+         _ws_m="$_ws_m --window NAME or --window @ID. Acting on an unnamed"
+         _ws_m="$_ws_m one would be a wrong answer rather than a refusal" ;;
+    (*)  _ws_m="'$2' names $_ws_n windows in $1 ($_ws_ids); mux acts only on"
+         _ws_m="$_ws_m a unique name, so pass one of those ids instead" ;;
+    esac
+    _out refused 1 "$_ws_m"
+  fi
+
+  # One window. Pick its worst-ranked agent pane, the rule every other
+  # surface already uses, so nothing is hidden.
+  _ws_br=-1
+  while read -r _wi _wn _wp; do
+    [ -n "$_wp" ] || continue
+    _ws_st=$(printf '%s' "$_ws_recs" \
+      | awk -v k="$_wp" '$1 == k { print $2; exit }')
+    [ -n "$_ws_st" ] || continue
+    _ws_r=$(mux_agent_rank "$_ws_st")
+    if [ "$_ws_r" -gt "$_ws_br" ]; then
+      _ws_br=$_ws_r; _ws_pane=$_wp; _ws_wid=$_wi; _ws_state=$_ws_st
+    fi
+  done <<WSEOF
+$_ws_cand
+WSEOF
+  [ -n "$_ws_pane" ] || _out refused 1 "no readable record for $1 $2"
+}
+
 case $_verb in
 read|wait|send|class)
   . "$_lib/mux-paths_lib"
@@ -133,9 +263,14 @@ if [ "$_verb" = read ]; then
   # down. `mux agent read mux -n 5` failed exactly that way once.
   _rn=
   _rpart=
+  _rwin=
   _rsess=
   while [ $# -gt 0 ]; do
     case $1 in
+    --window) shift
+        _rwin=${1:-}
+        [ -n "$_rwin" ] || _out usage 2 "--window needs a NAME or @ID"
+        shift ;;
     -n) shift
         _rn=${1:-}
         case ${_rn:-} in
@@ -152,12 +287,12 @@ if [ "$_verb" = read ]; then
         _rsess=$1; shift ;;
     esac
   done
-  [ -n "$_rsess" ] || _out usage 2 "usage: mux agent read SESSION [-n N]"
+  [ -n "$_rsess" ] || _out usage 2 \
+    "usage: mux agent read SESSION [--window NAME|@ID] [-n N]"
 
   _resolve "$_rsess" "$_rpart"
-  _pane=$(mux_agent_pane "$_rd" "$_rsess")
-  [ -n "$_pane" ] || _out refused 1 \
-    "no agent pane recorded for $_rsess"
+  _winsel "$_rsess" "$_rwin"
+  _pane=$_ws_pane
 
   # THE VISIBLE PANE BY DEFAULT, scrollback only when asked. An agent
   # pane's scrollback can be enormous, and a verb whose default answer is
@@ -170,7 +305,8 @@ if [ "$_verb" = read ]; then
 
   printf '{"status":"ok","partition":%s,"session":%s,' \
     "$(mux_json_str "${_rp:-global}")" "$(mux_json_str "$_rsess")"
-  printf '"pane":%s,"text":%s}\n' \
+  printf '"window":%s,"pane":%s,"text":%s}\n' \
+    "$(mux_json_str "$_ws_wid")" \
     "$(mux_json_str "$_pane")" "$(mux_json_str "$_text")"
   exit 0
 fi
@@ -272,12 +408,16 @@ if [ "$_verb" = send ]; then
   # the layer above composes in two lines, so mux does not grow a verb
   # that decides when a worker starts.
   _spart= _sack_prompt=0 _sack_blind=0 _senter=1
-  _ssess= _stext= _shave_text=0
+  _ssess= _stext= _shave_text=0 _ssel=
   while [ $# -gt 0 ]; do
     case $1 in
     --partition) shift
         _spart=${1:-}
         [ -n "$_spart" ] || _out usage 2 "--partition needs a name"
+        shift ;;
+    --window) shift
+        _ssel=${1:-}
+        [ -n "$_ssel" ] || _out usage 2 "--window needs a NAME or @ID"
         shift ;;
     # TWO ACKNOWLEDGEMENTS, NOT ONE, pairing with the two grants:
     # being allowed to answer prompts must never imply being
@@ -298,18 +438,31 @@ if [ "$_verb" = send ]; then
     esac
   done
   [ -n "$_ssess" ] && [ "$_shave_text" -eq 1 ] \
-    || _out usage 2 "usage: mux agent send SESSION TEXT|-"
+    || _out usage 2 \
+    "usage: mux agent send SESSION TEXT|- [--window NAME|@ID]"
 
   _resolve "$_ssess" "$_spart"
-  _spane=$(mux_agent_pane "$_rd" "$_ssess")
-  [ -n "$_spane" ] || _out refused 1 "no agent pane recorded for $_ssess"
-  _sstate=$(mux_agent_state "$_rd" "$_ssess")
-  _sstate=${_sstate%% *}
+  _winsel "$_ssess" "$_ssel"
+  _spane=$_ws_pane
+  # THE GATE JUDGES THE PANE IT WILL TYPE INTO, which is why the state comes
+  # from the selected pane's own record rather than from the session-wide
+  # worst. Those differ precisely when they matter: one worker `blocked` at a
+  # permission prompt would otherwise make an idle sibling unwritable, and
+  # worse in the other direction, a session whose worst pane is `idle` would
+  # let a charge through to a `blocked` one without the acknowledgement that
+  # case exists to require.
+  _sstate=$_ws_state
 
   # WHO CONTROLS THE PANE, and the default is the strict one. An
   # unclassified pane is a human's: the safe answer is the one you get by
   # saying nothing, and marking a village is a deliberate act by the
   # layer that spawned it.
+  #
+  # `_swin` IS THE RESOLVED PANE'S WINDOW NAME, not the caller's selector
+  # (`_ssel`), and they are two variables on purpose: this one is what a
+  # policy line matches and what the audit log records, so it has to be what
+  # mux ACTED on rather than what it was asked for. A selector of `@7` would
+  # otherwise be matched against a policy written in window names.
   _swin=$(_tx display-message -p -t "$_spane" '#{window_name}' \
     2>/dev/null || true)
   _sclass=$(_tx display-message -p -t "$_spane" '#{@mux-control}' \
@@ -533,6 +686,11 @@ $MUX_CTX_CROSS")"
     "$(mux_json_str "${_rp:-global}")" \
     "$(mux_json_str "$_osess")" \
     "$(mux_json_num "${MUX_WIN_OUT#*:}")"
+  # THE ID IS WHAT `--window` WANTS, and the index is for display: a create
+  # answering only an index would send the caller back through `peers` to
+  # learn the handle for the window it had just made.
+  printf '"window_id":%s,' \
+    "$([ -n "${MUX_WIN_ID:-}" ] && mux_json_str "$MUX_WIN_ID" || printf null)"
   printf '"control":%s,"attention":%s}\n' \
     "$([ -n "$_octl" ] && mux_json_str "$_octl" || printf null)" \
     "$([ -n "$_oattn" ] && mux_json_str "$_oattn" || printf null)"
@@ -579,8 +737,9 @@ if [ "$_verb" = class ]; then
         _clsess=$1; shift ;;
     esac
   done
-  [ -n "$_clsess" ] || _out usage 2 "usage: mux agent class SESSION \
-[--window N] [--partition P] [--control CLASS] [--attention CLASS] [--yes]"
+  _clu="usage: mux agent class SESSION [--window NAME|@ID] [--partition P]"
+  _clu="$_clu [--control CLASS] [--attention CLASS] [--yes]"
+  [ -n "$_clsess" ] || _out usage 2 "$_clu"
   [ -n "$_clctl$_clattn" ] || _out usage 2 \
     "nothing to change: give --control and/or --attention"
   for _c in "$_clctl" "$_clattn"; do
@@ -604,18 +763,13 @@ if [ "$_verb" = class ]; then
     }
   fi
 
-  # THE PANE IS RESOLVED HERE, from the state record, never taken from the
-  # caller: an id cached from an earlier `peers` can have died and been
-  # replaced, and reclassifying the wrong pane is a wrong answer wearing the
-  # shape of a right one. `--window` narrows it, which is how a supervisor
-  # names ITS worker rather than the session's worst agent.
-  if [ -n "$_clwin" ]; then
-    _clpane=$(mux_agent_pane_win "$_rd" "$_clsess" "$_clwin")
-  else
-    _clpane=$(mux_agent_pane "$_rd" "$_clsess")
-  fi
-  [ -n "$_clpane" ] || _out no-such-name 3 \
-    "no tracked agent in $_clsess${_clwin:+ window $_clwin}"
+  # THE PANE IS RESOLVED HERE, from the records and the live server, never
+  # taken from the caller: an id cached from an earlier `peers` can have died
+  # and been replaced, and reclassifying the wrong pane is a wrong answer
+  # wearing the shape of a right one. `--window` narrows it, which is how a
+  # supervisor names ITS worker rather than the session's worst agent.
+  _winsel "$_clsess" "$_clwin"
+  _clpane=$_ws_pane
 
   # EACH MARKER IS JUDGED ON ITS OWN, because a caller may tighten one and
   # leave the other alone, and that combination is the point of their being
@@ -655,7 +809,8 @@ human, which only a human may do")"
     "$(mux_json_str "${_rp:-global}")" \
     "$(mux_json_str "$_clsess")" \
     "$(mux_json_str "$_clpane")"
-  printf '"control":%s,"attention":%s}\n' \
+  printf '"window":%s,"control":%s,"attention":%s}\n' \
+    "$(mux_json_str "$_ws_wid")" \
     "$([ -n "$_clctl" ] && mux_json_str "$_clctl" || printf null)" \
     "$([ -n "$_clattn" ] && mux_json_str "$_clattn" || printf null)"
   exit 0
@@ -737,8 +892,16 @@ if [ "$_verb" = peers ]; then
       # server with zero panes does not exist: it exits. An
       # unkillable guard here is redundant code rather than a
       # missing test, so it went.
+      #
+      # THE WINDOW'S ID AND NAME RIDE ALONG, which is R9's answer side: an
+      # INDEX is a recyclable slot (measured: kill index 2 and the next
+      # window created takes it), so a caller holding one acts on a
+      # different worker. The id never recycles. It costs nothing to carry,
+      # the same ride `@mux-agent` took onto the strip's query: on a path
+      # that runs per poll, the ROUND TRIP is the cost and the extra fields
+      # are not.
       _ctl=$(tmux -L "$_p" list-panes -a \
-        -F "#{pane_id}	#{@mux-control}" \
+        -F "#{pane_id}	#{@mux-control}	#{window_id}	#{window_name}" \
         2>/dev/null) || _ctl=
       mux_agent_sessions "$_dir" | while IFS= read -r _s; do
         [ -n "$_s" ] || continue
@@ -790,9 +953,19 @@ if [ "$_verb" = peers ]; then
         # is the thing `read` and `send` avoid, and
         # answering a different question with it is not
         # the same as handing it over.
-        _cl=
+        _cl= _wid= _wnm=
         if [ -n "$_ctl" ]; then
           _pn=$(mux_agent_pane_win "$_dir" "$_s" "$_wi")
+          # ONE LOOKUP EACH, rather than one answer split here. A window
+          # NAME may contain a space and may contain nothing at all, so
+          # every way of packing two fields into one shell word needs a
+          # separator the data is allowed to hold. Two awks on a verb a
+          # supervisor calls (never the status bar, which polls `status`)
+          # is the cheaper half of that trade.
+          _wid=$(printf '%s\n' "$_ctl" | awk \
+            -F'\t' -v k="$_pn" '$1 == k { print $3; exit }')
+          _wnm=$(printf '%s\n' "$_ctl" | awk \
+            -F'\t' -v k="$_pn" '$1 == k { print $4; exit }')
           _cl=$(printf '%s\n' "$_ctl" | awk \
             -F'\t' -v k="$_pn" \
             '$1 == k { print $2; exit }')
@@ -809,10 +982,19 @@ if [ "$_verb" = peers ]; then
             | grep -q "^$_pn	" \
             || _cl=
         fi
+        # `window` IS KEPT AND IS FOR DISPLAY ONLY. It is what a human
+        # types at tmux, so dropping it would be a second break for no
+        # gain; `window_id` is the handle `--window` wants, and `window`
+        # must not be used as one. Both null when the server could not be
+        # reached, for the same reason `control` is: unknowable, never
+        # defaulted.
         printf '{"partition":%s,"session":%s,"window":%s,' \
           "$(mux_json_str "$_p")" \
           "$(mux_json_str "$_s")" \
           "$(mux_json_num "$_wi")"
+        printf '"window_id":%s,"window_name":%s,' \
+          "$([ -n "$_wid" ] && mux_json_str "$_wid" || printf null)" \
+          "$([ -n "$_wnm" ] && mux_json_str "$_wnm" || printf null)"
         printf '"state":%s,"age":%s,"control":%s,' \
           "$(mux_json_str "$_st")" \
           "$(mux_json_num "${_ag:-}")" \

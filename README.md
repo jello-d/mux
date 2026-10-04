@@ -751,11 +751,19 @@ rather than a second spelling of the same one.
 
 ```sh
 mux agent status              # worst state + count, per partition
-mux agent peers               # per session: state, age, control, root
+mux agent peers               # per window: id, name, state, age, control
 mux agent read api -n 200     # what that agent is doing
 mux agent wait api idle -t 60 # block until it is done
 mux agent send api 'run the integration suite'
+mux agent send api --window @7 'rerun the failing case'
 ```
+
+A supervised session has one window per worker, so `--window` names one, by
+the `window_id` `peers` reports or by the window's name. An **index is not
+accepted**: it is a recyclable slot, so acting on a remembered one types into
+a different worker and reports success. Where a session holds several agent
+windows the bare form refuses and lists the ids rather than acting on
+whichever ranks worst.
 
 **One JSON object on stdout, always, including on failure.** A reader never has
 to decide whether today's answer is a document or a sentence:
@@ -858,6 +866,7 @@ mux agent peers              who is here, what each is doing, who drives it
 mux agent read NAME [-n N]   capture that session's agent pane
 mux agent wait NAME STATE    block until it gets there (-t SECONDS)
 mux agent send NAME TEXT     hand it work (refuses a blocked or unknown pane)
+  ... --window NAME|@ID      which worker, on read, send and class
 mux scan                     rebuild the project discovery map
 mux why [NAME]               show each resolved value and where it came from
 mux views [auto|floor|ceil]  who is attached, at what size, what it costs

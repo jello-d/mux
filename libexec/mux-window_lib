@@ -50,8 +50,10 @@
 # arity is also what keeps the two shellcheck versions this tree meets from
 # disagreeing about it.
 #
-# IT SETS VARIABLES AND PRINTS NOTHING: `$MUX_WIN_OUT` is `SESSION:INDEX` on
-# success and `$MUX_WIN_ERR` is the reason on a refusal. Returns 0 ok, 2
+# IT SETS VARIABLES AND PRINTS NOTHING: `$MUX_WIN_OUT` is `SESSION:INDEX` and
+# `$MUX_WIN_ID` the window's tmux id on success (the stable handle, where the
+# index is a recyclable slot), and `$MUX_WIN_ERR` is the reason on a refusal.
+# Returns 0 ok, 2
 # refused, 3 when the session is not known on that socket, which is mux's
 # existing cross-cutting code for that condition rather than a new one.
 #
@@ -65,6 +67,7 @@
 # walk, which prints nothing for the same reason.
 mux_window_open() {
   MUX_WIN_OUT=
+  MUX_WIN_ID=
   MUX_WIN_ERR=
   _mwsock=$1 _mwsess=$2 _mwname=$3 _mwdir=$4
   _mwcmd=$5 _mwctl=$6 _mwattn=$7 _mwsw=$8
@@ -109,16 +112,29 @@ mux_window_open() {
   [ "$_mwsw" = 1 ] || set -- "$@" -d
   [ -z "$_mwname" ] || set -- "$@" -n "$_mwname"
   [ -z "$_mwdir" ] || set -- "$@" -c "$_mwdir"
-  # THE WINDOW INDEX COMES BACK FROM THE CREATE ITSELF (`-P -F`), not from a
+  # THE WINDOW COMES BACK FROM THE CREATE ITSELF (`-P -F`), not from a
   # follow-up query. A second round trip would be answering about "the current
   # window", which is exactly what `-d` just declined to change, so it would
   # name somebody else's window and do it plausibly.
-  set -- "$@" -P -F '#{window_index}'
+  #
+  # BOTH FIELDS, and the ID is the one that matters. An INDEX is a recyclable
+  # slot (measured: kill the window at index 2 and the next one created takes
+  # it), so a caller handed only an index has nothing stable to address the
+  # window it just made, and `--window` would send it back through `peers` to
+  # learn what the create already knew. A space separates them because
+  # neither an index nor a window id can contain one.
+  set -- "$@" -P -F '#{window_index} #{window_id}'
   [ -z "$_mwcmd" ] || set -- "$@" "$_mwcmd"
 
-  _mwidx=$(_mwt "$@" 2>/dev/null) || {
+  _mwpair=$(_mwt "$@" 2>/dev/null) || {
     MUX_WIN_ERR="tmux refused to open a window in $_mwsess"; return 2; }
-  [ -n "$_mwidx" ] || {
+  _mwidx=${_mwpair%% *}
+  _mwid=${_mwpair#* }
+  # BOTH FIELDS OR NEITHER. The format asks for two, so a one-field answer is
+  # an incoherent server rather than an older one, and accepting it would
+  # leave a FALLBACK target nothing can reach: an unkillable guard, which
+  # this package's own rule says to delete rather than test harder.
+  [ -n "$_mwidx" ] && [ "$_mwid" != "$_mwpair" ] || {
     MUX_WIN_ERR="tmux opened a window and did not say which"; return 2; }
 
   # THE CLASSES, ON THE WINDOW'S PANE, after it exists. A declaration by the
@@ -129,9 +145,16 @@ mux_window_open() {
     case $_mwp in
     *:) continue ;;
     esac
-    _mwt set-option -p -t "=$_mwsess:$_mwidx" \
+    # TARGETED BY ID, never by index, because an index can renumber between
+    # the create and this write (`renumber-windows`, or a concurrent kill),
+    # and the declaration then lands on somebody else's pane. `-p` with a
+    # window target resolves that window's active pane, which for a window
+    # created one line ago is its only pane: measured, with the neighbouring
+    # window left untouched.
+    _mwt set-option -p -t "$_mwid" \
       "@mux-${_mwp%%:*}" "${_mwp#*:}" 2>/dev/null || :
   done
 
   MUX_WIN_OUT="$_mwsess:$_mwidx"
+  MUX_WIN_ID=$_mwid
 }
