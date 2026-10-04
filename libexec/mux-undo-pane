@@ -47,7 +47,8 @@
 # field one `cd` fixes, whereas the pane, its slot and its command are exact.
 set -eu
 
-_lib=$(dirname "$0")
+_libexec=$(dirname "$0")
+_lib=$_libexec/../lib
 [ -r "$_lib/mux-log_lib" ] || {
   echo "mux: mux-log_lib missing (incomplete install)" >&2; exit 1; }
 . "$_lib/mux-log_lib"

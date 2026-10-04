@@ -22,7 +22,7 @@
 set -eu
 _name=mux-strip
 . "$(dirname "$0")/harness_lib"
-. "$HERE/libexec/mux-agent-state_lib"      # the glyph constants
+. "$HERE/lib/mux-agent-state_lib"      # the glyph constants
 
 mkdir -p "$T/bin" "$T/run/mux/agent-state/global"
 SESSIONS=$T/sessions

@@ -21,7 +21,8 @@
 set -eu
 
 # Sibling lib in this script's own (colocated) libexec dir.
-_lib=$(dirname "$0")
+_libexec=$(dirname "$0")
+_lib=$_libexec/../lib
 
 force=0
 case "${1:-}" in --force|-f) force=1 ;; esac
@@ -30,7 +31,7 @@ case "${1:-}" in --force|-f) force=1 ;; esac
 # it became a cross-session operation (a row that drifted in a session you are
 # not looking at stayed that way), and two copies of the even-out rules would
 # be two places for them to disagree.
-_balance() { "$_lib/mux-even" 2>/dev/null || true; }
+_balance() { "$_libexec/mux-even" 2>/dev/null || true; }
 
 # The mux bottom pane in the CURRENT window (mux tags it @mux-bottom). Target it
 # explicitly, not the active pane, so a refresh works from any focused pane.
@@ -49,7 +50,7 @@ if [ "$force" -eq 1 ]; then
   tmux break-pane -d -s "$bottom" -n _muxrefresh 2>/dev/null || exit 0
   tmux join-pane -v -f -l "$max" -s "$bottom" -t "$win" 2>/dev/null || :
   _balance
-  "$_lib/mux-pin" 2>/dev/null || true
+  "$_libexec/mux-pin" 2>/dev/null || true
   tmux select-pane -t "$act" 2>/dev/null || true
   exit 0
 fi
@@ -64,4 +65,4 @@ _balance
 
 # Re-pin ("the snap back"): mux-pin resizes every mux bottom pane to its
 # canonical height, cascading the siblings to fill correctly.
-exec "$_lib/mux-pin"
+exec "$_libexec/mux-pin"

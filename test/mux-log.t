@@ -23,8 +23,8 @@ set -eu
 _name=mux-log
 . "$(dirname "$0")/harness_lib"
 
-LIB=$HERE/libexec/mux-log_lib
-[ -r "$LIB" ] || fail "libexec/mux-log_lib is missing"
+LIB=$HERE/lib/mux-log_lib
+[ -r "$LIB" ] || fail "lib/mux-log_lib is missing"
 
 L=$T/state/mux.log
 lg() {   # <subsys> <msg...>: through the real lib, never by hand

@@ -1,5 +1,5 @@
 #!/bin/sh
-# test/mux-agent-rank.t - libexec/mux-agent-state_lib, the SINGLE SOURCE of the
+# test/mux-agent-rank.t - lib/mux-agent-state_lib, the SINGLE SOURCE of the
 # state ranking and the state glyphs.
 #
 # WHY IT GETS ITS OWN FILE. Seven programs source this lib (the session
@@ -21,7 +21,7 @@
 set -eu
 _name=mux-agent-rank
 . "$(dirname "$0")/harness_lib"
-. "$HERE/libexec/mux-agent-state_lib"
+. "$HERE/lib/mux-agent-state_lib"
 
 # --- the order itself, asserted as an ORDER and not as numbers -------------
 # The values are an implementation detail; what every consumer depends on is

@@ -25,7 +25,8 @@
 # not the one meant, which is this codebase's signature failure.
 set -eu
 
-_lib=$(dirname "$0")
+_libexec=$(dirname "$0")
+_lib=$_libexec/../lib
 for _l in mux-addr_lib mux-sessions_lib mux-class_lib mux-window_lib \
     mux-context_lib; do
   [ -r "$_lib/$_l" ] || {

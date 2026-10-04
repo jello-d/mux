@@ -190,8 +190,8 @@ printf 'x\t/tmp\n' >"$MAPD/projects.gonepartition"
 printf 'y\n' >"$MAPD/mux-themes.global.sha"
 printf 'z\n' >"$MAPD/sessions.global"
 (
-  . "$HERE/libexec/mux-paths_lib"
-  . "$HERE/libexec/mux-scan_lib"
+  . "$HERE/lib/mux-paths_lib"
+  . "$HERE/lib/mux-scan_lib"
   mux_ctx_partitions() { printf 'global\n'; }
   # The subshell is the POINT: it scopes the stubbed oracle and MUX_CACHE to
   # this one call, so the three cases here cannot leak into each other.
@@ -223,8 +223,8 @@ mux, before it could be adopted. That is unreconstructible."
 #    to source mux-context_lib too, but "happens to" is not a contract.
 printf 'x\t/tmp\n' >"$MAPD/projects.gonepartition"
 (
-  . "$HERE/libexec/mux-paths_lib"
-  . "$HERE/libexec/mux-scan_lib"
+  . "$HERE/lib/mux-paths_lib"
+  . "$HERE/lib/mux-scan_lib"
   # The subshell is the POINT: it scopes the stubbed oracle and MUX_CACHE to
   # this one call, so the three cases here cannot leak into each other.
   # shellcheck disable=SC2030
@@ -241,8 +241,8 @@ The alternative to skipping is deleting files based on an empty list."
 #    to be. An empty list means "no partition exists", and acting on it deletes
 #    every map on the box.
 (
-  . "$HERE/libexec/mux-paths_lib"
-  . "$HERE/libexec/mux-scan_lib"
+  . "$HERE/lib/mux-paths_lib"
+  . "$HERE/lib/mux-scan_lib"
   mux_ctx_partitions() { return 0; }
   # The subshell is the POINT: it scopes the stubbed oracle and MUX_CACHE to
   # this one call, so the three cases here cannot leak into each other.

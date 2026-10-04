@@ -1,5 +1,5 @@
 #!/bin/sh
-# test/mux-context.t - the CONTEXT seam (libexec/mux-context_lib): one word in,
+# test/mux-context.t - the CONTEXT seam (lib/mux-context_lib): one word in,
 # every setting out.
 #
 # The contract is deliberately tiny: an optional command prints a token, and
@@ -24,7 +24,7 @@ MUX_DIR=$T/conf
 MUX_SHARE=$T/share
 export MUX_DIR MUX_SHARE
 mkdir -p "$MUX_DIR/partitions" "$MUX_DIR/contexts" "$MUX_SHARE/partitions"
-. "$HERE/libexec/mux-context_lib"
+. "$HERE/lib/mux-context_lib"
 
 eq() { [ "$2" = "$3" ] || fail "$1: got [$2] want [$3]"; }
 # cc BODY: install a context-command with that body.

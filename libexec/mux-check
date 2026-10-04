@@ -20,7 +20,7 @@ MUX_SHARE=${MUX_SHARE:-$(dirname "$0")/../share}
 # by the overlay counts, and one shadowed by it is judged on the overlay copy.
 for _l in mux-paths_lib mux-data_lib mux-context_lib mux-scan_lib \
     mux-profiles_lib mux-notify_lib mux-views_lib mux-sessions_lib; do
-  _lp=$(dirname "$0")/$_l
+  _lp=$(dirname "$0")/../lib/$_l
   [ -r "$_lp" ] || {
     printf '  [FAIL] %s missing (broken install)\n' "$_lp" >&2
     exit 1; }
@@ -265,11 +265,11 @@ fi
 # here: `mux_env_plan` resolves and validates and writes NOTHING, where
 # `mux_env_apply` is the one that acts. The same distinction that keeps this
 # check away from `mux agent-render`, which prunes.
-if [ -r "$(dirname "$0")/mux-env_lib" ]; then
+if [ -r "$(dirname "$0")/../lib/mux-env_lib" ]; then
   # shellcheck source=/dev/null
-  . "$(dirname "$0")/mux-notice_lib"
+  . "$(dirname "$0")/../lib/mux-notice_lib"
   # shellcheck source=/dev/null
-  . "$(dirname "$0")/mux-env_lib"
+  . "$(dirname "$0")/../lib/mux-env_lib"
   _envnames=$(mux_env_names 2>/dev/null | tr '\n' ' ')
   if [ -z "${_envnames# }" ]; then
     ok "no session pointers managed (envhooks.d is empty)"
@@ -516,8 +516,8 @@ else
   # A WARN, not a FAIL: the agent's own configuration is the user's, a
   # provisioner's `apply` cannot repair it, and `--no-agent` sessions are
   # a deliberate reason to have none. Advisory is the honest level.
-  if [ -r "$(dirname "$0")/mux-agent-state_lib" ]; then
-    . "$(dirname "$0")/mux-agent-state_lib"
+  if [ -r "$(dirname "$0")/../lib/mux-agent-state_lib" ]; then
+    . "$(dirname "$0")/../lib/mux-agent-state_lib"
     _adir=$(mux_agent_dir 2>/dev/null || true)
     # THE WHOLE PIPELINE IS THE SUBSTITUTION, so no temp file is
     # needed to get a value out of a `while` that runs in a

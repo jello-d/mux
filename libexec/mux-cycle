@@ -13,7 +13,7 @@ set -eu
 
 dir=${1:?}; client=${2:?}; current=${3:-}
 # Sibling lib in this script's own (colocated) libexec dir.
-. "$(dirname "$0")/mux-exclude_lib"
+. "$(dirname "$0")/../lib/mux-exclude_lib"
 excluded=$(mux_excluded "$client")
 
 # Visible sessions in tmux name order (the same order the status strip uses).

@@ -55,7 +55,7 @@ done | sort -u | grep -c .)
   || fail "6 names produced only $_seen distinct themes; hash is degenerate"
 
 # --- the derived theme must be a REAL one -----------------------------------
-[ -n "$(MUX_DIR=$T/conf; . "$HERE/libexec/mux-data_lib"
+[ -n "$(MUX_DIR=$T/conf; . "$HERE/lib/mux-data_lib"
   MUX_SHARE=$HERE/share mux_data_find themes "$_a" .theme)" ] \
   || fail "derived theme [$_a] is not a themes/*.theme that exists"
 

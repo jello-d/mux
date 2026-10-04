@@ -30,14 +30,14 @@ _pay=$T/share/mux
 # would have caught the old layout.
 [ ! -L "$_pay" ] || fail "the payload is a SYMLINK, so this install still
 depends on a source checkout and dies when it moves"
-for _d in bin libexec share; do
+for _d in bin lib libexec share; do
   [ -d "$_pay/$_d" ] && [ ! -L "$_pay/$_d" ] \
     || fail "$_pay/$_d is missing or a link, so the payload is not
 self-contained"
 done
 
 # AND THE SIBLINGS ARE WHY `<payload>/share` IS NESTED, which reads as a wart
-# and is load-bearing: `bin/mux` resolves $0 and reads ../libexec and
+# and is load-bearing: `bin/mux` resolves $0 and reads ../lib, ../libexec and
 # ../share, which is what makes a checkout, a Homebrew keg and a relocated
 # install all work. Asserted so nobody flattens it to tidy the name away.
 [ -f "$_pay/bin/mux" ] || fail "no entry point inside the payload"
@@ -71,7 +71,7 @@ grep -q 'no retired layout path' "$T/out" \
 # to run the installer under test.
 _cp=$T/srccopy
 mkdir -p "$_cp"
-for _d in bin libexec share man; do
+for _d in bin lib libexec share man; do
   [ -d "$HERE/$_d" ] && cp -R "$HERE/$_d" "$_cp/"
 done
 cp "$HERE/setup.sh" "$_cp/setup.sh" 2>/dev/null || _cp=

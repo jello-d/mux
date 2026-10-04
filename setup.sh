@@ -82,9 +82,9 @@ _rmln() { [ "$(readlink "$2" 2>/dev/null)" = "$1" ] && rm -f "$2" || :; }
 # bargain: a failed write must not break the thing being logged, and the
 # reader is where the breakage surfaces.
 _HAVE_LOG=
-if [ -r "$_root/libexec/mux-log_lib" ]; then
+if [ -r "$_root/lib/mux-log_lib" ]; then
   # shellcheck source=/dev/null
-  . "$_root/libexec/mux-log_lib" && _HAVE_LOG=1
+  . "$_root/lib/mux-log_lib" && _HAVE_LOG=1
 fi
 _slog() { [ -n "$_HAVE_LOG" ] || return 0; mux_log setup "$@"; }
 
@@ -227,7 +227,7 @@ _payload_stage() {
   esac
   rm -rf -- "$_ps_new" "$_ps_old"
   mkdir -p "$_ps_new" || { bad "could not create $_ps_new"; return 1; }
-  for _d in bin libexec share man; do
+  for _d in bin lib libexec share man; do
     [ -d "$_root/$_d" ] || continue
     cp -R "$_root/$_d" "$_ps_new/" || { bad "could not copy $_d"; return 1; }
   done

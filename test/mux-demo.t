@@ -109,7 +109,7 @@ session reads."
 # Rendered against the demo server, because a demo whose strip is empty has
 # nothing to show. The glyph comes from the single source in
 # mux-agent-state_lib.
-. "$HERE/libexec/mux-agent-state_lib"
+. "$HERE/lib/mux-agent-state_lib"
 _sp=$(tmux -L "$SOCK" display-message -p '#{socket_path}')
 _strip=$(env TMUX="$_sp,0,0" MUX_STRIP_WIDTH=140 \
   "$HERE/libexec/mux-agent-state-render" api demo 2>/dev/null \

@@ -92,7 +92,7 @@ while IFS= read -r _line; do
     # stranger on a Mac. That makes it product, unlike the fixture this rule was
     # written to reject (a record aimed at test/lib.sh, which would have
     # validated forever and protected nothing).
-    bin/*|libexec/*|share/*|setup.sh|indicator/*|HomebrewFormula/*) ;;
+    bin/*|lib/*|libexec/*|share/*|setup.sh|indicator/*|HomebrewFormula/*) ;;
     *) fail "a record targets '${_line#??}', which is not shipped
 code. The corpus must guard what the package installs, not a test fixture" ;;
     esac ;;

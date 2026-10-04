@@ -14,7 +14,7 @@ set -eu
 _name=mux-send-policy
 . "$(dirname "$0")/harness_lib"
 
-. "$HERE/libexec/mux-send-policy_lib"
+. "$HERE/lib/mux-send-policy_lib"
 
 POL=$T/etc/send-policy
 mkdir -p "$T/etc"

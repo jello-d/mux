@@ -53,7 +53,8 @@
 # one section of it rather than the whole file.
 set -eu
 
-_lib=$(dirname "$0")
+_libexec=$(dirname "$0")
+_lib=$_libexec/../lib
 [ -d "${MUX_SHARE:-}" ] || MUX_SHARE=$_lib/../share
 
 _form=skill

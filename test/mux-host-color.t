@@ -3,7 +3,7 @@
 #
 # WHY MUX ANSWERS THIS AT ALL. A per-host tray item has to be the same colour as
 # that host's status-bar chip, or the two disagree about which machine is which
-# and neither looks broken. So the rule has ONE owner (libexec/mux-hosts_lib,
+# and neither looks broken. So the rule has ONE owner (lib/mux-hosts_lib,
 # which `mux style` also uses) rather than being derived a second time by
 # whatever is drawing.
 #

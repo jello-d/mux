@@ -6,7 +6,7 @@
 set -eu
 _name=mux-profiles
 . "$(dirname "$0")/harness_lib"
-. "$HERE/libexec/mux-profiles_lib"
+. "$HERE/lib/mux-profiles_lib"
 
 MUX_DIR=$T/conf
 mkdir -p "$MUX_DIR"

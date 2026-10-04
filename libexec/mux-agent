@@ -34,7 +34,8 @@
 # declared machine surface is what frees the human surface to keep changing.
 set -eu
 
-_lib=$(dirname "$0")
+_libexec=$(dirname "$0")
+_lib=$_libexec/../lib
 . "$_lib/mux-json_lib"
 . "$_lib/mux-send-policy_lib"
 # The pane class vocabulary and its ORDERING, which `class` turns on and
@@ -1055,7 +1056,7 @@ fi
 
 set -- --all
 [ "$_att" -eq 0 ] || set -- "$@" --attached
-_rows=$("$_lib/mux-agent-state-summary" "$@" 2>/dev/null) || _rows=
+_rows=$("$_libexec/mux-agent-state-summary" "$@" 2>/dev/null) || _rows=
 
 # `<partition> <state> <count>` per line into one object per line, then one
 # array. Read with a field split rather than `read -r a b c` so a malformed

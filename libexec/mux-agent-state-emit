@@ -52,7 +52,8 @@ done
 [ -n "${TMUX_PANE:-}" ] || exit 0
 
 # Sibling libs in this script's own (colocated) libexec dir.
-_lib=$(dirname "$0")
+_libexec=$(dirname "$0")
+_lib=$_libexec/../lib
 . "$_lib/mux-agent-state_lib"
 . "$_lib/mux-notify_lib"
 # mux_log, for TRANSITIONS only: see the write below. A beat that merely

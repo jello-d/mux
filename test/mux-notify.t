@@ -15,7 +15,7 @@
 set -eu
 _name=mux-notify
 . "$(dirname "$0")/harness_lib"
-. "$HERE/libexec/mux-notify_lib"
+. "$HERE/lib/mux-notify_lib"
 
 mkdir -p "$T/bin"
 LOG=$T/log

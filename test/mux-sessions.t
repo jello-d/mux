@@ -1,5 +1,5 @@
 #!/bin/sh
-# test/mux-sessions.t - the SESSION SET (libexec/mux-sessions_lib): which
+# test/mux-sessions.t - the SESSION SET (lib/mux-sessions_lib): which
 # sessions a partition had, so a reboot is followed by `mux resume`.
 #
 # The two rules that matter and are easy to get wrong:
@@ -16,8 +16,8 @@ _name=mux-sessions
 . "$(dirname "$0")/harness_lib"
 # mux-sessions_lib derives its path through mux-paths_lib (mux_state_path), so
 # the dependency is sourced here exactly as bin/mux sources it.
-. "$HERE/libexec/mux-paths_lib"
-. "$HERE/libexec/mux-sessions_lib"
+. "$HERE/lib/mux-paths_lib"
+. "$HERE/lib/mux-sessions_lib"
 
 MUX_CACHE=$T/cache
 export MUX_CACHE

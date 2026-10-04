@@ -23,7 +23,8 @@
 # release after being added.
 set -eu
 
-_lib=$(dirname "$0")
+_libexec=$(dirname "$0")
+_lib=$_libexec/../lib
 
 _ev=${1:-}
 [ -n "$_ev" ] || {
@@ -60,4 +61,4 @@ SessionStart)     set -- idle --unless-working ;;
   exit 2 ;;
 esac
 
-exec "$_lib/mux-agent-state-emit" "$@" --source "$_ev"
+exec "$_libexec/mux-agent-state-emit" "$@" --source "$_ev"

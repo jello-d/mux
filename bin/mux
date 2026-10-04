@@ -197,6 +197,7 @@ else
   done
 fi
 LIBEXEC=${_self%/*}/../libexec
+MUX_LIB=${_self%/*}/../lib
 # Package DATA, the shipped defaults (themes, agents, shapes, the default
 # layout), lives in share, a sibling of bin/ and libexec/ under the prefix.
 # User layouts and the integrator OVERLAY (context, hosts) live in $MUX_DIR.
@@ -432,7 +433,7 @@ esac
 # layouts, themes, agents. Core, so sourced unconditionally (it deploys with
 # mux); a fallback keeps mux alive if the lib is somehow missing, stripping only
 # whole-line comments (the pre-normalizer behaviour) so nothing hard-breaks.
-_conf_lib=$LIBEXEC/mux-conf_lib
+_conf_lib=$MUX_LIB/mux-conf_lib
 if [ -r "$_conf_lib" ]; then . "$_conf_lib"
 else mux_conf_clean() { grep -vE '^[[:space:]]*(#|$)'; }
 fi
@@ -444,17 +445,17 @@ fi
 # missing lib is a broken install and says so.
 for _l in mux-paths_lib mux-data_lib mux-profiles_lib mux-scan_lib \
     mux-sessions_lib mux-class_lib mux-log_lib; do
-  [ -r "$LIBEXEC/$_l" ] || {
-    echo "mux: $LIBEXEC/$_l missing (incomplete install)" >&2
+  [ -r "$MUX_LIB/$_l" ] || {
+    echo "mux: $MUX_LIB/$_l missing (incomplete install)" >&2
     exit 1; }
-  . "$LIBEXEC/$_l"
+  . "$MUX_LIB/$_l"
 done
 
 # The shared agent-state reader (also used by the status strip) lets the session
 # picker and `mux ls` show each session's agent glyph. Cosmetic, so a missing
 # lib degrades to plain names rather than taking down core verbs (kill, reload).
 _have_astate=0
-_astate_lib=$LIBEXEC/mux-agent-state_lib
+_astate_lib=$MUX_LIB/mux-agent-state_lib
 if [ -r "$_astate_lib" ]; then . "$_astate_lib"; _have_astate=1; fi
 
 # The CONTEXT seam: mux core knows no particular notion of "context" (a
@@ -462,7 +463,7 @@ if [ -r "$_astate_lib" ]; then . "$_astate_lib"; _have_astate=1; fi
 # optional $MUX_DIR/context hook and falls back to a single default context.
 # Core, so sourced unconditionally; a stub keeps every consumer working if the
 # lib is missing (default socket, side `default`, all layouts shared, no socks).
-_ctx_lib=$LIBEXEC/mux-context_lib
+_ctx_lib=$MUX_LIB/mux-context_lib
 if [ -r "$_ctx_lib" ]; then . "$_ctx_lib"
 else
   mux_ctx_resolve() { MUX_CTX_TOKEN=global; MUX_CTX_PARTITION=global
@@ -1306,7 +1307,7 @@ rs_focus=${2:-}
 # invocation and a verb nobody called must not cost a lib.
 if [ "$cmd" = resume ] && [ "$#" -le 1 ] && [ -n "$rs_want" ]; then
   # shellcheck source=/dev/null
-  . "$LIBEXEC/mux-addr_lib"
+  . "$MUX_LIB/mux-addr_lib"
   mux_addr_parse "$rs_want" || exit 2
   [ -z "$MUX_ADDR_WIN" ] || {
     echo "mux: resume: a window cannot be addressed here." >&2
@@ -1450,9 +1451,9 @@ _mux_env_loaded=0
 _mux_env_load() {
   [ "$_mux_env_loaded" -eq 0 ] || return 0
   for _eel in mux-paths_lib mux-conf_lib mux-notice_lib mux-env_lib; do
-    [ -r "$LIBEXEC/$_eel" ] || return 1
+    [ -r "$MUX_LIB/$_eel" ] || return 1
     # shellcheck source=/dev/null
-    . "$LIBEXEC/$_eel"
+    . "$MUX_LIB/$_eel"
   done
   _mux_env_loaded=1
   return 0
@@ -2383,13 +2384,13 @@ case $cmd in
 hide|show)
   [ -n "${TMUX:-}" ] || {
     echo "mux: $cmd must run inside a session" >&2; exit 1; }
-  [ -r "$LIBEXEC/mux-exclude_lib" ] || {
+  [ -r "$MUX_LIB/mux-exclude_lib" ] || {
     echo "mux: mux-exclude_lib missing (incomplete install)" >&2
     exit 1; }
   _client=$(tm display-message -p '#{client_name}' 2>/dev/null || true)
   [ -n "$_client" ] || {
     echo "mux: could not identify the client" >&2; exit 1; }
-  . "$LIBEXEC/mux-exclude_lib"
+  . "$MUX_LIB/mux-exclude_lib"
   _f=$(mux_exclude_file "$_client")
   mkdir -p "$(dirname "$_f")"
   if [ "$cmd" = show ] && [ "$all" -eq 1 ]; then

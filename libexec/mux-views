@@ -10,7 +10,8 @@
 # See mux-views_lib for what tension IS and why the modes are named this way.
 set -eu
 
-_lib=$(dirname "$0")
+_libexec=$(dirname "$0")
+_lib=$_libexec/../lib
 [ -r "$_lib/mux-views_lib" ] || {
   echo "mux: mux-views_lib missing (incomplete install)" >&2; exit 1; }
 . "$_lib/mux-views_lib"

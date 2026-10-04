@@ -17,7 +17,8 @@
 set -eu
 _self=$(command -v -- "$0" 2>/dev/null || printf '%s' "$0")
 _self=$(readlink -f -- "$_self" 2>/dev/null || printf '%s' "$_self")
-_lib=${_self%/*}
+_libexec=${_self%/*}
+_lib=$_libexec/../lib
 . "$_lib/mux-paths_lib"
 . "$_lib/mux-notice_lib"
 

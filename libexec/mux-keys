@@ -21,7 +21,8 @@
 # that does nothing, which is worse than saying nothing.
 set -eu
 
-_lib=$(dirname "$0")
+_libexec=$(dirname "$0")
+_lib=$_libexec/../lib
 [ -d "${MUX_SHARE:-}" ] || MUX_SHARE=$_lib/../share
 
 _keys=$MUX_SHARE/keys

@@ -46,7 +46,8 @@ _name=lint
 # the bulk of the package and quietly lint almost nothing.
 _list=$T/files
 : >"$_list"
-find "$HERE/bin" "$HERE/libexec" "$HERE/test" "$HERE/share" "$HERE/indicator" \
+find "$HERE/bin" "$HERE/lib" "$HERE/libexec" "$HERE/test" "$HERE/share" \
+  "$HERE/indicator" \
   -type f 2>/dev/null | LC_ALL=C sort | while IFS= read -r _f; do
   case $_f in
   # NOT SELECTED BY `.sh`, deliberately. A suffix-keyed selector SILENTLY
@@ -189,7 +190,7 @@ _bad=$T/order
 # with a TRAILING comment is still checked; only a comment-only line is not.
 ( cd "$HERE" && grep -rnE \
   '<[^ <]+ +2>/dev/null|>>?["'"'"'$][^ ]* +2>/dev/null' \
-  bin libexec test share setup.sh 2>/dev/null \
+  bin lib libexec test share setup.sh 2>/dev/null \
   | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' ) >"$_bad" || true
 if [ -s "$_bad" ]; then
   printf 'FAIL %s: redirect BEFORE its 2>/dev/null:\n' "$_name" >&2
@@ -219,7 +220,7 @@ fi
 _hcb=$T/hardcoded
 ( cd "$HERE" && grep -rnE \
   '(^|[^rn])/bin/(true|false|grep|sed|awk|tr|wc|head|tail|sort|cut)\b' \
-  bin libexec test share setup.sh indicator 2>/dev/null \
+  bin lib libexec test share setup.sh indicator 2>/dev/null \
   | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' \
   | grep -v '^test/lint\.t:' ) >"$_hcb" || true
 if [ -s "$_hcb" ]; then
@@ -245,7 +246,7 @@ fi
 _wcl=$T/wcl
 _wclre='\[ *"\$\([^)]*wc -l[^)]*\)" *=|= *"\$\([^)]*wc -l\)"'
 ( cd "$HERE" && grep -rnE "$_wclre" \
-  bin libexec test share setup.sh indicator 2>/dev/null \
+  bin lib libexec test share setup.sh indicator 2>/dev/null \
   | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' \
   | grep -v '^test/lint\.t:' ) >"$_wcl" || true
 if [ -s "$_wcl" ]; then
@@ -286,7 +287,7 @@ fi
 # looks for, the same reason the dash-name rule below excludes its own message.
 _trp=$T/traps
 ( cd "$HERE" && grep -rnE "trap '[^']*rm -rf[^']*\\\$" \
-  bin libexec test share setup.sh indicator 2>/dev/null \
+  bin lib libexec test share setup.sh indicator 2>/dev/null \
   | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' \
   | grep -vE '^test/lint\.t:' ) >"$_trp" || true
 if [ -s "$_trp" ]; then
@@ -403,7 +404,7 @@ fi
 # executed under its own shebang), so the only thing that stops this coming back
 # is a check.
 _star=$T/star
-( cd "$HERE" && grep -rn '\${\*[#%]' bin libexec test share setup.sh \
+( cd "$HERE" && grep -rn '\${\*[#%]' bin lib libexec test share setup.sh \
   2>/dev/null | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' ) >"$_star" || true
 if [ -s "$_star" ]; then
   printf 'FAIL %s: pattern removal directly on $*:\n' "$_name" >&2
@@ -474,7 +475,7 @@ fi
 _dash=$T/dashgrep
 ( cd "$HERE" && grep -rnE \
   'grep( +-[a-zA-Z]+)* +"\$' \
-  bin libexec share setup.sh 2>/dev/null \
+  bin lib libexec share setup.sh 2>/dev/null \
   | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' \
   | grep -vE 'grep( +-[a-zA-Z]+)* +-- ' ) >"$_dash" || true
 if [ -s "$_dash" ]; then
@@ -519,7 +520,7 @@ fi
 # gets reported as fine. Exempting the directory with a hole would let a hook
 # invent a fourth code; a rule of its own does not.
 _ec=$T/exitcodes
-( cd "$HERE" && grep -rnE '\bexit [0-9]+' bin libexec share setup.sh \
+( cd "$HERE" && grep -rnE '\bexit [0-9]+' bin lib libexec share setup.sh \
   2>/dev/null | grep -vE '\bexit [0123]\b' \
   | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' \
   | grep -vE '^share/(latch|indicator)/' ) >"$_ec" || true
@@ -573,13 +574,25 @@ done
 #
 # A COMMAND THAT IS NOT EXECUTABLE is the failure that actually happens: it
 # resolves by name through the dispatcher, then cannot run.
+# THE DIRECTORY NOW CARRIES THE ROLE TOO, which is a stronger signal than the
+# name and is asserted alongside it: lib/ is what mux SOURCES and libexec/ what
+# it EXECUTES (FHS), so a file in the wrong one is caught even if it is named
+# correctly, and a file named wrongly is caught even if it is placed correctly.
+for _f in "$HERE"/lib/*; do
+  [ -f "$_f" ] || continue
+  [ ! -x "$_f" ] || fail "$(basename "$_f") is in lib/, which mux SOURCES, and
+is EXECUTABLE. The bit is a lie: running it does nothing useful."
+  case $_f in *_lib) ;; *)
+    fail "$(basename "$_f") is in lib/ but is not named *_lib, so the two
+signals for 'sourced library' disagree." ;;
+  esac
+done
 for _f in "$HERE"/libexec/*; do
   [ -f "$_f" ] || continue
   case $_f in
   *_lib)
-    [ ! -x "$_f" ] || fail "$(basename "$_f") is a sourced library and
-is EXECUTABLE. The bit is a lie: running it does nothing useful, and mux asserts
-the opposite everywhere else in this directory."
+    fail "$(basename "$_f") is named as a sourced library but sits in libexec/,
+which mux EXECUTES. Sourced libraries live in lib/."
     ;;
   *)
     [ -x "$_f" ] || fail "$(basename "$_f") is a command and is NOT

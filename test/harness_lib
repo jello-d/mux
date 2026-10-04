@@ -257,7 +257,7 @@ pass() { MUX_T_SAID=1; printf 'ok   %s\n' "$_name"; exit 0; }
 #     state window pane epoch notif SESSION
 #
 # The session comes LAST so a name containing a space reads back whole with a
-# single `read -r _st _w _p _e _nid _ss` (see libexec/mux-agent-state_lib).
+# single `read -r _st _w _p _e _nid _ss` (see lib/mux-agent-state_lib).
 # notif is `-` when absent, never empty: an empty field collapses into the
 # whitespace run and shifts every field after it.
 #

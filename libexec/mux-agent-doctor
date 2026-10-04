@@ -48,7 +48,8 @@
 # land, and a record that moved has healed itself and must not be clobbered.
 set -eu
 
-_lib=$(dirname "$0")
+_libexec=$(dirname "$0")
+_lib=$_libexec/../lib
 # mux-conf_lib for mux_conf_clean: the `busy` marker is read through the same
 # comment-and-whitespace cleaner every other mux config file uses, rather
 # than a private parser. Omitting it made _busy_pat silently return nothing,

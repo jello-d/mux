@@ -36,9 +36,9 @@ MUX_SHARE=${MUX_SHARE:-$(dirname "$0")/../share}
 # up exactly as mux would have looked it up) and the shared comment/whitespace
 # rule (so a spliced layout arrives normalized, as the parser would see it).
 for _l in mux-data_lib mux-conf_lib mux-profiles_lib; do
-  [ -r "$(dirname "$0")/$_l" ] || {
+  [ -r "$(dirname "$0")/../lib/$_l" ] || {
     echo "mux: $_l missing (incomplete install)" >&2; exit 1; }
-  . "$(dirname "$0")/$_l"
+  . "$(dirname "$0")/../lib/$_l"
 done
 
 APPLY=0

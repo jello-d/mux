@@ -38,7 +38,8 @@ set -eu
 # Sibling libs in this script's own (colocated) libexec dir. paths first:
 # mux-sessions_lib calls mux_state_path, and a lib that needs another must say
 # so rather than relying on whoever sources first.
-_lib=$(dirname "$0")
+_libexec=$(dirname "$0")
+_lib=$_libexec/../lib
 for _l in mux-paths_lib mux-sessions_lib; do
   [ -r "$_lib/$_l" ] || {
     echo "mux: $_lib/$_l missing (incomplete install)" >&2

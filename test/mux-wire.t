@@ -251,13 +251,13 @@ chmod +x "$T/envconf/envhooks.d/MUX_T_POINTER"
 MUX_DIR=$T/envconf
 MUX_T_POINTER=/a/resolvable/value; export MUX_T_POINTER
 # shellcheck source=/dev/null
-. "$HERE/libexec/mux-paths_lib"
+. "$HERE/lib/mux-paths_lib"
 # shellcheck source=/dev/null
-. "$HERE/libexec/mux-conf_lib"
+. "$HERE/lib/mux-conf_lib"
 # shellcheck source=/dev/null
-. "$HERE/libexec/mux-notice_lib"
+. "$HERE/lib/mux-notice_lib"
 # shellcheck source=/dev/null
-. "$HERE/libexec/mux-env_lib"
+. "$HERE/lib/mux-env_lib"
 
 # THE POISONED SESSION, written exactly as tmux writes it: `-NAME` is the
 # REMOVAL marker, which is a third state beside set and absent and is the one

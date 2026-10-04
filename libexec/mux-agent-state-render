@@ -33,7 +33,8 @@
 set -eu
 
 # Sibling libs in this script's own (colocated) libexec dir.
-_lib=$(dirname "$0")
+_libexec=$(dirname "$0")
+_lib=$_libexec/../lib
 
 # The state GLYPHS (MUX_GLYPH_*) and the state reader (mux_agent_state) live in
 # a shared lib, so the strip and the mux picker map state the same way and

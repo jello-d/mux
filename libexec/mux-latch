@@ -92,7 +92,8 @@
 # only when every one of them is.
 set -eu
 
-_lib=$(dirname "$0")
+_libexec=$(dirname "$0")
+_lib=$_libexec/../lib
 . "$_lib/mux-conf_lib"
 # mux-log_lib for mux_log: latch is the reason the log exists. Every transition
 # went to stderr and the state machine lived in shell variables, so a latch that
@@ -211,7 +212,7 @@ STATUS=$(_hook "$(_seam "${MUX_LATCH_STATUS:-}" latch-status '')")
 # Defaulted by PATH, not by bare name: mux-sane is mux's own helper (and the
 # `mux sane` verb), not a transport hook under share/latch, so there is
 # nothing for _hook to resolve and nothing to depend on $PATH for.
-_r_seam=$(_seam "${MUX_LATCH_RESTORE:-}" latch-restore "$_lib/mux-sane")
+_r_seam=$(_seam "${MUX_LATCH_RESTORE:-}" latch-restore "$_libexec/mux-sane")
 RESTORE=$(_hook "$_r_seam")
 
 # A NAMED HOOK THAT DOES NOT EXIST IS A CONFIG ERROR, and it must be loud.

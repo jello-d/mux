@@ -24,7 +24,8 @@
 # tmux server is contacted, so it is safe anywhere, including a status tick.
 set -eu
 
-_lib=$(dirname "$0")
+_libexec=$(dirname "$0")
+_lib=$_libexec/../lib
 MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
 
 for _l in mux-conf_lib mux-hosts_lib; do

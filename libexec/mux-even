@@ -38,7 +38,8 @@
 # nothing.
 set -eu
 
-_lib=$(dirname "$0")
+_libexec=$(dirname "$0")
+_lib=$_libexec/../lib
 
 # ONE NAMESPACE, COMPUTED ONCE: the same repair next-blocked needed, and for
 # the same reason. Every tmux call here was bare, which is right INSIDE tmux
@@ -161,7 +162,7 @@ done
 # HEIGHT LAST, and through mux-pin rather than a second copy of its rules: it
 # already walks every pane on the server and knows how a MIN-MAX spec tracks
 # the window. Running it after the widths means one settle, not two.
-[ -x "$_lib/mux-pin" ] && "$_lib/mux-pin" 2>/dev/null || true
+[ -x "$_libexec/mux-pin" ] && "$_libexec/mux-pin" 2>/dev/null || true
 
 if [ -n "$_healed" ]; then
   echo "mux: restored @mux-bottom=$_consensus (from the other windows)" \

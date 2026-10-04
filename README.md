@@ -128,7 +128,8 @@ The text is the signal; colour is decoration.
 ## Install
 
 mux is a single entry point (`bin/mux`) that self-locates its helpers
-(`libexec/`) and data (`share/`) as siblings under one prefix. `setup.sh`
+(`lib/`, `libexec/`) and data (`share/`) as siblings under one prefix.
+`setup.sh`
 **copies** that tree to `~/.local/share/mux` and links only `bin` and the man
 page, so an installed mux is self-contained and does not depend on the clone
 it came from. Clone it and let `setup.sh` wire it in:
@@ -179,7 +180,8 @@ brew install mux
 
 After that, `brew upgrade mux` as usual, or `brew install --HEAD mux` to track
 the tip instead of the latest tag. Homebrew puts the tree under the formula's
-`libexec`, links `mux` onto `PATH`, and links the man page, so `man mux` works.
+`lib` and `libexec`, links `mux` onto `PATH`, and links the man page, so
+`man mux` works.
 
 Two things differ from the clone install above, both because brew installs by
 copying and so never runs `setup.sh`:
@@ -927,7 +929,7 @@ reads your override first, then the shipped default.
 ## How it works
 
 - **One entry point, self-locating.** `bin/mux` resolves its own path and finds
-  `../libexec` and `../share` beside it, so it works from any install
+  `../lib`, `../libexec` and `../share` beside it, so it works from any install
   prefix with no configuration. Every helper is reached as `mux <verb>`, so the
   tmux fragment and agent hooks carry no paths.
 - **Agent state** lives in per-pane files under `$XDG_RUNTIME_DIR`, namespaced

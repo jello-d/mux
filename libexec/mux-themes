@@ -41,7 +41,7 @@ MUX_SHARE=${MUX_SHARE:-$(dirname "$0")/../share}
 # Where mux keeps things (see mux-paths_lib), so the stamp directory is derived
 # in one place rather than spelled out here. Required, not optional: a fallback
 # would be a second copy of the very rule that lib exists to hold.
-_paths=$(dirname "$0")/mux-paths_lib
+_paths=$(dirname "$0")/../lib/mux-paths_lib
 [ -r "$_paths" ] || {
   echo "mux-themes: $_paths missing (incomplete install)" >&2; exit 1; }
 . "$_paths"
@@ -52,20 +52,20 @@ STAMPDIR=$(mux_cache_dir)
 # The shared $MUX_DIR-over-$MUX_SHARE resolver (see mux-data_lib), so a theme
 # dropped in $MUX_DIR/themes is COMPILED, not just listed: the palette the
 # server gets and the palette the help shows come from one resolution.
-_data=$(dirname "$0")/mux-data_lib
+_data=$(dirname "$0")/../lib/mux-data_lib
 [ -r "$_data" ] || {
   echo "mux-themes: $_data missing (incomplete install)" >&2; exit 1; }
 . "$_data"
 
 # The shared comment/normalize rule (see bin/mux); a fallback strips only
 # whole-line comments so a missing lib never breaks a palette push.
-_conf=$(dirname "$0")/mux-conf_lib
+_conf=$(dirname "$0")/../lib/mux-conf_lib
 if [ -r "$_conf" ]; then . "$_conf"
 else mux_conf_clean() { grep -vE '^[[:space:]]*(#|$)'; }
 fi
 # The context seam (see mux-context_lib): `sync` heals every non-default context
 # server the hook names. A stub yields none (only the default server) if absent.
-_ctx=$(dirname "$0")/mux-context_lib
+_ctx=$(dirname "$0")/../lib/mux-context_lib
 if [ -r "$_ctx" ]; then . "$_ctx"
 else mux_ctx_partitions() { echo global; }
 fi

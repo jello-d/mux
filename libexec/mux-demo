@@ -29,7 +29,8 @@
 # away from the product.
 set -eu
 
-_lib=$(dirname "$0")
+_libexec=$(dirname "$0")
+_lib=$_libexec/../lib
 [ -d "${MUX_SHARE:-}" ] || MUX_SHARE=$_lib/../share
 
 # A FIXED SOCKET, and one that cannot collide with a partition: a partition name

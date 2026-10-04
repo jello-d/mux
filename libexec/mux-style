@@ -39,7 +39,7 @@ pane_pid=${2:?usage: mux-style [-q] SESSION PANE_PID}
 MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
 # The shared comment/normalize rule (see bin/mux); a fallback strips only
 # whole-line comments so a missing lib never breaks the status line.
-_conf=$(dirname "$0")/mux-conf_lib
+_conf=$(dirname "$0")/../lib/mux-conf_lib
 if [ -r "$_conf" ]; then . "$_conf"
 else mux_conf_clean() { grep -vE '^[[:space:]]*(#|$)'; }
 fi
@@ -48,13 +48,13 @@ fi
 # uses to read $MUX_DIR/hosts. Required rather than stubbed: a fallback here
 # would be a second copy of the very rule that lib exists to hold, and the two
 # would disagree silently about which machine is which.
-_hostslib=$(dirname "$0")/mux-hosts_lib
+_hostslib=$(dirname "$0")/../lib/mux-hosts_lib
 [ -r "$_hostslib" ] || {
   echo "mux-style: $_hostslib missing (incomplete install)" >&2; exit 1; }
 . "$_hostslib"
 # The context seam (see mux-context_lib). A stub yields the global context if
 # the lib is somehow missing.
-_ctx=$(dirname "$0")/mux-context_lib
+_ctx=$(dirname "$0")/../lib/mux-context_lib
 if [ -r "$_ctx" ]; then . "$_ctx"
 else mux_ctx_resolve() { MUX_CTX_TOKEN=global; MUX_CTX_PARTITION=global
   MUX_CFG_label=''; MUX_CFG_theme=''; MUX_CFG_host_chip=on; }

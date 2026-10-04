@@ -19,7 +19,7 @@ _name=mux-addr
 . "$(dirname "$0")/harness_lib"
 
 # shellcheck source=/dev/null
-. "$HERE/libexec/mux-addr_lib"
+. "$HERE/lib/mux-addr_lib"
 
 # --- the premise, against a real tmux -------------------------------------
 if command -v tmux >/dev/null 2>&1; then

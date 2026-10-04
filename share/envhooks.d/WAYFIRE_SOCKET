@@ -2,7 +2,7 @@
 # envhooks.d/WAYFIRE_SOCKET - is this compositor IPC socket actually answering?
 #
 # 0 valid, 1 invalid, anything else "could not tell" (mux passes the value
-# through unchanged). See libexec/mux-env_lib for why the third answer exists.
+# through unchanged). See lib/mux-env_lib for why the third answer exists.
 #
 # WHERE THE VALUE COMES FROM, because it is the least obvious of the five and
 # because nothing in a shell can produce it: wayfire's ipc plugin invents the

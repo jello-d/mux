@@ -41,7 +41,8 @@
 # worse but not silent.
 set -eu
 
-_lib=$(dirname "$0")
+_libexec=$(dirname "$0")
+_lib=$_libexec/../lib
 [ -d "${MUX_SHARE:-}" ] || MUX_SHARE=$_lib/../share
 
 _die() { echo "mux: setup: $*" >&2; exit 1; }
@@ -97,7 +98,8 @@ fi
 # THE EVENTS COME FROM MUX, not from a list typed here. `mux agent-hook`'s
 # table IS the contract, so scraping it means this can never wire an event mux
 # does not understand (which exits 2 and logs) or miss one it does.
-_events=$(sed -n 's/^\([A-Za-z]*\))  *set -- .*/\1/p' "$_lib/mux-agent-hook")
+_events=$(sed -n 's/^\([A-Za-z]*\))  *set -- .*/\1/p' \
+           "$_libexec/mux-agent-hook")
 [ -n "$_events" ] || _die "cannot read the event table from mux-agent-hook"
 
 case $_agent in
@@ -127,7 +129,7 @@ command -v python3 >/dev/null 2>&1 || {
 # file, and a hardcoded interpreter at the call site leaks it just as loudly:
 # rewriting this in any other language would still break the caller. The file
 # carries its own `#!/usr/bin/env python3`.
-_impl=$_lib/mux-setup-claude
+_impl=$_libexec/mux-setup-claude
 [ -x "$_impl" ] || _die "$_impl is missing or not executable (broken install)"
 
 _mode=apply
@@ -187,7 +189,7 @@ mkdir -p "$_skdir" 2>/dev/null || _die "cannot create $_skdir"
 # redirections apply left to right, so a failing open prints before the
 # command runs) and would hide the one thing worth seeing here: mux-skill
 # says precisely why it could not assemble the document.
-if "$_lib/mux-skill" >"$_skdir/SKILL.md.new"; then
+if "$_libexec/mux-skill" >"$_skdir/SKILL.md.new"; then
   mv -f "$_skdir/SKILL.md.new" "$_skdir/SKILL.md"
   echo "mux: setup: installed $_skdir/SKILL.md"
 else

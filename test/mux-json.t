@@ -23,7 +23,7 @@ _name=mux-json
 command -v python3 >/dev/null 2>&1 || {
   printf 'skip %s (no python3 to parse with)\n' "$_name"; exit 0; }
 
-. "$HERE/libexec/mux-json_lib"
+. "$HERE/lib/mux-json_lib"
 
 # rt LABEL VALUE: emit VALUE as JSON, parse it, and require the parsed value
 # to be byte-identical to what went in.
