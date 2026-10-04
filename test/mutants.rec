@@ -3352,35 +3352,14 @@ m exited 2 without saying why
 # trap, which does NOT run when the shell is signalled. Once leaked, a
 # /tmp/tmp.XXXXXXXXXX cannot be told from any other program s, so
 # nothing can ever prune it. A deterministic name is bounded instead.
-= render-scratch-anonymous-and-unprunable
-f libexec/mux-agent-state-render
-t mux-strip
-- if mkdir -p "$_rdir" 2>/dev/null; then
-+ if false; then
-m did not land under the runtime dir
-
 # ... and a persistent name has to be TRUNCATED, because the records
 # file is appended to: otherwise the strip accumulates every session on
 # every tick for as long as the client lives. This is the one new way
 # the fix can be wrong, which is why it has its own record.
-= render-scratch-not-truncated
-f libexec/mux-agent-state-render
-t mux-strip
-- : 2>/dev/null >"$recs" || true
-+   true
-m CHANGED between two renders
-
 # AND THE SIGNALS ARE NAMED. An EXIT trap alone does not run when the
 # shell is signalled: measured, a TERM leaves both files behind with
 # `EXIT` only and removes them with the signals listed. This is the
 # original defect, and the test drives it with a tmux stub that blocks.
-= render-trap-misses-the-signals
-f libexec/mux-agent-state-render
-t mux-strip
-- trap "rm -f '$tmpf' '$recs'" EXIT INT HUP TERM
-+ trap "rm -f '$tmpf' '$recs'" EXIT
-m a SIGNALLED render leaked its scratch
-
 = agent-window-bare-form-picks-one
 f libexec/mux-agent
 t mux-agent
@@ -3444,3 +3423,19 @@ t mux-check
 -     _nda=$(_mux_bus_ask "$_ndt" ListActivatableNames) || return 1
 +     _nda=; false || return 1
 m the name is ACTIVATABLE
+
+= render-records-do-not-accumulate
+f libexec/mux-agent-state-render
+t mux-strip
+# THE RECORDS ARE BUILT IN A VARIABLE, which is what makes two concurrent
+# renders of one client independent: a file at a fixed name was shared, so
+# they interleaved their appends and deleted each other's scratch mid-read.
+# Dropping the accumulation keeps only the LAST session, so the strip draws
+# one chip where it should draw several. This REPLACES three records that
+# guarded the file-based shape (its anonymous name, its truncation, and its
+# trap's signal list): all three protected code that no longer exists, and
+# the concurrency property they could not express is asserted in mux-strip.t
+# instead, proven by running that test against the previous commit.
+-   _RECS="$_RECS$_cur $_st $_age $sess
++   _RECS="$_cur $_st $_age $sess
+m want

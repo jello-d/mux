@@ -217,62 +217,42 @@ fi
 
 # --- gather: one record per visible session, in tmux order ------------------
 # Fields "iscur state age name" (state 'none' for agentless, so the field is
-# never empty). Written to a file so the strip's WIDTH can be measured before it
-# is drawn: the graceful-reduction tiers below choose a layout that fits inside
-# status-right-length, instead of letting tmux truncate the strip blind and drop
-# whatever fell off the right: possibly a session that needs you.
-# DETERMINISTIC NAMES, NOT `mktemp`, and the reason is that this is the
-# hottest path mux has: it runs per client every status-interval, so anything
-# it leaks it leaks for ever. An anonymous `/tmp/tmp.XXXXXXXXXX` is the worst
-# shape for that, because once leaked it is indistinguishable from every other
-# program's temp file and NOTHING can safely prune it. A fixed name per client
-# is bounded instead: a leak is simply overwritten by that client's next
-# render, so the floor is two files per client rather than unbounded growth.
+# never empty). Held so the strip's WIDTH can be measured before it is drawn:
+# the graceful-reduction tiers below choose a layout that fits inside
+# status-right-length, instead of letting tmux truncate the strip blind and
+# drop whatever fell off the right: possibly a session that needs you.
 #
-# NOT UNDER $dir EITHER, which would be the obvious place: the records there
-# are enumerated with a bare `"$dir"/*` glob, so a file dropped in would be
-# read back as a per-pane record.
+# IN VARIABLES, NOT FILES, AND THAT IS A BUG FIX RATHER THAN A TIDY. Two
+# earlier shapes both failed, in opposite ways, and the second was worse:
 #
-# THE CLIENT NAME IS FLATTENED WITHOUT A FORK. It is a tty path
-# (`/dev/pts/24`), and `${client##*/}` alone would key two clients on different
-# device directories to one file: rare, and it would garble the strip rather
-# than fail, which is this project's signature failure mode. The loop costs no
-# process, which matters here and would not anywhere else.
-_rkey=; _rrest=${client:-noclient}
-while :; do
-  case $_rrest in
-  */*) _rkey=$_rkey${_rrest%%/*}_; _rrest=${_rrest#*/} ;;
-  *)   _rkey=$_rkey$_rrest; break ;;
-  esac
-done
-# THE PARTITION IS IN THE KEY TOO. This directory is shared across
-# partitions (it hangs off `mux/`, not off the namespace), and while two
-# clients cannot hold the same tty, making the key answer for both questions
-# costs one expansion and removes the need to reason about it at all.
-_rdir=${dir%/*}; _rdir=${_rdir%/*}/render
-_rkey=${dir##*/}.$_rkey
-if mkdir -p "$_rdir" 2>/dev/null; then
-  tmpf=$_rdir/$_rkey.sess; recs=$_rdir/$_rkey.recs
-else
-  # The pre-existing path, kept rather than invented: if the runtime dir
-  # cannot be written the strip must still draw, and this is what shipped.
-  tmpf=$(mktemp); recs=$(mktemp)
-fi
-# TRUNCATED, and this is the one new way to get it wrong: `recs` is APPENDED
-# to below, so a name that persists between renders would make the strip grow
-# by every session on every tick. `tmpf` is truncated by its own `>` redirect.
-: 2>/dev/null >"$recs" || true
-# INT HUP TERM AS WELL AS EXIT, because an EXIT trap alone does NOT run when
-# the shell is signalled, which is how this leaked in the first place.
-# Measured: with `EXIT` only a TERM leaves both files behind, and with the
-# signals named they are removed. `mux-latch` has always done this.
+#   mktemp         unique per render, so no render could disturb another, but
+#                  an anonymous /tmp/tmp.XXXXXXXXXX is indistinguishable from
+#                  every other program's scratch once leaked, so NOTHING can
+#                  prune it. 674 were counted on one box.
+#   a fixed name   bounded and prunable, and WRONG: this runs per client every
+#                  status-interval AND again on every redraw a session switch
+#                  forces, so two renders for one client overlap routinely and
+#                  shared one pair of files. They interleaved their appends
+#                  (the strip drew a session twice), and the first to finish
+#                  REMOVED the files the second was still reading (the strip
+#                  drew short, or blank). Measured: 44 of 50 concurrent
+#                  renders wrong, strips up to 2.5x too long. Self-healing,
+#                  because the next render that did not overlap was correct,
+#                  which is exactly what made it read as a drawing glitch.
 #
-# THE LITERALS ARE BAKED IN AT ARMING TIME rather than left to expand when the
-# trap fires, which is the fleet rule a destructive trap has already cost this
-# project a working tree for.
-# shellcheck disable=SC2064  # deliberate: see above
-trap "rm -f '$tmpf' '$recs'" EXIT INT HUP TERM
-tmux list-sessions -F '#{session_name}' 2>/dev/null >"$tmpf" || true
+# A VARIABLE IS PRIVATE TO THE PROCESS BY CONSTRUCTION, so it answers both:
+# nothing to leak, nothing to prune, nothing to share. It also drops a mkdir,
+# two opens and a trap from the hottest path mux has. The loops are fed by
+# here-doc, which keeps them in THIS shell: a pipe would put each in a
+# subshell and `nsess` would not survive it, and that is why a file was used
+# in the first place.
+#
+# THE LESSON WORTH KEEPING: a deterministic name is the right answer to a
+# LEAK and the wrong answer to CONCURRENCY, and this path has both properties.
+# The comment that shipped here named truncation as "the one new way to get it
+# wrong", which was true of sequential renders and blind to simultaneous ones.
+_SLIST=$(tmux list-sessions -F '#{session_name}' 2>/dev/null || true)
+_RECS=
 now=$(date +%s)          # one instant, so every age is measured the same
 nsess=0
 while read -r sess; do
@@ -295,9 +275,12 @@ while read -r sess; do
   [ -n "$_st" ] || _st=none
   _age=0; [ -n "$_ep" ] && _age=$((now - _ep))
   _cur=0; [ "$sess" = "$current" ] && _cur=1
-  printf '%s %s %s %s\n' "$_cur" "$_st" "$_age" "$sess" >>"$recs"
+  _RECS="$_RECS$_cur $_st $_age $sess
+"
   nsess=$((nsess + 1))
-done <"$tmpf"
+done <<EOF
+$_SLIST
+EOF
 [ "$nsess" -gt 0 ] || exit 0
 
 # Width budget: columns status-right may fill (status-right-length), less the
@@ -409,18 +392,24 @@ _emit_edge() {
 build_plain() {          # SHOWAGE(1|0): every session as a chip
   _reset
   while read -r _c _s _a _nm; do
+    [ -n "$_c" ] || continue
     _emit_session "$_c" "$_s" "$_a" "$_nm" "$1"
-  done <"$recs"
+  done <<EOF
+$_RECS
+EOF
 }
 build_collapse() {       # no age, runs of agentless sessions folded to ·N·
   _reset; _run=0
   while read -r _c _s _a _nm; do
+    [ -n "$_c" ] || continue
     if [ "$_c" -eq 0 ] && [ "$_s" = none ]; then
       _run=$((_run + 1)); continue
     fi
     [ "$_run" -gt 0 ] && { _emit_cluster "$_run"; _run=0; }
     _emit_session "$_c" "$_s" "$_a" "$_nm" 0
-  done <"$recs"
+  done <<EOF
+$_RECS
+EOF
   # if/then, NOT `[ ... ] && ...`: this is the function's LAST statement,
   # so a false test would make build_collapse RETURN 1, and its caller
   # is `[ fits ] || build_collapse`, where a non-zero final command trips
@@ -432,7 +421,12 @@ build_collapse() {       # no age, runs of agentless sessions folded to ·N·
 }
 build_window() {         # last resort: a window around current + edge counters
   set --
-  while IFS= read -r _l; do set -- "$@" "$_l"; done <"$recs"
+  while IFS= read -r _l; do
+    [ -n "$_l" ] || continue
+    set -- "$@" "$_l"
+  done <<EOF
+$_RECS
+EOF
   _tot=$#
   _ci=1 _k=0
   for _l in "$@"; do
@@ -498,7 +492,9 @@ build_summary() {        # the floor: too narrow even to window; show a count
   _nb=0
   while read -r _c _s _a _nm; do
     [ "$_s" = blocked ] && _nb=$((_nb + 1))
-  done <"$recs"
+  done <<EOF
+$_RECS
+EOF
   if [ "$_nb" -gt 0 ]; then          # keep the needs-you count, always
     BS="#[fg=colour232,bg=colour202,bold]$MUX_GLYPH_BLOCKED$_nb"
     BS="$BS#[default]"; BW=$((2 + ${#_nb}))
