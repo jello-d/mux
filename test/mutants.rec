@@ -2477,8 +2477,11 @@ t mux-check
 # that passes on a fully installed and fully broken box is the failure the
 # marker contract exists to prevent, so having it inside the file that defines
 # that contract was the worst available place for it.
--     *false*) return 1 ;;
-+     *false*) return 2 ;;
+# RE-POINTED when the `false` arm stopped returning directly: it now falls
+# through to the activatable question, so the line that carries the finding is
+# the one that keeps `false` OUT of the cannot-tell answer.
+-     *false*) ;;
++     *false*) continue ;;
 m NOBODY owns the notification
 
 = check-notify-daemon-unasked-is-broken
@@ -3420,3 +3423,24 @@ t mux-agent
 -   [ -n "$_mwidx" ] && [ "$_mwid" != "$_mwpair" ] || {
 +   [ -n "$_mwidx" ] || {
 m a create that named no window id must refuse
+
+= notify-activatable-read-as-absent
+f libexec/mux-notify_lib
+t mux-check
+-     *"'$_ndn'"*|*"\"$_ndn\""*) return 3 ;;
++     *nosuchpattern*) return 3 ;;
+m the name is ACTIVATABLE
+
+= notify-activatable-matched-loosely
+f libexec/mux-notify_lib
+t mux-check
+-     *"'$_ndn'"*|*"\"$_ndn\""*) return 3 ;;
++     *Notifications*) return 3 ;;
+m a name that merely CONTAINS ours
+
+= notify-activatable-never-asked
+f libexec/mux-notify_lib
+t mux-check
+-     _nda=$(_mux_bus_ask "$_ndt" ListActivatableNames) || return 1
++     _nda=; false || return 1
+m the name is ACTIVATABLE

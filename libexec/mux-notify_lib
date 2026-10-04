@@ -52,8 +52,18 @@ _mux_notify_closer() {
 # mux_notify_daemon -> is anything actually able to DISPLAY a notification?
 #
 #     0  a daemon owns org.freedesktop.Notifications
-#     1  a bus answered and NOBODY owns it: mux can raise and nothing shows
+#     1  nobody owns it AND nothing would start: mux raises into the void
 #     2  cannot tell from here (no tool, or no session bus reachable)
+#     3  nobody owns it YET, but the name is D-BUS ACTIVATABLE
+#
+# THE FOURTH ANSWER IS THE COMMON STATE AFTER A BOOT, and leaving it out made
+# this check wrong in the opposite direction to the bug it fixed. Measured five
+# minutes after a reboot: `NameHasOwner` answered false, no mako was running,
+# and `org.freedesktop.Notifications` was in `ListActivatableNames` with mako
+# shipping `fr.emersion.mako.service`. So notifications worked perfectly and
+# the check said "NOTHING DISPLAYS them". FOR AN ACTIVATABLE NAME, "nobody
+# home" AND "nobody can ever come" ARE THE SAME `false`, and only the second
+# is worth warning about.
 #
 # WHY THIS EXISTS. `mux check` reported `[OK] notifications` on the strength of
 # `command -v notify-send`, and on this box that was a lie: the binary was
@@ -82,43 +92,72 @@ _mux_notify_closer() {
 # an error string, so an error can mean the one thing left, which is that the
 # question could not be put at all.
 #
+# ASKING WHICH NAMES CAN BE ACTIVATED IS ALSO READ-ONLY, measured the same way
+# rather than assumed by analogy: driven against `ca.desrt.dconf` (activatable,
+# not running), `ListActivatableNames` answered and the name was still unowned
+# a second later. It asks the BUS for its own service list, so there is nothing
+# for it to start.
+#
+# AND THE MATCH IS QUOTE-EXACT, never a substring. All three tools quote each
+# name, which is what makes that possible, and it is necessary rather than
+# fastidious: this box also lists `org.gnome.Shell.Notifications`, so a
+# substring match would read a GNOME service as an answer about ours.
+#
 # THE THIRD ANSWER IS THE LOAD-BEARING ONE, and it is the lesson the
 # WAYLAND_DISPLAY hook cost: a probe run where it cannot see the desktop must
 # not report the desktop broken. `mux check` over ssh reaches no session bus,
 # so the query ERRORS, and calling that "nobody will display it" would be a
 # confident false finding about a machine that is fine.
+# _mux_bus_ask TOOL METHOD [ARG] -> prints the raw answer, non-zero if the
+# call could not be put. ONE caller for two questions, because the alternative
+# is a second three-arm case statement and three more chances for the two to
+# drift apart on a flag.
+_mux_bus_ask() {
+  _bat=$1; _bam=$2; _baa=${3:-}
+  case $_bat in
+  gdbus)
+    set -- gdbus call --session --dest org.freedesktop.DBus \
+      --object-path /org/freedesktop/DBus \
+      --method "org.freedesktop.DBus.$_bam"
+    [ -z "$_baa" ] || set -- "$@" "$_baa" ;;
+  busctl)
+    set -- busctl --user call org.freedesktop.DBus \
+      /org/freedesktop/DBus org.freedesktop.DBus "$_bam"
+    [ -z "$_baa" ] || set -- "$@" s "$_baa" ;;
+  dbus-send)
+    set -- dbus-send --session --print-reply \
+      --dest=org.freedesktop.DBus /org/freedesktop/DBus \
+      "org.freedesktop.DBus.$_bam"
+    [ -z "$_baa" ] || set -- "$@" "string:$_baa" ;;
+  *) return 1 ;;
+  esac
+  "$@" 2>/dev/null
+}
+
 mux_notify_daemon() {
   _ndn=org.freedesktop.Notifications
-  _ndo=
   for _ndt in gdbus busctl dbus-send; do
     command -v "$_ndt" >/dev/null 2>&1 || continue
-    case $_ndt in
-    gdbus)
-      _ndo=$(gdbus call --session \
-        --dest org.freedesktop.DBus \
-        --object-path /org/freedesktop/DBus \
-        --method org.freedesktop.DBus.NameHasOwner \
-        "$_ndn" 2>/dev/null) || _ndo= ;;
-    busctl)
-      _ndo=$(busctl --user call org.freedesktop.DBus \
-        /org/freedesktop/DBus org.freedesktop.DBus \
-        NameHasOwner s "$_ndn" 2>/dev/null) || _ndo= ;;
-    dbus-send)
-      _ndo=$(dbus-send --session --print-reply \
-        --dest=org.freedesktop.DBus /org/freedesktop/DBus \
-        org.freedesktop.DBus.NameHasOwner \
-        string:"$_ndn" 2>/dev/null) || _ndo= ;;
-    esac
+    _ndo=$(_mux_bus_ask "$_ndt" NameHasOwner "$_ndn") || _ndo=
     # All three spell the answer differently and all three contain the word:
     # `(true,)`, `b true`, `   boolean true`. Matched rather than parsed per
     # tool, since the shapes agree on the only token that carries meaning.
     case $_ndo in
-    *true*)  return 0 ;;
-    *false*) return 1 ;;
+    *true*) return 0 ;;
     esac
+    case $_ndo in
+    *false*) ;;
     # This tool could not put the question. Try the next one rather than
     # concluding anything: a box can carry a gdbus that cannot reach a bus
     # and a busctl that can.
+    *) continue ;;
+    esac
+    # NOBODY OWNS IT. That is only news if nothing WOULD start, so ask.
+    _nda=$(_mux_bus_ask "$_ndt" ListActivatableNames) || return 1
+    case $_nda in
+    *"'$_ndn'"*|*"\"$_ndn\""*) return 3 ;;
+    esac
+    return 1
   done
   return 2
 }

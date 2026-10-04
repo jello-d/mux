@@ -195,18 +195,29 @@ chmod +x "$T/bin/notify-send"
 # The stub answers the BUS's NameHasOwner, which is what mux asks. Driven in
 # all three directions because they are three different bugs, and the middle
 # one is the bug that was shipped.
-_bus() {   # <reply-or-empty>: what every bus tool answers
+#
+# ONE ARM PER QUESTION. mux asks the bus TWO things now (who owns the name,
+# and which names can be ACTIVATED), and a stub answering both the same way
+# is looser than the tool: `(false,)` to the second question happens to parse
+# as "not activatable", so the old single-answer stub kept the first case
+# green while being unable to express the new one at all.
+_bus() {   # <owner-reply-or-empty> [activatable-list]
+  printf '%s' "${1:-}" >"$T/bus-owner"
+  printf '%s' "${2:-}" >"$T/bus-act"
   for _bt in gdbus busctl dbus-send; do
-    if [ -n "${1:-}" ]; then
-      printf '#!/bin/sh\nprintf "%%s\\\\n" "%s"\n' "$1" >"$T/bin/$_bt"
-    else
-      printf '#!/bin/sh\nexit 0\n' >"$T/bin/$_bt"
-    fi
+    cat >"$T/bin/$_bt" <<EOF
+#!/bin/sh
+case \$* in
+*ListActivatableNames*) cat "$T/bus-act"; echo; exit 0 ;;
+esac
+[ -s "$T/bus-owner" ] || exit 1
+cat "$T/bus-owner"; echo
+EOF
     chmod +x "$T/bin/$_bt"
   done
 }
 
-_bus '(false,)'
+_bus '(false,)' "([ 'org.freedesktop.DBus' ],)"
 check >/dev/null
 has "NOTHING DISPLAYS them" "a bus that says NOBODY owns the notification
 name means mux can raise and nothing will show it, which is the 'fully
@@ -215,7 +226,32 @@ installed and fully broken' state this whole contract exists to catch"
 desktop rather than mux's install, and a provisioner's apply cannot repair
 it, so this is a WARN and must never FAIL the audit"
 
-_bus '(true,)'
+# --- NOBODY HOME IS NOT NOBODY COMING -------------------------------------
+# The name is D-Bus ACTIVATABLE, so the first notification starts a daemon.
+# Measured five minutes after a real reboot: unowned, no mako running, the
+# name listed, and notifications working perfectly. Warning there was this
+# check being wrong in the OPPOSITE direction to the bug it was added for,
+# and it is the ordinary state of every box for its first minutes.
+_bus '(false,)' "([ 'org.freedesktop.DBus', 'org.freedesktop.Notifications' ],)"
+check >/dev/null
+no_has "NOTHING DISPLAYS them" "the name is ACTIVATABLE, so a daemon starts
+on the first notification: warning that nothing will display one is a false
+finding about a box that works, and it is what every box looks like for the
+first minutes after a boot"
+has "start one on demand" "the hedge has to be SAID: an [OK] here is not the
+same fact as an [OK] backed by a daemon that is already up"
+[ "$RC" -eq 0 ] || fail "an activatable name is not a failure"
+
+# AND THE MATCH IS QUOTE-EXACT, which is this control's whole reason: this
+# box also lists `org.gnome.Shell.Notifications`, so a substring match would
+# read a GNOME service as an answer about ours and silence the one real
+# warning in the set.
+_bus '(false,)' "([ 'org.gnome.Shell.Notifications' ],)"
+check >/dev/null
+has "NOTHING DISPLAYS them" "a name that merely CONTAINS ours is a different
+service, and crediting it turns the one real finding here into silence"
+
+_bus '(true,)' "([ 'org.freedesktop.Notifications' ],)"
 check >/dev/null
 has "a live daemon" "a daemon that DOES own the name must be credited, or
 the marker is just as uninformative in the other direction"
@@ -226,7 +262,7 @@ no_has "NOTHING DISPLAYS them" "a live daemon was reported as no daemon"
 # context that cannot see it is exactly the false finding the WAYLAND_DISPLAY
 # validator shipped this week. Asserted as an ABSENCE, because the bug here
 # would be an extra warning rather than a missing one.
-_bus ''
+_bus '' ''
 check >/dev/null
 no_has "NOTHING DISPLAYS them" "with no bus to ask, mux must not claim
 nothing will display a notification: that is a confident false finding about
@@ -234,7 +270,7 @@ a machine that is very likely fine"
 has "no bus to confirm" "the hedge has to be SAID, or an [OK] here is
 indistinguishable from one backed by a real live daemon"
 [ "$RC" -eq 0 ] || fail "being unable to ask is not a failure"
-_bus '(true,)'
+_bus '(true,)' "([ 'org.freedesktop.Notifications' ],)"
 
 # Both overrides set is a supported path; half an override is a mistake.
 check MUX_NOTIFY_SEND=true MUX_NOTIFY_CLOSE=true >/dev/null

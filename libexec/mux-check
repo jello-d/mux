@@ -126,10 +126,18 @@ elif command -v notify-send >/dev/null 2>&1; then
     # block is optional: which daemon runs is the user's desktop, not mux's
     # install, and a provisioner's apply cannot repair it.
     warn "notifications raise but NOTHING DISPLAYS them: no daemon owns" \
-      "org.freedesktop.Notifications on this session bus"
+      "org.freedesktop.Notifications and nothing on this session bus" \
+      "offers to start one"
   elif [ "$_ncl" = none ]; then
     warn "notifications raise but never clear: no gdbus, busctl," \
       "dbus-send or makoctl to close one with"
+  elif [ "$_nd" -eq 3 ]; then
+    # NOBODY HOME IS NOT NOBODY COMING. The name is D-Bus activatable, so the
+    # first notification starts a daemon, and this is the ordinary state for
+    # the first minutes after a boot. Reporting it as a fault was this check
+    # being wrong in the opposite direction to the bug it was added to fix.
+    ok "notifications (notify-send, cleared via $_ncl; no daemon up yet," \
+      "D-Bus will start one on demand)"
   elif [ "$_nd" -eq 2 ]; then
     # SAID, NOT GUESSED. Over ssh there is no session bus to ask, and
     # reporting the desktop broken from a context that cannot see it is the
