@@ -88,7 +88,7 @@ The whole point is the bar. A sketch of what you see (colour omitted):
 
 ```
 ┌ status-left ─────────────┐          ┌────────── status-right ────────────┐
-│ [[WORK: api]]  host  api ▸│ 1:code 2:…│ ⚠ api · 🧠 web · ✓ docs · ⚫ notes│✱│
+│ [[WORK: api]]  host  api ▸│ 1:code 2:…│ ⚠ api · 🧠 web · ⚙ docs · ⚫ notes│✱│
 └──────────────────────────┘          └────────────────────────────────────┘
       context banner  host   current    per-session agent-state strip    view
       (optional)      chip    session                                    state
@@ -98,9 +98,10 @@ The whole point is the bar. A sketch of what you see (colour omitted):
   per-**host** colour chip so identically-named sessions on different machines
   are told apart, then the current session name.
 - **status-right**: one token per session, in cycle order, each with an
-  agent-state glyph: `⚠` needs you, `🧠` working, `✓` just finished, `⚫` no
-  agent, and `🔌` an agent mux started that has never reported: its hooks are
-  not wired, which `mux setup <agent>` fixes. The session that has needed you
+  agent-state glyph: `⚠` needs you, `🧠` working, `⚙` ready but still running
+  something it started, `✓` finished and quiet, `⚫` no agent, and `🔌` an
+  agent mux started that has never reported: its hooks are not wired, which
+  `mux setup <agent>` fixes. The session that has needed you
   **longest** is the loudest; `prefix b` jumps there.
 - **the right edge**: one glyph for [view tension](#views-and-tension), always
   present: `✱` auto, `┻` floor, `┳` ceil. Shape is the mode you chose; colour is

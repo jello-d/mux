@@ -187,10 +187,27 @@ $1
 if [ -d "$dir" ] && [ -n "${live# }" ]; then
   for f in "$dir"/*; do
     [ -e "$f" ] || continue
+    # A SIDECAR IS NOT A RECORD, and leaving that to the pane test was a
+    # SILENT BUG rather than a tidiness point. `.beat` (the 0.49 corroboration
+    # mark) and `.hum` live beside the record they belong to, and this loop
+    # reads every file in the directory: a sidecar parses with an EMPTY pane,
+    # `*" $pane "*` then asks whether `$live` contains two adjacent spaces, it
+    # does not, and the file was DELETED.
+    #
+    # MEASURED: a directory holding `1`, `1.beat` and `1.hum` came back from
+    # one render holding `1`. The strip renders every status-interval, so the
+    # beat mark never survived two seconds, and a second beat could never find
+    # the first. That is exactly why these notes record "zero beat corroborated
+    # lines in two days of logs, on two boxes" while the path corroborates
+    # first time when driven directly: the auto-mode recovery built in 0.49 has
+    # never once been able to fire in production, and this is the reason.
+    case $f in *.beat|*.hum) continue ;; esac
     read -r st win pane ep nid ss <"$f" || continue
     case "$live" in *" $pane "*) continue ;; esac
     mux_notify_close "$nid"
-    rm -f "$f"
+    # The sidecars go WITH the record they describe, or a pruned pane leaves
+    # orphans nothing will ever collect.
+    rm -f "$f" "$f.beat" "$f.hum"
   done
 fi
 
@@ -346,7 +363,14 @@ _emit_session() {
   _af=''
   if [ "$_sa" -eq 1 ]; then
     _d='   '
-    case $_s in blocked|working|idle) _d=$(fmt_age "$_a") ;; esac
+    # `humming` CARRIES ITS AGE like the other live states: how long a job
+    # has been running is the useful half ("still going after 5m" reads very
+    # differently from "just started"), and only `none` has no age to show.
+    # This list is hardcoded, so it is one of the things a new state has to be
+    # added to by hand: the derived-list lesson, met in a `case` pattern.
+    case $_s in
+    blocked|working|idle|humming) _d=$(fmt_age "$_a") ;;
+    esac
     _af=" $_d"
   fi
   _p=' '; _bp=' '

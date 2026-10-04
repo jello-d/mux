@@ -656,6 +656,25 @@ class ParseAll(unittest.TestCase):
             {"partition": "global", "state": "working", "count": 2}))
         self.assertIsInstance(got["global"][1], int)
 
+    def test_humming_is_a_KNOWN_state_not_unknown(self):
+        """A newer mux reports `humming`; an indicator that does not know the
+        word draws `unknown`, which is SLATE BLUE and claims the host is
+        unreachable when it is perfectly fine. That skew direction is real and
+        recorded at KNOWN, but it must not be this version's behaviour."""
+        got = self.sni.parse_all(self._doc(
+            {"partition": "global", "state": "humming", "count": 1}))
+        self.assertEqual(got["global"][0], "humming")
+        self.assertNotEqual(got["global"][0], "unknown")
+
+    def test_an_unknown_state_word_still_becomes_unknown(self):
+        """The control, and the reason the list exists at all: a feed that
+        answers plausible garbage and exits 0 must not draw as calm. Measured
+        once, when a mis-quoted ssh source ran the bare session picker and its
+        output parsed to the state `1)`."""
+        got = self.sni.parse_all(self._doc(
+            {"partition": "global", "state": "frobnicating", "count": 1}))
+        self.assertEqual(got["global"], self.sni.UNKNOWN)
+
     def test_idle_and_none_carry_no_count(self):
         got = self.sni.parse_all(self._doc(
             {"partition": "global", "state": "idle", "count": 0},

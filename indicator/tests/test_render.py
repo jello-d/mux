@@ -165,6 +165,52 @@ class UnreachableIsNotCalm(unittest.TestCase):
         self.assertIn("unknown", STATE_FRAME)
         self.assertNotEqual(STATE_FRAME["unknown"], STATE_FRAME["none"])
 
+    def test_humming_is_the_idle_FAMILY_not_a_new_hue(self):
+        """`humming` is a turn that ENDED with work it started still running,
+        so the agent IS ready and the hue must not say otherwise. Green, and a
+        DIFFERENT green, which is what lets the ordering read on the tile."""
+        self.assertIn("humming", STATE_FRAME)
+        self.assertNotEqual(STATE_FRAME["humming"], STATE_FRAME["idle"])
+        hr, hg, hb = STATE_FRAME["humming"][:3]
+        self.assertGreater(hg, hr, "humming's frame is not green-dominant")
+        self.assertGreater(hg, hb, "humming's frame is not green-dominant")
+
+    def test_humming_is_DARKER_than_idle(self):
+        """The direction is the point: idle is the brighter, fully-done green
+        and humming sits under it. Asserted on luminance rather than on the
+        literal value, so re-picking the shade does not need this rewritten."""
+        def lum(c):
+            return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+        self.assertLess(lum(STATE_FRAME["humming"]), lum(STATE_FRAME["idle"]))
+
+    def test_humming_badge_carries_the_shade_too(self):
+        """Its OWN assertion, and not folded into the frame one, because the
+        two cover for each other: either alone makes the tile differ from
+        idle's. Rendering settled which matters more: at 1:1 the badge is the
+        loudest thing on the tile, so a darker FRAME alone is nearly invisible
+        at 22px and the two greens would differ only where nobody looks."""
+        self.assertIn("humming", STATE_BADGE)
+        self.assertNotEqual(STATE_BADGE["humming"], STATE_BADGE["idle"])
+
+    def test_humming_does_not_draw_idles_CHECK(self):
+        """The glyph is the signal the colour cannot carry. A check on a
+        session whose background job is still running is the misleading
+        report this state exists to stop, so the tiles must differ even at the
+        smallest size the tray draws."""
+        for i, size in enumerate((22, 32, 48)):
+            self.assertNotEqual(icon_pixmap("humming", None)[i][2],
+                                icon_pixmap("idle", None)[i][2],
+                                "humming and idle are identical at %dpx"
+                                % size)
+
+    def test_humming_does_not_look_like_working(self):
+        """The inversion that must never happen: a session that looks BUSY is
+        one you deliberately leave alone, so the wait is unbounded. humming
+        means you CAN talk to it."""
+        self.assertNotEqual(STATE_FRAME["humming"], STATE_FRAME["working"])
+        self.assertNotEqual(icon_pixmap("humming", None)[0][2],
+                            icon_pixmap("working", 1)[0][2])
+
     def test_unknown_has_a_BADGE_and_none_does_not(self):
         """The other half. `none` deliberately has no badge, so a badge is what
         carries "I have something to say about this host": here, a `?`."""

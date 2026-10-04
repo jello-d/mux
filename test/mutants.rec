@@ -550,8 +550,8 @@ m must exit non-zero
 = render-check-keyed-on-count
 f indicator/mux_indicator/render.py
 t mux-indicator
--     if check:
-+     if count is None:
+-     elif check:
++     elif count is None:
 m idle
 
 # Making repair unconditional is caught by the EARLIEST plain run in the file,
@@ -992,13 +992,13 @@ m test_a_TILE_STILL_RENDERS_with_no_fonts_at_all
 = rank-blocked-demoted
 f lib/mux-agent-state_lib
 t mux-agent-rank
--   blocked) echo 3 ;;
+-   blocked) echo 4 ;;
 +   blocked) echo 1 ;;
 m must outrank working
 = rank-working-not-above-idle
 f lib/mux-agent-state_lib
 t mux-agent-rank
--   working) echo 2 ;;
+-   working) echo 3 ;;
 +   working) echo 0 ;;
 m must outrank idle
 = rank-unknown-outranks-everything
@@ -3453,3 +3453,65 @@ t setup
 - *) [ "$#" -le 1 ] || _badarg "${1:-help}" "$2" ;;
 + *) ;;
 m must be refused with
+
+= humming-rank-not-between
+f lib/mux-agent-state_lib
+t mux-agent-rank
+-   humming) echo 2 ;;
++   humming) echo 0 ;;
+m must outrank idle
+
+= humming-glyph-is-the-check
+f lib/mux-agent-state_lib
+t mux-agent-rank
+- MUX_GLYPH_HUMMING='⚙️'
++ MUX_GLYPH_HUMMING=$MUX_GLYPH_IDLE
+m draws idle's glyph
+
+= humming-not-derived-over-idle
+f lib/mux-agent-state_lib
+t mux-agent-rank
+-     if [ "$_st" = idle ] && mux_agent_humming "$_f"; then _st=humming; fi
++     if false; then _st=humming; fi
+m a live pid in the sidecar
+
+= humming-liveness-unchecked
+f lib/mux-agent-state_lib
+t mux-agent-rank
+-     kill -0 "$_hp" 2>/dev/null && return 0
++     true && return 0
+m the job is gone and NOTHING
+
+= wait-idle-refuses-humming
+f libexec/mux-agent
+t mux-agent
+-   [ "$_want" != idle ] || _wset='idle humming'
++   _wset=$_want
+m hum-wait-idle-rc
+
+= prune-eats-the-sidecars
+f libexec/mux-agent-state-render
+t mux-strip
+-     case $f in *.beat|*.hum) continue ;; esac
++     case $f in zzzz) continue ;; esac
+m live background work must draw
+
+= prune-orphans-the-sidecars
+f libexec/mux-agent-state-render
+t mux-strip
+-     rm -f "$f" "$f.beat" "$f.hum"
++     rm -f "$f"
+m sidecar was left behind
+
+= humming-chip-loses-its-age
+f libexec/mux-agent-state-render
+t mux-strip
+# THE AGE IS DRAWN FROM A HARDCODED STATE LIST, so a new state silently loses
+# it: measured, the first version rendered the gear with an empty age column.
+# How long a job has been running is the useful half, since "still going after
+# 5m" reads very differently from "just started". This is the derived-list
+# lesson met in a `case` pattern: a list that cannot miss a new ITEM can still
+# miss a new SHAPE, and nothing but an assertion notices.
+-     blocked|working|idle|humming) _d=$(fmt_age "$_a") ;;
++     blocked|working|idle) _d=$(fmt_age "$_a") ;;
+m dropped its age

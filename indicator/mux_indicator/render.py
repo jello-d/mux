@@ -18,6 +18,8 @@ Each state+count renders to an SNI IconPixmap entry list [[w, h, argb], ...],
 argb being ARGB32 in NETWORK (big-endian) byte order per the StatusNotifierItem
 spec.
 """
+import math
+
 from PIL import Image, ImageDraw, ImageFont
 
 # Frame colour + tint hue per state, keyed off mux's agent-state chips.
@@ -25,6 +27,14 @@ STATE_FRAME = {
     "blocked": (0xFF, 0xB0, 0x20, 0xFF),   # amber-gold; warm, off the purple
     "working": (0xFF, 0x8C, 0xE6, 0xFF),   # bright magenta/pink border
     "idle":    (0x34, 0xC9, 0x4A, 0xFF),   # green (= the badge green)
+    # HUMMING: the turn ended and work it started is still running. THE SAME
+    # FAMILY AS idle, deliberately: the agent IS ready, so the hue must not
+    # say otherwise. A darker forest green, picked by CIELAB distance (46.2
+    # from idle's frame, 32.3 from idle's screen, 51.2 to the nearest other
+    # reserved colour, against the 28.8 this palette already accepts) and then
+    # confirmed by rendering: the darker candidates below it start merging
+    # into the tray background at 22px.
+    "humming": (0x1B, 0x6B, 0x2A, 0xFF),   # forest green, darker than idle
     "none":    (0x88, 0x88, 0x8E, 0xFF),   # grey (agentless)
     # UNKNOWN IS NOT CALM, and this row is the whole reason it exists. A source
     # that could not be reached says NOTHING about that host: it may be idle,
@@ -41,6 +51,11 @@ STATE_BADGE = {
     "blocked": (0xC0, 0x18, 0x28, 0xFF),   # bold red; urgent, less black
     "working": (0x5F, 0x00, 0xD7, 0xFF),   # mux chip bg colour56 (purple)
     "idle":    (0x25, 0xA8, 0x3A, 0xFF),   # green, a drop darker for contrast
+    # THE BADGE CARRIES THE SHADE TOO, which rendering settled rather than
+    # taste: at 1:1 the badge is the loudest thing on the tile, so a darker
+    # FRAME alone is nearly invisible at 22px and the two greens would differ
+    # only where nobody looks.
+    "humming": (0x16, 0x55, 0x22, 0xFF),   # forest, a drop darker again
     # A badge, because `none` has none: that difference is what stops "no agents
     # here" and "cannot see this host" drawing the same tile. It holds a `?`
     # rather than a count: there is no count to hold.
@@ -53,6 +68,7 @@ STATE_INK = {
     "blocked": (0xFF, 0xF6, 0xA8, 0xFF),   # light yellow, pops on red
     "working": (0xFF, 0xE2, 0xBC, 0xFF),   # warm peach, a drop brighter
     "idle":    (0xF4, 0xF4, 0xF6, 0xFF),   # white check
+    "humming": (0xF4, 0xF4, 0xF6, 0xFF),   # white, as the check it replaces
     "unknown": (0xC8, 0xD2, 0xE8, 0xFF),   # pale slate, reads on the dark badge
 }
 # THE HOST MARK'S INK. It answers "WHICH machine", so it never changes as the
@@ -456,7 +472,31 @@ def _part_letter(d, s, text, avoid=0):
     d.text((bx - bb[0], by - bb[3]), text, font=f, fill=_PART_INK)
 
 
-def _badge(img, s, fill, ink, count, check=False, mark=None):
+def _gear(d, box, bd, ink):
+    """The HUMMING mark: a cog, drawn rather than set in a font.
+
+    The strip uses the emoji; this is the same idea in the tray, where a glyph
+    has to survive 22px. Chosen by rendering three candidates at 22/32/48 and
+    looking, which is how every mark on this tile has been settled: an open
+    ARC read as the letter `C` at every size, and three DOTS were the most
+    legible but say "more", not "still running".
+
+    Six teeth, not more: at 22px the badge is about fourteen pixels across and
+    anything finer fills in. It only has to be unmistakably NOT the check.
+    """
+    x0, _, x1, _ = box
+    cx, cy = (x0 + x1) / 2.0, (bd - 1) / 2.0
+    r = bd * 0.30
+    w = max(1, int(bd * 0.13))
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], outline=ink, width=w)
+    for k in range(6):
+        a = k * math.pi / 3
+        d.line([(cx + math.cos(a) * r * 0.9, cy + math.sin(a) * r * 0.9),
+                (cx + math.cos(a) * r * 1.6, cy + math.sin(a) * r * 1.6)],
+               fill=ink, width=w)
+
+
+def _badge(img, s, fill, ink, count, check=False, mark=None, gear=False):
     bd = int(s * _BADGE_F)
     x0 = s - bd
     box = [x0, -1, s - 1, bd - 1]
@@ -484,7 +524,12 @@ def _badge(img, s, fill, ink, count, check=False, mark=None):
     # Now: idle draws the check because it is idle. Any other state draws its
     # number when it has one, and a BARE badge when it does not: honest about
     # "something is happening, how much is unknown" rather than claiming calm.
-    if check:
+    if gear:
+        # BEFORE the check and the count, because `humming` carries neither: a
+        # count there would read as "things needing you" on a state whose whole
+        # claim is that nothing does.
+        _gear(d, box, bd, ink)
+    elif check:
         r = bd
         d.line([(x0 + r * 0.28, (bd - 1) / 2),
                 ((x0 + s - 1) / 2, bd - 1 - r * 0.20),
@@ -539,6 +584,7 @@ def _tile(state, count, size, cursor=True, host=None, mark=None, ink=None,
     if bcol is not None:              # blocked/working (number), idle (check)
         _badge(img, s, bcol, STATE_INK.get(state, _BADGE_INK), count,
                check=(state == "idle"),
+               gear=(state == "humming"),
                mark="?" if state == "unknown" else None)
     if mark:
         # A fresh Draw: _badge composites its own layer onto img, so the

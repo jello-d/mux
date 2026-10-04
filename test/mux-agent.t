@@ -1134,4 +1134,62 @@ _read alpha --window @11
 so the refusal above is a dead end: $OUT"
 eq r9-ambig-recover "$(jq 'd["pane"]')" %11
 
+# --- `humming` and the one way it could have broken a caller --------------
+# `wait` compares the state as an exact string, so a new state between
+# `working` and `idle` would silently stop `wait idle` returning: a supervisor
+# would keep waiting while its worker sat at a prompt ready for input, and
+# with a long-running background job it would burn the whole timeout and
+# report `timed-out` about a turn that HAD ended.
+sleep 30 & _hjob=$!
+agent_rec "$XDG_RUNTIME_DIR/mux/agent-state/global/ph" idle %5 400 hum x
+printf '%s\n' "$_hjob" >"$XDG_RUNTIME_DIR/mux/agent-state/global/ph.hum"
+printf 'hum\t/srv/hum\n' >>"$MUX_STATE/sessions.global"
+
+run status --any
+eq hum-status-rc "$RC" 0
+
+# BOTH GREENS SATISFY `idle`, because both mean the turn is over.
+RC=0
+OUT=$(env -u TMUX -u MUX_SHARE MUX_DIR="$MUX_DIR" MUX_CACHE="$MUX_CACHE" \
+  XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" PATH="$T/bin:$PATH" \
+  CAPLOG="${CAPLOG:-/dev/null}" PANESFILE="${PANESFILE:-/dev/null}" \
+  timeout 20 "$HERE/bin/mux" agent wait hum idle -t 3 2>"$T/err") || RC=$?
+[ "$RC" != 124 ] || fail "wait never returned at all"
+eq hum-wait-idle-rc "$RC" 0
+eq hum-wait-idle-status "$(jq 'd["status"]')" ok
+# AND IT REPORTS THE STATE REACHED, not the one asked for. Echoing the request
+# back would hide the only distinction the caller needs: "ready" and "ready,
+# with work still running" are different answers to the same question.
+eq hum-wait-reports-reached "$(jq 'd["state"]')" humming
+
+# `wait working` MUST STAY EXACT, which is why this is membership and not a
+# rank comparison: a caller waiting for a turn to START must not be satisfied
+# by a session that has already finished one.
+RC=0
+OUT=$(env -u TMUX -u MUX_SHARE MUX_DIR="$MUX_DIR" MUX_CACHE="$MUX_CACHE" \
+  XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" PATH="$T/bin:$PATH" \
+  CAPLOG="${CAPLOG:-/dev/null}" PANESFILE="${PANESFILE:-/dev/null}" \
+  timeout 20 "$HERE/bin/mux" agent wait hum working -t 1 2>"$T/err") || RC=$?
+eq hum-wait-working-rc "$RC" 1
+eq hum-wait-working-status "$(jq 'd["status"]')" timed-out
+
+# `humming` IS WAITABLE IN ITS OWN RIGHT, for a caller that specifically wants
+# to know the background work is still going.
+RC=0
+OUT=$(env -u TMUX -u MUX_SHARE MUX_DIR="$MUX_DIR" MUX_CACHE="$MUX_CACHE" \
+  XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" PATH="$T/bin:$PATH" \
+  CAPLOG="${CAPLOG:-/dev/null}" PANESFILE="${PANESFILE:-/dev/null}" \
+  timeout 20 "$HERE/bin/mux" agent wait hum humming -t 3 2>"$T/err") || RC=$?
+eq hum-wait-humming-rc "$RC" 0
+
+kill "$_hjob" 2>/dev/null; wait "$_hjob" 2>/dev/null || true
+
+# AND WITH THE JOB GONE IT IS PLAIN idle AGAIN, with nothing re-emitted.
+RC=0
+OUT=$(env -u TMUX -u MUX_SHARE MUX_DIR="$MUX_DIR" MUX_CACHE="$MUX_CACHE" \
+  XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" PATH="$T/bin:$PATH" \
+  CAPLOG="${CAPLOG:-/dev/null}" PANESFILE="${PANESFILE:-/dev/null}" \
+  timeout 20 "$HERE/bin/mux" agent wait hum idle -t 3 2>"$T/err") || RC=$?
+eq hum-wait-cleared "$(jq 'd["state"]')" idle
+
 pass

@@ -379,6 +379,32 @@ printf '%s %s %s %s %s %s\n' \
   "$state" "$_win" "$TMUX_PANE" "$epoch" "${notif:--}" "$_sess" \
   >"$_tmp" && mv -f "$_tmp" "$file" || rm -f "$_tmp"
 
+# --- the HUMMING sidecar: did this turn leave work behind? -----------------
+# THE CHECK HAPPENS ONCE, HERE, at the moment the state turns green, and never
+# again. That is the whole reason it can afford to walk /proc: a per-render
+# check on the status bar would cost a scan per client every status-interval,
+# and there is nothing to poll afterwards because the agents already wait() for
+# us. When the job finishes the sidecar's pids simply stop being alive, which
+# the READER notices for free.
+#
+# AFTER the record, deliberately, for the reason `mux themes load` prunes after
+# writing its stamp: a failed scan must never cost the turn its state.
+#
+# ONLY ON `idle`, and the other arm is as load-bearing: any other state CLEARS
+# the sidecar, so a pane that goes back to `working` cannot carry a stale set
+# of pids into its next turn.
+_humf=$file.hum
+if [ "$state" = idle ]; then
+  _htmp=$_humf.$$
+  if mux_agent_hum_scan 2>/dev/null >"$_htmp" && [ -s "$_htmp" ]; then
+    mv -f "$_htmp" "$_humf" 2>/dev/null || rm -f "$_htmp" 2>/dev/null || true
+  else
+    rm -f "$_htmp" "$_humf" 2>/dev/null || true
+  fi
+else
+  rm -f "$_humf" 2>/dev/null || true
+fi
+
 # An opt-in breadcrumb: with MUX_EMIT_LOG set, every transition is appended, so
 # a state that gets stuck can be traced to the hook that last wrote it, or to
 # the hook that never fired. The hooks send stderr to /dev/null and end in

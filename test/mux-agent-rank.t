@@ -156,4 +156,79 @@ reader that migrates takes a SNAPSHOT, and a beat refreshes mtime without
 advancing the epoch, so afterwards nothing can tell the copy from the live
 record."
 
+# --- `humming`: ready, with work it started still running -----------------
+# RANKED BETWEEN working AND idle, which is the whole claim the word makes.
+# Asserted as an ORDER for the reason the top of this file gives: the numbers
+# are not a contract, and pinning them would make inserting a rank a change
+# everyone has to agree on rather than a one-line edit.
+_h=$(mux_agent_rank humming)
+[ "$(mux_agent_rank working)" -gt "$_h" ] \
+  || fail "working must outrank humming: a turn in progress is more going on
+than a finished turn whose background job is still running"
+[ "$_h" -gt "$(mux_agent_rank idle)" ] \
+  || fail "humming must outrank idle, or a session with live background work
+reports as plain done, which is the misleading answer this state exists for"
+[ "$_h" -gt "$(mux_agent_rank frobnicating)" ] \
+  || fail "humming must outrank an unknown word"
+
+# ITS OWN GLYPH, and NOT the check: the colour says ready and the glyph says
+# something is still running, so a glyph shared with idle would carry none of
+# the new fact.
+[ -n "$MUX_GLYPH_HUMMING" ] || fail "humming has no glyph"
+[ "$MUX_GLYPH_HUMMING" != "$MUX_GLYPH_IDLE" ] \
+  || fail "humming draws idle's glyph, so the one thing it adds is invisible"
+[ "$MUX_GLYPH_HUMMING" != "$MUX_GLYPH_WORKING" ] \
+  || fail "humming draws working's glyph, which is the inversion this must
+never make: a session that looks busy is one you leave alone"
+
+# --- the state is DERIVED, so it clears itself ----------------------------
+# The record still says `idle` and a sidecar holds the PIDS. Nothing fires
+# when a background job ends (the agent is idle and may wait for hours), so a
+# stored word would be stale with nothing to correct it, which is the mirror
+# of the bug this fixes.
+rm -f "$D"/*
+agent_rec "$D/1" idle %1 100 sess
+[ "$(worst idle idle)" = idle ] || fail "precondition: a plain idle record"
+
+rm -f "$D"/*
+agent_rec "$D/1" idle %1 100 sess
+sleep 30 & _job=$!
+printf '%s\n' "$_job" >"$D/1.hum"
+# shellcheck disable=SC2046
+set -- $(mux_agent_state "$D" sess)
+[ "${1:-}" = humming ] || fail "a live pid in the sidecar must read as
+humming, got [${1:-}]"
+
+# `|| true` ON THE WAIT: it returns 128+SIGTERM for a job we just killed,
+# and under `set -e` that takes the whole file down with NO output, which is
+# the silent-death shape test/run exists to name. Measured: rc=143, nothing
+# printed.
+kill "$_job" 2>/dev/null; wait "$_job" 2>/dev/null || true
+# shellcheck disable=SC2046
+set -- $(mux_agent_state "$D" sess)
+[ "${1:-}" = idle ] || fail "the job is gone and NOTHING re-emitted, so the
+state must fall back to idle on its own: got [${1:-}]. A stored word would
+stay humming for ever, since no event fires when a background job ends."
+
+# A SIDECAR OF DEAD PIDS IS NOT humming, asserted separately from the empty
+# case: the file existing is not the question, a live pid is.
+printf '%s\n' 999999 >"$D/1.hum"
+# shellcheck disable=SC2046
+set -- $(mux_agent_state "$D" sess)
+[ "${1:-}" = idle ] || fail "a sidecar holding only dead pids read as
+humming, so the mark would never clear once written"
+
+# AND ONLY OVER idle. Over `working` it is noise and over `blocked` a human is
+# needed either way, so a sidecar must not change those at all.
+rm -f "$D"/*
+agent_rec "$D/1" working %1 100 sess
+sleep 30 & _job2=$!
+printf '%s\n' "$_job2" >"$D/1.hum"
+# shellcheck disable=SC2046
+set -- $(mux_agent_state "$D" sess)
+[ "${1:-}" = working ] || fail "a sidecar promoted a WORKING record to
+humming, which would hide a turn in progress behind a weaker state"
+kill "$_job2" 2>/dev/null; wait "$_job2" 2>/dev/null || true
+rm -f "$D"/*
+
 pass

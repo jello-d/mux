@@ -404,7 +404,15 @@ UNKNOWN = ("unknown", None)
 # fallback: a calm grey tile for a host whose feed is misconfigured. It happened
 # to exit non-zero and so read as unknown anyway, but that was luck. A feed that
 # returns plausible garbage and exits 0 is the failure this closes.
-KNOWN = ("blocked", "working", "idle", "none")
+# `humming` joined in the release that added it (agent contract 5). THE SKEW
+# DIRECTION IS WORTH KNOWING: an OLD indicator against a NEW mux sees a word
+# it does not know and draws `unknown`, i.e. slate blue, which claims the host
+# is unreachable when it is perfectly fine. That is the three-copy problem this
+# package already names (package / installed / running), and the existing
+# mitigation is the notice core's install prints when the indicator does not
+# match. Nothing here can fix it from this side; it is recorded so the symptom
+# is recognised rather than diagnosed.
+KNOWN = ("blocked", "working", "humming", "idle", "none")
 
 
 async def _query(argv):

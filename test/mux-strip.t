@@ -381,4 +381,86 @@ so this proves less than it claims"
 disagreed with the single-run strip. Two renders are sharing mutable state,
 which is what made the bar duplicate entries and then blank itself."
 
+# --- `humming` reaches the strip, and the sidecars survive the prune -------
+# A GEAR, NOT THE CHECK, for a session whose turn ended with work it started
+# still running. "done" is the misleading word and `✅` the misleading glyph.
+st %3 idle charlie
+_o=$(render charlie 400)
+has "$_o" "$MUX_GLYPH_IDLE" "precondition: a plain idle session draws a check"
+# The age text, read off the IDLE chip BEFORE the sidecar exists: the fixture
+# pins epoch 1 so every age is the same large value, which makes this exact
+# and needs no arithmetic.
+_agepat="s/.*charlie *\\([0-9][0-9]*[a-z]\\).*/\\1/p"
+_age=$(vis "$_o" | sed -n "$_agepat")
+[ -n "$_age" ] || fail "precondition: no age on an idle chip to compare with"
+
+sleep 30 & _sjob=$!
+printf '%s\n' "$_sjob" >"$T/run/mux/agent-state/global/3.hum"
+_o=$(render charlie 400)
+has "$_o" "$MUX_GLYPH_HUMMING" "a session with live background work must draw
+the gear: the colour says ready, the glyph says something is still running"
+
+# AND IT CARRIES ITS AGE, like every other live state. How long a job has been
+# running is the useful half ("still going after 5m" reads very differently
+# from "just started"), and the age is drawn from a HARDCODED state list, so a
+# new state silently loses it: measured, the first version rendered
+# `⚙️ charlie` with an empty age column. Asserted by WIDTH against the same
+# session drawn idle, because both carry the same name and the same age, so a
+# dropped field is the only thing that can make them differ.
+# PULLED OUT OF THE HUMMING CHIP ITSELF, not matched loosely across the strip.
+# The first version globbed `*gear charlie*AGE*`, which any LATER chip's age
+# satisfies: the fixture's other sessions carry the same age, so the mutation
+# SURVIVED and the assertion read as coverage. Only spaces may sit between the
+# name and its age, which is what makes the absence detectable.
+_hpat="s/.*$MUX_GLYPH_HUMMING charlie *\\([0-9][0-9]*[a-z]\\).*/\\1/p"
+_hage=$(vis "$_o" | sed -n "$_hpat")
+[ "$_hage" = "$_age" ] || fail "the humming chip dropped its age (idle shows
+[$_age], humming shows [$_hage]): the age is drawn from a HARDCODED list of
+states and a new one silently loses it. Measured: the first version rendered
+the gear with an empty age column."
+
+# AND THE CONTROL, which is what makes the gear the sidecar's doing rather
+# than a fixture that cannot fail: the OTHER idle sessions still draw a check.
+kill "$_sjob" 2>/dev/null; wait "$_sjob" 2>/dev/null || true
+_o=$(render charlie 400)
+has "$_o" "$MUX_GLYPH_IDLE" "with the job gone the strip must go back to the
+check with nothing re-emitted, or the mark never clears"
+no_has "$_o" "$MUX_GLYPH_HUMMING" "the gear outlived the work it stood for"
+
+# --- THE PRUNE WAS DELETING SIDECARS, which is a bug this change found -----
+# The prune reads every file in the record directory, and a sidecar parses
+# with an EMPTY pane: `*" $pane "*` then asks whether the live list contains
+# two adjacent spaces, it does not, and the file was REMOVED. Measured: a
+# directory holding `1`, `1.beat` and `1.hum` came back from one render
+# holding `1`.
+#
+# THE CONSEQUENCE WAS NOT THEORETICAL. The strip renders every
+# status-interval, so the 0.49 beat mark never survived two seconds and a
+# second beat could never find the first. That is exactly why these notes
+# record "zero beat corroborated lines in two days of logs, on two boxes"
+# while the path corroborates first time when driven directly.
+printf '%s\n' 1 >"$T/run/mux/agent-state/global/3.beat"
+printf '%s\n' 999999 >"$T/run/mux/agent-state/global/3.hum"
+render charlie 400 >/dev/null
+[ -f "$T/run/mux/agent-state/global/3.beat" ] \
+  || fail "a render DELETED the beat sidecar of a live pane. The strip draws
+every status-interval, so the corroboration mark can never survive long
+enough for a second beat to find it."
+[ -f "$T/run/mux/agent-state/global/3.hum" ] \
+  || fail "a render deleted the humming sidecar of a live pane"
+
+# AND A DEAD PANE'S SIDECARS GO WITH ITS RECORD, or pruning leaves orphans
+# that nothing will ever collect. %9 is in no live pane list.
+st %9 idle charlie
+printf '%s\n' 1 >"$T/run/mux/agent-state/global/9.beat"
+printf '%s\n' 2 >"$T/run/mux/agent-state/global/9.hum"
+render charlie 400 >/dev/null
+[ ! -e "$T/run/mux/agent-state/global/9" ] \
+  || fail "precondition: the dead pane's record was not pruned, so the
+sidecar assertion below proves nothing"
+[ ! -e "$T/run/mux/agent-state/global/9.hum" ] \
+  || fail "the record was pruned and its sidecar was left behind"
+[ ! -e "$T/run/mux/agent-state/global/9.beat" ] \
+  || fail "the record was pruned and its beat sidecar was left behind"
+
 pass

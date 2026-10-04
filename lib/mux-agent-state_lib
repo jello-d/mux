@@ -19,6 +19,11 @@
 # stay in mux-agent-state-render, which owns the bar's look.
 MUX_GLYPH_BLOCKED='⚠️' ; MUX_GLYPH_WORKING='🧠' ; MUX_GLYPH_IDLE='✅'
 MUX_GLYPH_NONE='⚫'    ; MUX_GLYPH_UNKNOWN='❓'
+# HUMMING: the turn ENDED and something it started is still running. A GEAR
+# because `🧠` is the agent thinking and this is machinery still turning: the
+# agent is done, the work is not. `done` was the misleading word, and `✅` was
+# the misleading glyph, for a session whose background job is still going.
+MUX_GLYPH_HUMMING='⚙️'
 # UNWIRED: mux STARTED an agent in this session and has never heard from it.
 # A PLUG, not a question mark, because the answer is not unknown: it is that
 # nothing is connected. `❓` already means something else and rarer (a state
@@ -84,8 +89,15 @@ mux_agent_dir() {
 # Numeric urgency of a state, so the worst live agent in a session wins.
 mux_agent_rank() {
   case $1 in
-  blocked) echo 3 ;;
-  working) echo 2 ;;
+  blocked) echo 4 ;;
+  working) echo 3 ;;
+  # BETWEEN working AND idle, which is the whole claim the word makes: more
+  # going on than `idle`, less than a turn in progress. The numbers are
+  # deliberately not a contract (mux-agent-rank.t asserts the ORDER and says
+  # why pinning `blocked = 3` would be wrong), which is what made inserting a
+  # rank here a one-line change rather than a renumbering everyone must agree
+  # on.
+  humming) echo 2 ;;
   idle)    echo 1 ;;
   *)       echo 0 ;;
   esac
@@ -179,6 +191,95 @@ mux_agent_pane_win() {  # <dir> <session> <window>
 # A LEADING FUNCTION NAME WITH `_`, because this one is internal: the four
 # above are the surface, and a caller reaching past them would be choosing
 # which fields to parse, which is the thing that went wrong before.
+# mux_agent_humming RECORDFILE -> 0 when that pane's record carries a HUMMING
+# sidecar with at least one pid still alive.
+#
+# A SIDECAR, NOT A SIXTH FIELD, which is the call 0.49 already made for the
+# beat mark and for the same reason: the record is read by a single `read -r`
+# in several programs and widening it has cost this package a day before.
+#
+# AND THE RECORD STILL SAYS `idle`, which is the design rather than an
+# accident. The sidecar holds PIDS, so the state is RE-DERIVED on every read
+# and clears itself the moment the last job exits: nothing fires when a
+# background job ends (the agent is idle and may be waiting for hours), so a
+# stored word would be stale with nothing to correct it, which is the mirror
+# of the bug this exists to fix. It also degrades the safe way: a reader that
+# knows nothing of the sidecar reports `idle`, which UNDER-reports rather than
+# claiming an urgency that is not there.
+#
+# `kill -0` RATHER THAN `/proc`, because the liveness half must work where the
+# detection half does not: only Linux can attribute a process to a pane, but
+# any reader anywhere may be handed a sidecar across a transport.
+# mux_agent_hum_scan -> one pid per line: work this PANE started that is still
+# running, excluding the caller and anything it spawned.
+#
+# ATTRIBUTION IS THE ENVIRONMENT, NOT THE PROCESS TREE, and that was settled by
+# measurement rather than preference. A job that outlives the tool shell which
+# started it RE-PARENTS TO INIT (measured: ppid becomes 1), so "children of the
+# agent" misses exactly the case this feature exists for. What survives is the
+# environment it inherited: `TMUX` and `TMUX_PANE` are still there after
+# re-parenting (measured on the same job).
+#
+# BOTH VARIABLES, because `TMUX_PANE=%1` is only unique within one SERVER: the
+# loose match found ten processes across other servers, including another
+# pane's live agent, where the pair finds three.
+#
+# AND THE PREFILTER IS NOT THE TEST. `grep` matches a SUBSTRING, so
+# `TMUX_PANE=%1` also matches `%11`; environ entries are NUL-separated and a
+# NUL is awkward to put in a pattern, so grep narrows the field in one fork and
+# each survivor is then compared EXACTLY, field by field. Cost measured at
+# ~47ms for the pair, against 1.3s for the naive fork-per-process version, and
+# it runs ONCE at the transition rather than on any render.
+#
+# LINUX ONLY, and it degrades the safe way: without /proc nothing is found, no
+# sidecar is written, and the state stays `idle`. Under-reporting beats
+# claiming activity that cannot be confirmed.
+mux_agent_hum_scan() {
+  [ -n "${TMUX:-}" ] && [ -n "${TMUX_PANE:-}" ] || return 0
+  [ -r /proc/self/environ ] || return 0
+  # Our own chain: this process and every ancestor. The agent and the pane's
+  # shell are both on it, so neither is ever mistaken for leftover work.
+  _hchain=" " _hp=$$
+  while [ -n "$_hp" ] && [ "$_hp" != 1 ]; do
+    _hchain="$_hchain$_hp "
+    _hp=$(awk '/^PPid:/ { print $2 }' "/proc/$_hp/status" 2>/dev/null)
+  done
+  for _hf in $(grep -laF "TMUX_PANE=$TMUX_PANE" /proc/[0-9]*/environ \
+    2>/dev/null || true); do
+    _hpid=${_hf#/proc/}; _hpid=${_hpid%/environ}
+    case $_hchain in *" $_hpid "*) continue ;; esac
+    _mux_hum_mine "$_hpid" && continue
+    _hok=$(tr '\0' '\n' 2>/dev/null <"/proc/$_hpid/environ" | awk \
+      -v p="$TMUX_PANE" -v t="$TMUX" \
+      '$0 == "TMUX_PANE=" p { a = 1 } $0 == "TMUX=" t { b = 1 }
+       END { print (a && b) ? 1 : 0 }')
+    [ "${_hok:-0}" = 1 ] || continue
+    printf '%s\n' "$_hpid"
+  done
+}
+
+# _mux_hum_mine PID -> 0 when PID descends from THIS process, which makes it
+# the scan's own machinery rather than a finding. Without it the subshells a
+# command substitution forks are counted, which is the self-match trap this
+# package has recorded three times in other shapes.
+_mux_hum_mine() {
+  _hm=$1
+  while [ -n "$_hm" ] && [ "$_hm" != 1 ]; do
+    [ "$_hm" = "$$" ] && return 0
+    _hm=$(awk '/^PPid:/ { print $2 }' "/proc/$_hm/status" 2>/dev/null)
+  done
+  return 1
+}
+
+mux_agent_humming() {   # <record file>
+  [ -f "$1.hum" ] || return 1
+  while read -r _hp _hrest; do
+    case ${_hp:-} in ''|*[!0-9]*) continue ;; esac
+    kill -0 "$_hp" 2>/dev/null && return 0
+  done <"$1.hum"
+  return 1
+}
+
 _mux_agent_walk() {
   _awdir=$1 _awsess=$2 _awskip=$3 _awwin=$4
   _best= _bestep= _bestpane= _br=-1
@@ -190,6 +291,11 @@ _mux_agent_walk() {
     [ "$_ss" = "$_awsess" ] || continue
     case " $_awskip " in *" $_p "*) continue ;; esac
     [ -z "$_awwin" ] || [ "$_w" = "$_awwin" ] || continue
+    # `idle` PLUS LIVE BACKGROUND WORK IS `humming`. Only over idle: over
+    # `working` it is noise (of course things are running) and over `blocked`
+    # a human is needed either way and blocked outranks it. The same shape the
+    # beat mark has, which also only means anything over an idle record.
+    if [ "$_st" = idle ] && mux_agent_humming "$_f"; then _st=humming; fi
     _r=$(mux_agent_rank "$_st")
     # AN `if`, NOT AN `&&` LIST, AND THAT IS NOT STYLE. This loop is the LAST
     # command in the function, so with `&&` the function's exit status is the
@@ -260,6 +366,7 @@ mux_agent_glyph() {
   blocked) printf '%s' "$MUX_GLYPH_BLOCKED" ;;
   working) printf '%s' "$MUX_GLYPH_WORKING" ;;
   idle)    printf '%s' "$MUX_GLYPH_IDLE" ;;
+  humming) printf '%s' "$MUX_GLYPH_HUMMING" ;;
   '')      printf '%s' "$MUX_GLYPH_NONE" ;;
   unwired) printf '%s' "$MUX_GLYPH_UNWIRED" ;;
   *)       printf '%s' "$MUX_GLYPH_UNKNOWN" ;;

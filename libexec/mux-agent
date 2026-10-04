@@ -348,9 +348,24 @@ if [ "$_verb" = wait ]; then
   [ -n "$_wsess" ] && [ -n "$_want" ] \
     || _out usage 2 "usage: mux agent wait SESSION STATE [-t N]"
   case $_want in
-  blocked|working|idle) ;;
+  blocked|working|idle|humming) ;;
   *) _out usage 2 "not a state mux emits: $_want" ;;
   esac
+  # BOTH GREENS SATISFY `idle`, and this is the one place a new state could
+  # have broken an existing caller SILENTLY. The comparison below is an exact
+  # string match, so without this a supervisor waiting for `idle` would keep
+  # waiting while its worker sat at a prompt ready for input, and with a
+  # long-running background job it would burn the whole timeout and report
+  # `timed-out` about a turn that had ended. That is the same class as the
+  # compaction bug (a machine surface making `idle` a lie), inverted.
+  #
+  # MEMBERSHIP, NOT RANK. `wait working` must stay exact: a caller waiting for
+  # a turn to START would otherwise be satisfied immediately by an idle
+  # session, which is a different and worse wrong answer. Only the two greens
+  # mean the same thing to a caller, because only they share the fact that the
+  # turn is over.
+  _wset=$_want
+  [ "$_want" != idle ] || _wset='idle humming'
 
   _resolve "$_wsess" "$_wpart"
 
@@ -362,12 +377,18 @@ if [ "$_verb" = wait ]; then
     _now=$(date +%s 2>/dev/null || echo 0)
     _el=$((_now - _t0))
     [ "$_el" -ge 0 ] || _el=0
-    if [ "${_se%% *}" = "$_want" ]; then
+    _wnow=${_se%% *}
+    if [ -n "$_wnow" ] && case " $_wset " in *" $_wnow "*) true ;; *) false ;;
+      esac; then
       printf '{"status":"ok","partition":%s,"session":%s,' \
         "$(mux_json_str "${_rp:-global}")" \
         "$(mux_json_str "$_wsess")"
+      # THE STATE REACHED, not the one asked for. With `idle` satisfied by
+      # either green, echoing the request back would hide the very distinction
+      # the caller needs: "ready" and "ready, with work still running" are
+      # different answers to the same question.
       printf '"state":%s,"waited":%s}\n' \
-        "$(mux_json_str "$_want")" \
+        "$(mux_json_str "$_wnow")" \
         "$(mux_json_num "$_el")"
       exit 0
     fi

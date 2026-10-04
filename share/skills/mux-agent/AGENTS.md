@@ -61,7 +61,11 @@ has one window per worker, and each answers for itself:
   chose the name and need certainty, use the id.
 - `window_id` and `window_name` are `null` when mux could not reach that
   server, for the same reason `control` is: unknowable, never defaulted.
-- `state` is `blocked`, `working` or `idle`. **`blocked` means it is waiting
+- `state` is `blocked`, `working`, `humming` or `idle`. **`humming` means the
+  turn ENDED but work it started is still running** (a build, a test run, a
+  server): you may talk to it, and "done" would be the wrong word. It ranks
+  between `working` and `idle`, and it clears itself the moment the last job
+  exits. **`blocked` means it is waiting
   on a human** - a permission prompt, a question - not that it is stuck.
 - `age` is SECONDS in that state, already computed. Never treat it as a
   timestamp; it is deliberately not one, so a reader on another machine never
@@ -103,7 +107,13 @@ ids to choose from.
 mux agent wait api idle -t 120
 ```
 
-Blocks until `api` is `idle`, up to 120 seconds (default 300). This is the
+Blocks until `api` is `idle`, up to 120 seconds (default 300).
+
+**`wait ... idle` is satisfied by `humming` too**, because both mean the turn
+is over, and the answer tells you which one you got. Wait for `humming`
+explicitly only if you specifically care that background work is still going.
+`wait ... working` stays exact: it means "wait for a turn to START", so a
+session that has already finished one does not satisfy it. This is the
 verb that makes the others composable - do not poll `peers` in a loop.
 
 On success: `{"status":"ok","waited":37}`. On timeout, status is `timed-out`
