@@ -3404,21 +3404,21 @@ t mux-agent
 m a create that named no window id must refuse
 
 = notify-activatable-read-as-absent
-f libexec/mux-notify_lib
+f lib/mux-notify_lib
 t mux-check
 -     *"'$_ndn'"*|*"\"$_ndn\""*) return 3 ;;
 +     *nosuchpattern*) return 3 ;;
 m the name is ACTIVATABLE
 
 = notify-activatable-matched-loosely
-f libexec/mux-notify_lib
+f lib/mux-notify_lib
 t mux-check
 -     *"'$_ndn'"*|*"\"$_ndn\""*) return 3 ;;
 +     *Notifications*) return 3 ;;
 m a name that merely CONTAINS ours
 
 = notify-activatable-never-asked
-f libexec/mux-notify_lib
+f lib/mux-notify_lib
 t mux-check
 -     _nda=$(_mux_bus_ask "$_ndt" ListActivatableNames) || return 1
 +     _nda=; false || return 1
