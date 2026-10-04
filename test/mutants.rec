@@ -3343,3 +3343,37 @@ t mux-latch
 -     [ "$#" -ge 2 ] || { echo "mux: latch: --max-tries needs a count" >&2
 +     [ 1 = 1 ] || { echo "mux: latch: --max-tries needs a count" >&2
 m exited 2 without saying why
+
+# THE HOTTEST PATH MUST NOT LEAK. The render runs per client every
+# status-interval, and it used anonymous mktemp files with an EXIT-only
+# trap, which does NOT run when the shell is signalled. Once leaked, a
+# /tmp/tmp.XXXXXXXXXX cannot be told from any other program s, so
+# nothing can ever prune it. A deterministic name is bounded instead.
+= render-scratch-anonymous-and-unprunable
+f libexec/mux-agent-state-render
+t mux-strip
+- if mkdir -p "$_rdir" 2>/dev/null; then
++ if false; then
+m did not land under the runtime dir
+
+# ... and a persistent name has to be TRUNCATED, because the records
+# file is appended to: otherwise the strip accumulates every session on
+# every tick for as long as the client lives. This is the one new way
+# the fix can be wrong, which is why it has its own record.
+= render-scratch-not-truncated
+f libexec/mux-agent-state-render
+t mux-strip
+- : 2>/dev/null >"$recs" || true
++   true
+m CHANGED between two renders
+
+# AND THE SIGNALS ARE NAMED. An EXIT trap alone does not run when the
+# shell is signalled: measured, a TERM leaves both files behind with
+# `EXIT` only and removes them with the signals listed. This is the
+# original defect, and the test drives it with a tmux stub that blocks.
+= render-trap-misses-the-signals
+f libexec/mux-agent-state-render
+t mux-strip
+- trap "rm -f '$tmpf' '$recs'" EXIT INT HUP TERM
++ trap "rm -f '$tmpf' '$recs'" EXIT
+m a SIGNALLED render leaked its scratch

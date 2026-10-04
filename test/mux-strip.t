@@ -312,4 +312,71 @@ render delta 400 >/dev/null
 # ... and a LIVE pane's file is untouched.
 [ -f "$T/run/mux/agent-state/global/1" ] || fail "pruned a live pane's state"
 
+# --- the render's scratch is BOUNDED, and cleaned even when signalled ------
+# It writes two scratch files to measure the strip's width before drawing it.
+# They used to be anonymous `mktemp` files under $TMPDIR with a `trap ... EXIT`
+# that does NOT run when the shell is signalled, so a render that got killed
+# leaked two files that nothing could ever prune: once leaked, an anonymous
+# /tmp/tmp.XXXXXXXXXX is indistinguishable from every other program's.
+_rd=$T/run/mux/render
+render delta 400 >/dev/null
+[ -d "$_rd" ] || fail "the scratch did not land under the runtime dir; an
+anonymous \$TMPDIR file is the one shape nothing can prune once it leaks"
+[ "$(ls -1 "$_rd" | wc -l)" -eq 0 ] \
+  || fail "a CLEAN render left its scratch behind: [$(ls "$_rd")]"
+
+# A DETERMINISTIC NAME INTRODUCES ONE NEW WAY TO BE WRONG, and this is it: the
+# records file is APPENDED to, so a name that persists between renders would
+# make the strip grow by every session on every tick unless it is truncated
+# first. Planted with the real key, which is how the first version of this
+# assertion was wrong: a made-up filename the render never opens sits
+# untouched and proves nothing.
+printf 'STALE 0 0 0\n' >"$_rd/global.testclient.recs"
+printf 'stalesession\n' >"$_rd/global.testclient.sess"
+_o=$(render delta 400)
+case $_o in
+*STALE*|*stalesession*) fail "leftover scratch reached the strip, so a render
+after a killed one would draw sessions that are not there: [$(vis "$_o")]" ;;
+esac
+_n1=${#_o}
+_o=$(render delta 400)
+# CHANGED, not "grew": accumulated records can also make the strip SHRINK, by
+# pushing it into a narrower reduction tier. The claim is that two renders of
+# the same state are identical, which covers both directions.
+[ "${#_o}" = "$_n1" ] || fail "the strip CHANGED between two renders of the
+same state (${_n1} -> ${#_o}): the records file is being appended to rather
+than truncated, so it accumulates for as long as the client lives"
+[ "$(ls -1 "$_rd" | wc -l)" -eq 0 ] \
+  || fail "the leftovers were used but not cleaned: [$(ls "$_rd")]"
+
+# AND A SIGNALLED RENDER CLEANS UP, which is the original defect. Driven with
+# a tmux stub that BLOCKS, because the real render is far too fast to catch.
+# In its own bin dir rather than by editing the shared stub, which earlier
+# cases depend on.
+mkdir -p "$T/slowbin"
+cat >"$T/slowbin/tmux" <<'SEOF'
+#!/bin/sh
+case "$*" in
+*list-sessions*) sleep 2; cat "$SESSIONS" ;;
+*) exit 0 ;;
+esac
+SEOF
+chmod +x "$T/slowbin/tmux"
+env -u TMUX -u TMUX_PANE XDG_RUNTIME_DIR="$T/run" MUX_STRIP_WIDTH=400 \
+  SESSIONS="$SESSIONS" PANES="$PANES" PATH="$T/slowbin:$PATH" \
+  "$HERE/libexec/mux-agent-state-render" delta testclient \
+  >/dev/null 2>&1 &
+_rp=$!
+sleep 0.5
+[ "$(ls -1 "$_rd" | wc -l)" -gt 0 ] || fail "precondition: the blocked render
+had not created its scratch yet, so the kill below proves nothing"
+kill -TERM "$_rp" 2>/dev/null || true
+# The trap runs when the current foreground command returns, so this has to
+# outlast the stub's own sleep. Measured: with `trap ... EXIT` alone the files
+# survive a TERM; with the signals named they do not.
+sleep 3
+[ "$(ls -1 "$_rd" | wc -l)" -eq 0 ] \
+  || fail "a SIGNALLED render leaked its scratch: [$(ls "$_rd")]. An EXIT trap
+does not run when the shell is signalled; the signals have to be named."
+
 pass
