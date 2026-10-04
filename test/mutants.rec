@@ -3439,3 +3439,17 @@ t mux-strip
 -   _RECS="$_RECS$_cur $_st $_age $sess
 +   _RECS="$_cur $_st $_age $sess
 m want
+
+= setup-extra-argument-ignored
+f setup.sh
+t setup
+# AN INSTALLER HANDED AN ARGUMENT IT DOES NOT UNDERSTAND MUST NOT INSTALL
+# SOMEWHERE ELSE AND REPORT SUCCESS. Found by making the mistake on a live
+# box: `sh setup.sh install PREFIX=/var/tmp/scratch` wrote to the REAL prefix,
+# printed its usual success line, retargeted a deployed install and reloaded a
+# live tmux server, because PREFIX is an environment variable and `$2` was
+# never read. Removing the guard restores exactly that: the run succeeds, so
+# the exit-code assertion fires before the absence-of-an-install one.
+- *) [ "$#" -le 1 ] || _badarg "${1:-help}" "$2" ;;
++ *) ;;
+m must be refused with

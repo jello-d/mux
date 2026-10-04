@@ -17,7 +17,10 @@
 #                          daemon, unlike core mux (shell, no deps but tmux).
 #
 # POSIX sh, non-privileged. PREFIX (default ~/.local) and the XDG_* vars
-# override the destinations, so a test drives it against a scratch dir. The
+# override the destinations, so a test drives it against a scratch dir. THEY
+# ARE ENVIRONMENT VARIABLES AND NEVER ARGUMENTS: `PREFIX=/tmp/x sh setup.sh
+# install`, not `sh setup.sh install PREFIX=/tmp/x`, which is refused rather
+# than ignored (see the arity guard at the dispatch, and why it exists). The
 # <pkg> namespace lives in the INSTALL prefix (~/.local/libexec/mux), applied
 # here; the source tree carries none (libexec/, share/), as a package should.
 set -eu
@@ -699,6 +702,44 @@ do_paths() {
 }
 
 _U="usage: setup.sh [install|uninstall|check|paths|test|version|all|indicator]"
+# --- ARGUMENTS PAST THE VERB ARE REFUSED, NEVER IGNORED --------------------
+# FOUND BY MAKING THE MISTAKE, on a live box: `sh setup.sh install
+# PREFIX=/var/tmp/scratch` installed to the REAL prefix and printed its usual
+# success line, because PREFIX is an ENVIRONMENT variable and `$2` was never
+# looked at. The verb dispatch below has always refused an unknown VERB; what
+# it could not see was an unknown argument AFTER a known one.
+#
+# THAT IS THE PLAUSIBLE-WRONG-OUTCOME SHAPE this package keeps cataloguing,
+# and it is at its worst in an installer: the caller named a destination, the
+# script wrote somewhere else, and said it succeeded. It retargeted a deployed
+# install and reloaded a live tmux server, which is exactly the accident this
+# file's own notes warn about testing against a scratch PREFIX to avoid.
+#
+# A SETTING GETS ITS OWN MESSAGE, because that is the mistake a human actually
+# makes and a bare "unexpected argument" would leave them guessing which form
+# is wanted. Matched on `*=*` rather than on a `[A-Z]*=*` range, since a
+# bracket range is a COLLATION range and admits surprises in another locale:
+# the match only chooses the WORDING here, so the loose, locale-proof test is
+# the right one.
+_badarg() {   # <verb> <offending argument>
+  case $2 in
+  *=*)
+    printf 'setup.sh: %s is a SETTING, not an argument.\n' "$2" >&2
+    printf '  Settings come from the environment, so:  %s sh setup.sh %s\n' \
+      "$2" "$1" >&2 ;;
+  *)
+    printf "setup.sh: unexpected argument '%s' after '%s'\n" "$2" "$1" >&2 ;;
+  esac
+  printf '%s\n' "$_U" >&2
+  exit 2
+}
+# `indicator` is the one verb that legitimately takes more: it passes a verb
+# and its flags straight through to the sub-package.
+case "${1:-help}" in
+indicator) ;;
+*) [ "$#" -le 1 ] || _badarg "${1:-help}" "$2" ;;
+esac
+
 case "${1:-help}" in
   install)   do_install ;;
   uninstall) do_uninstall ;;

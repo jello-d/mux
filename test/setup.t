@@ -539,4 +539,61 @@ case $_mlog in
 so the contract and the program disagree about where state lives" ;;
 esac
 
+# --- AN ARGUMENT PAST THE VERB IS REFUSED, NEVER IGNORED -------------------
+# FOUND BY MAKING THE MISTAKE on a live box: `sh setup.sh install
+# PREFIX=/var/tmp/scratch` installed to the REAL prefix and printed its usual
+# success line, because PREFIX is an ENVIRONMENT variable and `$2` was never
+# read. The verb dispatch had always refused an unknown VERB; nothing looked
+# at an unknown argument after a known one. It retargeted a deployed install
+# and reloaded a live tmux server.
+#
+# THE LOAD-BEARING ASSERTION IS THE ABSENCE OF AN INSTALL, not the message: an
+# error path that refuses AFTER acting is the defect, and a message proves
+# only that something was said. Driven against its own FRESH prefix so
+# "nothing was written" is a fact about this case rather than about whatever
+# the cases above left behind.
+_rp=$T/refuse
+_o=$(env PREFIX="$_rp" XDG_BIN_HOME="$_rp/bin" XDG_DATA_HOME="$_rp/share" \
+  NO_COLOR=1 XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
+  sh "$HERE/setup.sh" install "PREFIX=$_rp" 2>&1) && _rc=0 || _rc=$?
+[ "$_rc" -eq 2 ] || fail "a setting passed as an ARGUMENT must be refused with
+2, got $_rc: [$_o]"
+[ ! -d "$_rp" ] || [ "$(ls -A "$_rp" 2>/dev/null | wc -l)" -eq 0 ] \
+  || fail "it refused and installed anyway, into [$_rp]: [$(ls -A "$_rp")].
+An installer that writes after refusing is the whole defect; the message is
+not the point."
+# THE SETTING GETS ITS OWN MESSAGE, because a bare "unexpected argument" leaves
+# the caller guessing which form is wanted, and prescribing the remedy is this
+# fleet's rule for any refusal a human will hit.
+case $_o in
+*"is a SETTING"*) ;;
+*) fail "the refusal did not say that a VAR=value argument is a setting, so
+the caller is left to guess: [$_o]" ;;
+esac
+case $_o in
+*"sh setup.sh install"*) ;;
+*) fail "the refusal did not PRESCRIBE the environment form it wants: [$_o]" ;;
+esac
+
+# A PLAIN EXTRA ARGUMENT IS REFUSED TOO, and names both the argument and the
+# verb it followed, which is what tells a caller it was not the verb at fault.
+_o=$(run check extra 2>&1) && _rc=0 || _rc=$?
+[ "$_rc" -eq 2 ] || fail "an extra argument after a known verb must exit 2,
+got $_rc: [$_o]"
+case $_o in
+*"unexpected argument 'extra'"*) ;;
+*) fail "the refusal did not name the offending argument: [$_o]" ;;
+esac
+
+# AND THE ONE VERB THAT TAKES MORE STILL DOES. `indicator` passes a verb and
+# its flags through to the sub-package, so the guard must exempt it: this is
+# the half a blanket arity check would break, and it would break the path a
+# provisioner uses rather than one a human types.
+_o=$(run indicator check 2>&1) && _rc=0 || _rc=$?
+case $_o in
+*"unexpected argument"*|*"is a SETTING"*)
+  fail "the arity guard swallowed the indicator passthrough, which is the one
+verb that legitimately takes another: [$_o]" ;;
+esac
+
 pass
