@@ -434,6 +434,14 @@ t_prefix() {   # -> $T_PREFIX, a runnable mux whose lib/ is yours to break
 #      invocation, so an eager source puts the lib on every verb's path.
 #      Measured with a POISONED lib (one that kills the shell when read), so
 #      another verb still answering proves it was never read.
+#
+#      WHAT THAT REACHES, stated rather than implied: any `other verb` sees
+#      a source placed in bin/mux's EAGER REGION, which is where the other
+#      five libs are loaded and where this regression would go. A source
+#      placed just ABOVE the branch is caught only by a verb that runs
+#      further, and it is not a regression for any verb that exits earlier,
+#      so pick the other verb for what the FIXTURE can drive rather than
+#      reaching for depth.
 #   2. a MISSING lib names itself and exits 1, rather than failing with the
 #      shell's own wording and a code nobody chose.
 #
@@ -445,11 +453,15 @@ t_prefix() {   # -> $T_PREFIX, a runnable mux whose lib/ is yours to break
 # CALLER SUPPLIES THE RUNNER, since each test already has one that pins
 # MUX_DIR, PATH and the rest for its own fixture. It must take a verb and
 # echo both streams.
-t_lib_lazy() {   # <runner-fn> <lib name> <own verb> <other verb>
+# THE OWN VERB MAY CARRY ARGUMENTS, deliberately word-split: `mux edit`
+# refuses without a NAME, so a control that cannot even run the verb would
+# fail here rather than measuring anything. The other verb takes none.
+t_lib_lazy() {   # <runner-fn> <lib name> <own verb [args]> <other verb>
   _tl_r=$1; _tl_l=$2; _tl_v=$3; _tl_o=$4
   t_prefix
   # THE CONTROL FIRST, or both cases below pass for the wrong reason.
-  _tl_out=$("$_tl_r" "$_tl_v" 2>&1) \
+  # shellcheck disable=SC2086
+  _tl_out=$("$_tl_r" $_tl_v 2>&1) \
     || fail "t_lib_lazy: the scratch prefix cannot run '$_tl_v': $_tl_out"
 
   printf 'echo POISONED >&2\nexit 9\n' >"$T_PREFIX/lib/$_tl_l"
@@ -460,12 +472,16 @@ $_tl_out"
   *POISONED*) fail "mux $_tl_o read $_tl_l, so it is sourced EAGERLY and
 every verb now pays for it" ;;
   esac
-  _tl_rc=0; _tl_out=$("$_tl_r" "$_tl_v" 2>&1) || _tl_rc=$?
+  _tl_rc=0
+  # shellcheck disable=SC2086
+  _tl_out=$("$_tl_r" $_tl_v 2>&1) || _tl_rc=$?
   [ "$_tl_rc" -eq 9 ] || fail "mux $_tl_v did not read $_tl_l at all
 (rc=$_tl_rc), so the poison case above proves nothing"
 
   rm -f "$T_PREFIX/lib/$_tl_l"
-  _tl_rc=0; _tl_out=$("$_tl_r" "$_tl_v" 2>&1) || _tl_rc=$?
+  _tl_rc=0
+  # shellcheck disable=SC2086
+  _tl_out=$("$_tl_r" $_tl_v 2>&1) || _tl_rc=$?
   case $_tl_out in
   *"$_tl_l missing"*) ;;
   *) fail "a lost $_tl_l must name itself; got: $_tl_out" ;;

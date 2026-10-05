@@ -1,0 +1,173 @@
+#!/bin/sh
+# mux-save_lib - `mux save`: snapshot the live session as a profile.
+#
+# EXTRACTED FROM bin/mux (2026-10-05), 132 lines, and SOURCED LAZILY inside
+# the save branch for the rule that file's other lazy sources already state:
+# the front end is parsed on every invocation, `mux agent-render` runs per
+# client every status-interval, and a verb nobody called must not cost a lib.
+#
+# A SOURCED LIB AND NOT AN EXECUTED HELPER, the same call mux-why_lib made
+# and for a sharper reason: two of the things this needs are bin/mux's OWN
+# functions, not any lib's. `tm` is the tmux wrapper that carries the
+# partition's `-L` socket, and `emit_window` is the window/pane serialiser
+# the build path and this one share. A separate process would have to grow a
+# second copy of both, and a second copy of the serialiser in particular
+# would let `mux save` write a profile `mux go` cannot rebuild.
+#
+# THE CALLER SOURCES THE DEPENDENCIES, because a sourced POSIX sh file sees
+# the CALLER's `$0` and so cannot resolve its own siblings:
+#
+#     from bin/mux       tm  emit_window
+#     mux-conf_lib       mux_conf_clean
+#     mux-data_lib       mux_data_find mux_data_stems
+#     mux-profiles_lib   mux_fold_tilde mux_prof_drop mux_prof_file
+#                        mux_prof_replace
+#     mux-resolve_lib    mux_resolve_hash_theme
+#     mux-sessions_lib   mux_sess_sanitise
+#
+# CALLER INPUTS: `name_arg` (what to call the saved profile; defaults to the
+# live session's name) and `force` (overwrite an existing layout). Both are
+# the parser's, and both are loud if absent since every caller runs under
+# `set -u`.
+#
+# THE `sv_` PREFIX AND THE `_save_` NAMES STAY. Sourcing loads them into the
+# same shell they already lived in, so they are exactly as private as before,
+# and renaming would have moved mutation anchors and made the move's
+# differential about two things at once.
+# --- save: snapshot the live session ---------------------------------------
+# Shared state, in the order the steps below set it:
+#   _save_identify      sv_sess sv_name
+#   _save_capture       sv_tmp        (the arrangement, as directives)
+#   _save_match_layout  sv_layout     (an existing layout that already says it)
+#   _save_write_layout  sv_layout     (or the one it just wrote)
+#   _save_deltas        sv_pairs      (only what is NOT derivable)
+
+# Which live session this is, and what to call the saved profile.
+_save_identify() {
+  [ -n "${TMUX:-}" ] || {
+    echo "mux: save must run inside a session" >&2; exit 1; }
+  sv_sess=$(tm display-message -p '#{session_name}' 2>/dev/null || true)
+  [ -n "$sv_sess" ] || {
+    echo "mux: could not identify the session" >&2; exit 1; }
+  sv_name=${name_arg:-$sv_sess}
+  sv_name=$(mux_sess_sanitise "$sv_name")
+}
+
+# The arrangement, into a temp so it can be compared before it lands.
+_save_capture() {
+  sv_tmp=$(mktemp) || { echo "mux: mktemp failed" >&2; exit 1; }
+  trap 'rm -f "$sv_tmp"' EXIT
+  tm list-windows -t "=$sv_sess" -F '#{window_index} #{window_name}' \
+  | while read -r _wi _wn; do
+    printf 'window  %s\n' "$_wn"
+    emit_window "=$sv_sess:$_wi"
+  done >"$sv_tmp"
+  [ -s "$sv_tmp" ] || {
+    echo "mux: read no windows from $sv_sess" >&2; exit 1; }
+}
+
+# Does an existing layout already say this? Compared NORMALIZED, so comments
+# and spacing do not make a match look like a difference.
+_save_match_layout() {
+  sv_layout=
+  sv_norm=$(mux_conf_clean <"$sv_tmp")
+  # Line by line: a layout file may be named with a space, and
+  # splitting it would look for two layouts that do not exist.
+  while IFS= read -r _cand; do
+    [ -n "$_cand" ] || continue
+    _cf=$(mux_data_find layouts "$_cand" .layout)
+    [ -n "$_cf" ] || continue
+    [ "$(mux_conf_clean <"$_cf")" = "$sv_norm" ] || continue
+    sv_layout=$_cand
+    break
+  done <<EOF
+$(mux_data_stems layouts .layout)
+EOF
+}
+
+# Write the captured arrangement, unless an existing layout already matched:
+# config never restates what mux can already point at.
+_save_write_layout() {
+  sv_lfile=$MUX_DIR/layouts/$sv_name.layout
+  if [ -n "$sv_layout" ]; then
+    echo "mux: arrangement matches the '$sv_layout' layout;" \
+      "no new one written"
+  else
+    # `force` IS A CALLER INPUT (--force, from bin/mux's parser), named in
+    # the header's contract. Loud if absent anyway, since every caller runs
+    # under `set -u`.
+    # shellcheck disable=SC2154
+    [ "$force" -eq 1 ] || [ ! -e "$sv_lfile" ] || {
+      echo "mux: exists: $sv_lfile (use --force)" >&2
+      exit 1
+    }
+    mkdir -p "$MUX_DIR/layouts"
+    {
+      printf '# %s: arrangement captured from session %s' \
+        "$sv_name" "$sv_sess"
+      printf ' on %s.\n' "$(date '+%Y-%m-%d')"
+      printf '# Pane commands are best-effort;'
+      printf ' review them.\n'
+      cat "$sv_tmp"
+    } >"$sv_lfile"
+    sv_layout=$sv_name
+    echo "mux: wrote $sv_lfile"
+  fi
+  rm -f "$sv_tmp"; trap - EXIT
+}
+
+# The profile row: ONLY what mux could not derive on its own.
+_save_deltas() {
+  # Root: the session's own start directory, folded to ~. Dropped when
+  # the name derives from it, which needs the root to BE a project base
+  # (a git toplevel, or in no repo at all): a subdirectory of a repo
+  # derives the REPO's name, so its root must be kept.
+  sv_root=$(tm display-message -t "=$sv_sess" -p '#{session_path}' \
+    2>/dev/null || true)
+  sv_pairs=
+  if [ -n "$sv_root" ]; then
+    _top=$(git -C "$sv_root" rev-parse --show-toplevel \
+      2>/dev/null || true)
+    if [ "$(basename "$sv_root")" = "$sv_name" ] \
+       && { [ -z "$_top" ] || [ "$_top" = "$sv_root" ]; }; then
+      :        # derivable, so not worth recording
+    else
+      sv_pairs="root=$(mux_fold_tilde "$sv_root")"
+    fi
+  fi
+  # Theme: only when it is not the one this name would hash to anyway.
+  sv_theme=$(tm show-options -t "=$sv_sess" -qv @mux-theme \
+    2>/dev/null || true)
+  sv_hash=$(mux_resolve_hash_theme "$sv_name")
+  if [ -n "$sv_theme" ] && [ "$sv_theme" != "$sv_hash" ]
+  then
+    sv_pairs="$sv_pairs theme=$sv_theme"
+  fi
+  [ "$sv_layout" = default ] || sv_pairs="$sv_pairs layout=$sv_layout"
+  sv_pairs=${sv_pairs# }
+}
+
+# Record the deltas, or drop the row entirely when there are none.
+_save_record() {
+  if [ -n "$sv_pairs" ]; then
+    mux_prof_replace "$sv_name" "$sv_pairs" || {
+      echo "mux: could not write $(mux_prof_file)" >&2
+      exit 1; }
+    echo "mux: $sv_name -> $sv_pairs"
+  else
+    mux_prof_drop "$sv_name"
+    echo "mux: nothing to record: $sv_name is entirely derivable"
+  fi
+  echo "mux: launch it with  mux go $sv_name"
+}
+
+mux_save() {
+  _save_identify
+  _save_capture
+  _save_match_layout
+  _save_write_layout
+  _save_deltas
+  _save_record
+  exit 0
+}
+

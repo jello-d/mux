@@ -159,11 +159,6 @@ has "$_o" "no context-command" "ctx: none configured"
 # verb, and a missing one names itself and exits 1) against a scratch
 # prefix, because interfering with the checkout's lib would reach every
 # other session on this box.
-#
-# `ls` IS THE OTHER VERB because it runs nearly the whole file before
-# dispatching, which is the range an eager source would live in. Measured: a
-# source placed just ABOVE the why branch is not caught, and is also not a
-# regression, since every verb that exits earlier still never reads it.
 runp() {
   ( cd "$T" && env -u MUX_SHARE -u TMUX -u TMUX_PANE \
     MUX_DIR="$T/conf" MUX_CACHE="$T/cache" PATH="$T/bin:$PATH" \

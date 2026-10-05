@@ -1,0 +1,128 @@
+#!/bin/sh
+# mux-theme_lib - `mux theme`: set, cycle or show a session's colour theme.
+#
+# EXTRACTED FROM bin/mux (2026-10-05), 104 lines, SOURCED LAZILY inside the
+# theme branch: the front end is parsed on every invocation and a verb nobody
+# called must not cost a lib.
+#
+# A SOURCED LIB AND NOT AN EXECUTED HELPER: `tm` is bin/mux's own tmux
+# wrapper and carries the partition's `-L` socket, and a second copy of that
+# is the wrong-socket bug this package has shipped three times.
+#
+# THE CALLER SOURCES THE DEPENDENCIES, because a sourced POSIX sh file sees
+# the CALLER's `$0` and so cannot resolve its own siblings:
+#
+#     from bin/mux       tm
+#     mux-data_lib       mux_data_find mux_data_stems_line
+#     mux-profiles_lib   mux_prof_file mux_prof_find mux_prof_set
+#
+# CALLER INPUTS: `name_arg` (the theme, or next/prev, or empty to show) and
+# `LIBEXEC`, which `_theme_apply` uses to reach `mux-style`. Both are
+# bin/mux's, and both are loud if absent under `set -u`.
+# --- theme: set / cycle / show the current session's colour theme -----------
+# `mux theme`             show the current theme and the available ones
+# `mux theme NAME`        apply NAME to the current session, live
+# `mux theme next|prev`   cycle to the neighbouring theme (preview)
+# `-p`/`--persist`        also write `theme NAME` into $MUX_DIR/<session>.layout
+# Applying sets @mux-theme (which mux-style reads every tick) and repaints now.
+_persist_theme() {      # LAYOUT_FILE THEME -> write/replace the `theme` line
+  if grep -qE '^[[:space:]]*theme[[:space:]]' "$1"; then
+    sed -E "s|^[[:space:]]*theme[[:space:]].*|theme   $2|" \
+      "$1" > "$1.tmp" && mv "$1.tmp" "$1"
+  else
+    printf 'theme   %s\n' "$2" >> "$1"
+  fi
+}
+_theme_cycle() {        # next|prev CURRENT "space list" -> neighbour stem
+  _d=$1 _c=$2
+  # shellcheck disable=SC2086
+  set -- $3
+  _n=$#; [ "$_n" -gt 0 ] || return 1
+  _idx=0 _i=0
+  for _t in "$@"; do _i=$((_i + 1))
+    [ "$_t" = "$_c" ] && { _idx=$_i; break; }
+  done
+  if [ "$_d" = next ]; then
+    [ "$_idx" -eq 0 ] && _j=1 || _j=$((_idx % _n + 1))
+  else
+    [ "$_idx" -eq 0 ] && _j=$_n || _j=$(((_idx - 2 + _n) % _n + 1))
+  fi
+  _i=0
+  for _t in "$@"; do _i=$((_i + 1))
+    [ "$_i" -eq "$_j" ] && { printf '%s' "$_t"; return 0; }
+  done
+}
+# With no argument, theme REPORTS: what this session is wearing and what else
+# is available. The only mode that works outside a session.
+_theme_show() {   # reads $_themes, set by mux_theme
+  if [ -n "${TMUX:-}" ]; then
+    _s=$(tm display-message -p '#{session_name}')
+    _c=$(tm show-options -t "$_s" -qv @mux-theme || true)
+    printf 'current: %s\n' "${_c:-<mode default>}"
+  fi
+  printf 'available: %s\n' "$_themes"
+  exit 0
+}
+
+# Set the option, restyle, and force a full redraw.
+_theme_apply() {        # reads $_s, $_pp and $_t
+  tm set-option -t "$_s" @mux-theme "$_t"
+  [ -x "$LIBEXEC/mux-style" ] \
+    && "$LIBEXEC/mux-style" -q "$_s" "$_pp" >/dev/null 2>&1 \
+    || true
+  # A border-style repaint can leave a DOUBLED border row in some
+  # terminals (the old line is not cleared under the new). Perturb the mux
+  # bottom pane and restore its height: that forces tmux to recompute and
+  # fully redraw the column geometry, which a plain refresh cannot. Via tm
+  # (socket-aware), so it works in a non-default context too.
+  _bp=$(tm list-panes -t "$_s" -F '#{pane_id} #{@mux-bottom}' \
+    2>/dev/null | awk 'NF > 1 { print $1; exit }')
+  if [ -n "$_bp" ]; then
+    _bh=$(tm display-message -t "$_bp" -p '#{pane_height}' \
+      2>/dev/null || echo 0)
+    if [ "$_bh" -ge 4 ]; then
+      _bs=$((_bh - 2))
+      tm resize-pane -t "$_bp" -y "$_bs" 2>/dev/null || :
+      tm resize-pane -t "$_bp" -y "$_bh" 2>/dev/null || :
+    fi
+  fi
+  tm refresh-client 2>/dev/null || true
+  echo "mux: theme $_t"
+}
+
+_theme_remember() {     # reads $_s and $_t
+  # REMEMBERED, not just applied. A theme set by hand is a decision, and
+  # the file is the only place decisions live, so it is written now
+  # rather than behind a flag you have to remember. A breakout profile
+  # takes it in place; everything else becomes a row.
+  _bo=$(mux_prof_find "$_s")
+  case $_bo in
+  *.profile)
+    _persist_theme "$_bo" "$_t"
+    echo "mux: remembered in $_bo" ;;
+  *)
+    mux_prof_set "$_s" theme "$_t" \
+      && echo "mux: remembered in $(mux_prof_file)" \
+      || echo "mux: could not write $(mux_prof_file)" >&2 ;;
+  esac
+  exit 0
+}
+
+mux_theme() {
+  _themes=$(mux_data_stems_line themes .theme)
+  if [ -z "$name_arg" ]; then _theme_show; fi
+  [ -n "${TMUX:-}" ] || {
+    echo "mux: theme must run in a session" >&2; exit 1; }
+  _s=$(tm display-message -p '#{session_name}')
+  _pp=$(tm display-message -p '#{pane_pid}')
+  _c=$(tm show-options -t "$_s" -qv @mux-theme || true)
+  case $name_arg in
+    next|prev) _t=$(_theme_cycle "$name_arg" "$_c" "$_themes") ;;
+    *)         _t=$name_arg ;;
+  esac
+  { [ -n "$_t" ] && [ -n "$(mux_data_find themes "$_t" .theme)" ]; } || {
+    echo "mux: unknown theme: ${_t:-$name_arg}" >&2; exit 1; }
+  _theme_apply
+  _theme_remember
+}
+

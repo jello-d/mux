@@ -154,4 +154,15 @@ grep -qE '^control|^attention' "$T/conf/layouts/proj.layout" \
 "$T/conf/layouts/proj.layout")"
 :
 
+# --- THE VERB IS A LAZILY SOURCED LIB (2026-10-05) ------------------------
+# 132 lines moved to lib/mux-save_lib, which also needs bin/mux's own `tm`
+# and `emit_window`: see its header. t_lib_lazy drives the two properties of
+# the move itself, invisible to every assertion above.
+muxp() {
+  ( cd "$T/proj" && env -u MUX_SHARE MUX_DIR="$T/conf" \
+    MUX_CACHE="$T/cache" TMUX="$T/default,0,proj" \
+    "$T_PREFIX/bin/mux" "$@" ) 2>&1
+}
+t_lib_lazy muxp mux-save_lib save ls
+
 pass

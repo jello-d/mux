@@ -1,0 +1,148 @@
+#!/bin/sh
+# mux-edit_lib - `mux edit`: open a profile, and never eat the work.
+#
+# EXTRACTED FROM bin/mux (2026-10-05), 116 lines, SOURCED LAZILY inside the
+# edit branch: the front end is parsed on every invocation and a verb nobody
+# called must not cost a lib.
+#
+# A SOURCED LIB AND NOT AN EXECUTED HELPER, because `tm` is bin/mux's own
+# tmux wrapper and it carries the partition's `-L` socket. A separate process
+# would need a second copy, and this package has shipped the wrong-socket bug
+# THREE times (agent read/send, mux even, next-blocked), every time because
+# one answer was derived in two places.
+#
+# THE CALLER SOURCES THE DEPENDENCIES, because a sourced POSIX sh file sees
+# the CALLER's `$0` and so cannot resolve its own siblings:
+#
+#     from bin/mux       tm
+#     mux-data_lib       mux_data_find
+#     mux-paths_lib      mux_state_path
+#     mux-profiles_lib   mux_prof_directives mux_prof_drop mux_prof_file
+#                        mux_prof_replace
+#
+# CALLER INPUT: `name_arg`, the profile to edit (defaults to the session you
+# are sitting in). Loud if absent, since every caller runs under `set -u`.
+#
+# THE `_edit_` NAMES STAY. Sourcing loads them into the same shell they
+# already lived in, so they are exactly as private as before.
+# --- edit: open a profile, and never eat the work ---------------------------
+# Shared state:
+#   _edit_target   _en (the profile name)
+#   _edit_draft    _dd _df (the deterministic draft path)
+#   _edit_parse    _pairs _promote _bad
+
+# Which profile to edit: the argument, else the session you are sitting in.
+_edit_target() {
+  # `name_arg` IS THE CALLER INPUT named in the header's contract: bin/mux's
+  # parser owns it, and it is loud if absent under `set -u`.
+  # shellcheck disable=SC2154
+  _en=$name_arg
+  [ -n "$_en" ] && return 0
+  [ -n "${TMUX:-}" ] || {
+    echo "mux: edit NAME (or run inside a session)" >&2
+    exit 1; }
+  _en=$(tm display-message -p '#{session_name}')
+}
+
+# Open the draft in $EDITOR. The draft lives at a DETERMINISTIC path, so
+# recovering a botched edit needs no argument to be remembered or typed:
+# `mux edit NAME` finds it and reopens it. Same idea as an interrupted
+# `git commit`.
+#
+# $EDITOR is word-split on purpose: it commonly carries flags, e.g.
+# EDITOR="code -w" or "emacsclient -nw".
+_edit_draft() {
+  # STATE, not cache: a draft is work you typed and nothing can
+  # rebuild it. It sat in $MUX_CACHE until 0.39 on the reasoning that
+  # it was transient: true of the draft's LIFETIME and irrelevant to
+  # whether a cache clear may take it mid-edit.
+  _dd=$(mux_state_path edit)
+  _df=$_dd/$_en.profile
+  mkdir -p "$_dd"
+  if [ -f "$_df" ]; then
+    echo "mux: resuming the unsaved draft at $_df" >&2
+  else
+    mux_prof_directives "$_en" >"$_df" || exit 1
+  fi
+  # shellcheck disable=SC2086
+  ${EDITOR:-vi} "$_df" || {
+    echo "mux: editor exited non-zero; draft kept at $_df" >&2
+    exit 1; }
+}
+
+# Parse the draft back into pairs. Anything unparseable KEEPS the draft and
+# says where it is: the failure hands your work back rather than eating it.
+_edit_parse() {
+  _pairs=
+  _promote=0
+  _bad=
+  while IFS= read -r _line; do
+    case $_line in
+    '') continue ;;
+    [[:space:]]*'#'*|'#'*)
+      # A comment cannot live in a one-line row. That is the
+      # signal the entry has outgrown the table, so it is
+      # what triggers promotion to a breakout file.
+      _promote=1; continue ;;
+    esac
+    _k=${_line%%[[:space:]]*}
+    _v=${_line#"$_k"}
+    _v=${_v#"${_v%%[![:space:]]*}"}
+    case $_k in
+    root|theme|agent|notify|layout|context) ;;
+    *) _bad="unknown key '$_k'"; break ;;
+    esac
+    [ -n "$_v" ] || { _bad="'$_k' has no value"; break; }
+    # A value with whitespace cannot be a pair on a shared line:
+    # the other case a breakout file exists for.
+    case $_v in *[[:space:]]*) _promote=1 ;; esac
+    _pairs="$_pairs $_k=$_v"
+  done <"$_df"
+  if [ -n "$_bad" ]; then
+    echo "mux: $_df: $_bad" >&2
+    echo "mux: draft kept; fix it and re-run  mux edit $_en" >&2
+    exit 1
+  fi
+  _pairs=${_pairs# }
+}
+
+# Land the edit: as a breakout file when it has outgrown a one-line row,
+# otherwise back into the table.
+_edit_commit() {
+  if [ "$_promote" -eq 1 ]; then
+    # The draft becomes the breakout verbatim (comments and all),
+    # and the row goes, so a name never lives in both.
+    mkdir -p "$MUX_DIR/profiles.d"
+    mv -f "$_df" "$MUX_DIR/profiles.d/$_en.profile"
+    mux_prof_drop "$_en"
+    echo "mux: kept as $MUX_DIR/profiles.d/$_en.profile"
+    echo "mux: (a comment, or a value with a space, does not fit" \
+      "a one-line row)"
+    return 0
+  fi
+  mux_prof_replace "$_en" "$_pairs" || {
+    echo "mux: could not write $(mux_prof_file);" \
+      "draft kept at $_df" >&2
+    exit 1; }
+  rm -f "$_df"
+  if [ -n "$_pairs" ]; then
+    echo "mux: $_en -> $_pairs"
+  else
+    echo "mux: $_en has no deviations left; row removed"
+  fi
+}
+
+mux_edit() {
+  _edit_target
+  # A BREAKOUT profile is already a file in the right syntax; edit it in
+  # place. Everything else goes through a draft.
+  _bo=$(mux_data_find profiles.d "$_en" .profile)
+  # shellcheck disable=SC2086
+  if [ -n "$_bo" ]; then exec ${EDITOR:-vi} "$_bo"; fi
+  _edit_draft
+  _edit_parse
+  _edit_commit
+  exit 0
+}
+
+

@@ -1039,113 +1039,20 @@ cmd_ls() {
 if [ "$cmd" = ls ]; then cmd_ls; fi
 
 # --- theme: set / cycle / show the current session's colour theme -----------
-# `mux theme`             show the current theme and the available ones
-# `mux theme NAME`        apply NAME to the current session, live
-# `mux theme next|prev`   cycle to the neighbouring theme (preview)
-# `-p`/`--persist`        also write `theme NAME` into $MUX_DIR/<session>.layout
-# Applying sets @mux-theme (which mux-style reads every tick) and repaints now.
-_persist_theme() {      # LAYOUT_FILE THEME -> write/replace the `theme` line
-  if grep -qE '^[[:space:]]*theme[[:space:]]' "$1"; then
-    sed -E "s|^[[:space:]]*theme[[:space:]].*|theme   $2|" \
-      "$1" > "$1.tmp" && mv "$1.tmp" "$1"
-  else
-    printf 'theme   %s\n' "$2" >> "$1"
-  fi
-}
-_theme_cycle() {        # next|prev CURRENT "space list" -> neighbour stem
-  _d=$1 _c=$2
-  # shellcheck disable=SC2086
-  set -- $3
-  _n=$#; [ "$_n" -gt 0 ] || return 1
-  _idx=0 _i=0
-  for _t in "$@"; do _i=$((_i + 1))
-    [ "$_t" = "$_c" ] && { _idx=$_i; break; }
-  done
-  if [ "$_d" = next ]; then
-    [ "$_idx" -eq 0 ] && _j=1 || _j=$((_idx % _n + 1))
-  else
-    [ "$_idx" -eq 0 ] && _j=$_n || _j=$(((_idx - 2 + _n) % _n + 1))
-  fi
-  _i=0
-  for _t in "$@"; do _i=$((_i + 1))
-    [ "$_i" -eq "$_j" ] && { printf '%s' "$_t"; return 0; }
-  done
-}
-# With no argument, theme REPORTS: what this session is wearing and what else
-# is available. The only mode that works outside a session.
-_theme_show() {   # reads $_themes, set by cmd_theme
-  if [ -n "${TMUX:-}" ]; then
-    _s=$(tm display-message -p '#{session_name}')
-    _c=$(tm show-options -t "$_s" -qv @mux-theme || true)
-    printf 'current: %s\n' "${_c:-<mode default>}"
-  fi
-  printf 'available: %s\n' "$_themes"
-  exit 0
-}
-
-# Set the option, restyle, and force a full redraw.
-_theme_apply() {        # reads $_s, $_pp and $_t
-  tm set-option -t "$_s" @mux-theme "$_t"
-  [ -x "$LIBEXEC/mux-style" ] \
-    && "$LIBEXEC/mux-style" -q "$_s" "$_pp" >/dev/null 2>&1 \
-    || true
-  # A border-style repaint can leave a DOUBLED border row in some
-  # terminals (the old line is not cleared under the new). Perturb the mux
-  # bottom pane and restore its height: that forces tmux to recompute and
-  # fully redraw the column geometry, which a plain refresh cannot. Via tm
-  # (socket-aware), so it works in a non-default context too.
-  _bp=$(tm list-panes -t "$_s" -F '#{pane_id} #{@mux-bottom}' \
-    2>/dev/null | awk 'NF > 1 { print $1; exit }')
-  if [ -n "$_bp" ]; then
-    _bh=$(tm display-message -t "$_bp" -p '#{pane_height}' \
-      2>/dev/null || echo 0)
-    if [ "$_bh" -ge 4 ]; then
-      _bs=$((_bh - 2))
-      tm resize-pane -t "$_bp" -y "$_bs" 2>/dev/null || :
-      tm resize-pane -t "$_bp" -y "$_bh" 2>/dev/null || :
-    fi
-  fi
-  tm refresh-client 2>/dev/null || true
-  echo "mux: theme $_t"
-}
-
-_theme_remember() {     # reads $_s and $_t
-  # REMEMBERED, not just applied. A theme set by hand is a decision, and
-  # the file is the only place decisions live, so it is written now
-  # rather than behind a flag you have to remember. A breakout profile
-  # takes it in place; everything else becomes a row.
-  _bo=$(mux_prof_find "$_s")
-  case $_bo in
-  *.profile)
-    _persist_theme "$_bo" "$_t"
-    echo "mux: remembered in $_bo" ;;
-  *)
-    mux_prof_set "$_s" theme "$_t" \
-      && echo "mux: remembered in $(mux_prof_file)" \
-      || echo "mux: could not write $(mux_prof_file)" >&2 ;;
-  esac
-  exit 0
-}
-
-cmd_theme() {
-  _themes=$(mux_data_stems_line themes .theme)
-  if [ -z "$name_arg" ]; then _theme_show; fi
-  [ -n "${TMUX:-}" ] || {
-    echo "mux: theme must run in a session" >&2; exit 1; }
-  _s=$(tm display-message -p '#{session_name}')
-  _pp=$(tm display-message -p '#{pane_pid}')
-  _c=$(tm show-options -t "$_s" -qv @mux-theme || true)
-  case $name_arg in
-    next|prev) _t=$(_theme_cycle "$name_arg" "$_c" "$_themes") ;;
-    *)         _t=$name_arg ;;
-  esac
-  { [ -n "$_t" ] && [ -n "$(mux_data_find themes "$_t" .theme)" ]; } || {
-    echo "mux: unknown theme: ${_t:-$name_arg}" >&2; exit 1; }
-  _theme_apply
-  _theme_remember
-}
-
-if [ "$cmd" = theme ]; then cmd_theme; fi
+# THE WHOLE VERB IS lib/mux-theme_lib (2026-10-05). Its header says why it
+# is a sourced lib rather than an executed helper (`tm` carries the
+# partition socket), and names the three libs sourced above.
+#
+# SOURCED LAZILY, inside the branch: the front end is parsed on every
+# invocation and a verb nobody called must not cost a lib.
+if [ "$cmd" = theme ]; then
+  [ -r "$MUX_LIB/mux-theme_lib" ] || {
+    echo "mux: mux-theme_lib missing (incomplete install)" >&2
+    exit 1; }
+  # shellcheck source=/dev/null
+  . "$MUX_LIB/mux-theme_lib"
+  mux_theme
+fi
 
 # --- why: where every resolved value came from -----------------------------
 # THE REPORT IS lib/mux-why_lib (2026-10-05): 243 lines that only describe
@@ -1225,126 +1132,21 @@ cmd_rename() {
 
 if [ "$cmd" = rename ]; then cmd_rename; fi
 
-# --- edit: open a layout in $EDITOR -----------------------------------------
-# `mux edit [NAME]`: NAME defaults to the current session's layout.
 # --- edit: open a profile, and never eat the work ---------------------------
-# Shared state:
-#   _edit_target   _en (the profile name)
-#   _edit_draft    _dd _df (the deterministic draft path)
-#   _edit_parse    _pairs _promote _bad
-
-# Which profile to edit: the argument, else the session you are sitting in.
-_edit_target() {
-  _en=$name_arg
-  [ -n "$_en" ] && return 0
-  [ -n "${TMUX:-}" ] || {
-    echo "mux: edit NAME (or run inside a session)" >&2
-    exit 1; }
-  _en=$(tm display-message -p '#{session_name}')
-}
-
-# Open the draft in $EDITOR. The draft lives at a DETERMINISTIC path, so
-# recovering a botched edit needs no argument to be remembered or typed:
-# `mux edit NAME` finds it and reopens it. Same idea as an interrupted
-# `git commit`.
+# THE WHOLE VERB IS lib/mux-edit_lib (2026-10-05). Its header says why it
+# is a sourced lib rather than an executed helper (`tm` carries the
+# partition socket), and names the four libs sourced above.
 #
-# $EDITOR is word-split on purpose: it commonly carries flags, e.g.
-# EDITOR="code -w" or "emacsclient -nw".
-_edit_draft() {
-  # STATE, not cache: a draft is work you typed and nothing can
-  # rebuild it. It sat in $MUX_CACHE until 0.39 on the reasoning that
-  # it was transient: true of the draft's LIFETIME and irrelevant to
-  # whether a cache clear may take it mid-edit.
-  _dd=$(mux_state_path edit)
-  _df=$_dd/$_en.profile
-  mkdir -p "$_dd"
-  if [ -f "$_df" ]; then
-    echo "mux: resuming the unsaved draft at $_df" >&2
-  else
-    mux_prof_directives "$_en" >"$_df" || exit 1
-  fi
-  # shellcheck disable=SC2086
-  ${EDITOR:-vi} "$_df" || {
-    echo "mux: editor exited non-zero; draft kept at $_df" >&2
+# SOURCED LAZILY, inside the branch: the front end is parsed on every
+# invocation and a verb nobody called must not cost a lib.
+if [ "$cmd" = edit ]; then
+  [ -r "$MUX_LIB/mux-edit_lib" ] || {
+    echo "mux: mux-edit_lib missing (incomplete install)" >&2
     exit 1; }
-}
-
-# Parse the draft back into pairs. Anything unparseable KEEPS the draft and
-# says where it is: the failure hands your work back rather than eating it.
-_edit_parse() {
-  _pairs=
-  _promote=0
-  _bad=
-  while IFS= read -r _line; do
-    case $_line in
-    '') continue ;;
-    [[:space:]]*'#'*|'#'*)
-      # A comment cannot live in a one-line row. That is the
-      # signal the entry has outgrown the table, so it is
-      # what triggers promotion to a breakout file.
-      _promote=1; continue ;;
-    esac
-    _k=${_line%%[[:space:]]*}
-    _v=${_line#"$_k"}
-    _v=${_v#"${_v%%[![:space:]]*}"}
-    case $_k in
-    root|theme|agent|notify|layout|context) ;;
-    *) _bad="unknown key '$_k'"; break ;;
-    esac
-    [ -n "$_v" ] || { _bad="'$_k' has no value"; break; }
-    # A value with whitespace cannot be a pair on a shared line:
-    # the other case a breakout file exists for.
-    case $_v in *[[:space:]]*) _promote=1 ;; esac
-    _pairs="$_pairs $_k=$_v"
-  done <"$_df"
-  if [ -n "$_bad" ]; then
-    echo "mux: $_df: $_bad" >&2
-    echo "mux: draft kept; fix it and re-run  mux edit $_en" >&2
-    exit 1
-  fi
-  _pairs=${_pairs# }
-}
-
-# Land the edit: as a breakout file when it has outgrown a one-line row,
-# otherwise back into the table.
-_edit_commit() {
-  if [ "$_promote" -eq 1 ]; then
-    # The draft becomes the breakout verbatim (comments and all),
-    # and the row goes, so a name never lives in both.
-    mkdir -p "$MUX_DIR/profiles.d"
-    mv -f "$_df" "$MUX_DIR/profiles.d/$_en.profile"
-    mux_prof_drop "$_en"
-    echo "mux: kept as $MUX_DIR/profiles.d/$_en.profile"
-    echo "mux: (a comment, or a value with a space, does not fit" \
-      "a one-line row)"
-    return 0
-  fi
-  mux_prof_replace "$_en" "$_pairs" || {
-    echo "mux: could not write $(mux_prof_file);" \
-      "draft kept at $_df" >&2
-    exit 1; }
-  rm -f "$_df"
-  if [ -n "$_pairs" ]; then
-    echo "mux: $_en -> $_pairs"
-  else
-    echo "mux: $_en has no deviations left; row removed"
-  fi
-}
-
-cmd_edit() {
-  _edit_target
-  # A BREAKOUT profile is already a file in the right syntax; edit it in
-  # place. Everything else goes through a draft.
-  _bo=$(mux_data_find profiles.d "$_en" .profile)
-  # shellcheck disable=SC2086
-  if [ -n "$_bo" ]; then exec ${EDITOR:-vi} "$_bo"; fi
-  _edit_draft
-  _edit_parse
-  _edit_commit
-  exit 0
-}
-
-if [ "$cmd" = edit ]; then cmd_edit; fi
+  # shellcheck source=/dev/null
+  . "$MUX_LIB/mux-edit_lib"
+  mux_edit
+fi
 
 # --- save: snapshot the CURRENT live session -------------------------------
 # Records the session the way everything else does: as a DEVIATION. It reads the
@@ -1363,139 +1165,20 @@ if [ "$cmd" = edit ]; then cmd_edit; fi
 # commands are best-effort: review them. Runs inside a session; NAME defaults
 # to the session name.
 # --- save: snapshot the live session ---------------------------------------
-# Shared state, in the order the steps below set it:
-#   _save_identify      sv_sess sv_name
-#   _save_capture       sv_tmp        (the arrangement, as directives)
-#   _save_match_layout  sv_layout     (an existing layout that already says it)
-#   _save_write_layout  sv_layout     (or the one it just wrote)
-#   _save_deltas        sv_pairs      (only what is NOT derivable)
-
-# Which live session this is, and what to call the saved profile.
-_save_identify() {
-  [ -n "${TMUX:-}" ] || {
-    echo "mux: save must run inside a session" >&2; exit 1; }
-  sv_sess=$(tm display-message -p '#{session_name}' 2>/dev/null || true)
-  [ -n "$sv_sess" ] || {
-    echo "mux: could not identify the session" >&2; exit 1; }
-  sv_name=${name_arg:-$sv_sess}
-  sv_name=$(mux_sess_sanitise "$sv_name")
-}
-
-# The arrangement, into a temp so it can be compared before it lands.
-_save_capture() {
-  sv_tmp=$(mktemp) || { echo "mux: mktemp failed" >&2; exit 1; }
-  trap 'rm -f "$sv_tmp"' EXIT
-  tm list-windows -t "=$sv_sess" -F '#{window_index} #{window_name}' \
-  | while read -r _wi _wn; do
-    printf 'window  %s\n' "$_wn"
-    emit_window "=$sv_sess:$_wi"
-  done >"$sv_tmp"
-  [ -s "$sv_tmp" ] || {
-    echo "mux: read no windows from $sv_sess" >&2; exit 1; }
-}
-
-# Does an existing layout already say this? Compared NORMALIZED, so comments
-# and spacing do not make a match look like a difference.
-_save_match_layout() {
-  sv_layout=
-  sv_norm=$(mux_conf_clean <"$sv_tmp")
-  # Line by line: a layout file may be named with a space, and
-  # splitting it would look for two layouts that do not exist.
-  while IFS= read -r _cand; do
-    [ -n "$_cand" ] || continue
-    _cf=$(mux_data_find layouts "$_cand" .layout)
-    [ -n "$_cf" ] || continue
-    [ "$(mux_conf_clean <"$_cf")" = "$sv_norm" ] || continue
-    sv_layout=$_cand
-    break
-  done <<EOF
-$(mux_data_stems layouts .layout)
-EOF
-}
-
-# Write the captured arrangement, unless an existing layout already matched:
-# config never restates what mux can already point at.
-_save_write_layout() {
-  sv_lfile=$MUX_DIR/layouts/$sv_name.layout
-  if [ -n "$sv_layout" ]; then
-    echo "mux: arrangement matches the '$sv_layout' layout;" \
-      "no new one written"
-  else
-    [ "$force" -eq 1 ] || [ ! -e "$sv_lfile" ] || {
-      echo "mux: exists: $sv_lfile (use --force)" >&2
-      exit 1
-    }
-    mkdir -p "$MUX_DIR/layouts"
-    {
-      printf '# %s: arrangement captured from session %s' \
-        "$sv_name" "$sv_sess"
-      printf ' on %s.\n' "$(date '+%Y-%m-%d')"
-      printf '# Pane commands are best-effort;'
-      printf ' review them.\n'
-      cat "$sv_tmp"
-    } >"$sv_lfile"
-    sv_layout=$sv_name
-    echo "mux: wrote $sv_lfile"
-  fi
-  rm -f "$sv_tmp"; trap - EXIT
-}
-
-# The profile row: ONLY what mux could not derive on its own.
-_save_deltas() {
-  # Root: the session's own start directory, folded to ~. Dropped when
-  # the name derives from it, which needs the root to BE a project base
-  # (a git toplevel, or in no repo at all): a subdirectory of a repo
-  # derives the REPO's name, so its root must be kept.
-  sv_root=$(tm display-message -t "=$sv_sess" -p '#{session_path}' \
-    2>/dev/null || true)
-  sv_pairs=
-  if [ -n "$sv_root" ]; then
-    _top=$(git -C "$sv_root" rev-parse --show-toplevel \
-      2>/dev/null || true)
-    if [ "$(basename "$sv_root")" = "$sv_name" ] \
-       && { [ -z "$_top" ] || [ "$_top" = "$sv_root" ]; }; then
-      :        # derivable, so not worth recording
-    else
-      sv_pairs="root=$(mux_fold_tilde "$sv_root")"
-    fi
-  fi
-  # Theme: only when it is not the one this name would hash to anyway.
-  sv_theme=$(tm show-options -t "=$sv_sess" -qv @mux-theme \
-    2>/dev/null || true)
-  sv_hash=$(mux_resolve_hash_theme "$sv_name")
-  if [ -n "$sv_theme" ] && [ "$sv_theme" != "$sv_hash" ]
-  then
-    sv_pairs="$sv_pairs theme=$sv_theme"
-  fi
-  [ "$sv_layout" = default ] || sv_pairs="$sv_pairs layout=$sv_layout"
-  sv_pairs=${sv_pairs# }
-}
-
-# Record the deltas, or drop the row entirely when there are none.
-_save_record() {
-  if [ -n "$sv_pairs" ]; then
-    mux_prof_replace "$sv_name" "$sv_pairs" || {
-      echo "mux: could not write $(mux_prof_file)" >&2
-      exit 1; }
-    echo "mux: $sv_name -> $sv_pairs"
-  else
-    mux_prof_drop "$sv_name"
-    echo "mux: nothing to record: $sv_name is entirely derivable"
-  fi
-  echo "mux: launch it with  mux go $sv_name"
-}
-
-cmd_save() {
-  _save_identify
-  _save_capture
-  _save_match_layout
-  _save_write_layout
-  _save_deltas
-  _save_record
-  exit 0
-}
-
-if [ "$cmd" = save ]; then cmd_save; fi
+# THE WHOLE VERB IS lib/mux-save_lib (2026-10-05). Its header says why it is
+# a sourced lib rather than an executed helper, names the two functions it
+# needs from THIS file (tm, emit_window) and the five libs sourced above.
+#
+# SOURCED LAZILY, inside the branch: the front end is parsed on every
+# invocation and a verb nobody called must not cost a lib.
+if [ "$cmd" = save ]; then
+  [ -r "$MUX_LIB/mux-save_lib" ] || {
+    echo "mux: mux-save_lib missing (incomplete install)" >&2
+    exit 1; }
+  # shellcheck source=/dev/null
+  . "$MUX_LIB/mux-save_lib"
+  mux_save
+fi
 
 # --- hide / show / show-all: per-client session hiding ---------------------
 # Context-sensitive: must run INSIDE a session, so the client (its tty) can be

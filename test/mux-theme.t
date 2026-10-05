@@ -172,4 +172,16 @@ mux theme bbb >/dev/null
 [ "$(grep -c '^theme' "$BO")" -eq 1 ] \
   || fail "re-setting the same theme duplicated the line"
 
+# --- THE VERB IS A LAZILY SOURCED LIB (2026-10-05) ------------------------
+# 104 lines moved to lib/mux-theme_lib. t_lib_lazy drives the two properties
+# that split carries, which no assertion above can see because they are
+# about the MOVE: the lib is read only by its own verb, and a missing one
+# names itself and exits 1.
+muxp() {
+  ( cd "$T/proj" && env TMUX=/tmp/fake/global,1,0 PATH="$T/bin:$PATH" \
+    MUX_DIR="$T/conf" MUX_SHARE="$T/share" MUX_CACHE="$T/cache" \
+    "$T_PREFIX/bin/mux" "$@" ) 2>&1
+}
+t_lib_lazy muxp mux-theme_lib theme ls
+
 pass

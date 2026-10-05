@@ -111,14 +111,14 @@ t mux-rename
 m did not follow the rename
 
 = theme-persist-appends-always
-f bin/mux
+f lib/mux-theme_lib
 t mux-theme
 -   if grep -qE '^[[:space:]]*theme[[:space:]]' "$1"; then
 +   if false; then
 m second theme line
 
 = theme-cycle-next-offby1
-f bin/mux
+f lib/mux-theme_lib
 t mux-theme
 -     [ "$_idx" -eq 0 ] && _j=1 || _j=$((_idx % _n + 1))
 +     [ "$_idx" -eq 0 ] && _j=1 || _j=$((_idx % _n + 2))
@@ -3958,3 +3958,45 @@ t mux-why
 - if [ -r "$_ctx_lib" ]; then . "$_ctx_lib"
 + . "$MUX_LIB/mux-why_lib"; if [ -r "$_ctx_lib" ]; then . "$_ctx_lib"
 m sourced EAGERLY and every verb
+= theme-lib-missing-is-silent
+f bin/mux
+t mux-theme
+-   [ -r "$MUX_LIB/mux-theme_lib" ] || {
++   [ -r "$MUX_LIB/mux-theme_lib" ] || [ 1 = 1 ] || {
+m must name itself
+
+= edit-lib-missing-is-silent
+f bin/mux
+t mux-edit
+-   [ -r "$MUX_LIB/mux-edit_lib" ] || {
++   [ -r "$MUX_LIB/mux-edit_lib" ] || [ 1 = 1 ] || {
+m must name itself
+
+= save-lib-missing-is-silent
+f bin/mux
+t mux-save
+-   [ -r "$MUX_LIB/mux-save_lib" ] || {
++   [ -r "$MUX_LIB/mux-save_lib" ] || [ 1 = 1 ] || {
+m must name itself
+
+= theme-lib-sourced-eagerly
+f bin/mux
+t mux-theme
+- if [ -r "$_ctx_lib" ]; then . "$_ctx_lib"
++ . "$MUX_LIB/mux-theme_lib"; if [ -r "$_ctx_lib" ]; then . "$_ctx_lib"
+m sourced EAGERLY and every verb
+
+= edit-lib-sourced-eagerly
+f bin/mux
+t mux-edit
+- if [ -r "$_ctx_lib" ]; then . "$_ctx_lib"
++ . "$MUX_LIB/mux-edit_lib"; if [ -r "$_ctx_lib" ]; then . "$_ctx_lib"
+m sourced EAGERLY and every verb
+
+= save-lib-sourced-eagerly
+f bin/mux
+t mux-save
+- if [ -r "$_ctx_lib" ]; then . "$_ctx_lib"
++ . "$MUX_LIB/mux-save_lib"; if [ -r "$_ctx_lib" ]; then . "$_ctx_lib"
+m sourced EAGERLY and every verb
+

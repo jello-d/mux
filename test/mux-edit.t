@@ -110,4 +110,18 @@ rm -f "$(draft ff)"
 edit empty zz >/dev/null || fail "emptying a draft failed"
 [ -z "$(row zz)" ] || fail "an emptied draft left a row behind"
 
+# --- THE VERB IS A LAZILY SOURCED LIB (2026-10-05) ------------------------
+# 116 lines moved to lib/mux-edit_lib. t_lib_lazy drives the two properties
+# of the move, invisible to every assertion above.
+#
+# `-V` IS THE OTHER VERB rather than something that runs further, because
+# this fixture deliberately has NO tmux at all (edit is pure file work), and
+# the harness note on reach applies: an eager source lands in bin/mux's eager
+# region, which `-V` sees.
+muxp() {
+  ( cd "$T" && env -u MUX_SHARE MUX_DIR="$T/conf" MUX_CACHE="$T/cache" \
+    EDITOR=true "$T_PREFIX/bin/mux" "$@" ) 2>&1
+}
+t_lib_lazy muxp mux-edit_lib "edit api" -V
+
 pass
