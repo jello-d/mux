@@ -698,7 +698,7 @@ m test_A_STALE_LOCK_IS_SKIPPED
 = indicator-local-host-dropped
 f indicator/mux_indicator/sources.py
 t mux-indicator
--     out = [(local, [mux_bin, *LOCAL_CMD])]
+-     out = [local]
 +     out = []
 m test_the_local_host_is_always_there
 
@@ -3620,3 +3620,31 @@ t mux-agent-humming
 -     { _s = $0; sub(/^.*\) /, "", _s); split(_s, _f, " "); par[$1] = _f[2] }
 +     { par[$1] = $4 }
 m the AGENT is reported as work
+
+= indicator-a-doomed-stream-is-never-downgraded
+f indicator/mux_indicator/sni.py
+t mux-indicator
+-                     return      # reachable and cannot stream: poll it
++                     pass        # reachable and cannot stream: poll it
+m falls_back_to_POLLING
+
+= indicator-downgrades-an-unreachable-host
+f indicator/mux_indicator/sni.py
+t mux-indicator
+-                 if probe is not None:
++                 if True:
+m answers NEITHER channel
+
+= indicator-any-line-counts-as-streaming
+f indicator/mux_indicator/sni.py
+t mux-indicator
+-                             if self.rows is not None:
++                             if True:
+m falls_back_to_POLLING
+
+= indicator-remote-stream-is-really-a-poll
+f indicator/mux_indicator/sources.py
+t mux-indicator
+-              else remote_argv(h, tmpl, REMOTE_STREAM))
++              else remote_argv(h, tmpl))
+m split across elements

@@ -98,6 +98,9 @@ LOCAL_CMD = ("agent", "status", "--all")
 # stops asking: the polling happens on the watched box and only CHANGES cross
 # the network. Same flags, because it is the same question.
 LOCAL_STREAM = ("agent", "stream", "--all")
+# And over a transport. `sh -lc` for the reason REMOTE_CMD needs it: sshd runs
+# a remote command WITHOUT a login shell, so mux is not on PATH without it.
+REMOTE_STREAM = "sh -lc 'mux agent stream --all'"
 
 # A partition name is a DNS label (see mux_ctx_valid): lowercase alphanumerics
 # and hyphens. VALIDATED HERE because the names arrive from the far side and
@@ -263,23 +266,35 @@ def latched(run_dir=None):
     return out
 
 
-def load(run_dir=None, mux_bin="mux"):
-    """Every source to publish: this machine first, then each latched host.
+def _hosts(run_dir=None):
+    """The labels to publish, in order: this machine, then each latched host.
 
     Local first because it is the one that is always there, so the tray's
-    left-hand item does not move around as latches come and go.
+    left-hand item does not move around as latches come and go. Latched to
+    ourselves is skipped: that is already the local item.
+
+    ONE ENUMERATION FOR BOTH `load` AND `streams`, because the moment the two
+    disagree about WHICH hosts exist, a host gets a poll and a stream at once
+    or neither, and the tray's own rule is that the answer which repaints the
+    items is also the one that decides which items exist.
     """
     local = local_label()
-    out = [(local, [mux_bin, *LOCAL_CMD])]
-    tmpl = transport()
+    out = [local]
     for host, _target in latched(run_dir):
-        if host == local:
-            continue         # latched to ourselves: already the local item
-        out.append((host, remote_argv(host, tmpl)))
+        if host != local:
+            out.append(host)
     return out
 
 
-def streams(mux_bin="mux"):
+def load(run_dir=None, mux_bin="mux"):
+    """Every source to publish, as label -> the argv that QUERIES it once."""
+    tmpl = transport()
+    local = local_label()
+    return [(h, [mux_bin, *LOCAL_CMD] if h == local else remote_argv(h, tmpl))
+            for h in _hosts(run_dir)]
+
+
+def streams(run_dir=None, mux_bin="mux"):
     """label -> the argv that STREAMS that source, for sources that can.
 
     SEPARATE FROM `load()` RATHER THAN A THIRD FIELD IN ITS TUPLES, for two
@@ -290,9 +305,26 @@ def streams(mux_bin="mux"):
     "which sources stream" wants one explicit place to say so rather than a
     condition spread across the loader.
 
-    LOCAL ONLY FOR NOW, deliberately. A local stream costs no transport and
-    can be wrong in exactly one way (the process dies), so it is where the
-    reader's staleness and respawn rules get proven before a network is
-    allowed to exercise them.
+    EVERY SOURCE STREAMS NOW, local and remote alike, and the remote half is
+    what the whole design was for: the box the human is sitting at stops
+    asking every host every five seconds, and a transition crosses the network
+    when it HAPPENS rather than up to a poll later. That is also the thing
+    that makes a remote notification possible at all.
+
+    A STREAM IS CHEAPER THAN THE POLL IT REPLACES, and that is worth stating
+    because the reverse was assumed while designing this: the argument for
+    sharing a connection (ControlMaster) was amortising a handshake paid every
+    five seconds, and a stream pays ONE handshake and then holds it. Sharing
+    may still be worth it for a faster reconnect; it is no longer a
+    precondition, so it is not done here.
+
+    WHETHER A SOURCE CAN ACTUALLY STREAM IS NOT KNOWABLE HERE. A remote may be
+    running a mux too old to know the verb, and this function cannot ask
+    without a round trip per host at every discovery pass. The reader finds
+    out instead, and falls back to polling that host: see `Feed.watch`.
     """
-    return [(local_label(), [mux_bin, *LOCAL_STREAM])]
+    tmpl = transport()
+    local = local_label()
+    return [(h, [mux_bin, *LOCAL_STREAM] if h == local
+             else remote_argv(h, tmpl, REMOTE_STREAM))
+            for h in _hosts(run_dir)]

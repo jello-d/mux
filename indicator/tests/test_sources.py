@@ -462,3 +462,70 @@ class ActivateCommand(unittest.TestCase):
         activate command would break the feed itself."""
         argv = sources.remote_argv("box", template="ssh %h %q")
         self.assertNotIn("next-blocked", " ".join(argv))
+
+
+class Streams(unittest.TestCase):
+    """Which sources can be read as a long-lived stream, and how.
+
+    THE REMOTE HALF IS WHAT THE DESIGN WAS FOR. Polling opened a connection to
+    every latched host every few seconds; a stream moves the polling on to the
+    watched box, so only CHANGES cross the network and a transition is visible
+    when it happens rather than up to a poll later. That is also the only way
+    a remote agent's banner can ever reach the desk the human is sitting at.
+    """
+
+    def setUp(self):
+        self.d = tempfile.mkdtemp(prefix="muxlatch")
+
+    def _lock(self, name, target):
+        with open(os.path.join(self.d, name + ".lock"), "w") as fh:
+            fh.write(f"{os.getpid()}\n{target}\n")
+
+    def test_the_local_source_streams(self):
+        got = sources.streams(self.d)
+        self.assertEqual(got, [(local_label(),
+                                ["mux", "agent", "stream", "--all"])])
+
+    def test_a_latched_host_streams_too(self):
+        self._lock("northgate", "northgate")
+        got = dict(sources.streams(self.d))
+        self.assertIn("northgate", got)
+
+    def test_the_remote_stream_asks_for_the_STREAM(self):
+        """Not the one-shot query. Both exist and differ by one word, so the
+        failure of getting this wrong is a feed that answers once, exits, and
+        is respawned for ever: a poll wearing a stream's costs."""
+        self._lock("box", "box")
+        argv = dict(sources.streams(self.d))["box"]
+        self.assertTrue(any("agent stream" in w for w in argv),
+                        f"no stream verb in {argv}")
+        self.assertFalse(any("agent status" in w for w in argv),
+                         f"the one-shot query leaked into the stream: {argv}")
+
+    def test_the_remote_command_is_ONE_argv_element(self):
+        """ssh concatenates its remaining arguments and the remote shell
+        re-splits them, so a command spread over several elements arrives as
+        `sh -lc mux` with the rest as $0 and runs the bare session PICKER.
+        mux has shipped that bug twice; here it would read the picker's output
+        as a state and draw a calm tile for a feed that never worked."""
+        self._lock("box", "box")
+        argv = dict(sources.streams(self.d))["box"]
+        whole = [w for w in argv if "agent stream" in w]
+        self.assertEqual(len(whole), 1, f"split across elements: {argv}")
+        self.assertIn("sh -lc", whole[0],
+                      "sshd runs a remote command with no login shell, so "
+                      "mux is not on PATH without one")
+
+    def test_the_two_enumerations_AGREE(self):
+        """One host set, asked two ways. If they ever disagree a host gets a
+        poll and a stream at once, or neither, and the tray's own rule is that
+        the answer which repaints the items is also the one that decides which
+        items exist."""
+        self._lock("alpha", "alpha")
+        self._lock("beta", "beta:2222")
+        self.assertEqual([l for l, _ in load(self.d)],
+                         [l for l, _ in sources.streams(self.d)])
+
+    def test_a_latch_to_OURSELVES_does_not_stream_twice(self):
+        self._lock("self", local_label())
+        self.assertEqual(len(sources.streams(self.d)), 1)

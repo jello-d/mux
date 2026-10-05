@@ -592,9 +592,10 @@ class Feed:
         and nothing about starting or stopping a feed changes.
         """
         if self.stream_argv:
+            # `watch` returns ONLY when it has established that this source
+            # cannot stream, so falling through is the downgrade.
             await self.watch()
-        else:
-            await self.poll()
+        await self.poll()
 
     def _ingest(self, line):
         """One line from a stream -> this feed's rows. True if it was an
@@ -624,8 +625,32 @@ class Feed:
         return True
 
     async def watch(self):
-        """Read a long-lived source, repainting on every answer it sends."""
+        """Read a long-lived source, repainting on every answer it sends.
+
+        RETURNS when this source has proved it cannot stream, which is the
+        caller's signal to poll it instead. A remote may be running a mux too
+        old to know the verb: it answers one line of `{"status":"usage"}`,
+        exits 2, and without this the host would sit `unknown` for ever while
+        being perfectly reachable, respawning a doomed stream every few
+        seconds. Plausible, wrong and silent, which is this package's
+        signature failure.
+
+        THE DISCRIMINATOR IS A POLL, not a timer and not a version query. An
+        unreachable host ALSO fails to stream without answering, and
+        downgrading it would spend the feature on a network blip; a remote
+        that is merely too old answers a POLL perfectly. So on a stream that
+        has NEVER once answered, ask the other channel: it answers, this
+        source cannot stream, and if it does not answer the host is simply
+        unreachable and the stream is worth retrying. Same move latch makes
+        when it cannot read an exit code, for the same reason: on a path that
+        is already failing, one read-only round trip is free.
+
+        NEVER ANSWERED, rather than "exited quickly". A stream that worked for
+        an hour and then dropped is a disruption and must be retried, not
+        downgraded, and no timing rule separates those two.
+        """
         _back = RESPAWN
+        _ever = False
         while True:
             proc = None
             try:
@@ -652,6 +677,16 @@ class Feed:
                             break   # the stream ended
                         if self._ingest(line):
                             _back = RESPAWN
+                            # USABLE, not merely "worth repainting".
+                            # `_ingest` answers True for any line that is not
+                            # a keepalive, INCLUDING one that set rows to
+                            # None, and a mux too old to know the verb emits
+                            # exactly such a line (`{"status":"usage"}`).
+                            # Counting that as having streamed is what made
+                            # the first version of this skip the fallback
+                            # entirely, for precisely the case it exists for.
+                            if self.rows is not None:
+                                _ever = True
                             self._ev.set()
                             self._ev.clear()
                 finally:
@@ -663,6 +698,14 @@ class Feed:
             self.asked = True
             self._ev.set()
             self._ev.clear()
+            if not _ever:
+                probe = await _query_all(self.argv)
+                if probe is not None:
+                    self.rows = probe
+                    self.asked = True
+                    self._ev.set()
+                    self._ev.clear()
+                    return      # reachable and cannot stream: poll it
             await asyncio.sleep(_back)
             _back = min(_back * 2, RESPAWN_MAX)
 

@@ -1466,3 +1466,58 @@ class StreamingFeed(unittest.TestCase):
         at or below that declares a perfectly healthy feed dead."""
         sni = _fresh()
         self.assertGreater(sni.STALE, 15.0)
+
+    def test_a_source_that_CANNOT_stream_falls_back_to_POLLING(self):
+        """The mixed-fleet case, and the reason `watch` is allowed to return.
+        A remote running a mux too old to know the verb answers one line of
+        `{"status":"usage"}` and exits 2. Without a downgrade that host sits
+        `unknown` for ever while being perfectly reachable, respawning a
+        doomed stream every few seconds: plausible, wrong and silent.
+
+        RESPAWN is enormous here on purpose, so a `watch` that loops instead
+        of returning hangs and is caught by the timeout rather than passing.
+        """
+        sni = _fresh()
+        sni.RESPAWN = 3600
+        doc = ('{"status":"ok","partitions":'
+               '[{"partition":"global","state":"blocked","count":2}]}')
+        f = sni.Feed(["sh", "-c", "printf '%s\\n'" % doc],
+                     stream_argv=["sh", "-c",
+                                  "printf '{\"status\":\"usage\"}\\n'; exit 2"])
+
+        async def drive():
+            await asyncio.wait_for(f.watch(), 5)
+        asyncio.run(drive())
+        self.assertEqual(f.rows, {"global": ("blocked", 2)},
+                         "the fallback poll's answer must be on screen: "
+                         "returning without it leaves the host blank for a "
+                         "whole poll interval")
+
+    def test_an_UNREACHABLE_host_KEEPS_trying_the_stream(self):
+        """The other direction, and it is a different bug, so it is a
+        different assertion: a host that is simply down ALSO fails to stream
+        without answering, and downgrading it would spend the feature
+        permanently on a network blip. The discriminator is that an
+        unreachable host answers neither channel, so the poll is what tells
+        the two apart rather than any timing rule.
+        """
+        sni = _fresh()
+        sni.RESPAWN = 0.05
+        f = sni.Feed(["sh", "-c", "exit 1"],
+                     stream_argv=["sh", "-c", "exit 1"])
+
+        async def drive():
+            t = asyncio.get_event_loop().create_task(f.watch())
+            await asyncio.sleep(0.5)
+            gave_up = t.done()
+            t.cancel()
+            try:
+                await t
+            except asyncio.CancelledError:
+                pass
+            return gave_up
+        self.assertFalse(asyncio.run(drive()),
+                         "a host that answers NEITHER channel was downgraded "
+                         "to polling, so a blip costs it streaming for the "
+                         "rest of the daemon's life")
+        self.assertIsNone(f.rows, "an unreachable host must read unknown")
