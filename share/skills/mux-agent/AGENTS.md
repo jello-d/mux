@@ -75,7 +75,11 @@ has one window per worker, and each answers for itself:
 - `root` is where that session lives.
 
 `mux agent status` is the same picture collapsed to one line per partition,
-when you only want the worst state and a count.
+when you only want the worst state and a count. Each partition also lists its
+`sessions` as `{session, state}`, so one answer tells you both the headline
+and who is behind it. There is deliberately no age in that list: `status` is
+what `mux agent stream` emits on CHANGE, and a field that moves every second
+would make every tick a change.
 
 Both are scoped to YOUR partition. `--partition NAME` asks about another one
 and `--all` about every one; a partition is an isolation boundary, so do not

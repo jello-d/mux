@@ -215,6 +215,63 @@ eq status-state "$(jq 'd["partitions"][0]["state"]')" blocked
 # tab-separated form: a consumer gets a type instead of an agreement.
 eq status-count "$(jq 'd["partitions"][0]["count"] + 1')" 2
 
+# --- AND THE SESSIONS THE PARTITION HOLDS ---------------------------------
+# `(partition, state, count)` can say that something happened and not WHAT, so
+# a presenter fed only that cannot raise the banner mux has always raised:
+# "Claude finished: <session>". The notifier reads this document, so the
+# document has to carry the name.
+eq status-sess-n "$(jq 'len(d["partitions"][0]["sessions"])')" 2
+eq status-sess-0 "$(jq 'd["partitions"][0]["sessions"][0]["session"]')" alpha
+eq status-sess-0st \
+  "$(jq 'd["partitions"][0]["sessions"][0]["state"]')" blocked
+eq status-sess-1 "$(jq 'd["partitions"][0]["sessions"][1]["session"]')" bravo
+eq status-sess-1st \
+  "$(jq 'd["partitions"][0]["sessions"][1]["state"]')" working
+
+# EACH SESSION'S OWN STATE, NOT THE PARTITION'S. The collapsed `state` is the
+# WORST across the partition, so a document that copied it down into every
+# session would make a single blocked agent look like a box where everything
+# needs you, and the notifier would raise a banner per session for one event.
+# Asserted as a DIFFERENCE, because the fixture's two sessions disagree and
+# nothing else here can tell the two readings apart.
+[ "$(jq 'd["partitions"][0]["sessions"][0]["state"]')" \
+  != "$(jq 'd["partitions"][0]["sessions"][1]["state"]')" ] \
+  || fail "both sessions report the same state, so this is the partition's
+collapsed state copied down rather than each session's own"
+
+# A NAME CONTAINING A SPACE SURVIVES, which is why the helper emits the
+# session LAST: the wire format is `<partition> <state> <session>` read with
+# one `read -r`, the same rule the state record itself follows and the same
+# bug this package shipped once when the order was flipped.
+agent_rec "$XDG_RUNTIME_DIR/mux/agent-state/global/p8" idle %8 400 "two words" x
+WATCHED=global run status; unset WATCHED
+_spaced=0
+for _i in 0 1 2; do
+  [ "$(jq "d[\"partitions\"][0][\"sessions\"][$_i][\"session\"]")" \
+    = "two words" ] && _spaced=1
+done
+[ "$_spaced" = 1 ] || fail "a session name containing a space did not read
+back whole, so the wire format put it anywhere but last"
+
+# AND THE DOCUMENT CARRIES NOTHING CLOCK-DERIVED, asserted as an EQUALITY
+# between two reads rather than by naming a field, because the property is
+# what matters and a future field could break it under a different name.
+# `mux agent stream` emits only when the document CHANGES, so one age in here
+# makes every tick a change: the stream becomes a poll that also pays for a
+# diff, and every consumer repaints several times a minute for nothing. This
+# is also why a reader is better off timing the ARRIVAL of a line, which needs
+# no agreement with a remote clock at all.
+WATCHED=global run status; unset WATCHED
+_doc1=$OUT
+sleep 1.1
+WATCHED=global run status; unset WATCHED
+[ "$_doc1" = "$OUT" ] || fail "two reads a second apart differ, so the
+document carries something clock-derived and the stream will emit on every
+tick for ever:
+  [$_doc1]
+  [$OUT]"
+rm -f "$XDG_RUNTIME_DIR/mux/agent-state/global/p8"
+
 # --- SCOPED TO THE CALLER'S PARTITION BY DEFAULT --------------------------
 # `_all` was PARSED AND NEVER READ until 0.73, so every caller got every
 # partition and the flag was decoration. The shipped skill says the opposite,

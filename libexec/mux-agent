@@ -1101,11 +1101,21 @@ fi
 # is built here and never twice: a second copy is how the polled answer and
 # the streamed one start disagreeing about the same instant, which is the
 # worst possible bug in a presenter that may be fed by either.
-_status_doc() {
+# _collect -> the document's INPUTS, in `_rows` and `_srows`. Separate from
+# the formatting below because the stream compares these to decide whether
+# anything happened: they are the whole truth the document is built from, and
+# they cost two forks where formatting costs an `awk` per string. So a quiet
+# tick now pays two forks instead of a dozen, which is strictly cheaper than
+# before sessions were carried at all.
+_collect() {
   set -- --all
   [ "$_att" -eq 0 ] || set -- "$@" --attached
   _rows=$("$_libexec/mux-agent-state-summary" "$@" 2>/dev/null) || _rows=
+  _srows=$("$_libexec/mux-agent-state-summary" "$@" --sessions \
+    2>/dev/null) || _srows=
+}
 
+_status_doc() {
   # `<partition> <state> <count>` per line into one object per line, then one
   # array. Read with a field split rather than `read -r a b c` so a malformed
   # line cannot silently shift the count into the state.
@@ -1114,22 +1124,51 @@ _status_doc() {
       [ -n "${_p:-}" ] || continue
       [ -n "${_st:-}" ] || continue
       [ -z "$_spart" ] || [ "$_p" = "$_spart" ] || continue
-      printf '{"partition":%s,"state":%s,"count":%s}\n' \
+      # THE SESSIONS THIS PARTITION HOLDS, which the collapsed state and
+      # count cannot express and a NOTIFIER needs: a banner says "Claude
+      # finished: <session>", so a presenter fed only `(partition, state,
+      # count)` can report that something happened and not what.
+      #
+      # SESSION LAST on the wire, so a name containing a space reads back
+      # whole, which is the rule the state record itself follows.
+      _sarr=$(
+        printf '%s\n' "$_srows" \
+          | while IFS=' ' read -r _sp _sst _ssn; do
+          [ -n "${_ssn:-}" ] || continue
+          [ "$_sp" = "$_p" ] || continue
+          printf '{"session":%s,"state":%s}\n' \
+            "$(mux_json_str "$_ssn")" "$(mux_json_str "$_sst")"
+        done | mux_json_array
+      )
+      printf '{"partition":%s,"state":%s,"count":%s,"sessions":%s}\n' \
         "$(mux_json_str "$_p")" "$(mux_json_str "$_st")" \
-        "$(mux_json_num "${_n:-}")"
+        "$(mux_json_num "${_n:-}")" "$_sarr"
     done | mux_json_array
   )
   printf '{"status":"ok","partitions":%s}\n' "$_items"
 }
 
 if [ "$_verb" = stream ]; then
+  _collect
   _sdoc=$(_status_doc)
   printf '%s\n' "$_sdoc"
-  _slast=$_sdoc
+  _slast=$_sdoc _ssnap="$_rows$_srows"
   _squiet=0
   while :; do
     sleep "$_sint"
-    _sdoc=$(_status_doc)
+    # TWO LEVELS, AND BOTH ARE NEEDED. The cheap one skips the formatting
+    # entirely on a quiet tick, which is the common case by far. The second
+    # is not redundant: `--partition` and `--attached` FILTER what reaches
+    # the document, so an input can change in a partition this stream does
+    # not report and rebuild a byte-identical document. Emitting that would
+    # break the one promise a consumer has, that a line IS an event.
+    _collect
+    if [ "$_rows$_srows" = "$_ssnap" ]; then
+      _sdoc=$_slast
+    else
+      _ssnap="$_rows$_srows"
+      _sdoc=$(_status_doc)
+    fi
     if [ "$_sdoc" != "$_slast" ]; then
       printf '%s\n' "$_sdoc"
       _slast=$_sdoc
@@ -1154,5 +1193,6 @@ if [ "$_verb" = stream ]; then
   done
 fi
 
+_collect
 _status_doc
 exit 0

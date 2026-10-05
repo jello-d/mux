@@ -1622,8 +1622,8 @@ m empty-arr
 = agent-count-emitted-as-a-string
 f libexec/mux-agent
 t mux-agent
--         "$(mux_json_num "${_n:-}")"
-+         "$(mux_json_str "${_n:-}")"
+-         "$(mux_json_num "${_n:-}")" "$_sarr"
++         "$(mux_json_str "${_n:-}")" "$_sarr"
 m status-count
 
 = agent-peers-root-not-looked-up
@@ -3669,3 +3669,31 @@ t mux-desktop-notifier-setup
 -   rm -f "$BIN_DIR/$_onm"
 +   :
 m survived as a dangling symlink
+
+= agent-status-drops-the-sessions
+f libexec/mux-agent
+t mux-agent
+-         "$(mux_json_num "${_n:-}")" "$_sarr"
++         "$(mux_json_num "${_n:-}")" "[]"
+m status-sess-n
+
+= agent-status-copies-the-collapsed-state
+f libexec/mux-agent
+t mux-agent
+-             "$(mux_json_str "$_ssn")" "$(mux_json_str "$_sst")"
++             "$(mux_json_str "$_ssn")" "$(mux_json_str "$_st")"
+m status-sess-1st
+
+= agent-status-carries-a-clock-field
+f libexec/mux-agent
+t mux-agent
+-   printf '{"status":"ok","partitions":%s}\n' "$_items"
++   printf '{"status":"ok","partitions":%s,"t":"'"$(date +%s)"'"}\n' "$_items"
+m two reads a second apart differ
+
+= summary-sessions-carry-an-age
+f libexec/mux-agent-state-summary
+t mux-agent
+-       printf '%s%s %s\n' "${_pfx:+$_pfx }" "$_state" "$_s"
++       printf '%s%s %s %s\n' "${_pfx:+$_pfx }" "$_state" 0 "$_s"
+m status-sess-0

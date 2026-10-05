@@ -58,10 +58,12 @@ _lib=$_libexec/../lib
 # explicitly; everyone else keeps the state report.
 _all=0
 _att=0
+_sess_mode=0
 while :; do
   case "${1:-}" in
   --all|-a)    _all=1; shift ;;
   --attached)  _att=1; shift ;;
+  --sessions)  _sess_mode=1; shift ;;
   *) break ;;
   esac
 done
@@ -86,8 +88,8 @@ _NL='
 # ONE FUNCTION, because --all asks the same question of several directories
 # and a second copy of the ranking walk would be a second place for the
 # "worst wins" rule to drift from mux-agent-state_lib.
-_summarise() {   # <dir>
-  _sd=$1
+_summarise() {   # <dir> <prefix>
+  _sd=$1 _pfx=${2:-}
   _sessions=
   if [ -d "$_sd" ]; then
     for _f in "$_sd"/*; do
@@ -109,6 +111,24 @@ _summarise() {   # <dir>
     _state=$(mux_agent_state "$_sd" "$_s")
     _state=${_state%% *}
     [ -n "$_state" ] || continue
+    # --sessions: the same walk, reported per session instead of collapsed.
+    # IN THIS LOOP rather than in a second helper, because the loop already
+    # has every session's own state in hand: a separate enumeration would be
+    # a second place for "which sessions does this namespace have" to drift,
+    # and that question has already been answered wrong once here (a
+    # hardcoded `default` namespace that silently reported nothing).
+    #
+    # NO AGE, which is the one field a caller might expect and must not get.
+    # This feeds `mux agent stream`, which emits only when the DOCUMENT
+    # changes; an age changes every second, so including it would make every
+    # tick a change and turn the stream back into a poll that also pays for
+    # a diff. A reader that wants to know how long ago something happened
+    # learns it from WHEN THE LINE ARRIVED, which needs no clock agreement at
+    # all and is strictly better than trusting a remote clock.
+    if [ "$_sess_mode" -eq 1 ]; then
+      printf '%s%s %s\n' "${_pfx:+$_pfx }" "$_state" "$_s"
+      continue
+    fi
     _r=$(mux_agent_rank "$_state")
     if [ "$_r" -gt "$_wr" ]; then
       _wr=$_r; _worst=$_state; _count=1
@@ -120,12 +140,13 @@ _summarise() {   # <dir>
   done <<EOF
 $_sessions
 EOF
+  [ "$_sess_mode" -eq 0 ] || return 0
   [ -n "$_worst" ] || { echo "none 0"; return 0; }
   printf '%s %s\n' "$_worst" "$_count"
 }
 
 if [ "$_all" -eq 0 ]; then
-  _summarise "$(mux_agent_dir "$_ns")"
+  _summarise "$(mux_agent_dir "$_ns")" ""
   exit 0
 fi
 
@@ -163,7 +184,14 @@ for _d in "$_root"/*; do
   _p=${_d##*/}
   [ "$_att" -eq 0 ] || _watched "$_p" || continue
   _seen="$_seen $_p"
-  printf '%s %s\n' "$_p" "$(_summarise "$_d")"
+  if [ "$_sess_mode" -eq 1 ]; then
+    # The prefix is printed INSIDE, not wrapped in `$( )` out here: a
+    # substitution carrying several lines would be handed to one `printf`
+    # argument and come back as one prefixed line plus bare ones.
+    _summarise "$_d" "$_p"
+  else
+    printf '%s %s\n' "$_p" "$(_summarise "$_d" "")"
+  fi
 done
 [ "$_att" -eq 0 ] || exit 0
 case " $_seen " in
