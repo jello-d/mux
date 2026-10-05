@@ -2418,9 +2418,15 @@ t mux-update-env
 # a box where nothing listens to it, advising a restart that could never
 # supply it, printed beside a real finding about SSH_AUTH_SOCK. Advice that
 # cannot come true is this package's oldest defect class.
+#
+# THE KILL MOVED when the DRY mode learned to report stale panes: the same
+# walk now runs in both modes and the preview's copy of this assertion fires
+# first. One line, two cases, so the real-mode twin is not separately
+# killable by it; both are kept because a bug reaching only one mode is
+# exactly what gap this closed.
 -       *) continue ;;
 +       *) ;;
-m DELIBERATELY WITHHELD
+m named a pane stale for a value the run is about to
 
 = update-env-dry-run-writes
 f libexec/mux-update-env
@@ -2487,6 +2493,48 @@ t mux-update-env
 -       dropped)  _l="drop ${_l#* }" ;;
 +       dropped)  : ;;
 m would dropped
+
+# THE DRY RUN SEES THE PANES A RESTART CANNOT AVOID, and sees the RIGHT ones.
+# Two records because they break different things: one removes the report,
+# the other feeds it the wrong question.
+= update-env-dry-hides-stale-panes
+f libexec/mux-update-env
+t mux-update-env
+- if [ -s "$_stalef" ]; then
++ if [ "$_dry" -eq 0 ] && [ -s "$_stalef" ]; then
+m reported no stale panes at all
+
+# NOTHING IS WRITTEN IN DRY MODE, so the session still holds its OLD set and
+# a pane compared against that is stale for yesterday's question. The name
+# the run is ABOUT to set is exactly the one every existing pane lacks, so
+# without this the preview goes quiet about the only pane it matters for.
+= update-env-preview-ignores-its-own-plan
+f libexec/mux-update-env
+t mux-update-env
+-       $1 == "set"                         { add[$2] = 1 }
++       $1 == "setx"                        { add[$2] = 1 }
+m reported no stale panes at all
+
+# A RUN THAT WALKED NOTHING IS NOT A CLEAN BILL OF HEALTH. `--all` on a box
+# with one empty partition, and `work::` naming a partition with no sessions,
+# both reach the end having examined nothing.
+= update-env-walked-nothing-looks-clean
+f libexec/mux-update-env
+t mux-update-env
+- if [ "$_saw" -eq 0 ]; then
++ if false; then
+m a partition with no sessions
+
+# ZERO BYTES IS THE ONE ANSWER A CALLER CANNOT ACT ON, because it is equally
+# true of a verb that did its job and of one that resolved no target. The
+# same box answered 0 bytes and 2085 bytes from the same state and both were
+# misread, once as "scoped wrongly" and once as "a scoping bug".
+= update-env-dry-run-says-nothing
+f libexec/mux-update-env
+t mux-update-env
+-     echo "mux: nothing would change ($_saw session(s) examined)"
++     :
+m a dry run with nothing to do said
 
 = check-notify-daemon-presence-only
 f lib/mux-notify_lib

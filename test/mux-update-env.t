@@ -113,6 +113,45 @@ case $(tm show-environment -t '=one' MUX_T_LIVE 2>&1) in
 a preview the caller trusted has already acted" ;;
 esac
 
+# --- AND A PREVIEW SEES THE PANES A RESTART CANNOT AVOID ------------------
+# `-n` was the ONLY mode that could not, and it is the mode a careful person
+# reaches for first, precisely to find out what is going on without acting.
+# The suppression read as caution and was the opposite: the only way to learn
+# that a pane was about to be left behind was to run the thing you were
+# previewing.
+#
+# AND IT HAS TO BE A TRUE PREVIEW, which is the part with teeth. Nothing is
+# written in dry mode, so the session still holds its OLD set, and comparing
+# panes against that reports who is stale NOW rather than who WOULD be. The
+# difference is the whole report: MUX_T_LIVE is exactly the name the run is
+# about to set and therefore exactly the one every existing pane lacks, so a
+# preview reading the unmodified session says nothing about it at all. This
+# file's own rule, stated for the other half of this verb: a preview computed
+# by a different code path from the action is not a preview.
+if [ -r /proc/$$/environ ]; then
+  # MATCHED ON THE PHRASE BOTH MODES SHARE. The two headings differ in tense
+  # ("are still on" / "would still be on"), which is right for a reader and
+  # is a trap for a test: the real run's pattern finds nothing here and the
+  # assertion then fails against correct code.
+  _dstale=$(printf '%s\n' "$_o" | sed -n '/on the OLD environment/,$p')
+  [ -n "$_dstale" ] || fail "a dry run reported no stale panes at all. The
+pane predates MUX_T_LIVE and the run is about to set it, so there is a pane a
+restart cannot be avoided for and -n is the mode that must say so: [$_o]"
+  case $_dstale in
+  *MUX_T_LIVE*) ;;
+  *) fail "the dry run's stale report does not name MUX_T_LIVE, so it was
+computed against the session's CURRENT environment rather than the one the
+run would leave: it answers a different question from the real run and is
+therefore not a preview. [$_dstale]" ;;
+  esac
+  case $_dstale in
+  *MUX_T_DEAD*)
+    fail "the preview named a pane stale for a value the run is about to
+DROP. Nothing will hold it afterwards, so no restart could supply it, which
+is advice that cannot come true. [$_dstale]" ;;
+  esac
+fi
+
 # --- the real run ---------------------------------------------------------
 _o=$(mux update-env "$SOCK::one" 2>&1 || true)
 [ "$(tm show-environment -t '=one' MUX_T_LIVE)" = "MUX_T_LIVE=/a/live/value" ] \
@@ -172,11 +211,41 @@ case $_o2 in
 cannot be run from a provisioner or a hook: [$_o2]" ;;
 esac
 
+# ... and a dry second run SAYS SO, where it used to print zero bytes. That
+# silence is the one answer a caller cannot act on, because it is equally
+# true of a verb that did its job and of one that resolved no target: the
+# same box answered 0 bytes and 2085 bytes from the same state, and both were
+# misread, once as "scoped wrongly" and once as "a scoping bug".
+_o3=$(mux update-env "$SOCK::one" -n 2>&1 || true)
+case $_o3 in
+*'nothing would change'*) ;;
+*) fail "a dry run with nothing to do said [$_o3]. Zero bytes cannot be told
+from a run that walked no session at all, and both are reachable." ;;
+esac
+
 # --- a session that is not there ------------------------------------------
 _o=$(mux update-env "$SOCK::nosuch" 2>&1 || true)
 case $_o in
 *'no such session'*) ;;
 *) fail "naming a session that does not exist must say so: [$_o]" ;;
 esac
+
+# --- AND WALKING NOTHING IS ITS OWN ANSWER --------------------------------
+# A partition with no sessions reaches the end having examined nothing, and
+# said "nothing needed changing": a true-sounding statement about a question
+# never asked. `--all` on a box with one empty partition lands here too.
+# ASSERTED IN BOTH MODES, because the dry one was silent and the real one
+# lied, which are different failures needing the same fix.
+for _m in '' '-n'; do
+  # shellcheck disable=SC2086  # an EMPTY word must disappear, not be passed.
+  _o4=$(mux update-env "nosuchpart::" $_m 2>&1 || true)
+  case $_o4 in
+  *'no sessions to examine'*) ;;
+  *) fail "a partition with no sessions (mode [${_m:-real}]) answered
+[$_o4]. Nothing was examined, so neither silence nor a claim that nothing
+needed changing is true: both read as a clean bill of health for a question
+that was never asked." ;;
+  esac
+done
 
 pass

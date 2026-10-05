@@ -395,7 +395,10 @@ is byte\-identical to the window target tmux itself takes.
 sweeps every session in every partition, which is how a box whose sessions
 were poisoned before any of this existed is recovered.
 .B -n
-shows what would change without changing it.
+shows what would change without changing it, and that preview carries the
+stale\-pane report too: the pane a restart cannot be avoided for is the one
+fact worth knowing BEFORE acting, and it is computed against the environment
+the run would leave rather than the one in place now.
 .PP
 It only writes where a session LACKS a working value: one that passes its own
 validator is left alone, because two sessions with deliberately different
@@ -403,6 +406,15 @@ environments must not collapse into each other. A process environment is fixed
 at exec, so this cannot reach a pane that is already running, and it NAMES the
 panes it could not fix rather than letting "updated" be read as "your running
 agent is fixed".
+.PP
+A run that examined NO session says so, which is not the same answer as
+having found nothing to do:
+.B --all
+on a box with one empty partition, and
+.B work::
+naming a partition with no sessions, both reach the end having walked
+nothing, and a claim that nothing needed changing would be a clean bill of
+health for a question never asked.
 .RE
 .TP
 .B mux kill " " \fINAME\fR ", " mux kill-all

@@ -183,6 +183,14 @@ _sessions_in() {   # <partition>
 
 # --- act --------------------------------------------------------------------
 _did=0
+# WHETHER ANY SESSION WAS EXAMINED AT ALL, which is a different question from
+# whether anything changed, and conflating them cost two wrong conclusions in
+# one sitting: the same box answered 0 bytes and 2085 bytes from the same
+# state, and I read the silence as "scoped wrongly" and then the output as "a
+# scoping bug". `--all` with no partitions, and `work::` with no sessions in
+# it, both reach here with nothing to walk, so "nothing needed changing" was
+# indistinguishable from "nothing was looked at".
+_saw=0
 # A scratch file for the stale-pane findings, verified before anything is
 # appended: see the subshell note at the loop below.
 _stalef=$(mktemp "${TMPDIR:-/tmp}/mux-updenv.XXXXXX" 2>/dev/null) || _stalef=
@@ -204,6 +212,7 @@ while IFS='	' read -r _p _s; do
     echo "mux: no such session: $_p:$_s" >&2
     continue
   fi
+  _saw=$((_saw + 1))
 
   # THE DRY RUN GOES THROUGH THE SAME DECISION, which the first version got
   # wrong: it printed mux_env_plan, and the plan says what RESOLVED while
@@ -231,9 +240,8 @@ while IFS='	' read -r _p _s; do
       esac
       printf '%s:%s  would %s\n' "$_p" "$_s" "$_l"
     done
-    continue
-  fi
-  if [ -n "$_out" ]; then
+    [ -z "$_out" ] || _did=1
+  elif [ -n "$_out" ]; then
     printf '%s\n' "$_out" | while IFS= read -r _l; do
       [ -n "$_l" ] || continue
       printf '%s:%s  %s\n' "$_p" "$_s" "$_l"
@@ -244,11 +252,15 @@ while IFS='	' read -r _p _s; do
   # THE PANES THAT CANNOT BE FIXED, named rather than implied. A pane whose
   # environment lacks a name mux just set is running on the old one and always
   # will be, because exec already happened.
-  # COLLECTED TO A FILE, NOT A VARIABLE, because this loop reads from a
-  # here-doc and therefore runs in a SUBSHELL: the first version assigned
-  # to `_stale` in here and read it after the loop, where it was always
-  # empty. Reported once at the end rather than interleaved, since these
-  # are a different KIND of fact: what was fixed versus what cannot be.
+  # COLLECTED TO A FILE, NOT A VARIABLE, because the INNER loop is fed by a
+  # PIPE (`mux_env_names | while`) and therefore runs in a subshell: the
+  # first version assigned to `_stale` in there and read it after the loop,
+  # where it was always empty. The outer here-doc loop is not the reason, and
+  # an earlier version of this comment said it was: measured in dash, bash,
+  # ksh and macOS `/bin/sh`, a `while ... done <<EOF` keeps its assignments,
+  # which is also why `_did` and `_saw` can be plain variables. Reported once
+  # at the end rather than interleaved, since these are a different KIND of
+  # fact: what was fixed versus what cannot be.
   # WHICH NAMES THE SESSION NOW HOLDS, computed ONCE per session rather than
   # per pane. This is not an optimisation, it is the question: a pane is only
   # stale relative to something it could actually GAIN by restarting.
@@ -265,6 +277,29 @@ while IFS='	' read -r _p _s; do
   # unanchored substring test makes `AUTH_SOCK` match `SSH_AUTH_SOCK`.
   _held=$(tm show-environment -t "=$_s" 2>/dev/null \
     | sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' | tr '\n' ' ')
+  # A PREVIEW ANSWERS THE SAME QUESTION THE RUN DOES, which is this file's own
+  # rule one paragraph up: `-n` lives inside mux_env_apply precisely because a
+  # preview computed by a different code path is not a preview. Nothing has
+  # been written in dry mode, so the session still holds its OLD set, and
+  # comparing panes against that would report who is stale NOW rather than who
+  # would be stale after the run. The difference is the whole point of the
+  # report: a name the run is about to SET is exactly the one every existing
+  # pane will be missing.
+  #
+  # DERIVED FROM THE PREVIEW ITSELF rather than from the plan, for the same
+  # reason: `_out` is what mux_env_apply says it would do, having already
+  # consulted the session's current value.
+  if [ "$_dry" -eq 1 ]; then
+    _held=$(printf '%s\n' "$_out" | awk -v cur="$_held" '
+      $1 == "set"                         { add[$2] = 1 }
+      $1 == "dropped" || $1 == "stripped" { del[$2] = 1 }
+      END {
+        n = split(cur, c, " ")
+        for (i = 1; i <= n; i++) if (!(c[i] in del)) out[c[i]] = 1
+        for (k in add) if (!(k in del)) out[k] = 1
+        for (k in out) printf "%s ", k
+      }')
+  fi
   while IFS='	' read -r _loc _pid; do
     [ -n "$_pid" ] || continue
     if [ ! -r "/proc/$_pid/environ" ]; then
@@ -295,20 +330,50 @@ done <<EOF
 $(_targets)
 EOF
 
-if [ "$_dry" -eq 0 ] && [ -s "$_stalef" ]; then
+if [ -s "$_stalef" ]; then
   # SAID PLAINLY, because "updated" must not be read as "your running
   # agent is fixed". A process environment is fixed at exec, and setting a
   # session option cannot reach back into one already running.
+  #
+  # AND SAID IN DRY MODE TOO, which it was not: `-n` was the ONLY mode that
+  # could not see this, and it is the mode a careful person reaches for first,
+  # precisely to find out what is going on without acting. The suppression
+  # read as caution and was the opposite: the pane a restart cannot be avoided
+  # for is the one fact a preview most needs to carry, and hiding it meant the
+  # only way to learn it was to run the thing you were previewing.
   echo
-  echo "mux: these panes are still on the OLD environment. A running"
-  echo "mux: process cannot be changed from outside, so they stay as they"
-  echo "mux: are until restarted; anything NEW in them is correct."
+  if [ "$_dry" -eq 1 ]; then
+    echo "mux: these panes would still be on the OLD environment. A running"
+    echo "mux: process cannot be changed from outside, so they would stay as"
+    echo "mux: they are until restarted; anything NEW in them is correct."
+  else
+    echo "mux: these panes are still on the OLD environment. A running"
+    echo "mux: process cannot be changed from outside, so they stay as they"
+    echo "mux: are until restarted; anything NEW in them is correct."
+  fi
   LC_ALL=C sort -u "$_stalef" | while IFS='	' read -r _loc _what; do
     [ -n "$_loc" ] || continue
     printf '  %-26s %s\n' "$_loc" "$_what"
   done
 fi
 
-[ "$_did" -eq 1 ] || [ "$_dry" -eq 1 ] \
-  || echo "mux: nothing needed changing"
+# THREE ANSWERS, NOT TWO, and the third is why this changed: a run that walked
+# NO SESSION said exactly what a run that found nothing to do said, and in dry
+# mode the latter said nothing at all. Zero bytes is the one answer a caller
+# cannot act on, because it is equally true of a verb that did its job and of
+# one that resolved no target. `--all` on a box with one empty partition, and
+# `work::` naming a partition with no sessions, both land here.
+# INDEPENDENT OF THE STALE REPORT, because they are different facts and both
+# can be true: nothing needed CHANGING is an honest answer to a run that also
+# found panes a restart cannot avoid. Gating one on the other would make a
+# second run go quiet about whether it did anything.
+if [ "$_saw" -eq 0 ]; then
+  echo "mux: no sessions to examine"
+elif [ "$_did" -eq 0 ]; then
+  if [ "$_dry" -eq 1 ]; then
+    echo "mux: nothing would change ($_saw session(s) examined)"
+  else
+    echo "mux: nothing needed changing"
+  fi
+fi
 exit 0
