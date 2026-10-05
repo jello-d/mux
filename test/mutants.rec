@@ -692,9 +692,37 @@ m test_A_STALE_LOCK_IS_SKIPPED
 = indicator-local-host-dropped
 f desktop-notifier/mux_desktop_notifier/sources.py
 t mux-desktop-notifier
--     out = [local]
+-     out = [(local, "")]
 +     out = []
 m test_the_local_host_is_always_there
+
+# THE PORT REACHES BOTH CALLERS, and they are separate records because they
+# are separate call sites: `load` builds the POLL argv and `streams` builds
+# the STREAM argv, so one of them dropping it is a host watched at 22 while
+# the other is correct, which is the hardest version to notice.
+= sources-poll-drops-the-port
+f desktop-notifier/mux_desktop_notifier/sources.py
+t mux-desktop-notifier
+-              else remote_argv(h, tmpl, port=split_address(a)[1]))
++              else remote_argv(h, tmpl))
+m test_the_PORT_REACHES_both_the_poll_and_the_stream
+
+= sources-stream-drops-the-port
+f desktop-notifier/mux_desktop_notifier/sources.py
+t mux-desktop-notifier
+-                               port=split_address(a)[1]))
++                               ))
+m test_the_PORT_REACHES_both_the_poll_and_the_stream
+
+# `%p:DEFAULT` MUST BE TRIED BEFORE BARE `%p`, because the first string
+# CONTAINS the second: with this gone the `elif` fires on `%p:22` and leaves
+# the default behind, so an explicit 2222 is asked for as `2222:22`.
+= sources-port-default-not-matched
+f desktop-notifier/mux_desktop_notifier/sources.py
+t mux-desktop-notifier
+-         m = re.search(r"%p:(\d+)", word)
++         m = None
+m test_an_explicit_port_WINS
 
 = indicator-remote-cmd-word-split
 f desktop-notifier/mux_desktop_notifier/sources.py
@@ -3633,8 +3661,8 @@ m falls_back_to_POLLING
 = indicator-remote-stream-is-really-a-poll
 f desktop-notifier/mux_desktop_notifier/sources.py
 t mux-desktop-notifier
--              else remote_argv(h, tmpl, REMOTE_STREAM))
-+              else remote_argv(h, tmpl))
+-              else remote_argv(h, tmpl, REMOTE_STREAM,
++              else remote_argv(h, tmpl,
 m split across elements
 
 

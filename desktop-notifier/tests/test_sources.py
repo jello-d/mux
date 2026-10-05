@@ -41,19 +41,42 @@ class Latched(unittest.TestCase):
         self._lock("northgate", os.getpid(), "northgate")
         self.assertEqual(latched(self.d), [("northgate", "northgate")])
 
-    def test_the_TARGET_not_the_filename_gives_the_host(self):
-        """The filename is sanitised through `tr -c`, so `northwood:api` lands as
-        `northwood_api` and is indistinguishable from a host genuinely called
-        that. Polling `northwood_api` would draw `unknown` forever with nothing
-        on screen to say why, so latch writes the target verbatim on line 2
-        and this reads it."""
-        self._lock("northwood_api", os.getpid(), "northwood:api")
-        self.assertEqual(latched(self.d), [("northwood", "northwood:api")])
+    def test_the_ADDRESS_not_the_filename_gives_the_host(self):
+        """The filename is sanitised through `tr -c`, so `northwood:2222` lands
+        as `northwood_2222` and is indistinguishable from a host genuinely
+        called that. Polling `northwood_2222` would draw `unknown` forever with
+        nothing on screen to say why, so latch writes the address verbatim on
+        line 2 and this reads it."""
+        self._lock("northwood_2222", os.getpid(), "northwood:2222")
+        self.assertEqual(latched(self.d), [("northwood", "northwood:2222")])
 
-    def test_a_session_name_may_contain_a_colon(self):
-        """The target grammar: the host is everything before the FIRST colon."""
-        self._lock("box_a_b", os.getpid(), "box:a:b")
-        self.assertEqual(latched(self.d)[0][0], "box")
+    def test_the_PORT_is_split_off_and_kept(self):
+        """Line 2 is purely the ADDRESS since 0.84: the partition and session
+        moved out of it, so a colon here can only be a port. The host keys the
+        item and the port has to reach the transport, which is the gap this
+        closed: it was split off to key the item and nothing put it back, so a
+        latch to `box:2222` was WATCHED AT 22."""
+        self._lock("box_2222", os.getpid(), "box:2222")
+        host, addr = latched(self.d)[0]
+        self.assertEqual(host, "box")
+        self.assertEqual(sources.split_address(addr), ("box", "2222"))
+
+    def test_an_IPv6_LITERAL_is_never_split(self):
+        """A colon is a port only when it cannot be anything else, which is
+        the rule latch applies to this same field. Guessing wrong here dials a
+        host that does not exist while looking like it worked."""
+        self.assertEqual(sources.split_address("fe80::1"), ("fe80::1", None))
+        self.assertEqual(sources.split_address("[::1]:2222"), ("::1", "2222"))
+        self.assertEqual(sources.split_address("box"), ("box", None))
+
+    def test_a_PRE_0_84_target_is_not_dismembered(self):
+        """`box:a:b` was a legal lock line when line 2 still carried the
+        partition and session. It is not an address, so it is NOT split into a
+        host called `box`: three tests used to assert exactly that and passed
+        by coincidence, because the old first-colon split gives the same
+        answer for an address with a port. Treating a two-colon value as
+        `HOST:PORT` is the IPv6 trap pointed the other way."""
+        self.assertEqual(sources.split_address("box:a:b"), ("box:a:b", None))
 
     def test_A_STALE_LOCK_IS_SKIPPED(self):
         """A crashed latch must not leave a permanent phantom host in the tray.
@@ -85,11 +108,12 @@ class Latched(unittest.TestCase):
         self.assertEqual(latched("/nonexistent/mux-latch"), [])
 
     def test_two_latches_to_one_host_are_ONE_item(self):
-        """`mux agent-summary` answers for the whole box, so two items for
-        `box:api` and `box:web` would be identical twins: a puzzle rather
-        than information."""
-        self._lock("box_api", os.getpid(), "box:api")
-        self._lock("box_web", os.getpid(), "box:web")
+        """`mux agent status --all` answers for the whole box, so two items
+        for one host would be identical twins: a puzzle rather than
+        information. Two latches to the same host differ by PARTITION now,
+        which the lock no longer carries, so both write the same address."""
+        self._lock("box_api", os.getpid(), "box")
+        self._lock("box_web", os.getpid(), "box")
         self.assertEqual([h for h, _ in latched(self.d)], ["box"])
 
 
@@ -530,3 +554,70 @@ class Streams(unittest.TestCase):
     def test_a_latch_to_OURSELVES_does_not_stream_twice(self):
         self._lock("self", local_label())
         self.assertEqual(len(sources.streams(self.d)), 1)
+
+
+class Port(unittest.TestCase):
+    """The port reaches the transport, which it did not until now.
+
+    THE LOCK'S ADDRESS CARRIES `HOST[:PORT]` and the tray split the port off
+    to key its item by host, then built the argv from the host alone. So a
+    latch to `box:2222` was polled at 22: an item reading `unknown` for ever
+    about a box that is perfectly reachable, or worse, whatever answers on 22.
+    Nothing regressed when ports arrived in 0.84 because there were none
+    before, which is exactly why it went unnoticed.
+    """
+
+    def setUp(self):
+        self.d = tempfile.mkdtemp(prefix="muxlatch")
+
+    def _lock(self, name, addr):
+        with open(os.path.join(self.d, name + ".lock"), "w") as fh:
+            fh.write(f"{os.getpid()}\n{addr}\n")
+
+    def test_the_default_comes_from_the_TEMPLATE(self):
+        """`-p %p:22` reads as "the port, or 22". The default cannot live in
+        mux: 22 being ssh's and 2022 being ET's is knowledge of a transport,
+        and the whole seam exists so mux does not have any."""
+        argv = sources.remote_argv("box", sources.DEFAULT_TRANSPORT)
+        self.assertIn("22", argv)
+        self.assertEqual(argv[argv.index("-p") + 1], "22")
+
+    def test_an_explicit_port_WINS(self):
+        argv = sources.remote_argv("box", sources.DEFAULT_TRANSPORT,
+                                   port="2222")
+        self.assertEqual(argv[argv.index("-p") + 1], "2222")
+
+    def test_the_longer_token_is_substituted_FIRST(self):
+        """`%p:22` CONTAINS `%p`, so substituting the bare one first leaves
+        `:22` behind and asks ssh for port `22222`. Ordering, not cleverness,
+        and the kind of thing that works on every machine with no port set."""
+        argv = sources.remote_argv("box", "ssh -p %p:22 %h %q", port="2222")
+        self.assertEqual(argv[argv.index("-p") + 1], "2222")
+
+    def test_a_template_with_NO_port_token_still_works(self):
+        """Every transport line written before ports existed. A template that
+        never mentions `%p` must never see one."""
+        argv = sources.remote_argv("box", "ssh %h %q", port="2222")
+        self.assertNotIn("2222", argv)
+        self.assertIn("box", argv)
+
+    def test_a_bare_token_with_no_port_goes_EMPTY_not_away(self):
+        """What latch does with the same token, and one grammar is the whole
+        argument for mirroring it. Dropping the WORD was the first version and
+        is the worse failure: `-p` and `%p` are separate shell words, so
+        dropping one leaves its flag to swallow the next argument, and
+        `ssh -p box` dials nothing while looking like a dial."""
+        argv = sources.remote_argv("box", "ssh -p %p %h %q")
+        self.assertEqual(argv[argv.index("-p") + 1], "")
+        self.assertIn("box", argv)
+
+    def test_the_PORT_REACHES_both_the_poll_and_the_stream(self):
+        """The load-bearing one: everything above tests the substitution, and
+        this tests that a caller actually passes it. The enumeration splits
+        the address to key the item, so the port is one `[1]` away from being
+        dropped again, and in BOTH functions."""
+        self._lock("box_2222", "box:2222")
+        got = dict(sources.load(self.d))
+        self.assertIn("2222", got["box"], f"the poll lost the port: {got}")
+        got = dict(sources.streams(self.d))
+        self.assertIn("2222", got["box"], f"the stream lost the port: {got}")

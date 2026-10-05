@@ -57,9 +57,14 @@ _INLINE = re.compile(r"\s#.*$")
 #
 # BatchMode=yes because a tray daemon can never answer a prompt; failing fast is
 # what turns an unreachable host into `unknown` instead of a wedged poll.
+#
+# `-p %p:22` IS THE SAME GRAMMAR LATCH USES, not a second one: the port comes
+# from the TARGET and the default from the TEMPLATE, because 22 being ssh's
+# and 2022 being ET's is knowledge of a transport that mux does not have. A
+# template with no `%p` never sees a port, so an older line still works.
 DEFAULT_TRANSPORT = (
     "ssh -o BatchMode=yes -o ConnectTimeout=6 "
-    "-o StrictHostKeyChecking=accept-new %h %q"
+    "-o StrictHostKeyChecking=accept-new -p %p:22 %h %q"
 )
 # `mux agent status`, THE MACHINE CONTRACT, rather than the human-facing
 # summary this used to poll. That is the whole point of the namespace: the
@@ -232,8 +237,14 @@ def activate_hook():
             or _conf("desktop-notifier-activate"))
 
 
-def remote_argv(host, template=None, cmd=None):
-    """host -> the argv that asks it for `mux agent-summary`.
+def remote_argv(host, template=None, cmd=None, port=None):
+    """host -> the argv that asks it for `mux agent status`.
+
+    THE PORT WAS SILENTLY DROPPED UNTIL NOW, which is the gap this closes: the
+    lock's address carries `HOST[:PORT]`, the caller split it off to key the
+    item by host, and nothing put it back. So a latch to `box:2222` was
+    WATCHED AT 22: a tray item that reads `unknown` forever about a box that
+    is perfectly reachable, or worse, a different box answering on 22.
 
     BUILT AS ARGV, never joined into a string: every delimiter is a bug waiting
     for a host name that contains it, and POSIX-shell latch learned the same
@@ -244,7 +255,24 @@ def remote_argv(host, template=None, cmd=None):
     for word in shlex.split(template or transport()):
         if word == "%q":
             out.append(cmd or REMOTE_CMD)
-        elif word == "%h":
+            continue
+        # `%p:DEFAULT` before bare `%p`, because the first contains the
+        # second: substituting `%p` first would leave the `:22` behind as
+        # part of the argument and ask ssh for port `22222`.
+        m = re.search(r"%p:(\d+)", word)
+        if m:
+            word = word.replace(m.group(0), port or m.group(1))
+        elif "%p" in word:
+            # EMPTY WHEN THERE IS NO PORT, which is exactly what latch does
+            # with the same token, and one grammar is the entire argument for
+            # mirroring it. Dropping the WORD instead was my first version and
+            # it is the worse failure: `-p` and `%p` are separate shell words,
+            # so dropping one leaves its flag to swallow the next argument and
+            # `ssh -p box` dials nothing while looking like a dial. A bare
+            # `%p` with no port is a misconfigured template, and ssh refusing
+            # an empty port says so.
+            word = word.replace("%p", port or "")
+        if word == "%h":
             out.append(host)
         else:
             out.append(word.replace("%h", host))
@@ -292,14 +320,41 @@ def latched(run_dir=None):
             continue         # a killed run is not a host worth polling
         if not target:
             continue         # a lock older than the two-line format
-        # The target grammar: everything before the FIRST colon is the host, so
-        # a session name may itself contain one.
-        host = target.split(":", 1)[0]
+        # The ADDRESS grammar, `HOST[:PORT]`, which is all line 2 carries
+        # since 0.84: the partition and session moved out of it, so a colon
+        # here can only be a port.
+        host, port = split_address(target)
         if not host or host in seen:
             continue
         seen.add(host)
         out.append((host, target))
     return out
+
+
+def split_address(addr):
+    """`HOST[:PORT]` -> (host, port or None).
+
+    AN IPv6 LITERAL IS NEVER SPLIT, the same rule latch applies to the same
+    field: a colon is a port only when it cannot be anything else, meaning one
+    colon with digits after it, or brackets. `fe80::1` survives whole, and
+    getting this wrong dials a host that does not exist while looking like it
+    worked, which is this package's signature failure.
+    """
+    if not addr:
+        return "", None
+    if addr.startswith("["):
+        end = addr.find("]")
+        if end > 0:
+            rest = addr[end + 1:]
+            if rest.startswith(":") and rest[1:].isdigit():
+                return addr[1:end], rest[1:]
+            return addr[1:end], None
+        return addr, None
+    if addr.count(":") == 1:
+        h, _, p = addr.partition(":")
+        if p.isdigit():
+            return h, p
+    return addr, None
 
 
 def _hosts(run_dir=None):
@@ -309,16 +364,21 @@ def _hosts(run_dir=None):
     left-hand item does not move around as latches come and go. Latched to
     ourselves is skipped: that is already the local item.
 
+    Each is `(label, address)`: the ADDRESS is carried rather than discarded
+    because it holds the PORT, and dropping it is exactly the bug this pair
+    shipped: the item was keyed by host, the port was split off to do that,
+    and nothing put it back.
+
     ONE ENUMERATION FOR BOTH `load` AND `streams`, because the moment the two
     disagree about WHICH hosts exist, a host gets a poll and a stream at once
     or neither, and the tray's own rule is that the answer which repaints the
     items is also the one that decides which items exist.
     """
     local = local_label()
-    out = [local]
-    for host, _target in latched(run_dir):
+    out = [(local, "")]
+    for host, target in latched(run_dir):
         if host != local:
-            out.append(host)
+            out.append((host, target))
     return out
 
 
@@ -326,8 +386,9 @@ def load(run_dir=None, mux_bin="mux"):
     """Every source to publish, as label -> the argv that QUERIES it once."""
     tmpl = transport()
     local = local_label()
-    return [(h, [mux_bin, *LOCAL_CMD] if h == local else remote_argv(h, tmpl))
-            for h in _hosts(run_dir)]
+    return [(h, [mux_bin, *LOCAL_CMD] if h == local
+             else remote_argv(h, tmpl, port=split_address(a)[1]))
+            for h, a in _hosts(run_dir)]
 
 
 def streams(run_dir=None, mux_bin="mux"):
@@ -362,5 +423,6 @@ def streams(run_dir=None, mux_bin="mux"):
     tmpl = transport()
     local = local_label()
     return [(h, [mux_bin, *LOCAL_STREAM] if h == local
-             else remote_argv(h, tmpl, REMOTE_STREAM))
-            for h in _hosts(run_dir)]
+             else remote_argv(h, tmpl, REMOTE_STREAM,
+                              port=split_address(a)[1]))
+            for h, a in _hosts(run_dir)]
