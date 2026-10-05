@@ -210,6 +210,24 @@ case "$(err nosuchverb)" in
 *) fail "an unknown verb did not say so" ;;
 esac
 
+# AND THE TEXT HAS TO ARRIVE, which is a DIFFERENT fact from the code since
+# 2026-10-05: `usage` now EXECS libexec/mux-help, so an error path that lost
+# the helper would answer 2 from the shell having printed nothing, and the
+# codes above cannot tell that from working. The whole reason these paths
+# call usage is the summary.
+#
+# NO SECOND EXIT-CODE ASSERTION HERE, deliberately. Four were written for the
+# arity shapes and every one was UNKILLABLE: `rc nosuchverb` above reaches the
+# same exec, so it already proves the mechanism answers 2, and a mutation of
+# the arm died on that line instead. Belt and braces reads as safety and
+# measures as untestable; the arity ARMS themselves are mux-args.t's job.
+case "$(err ls extra)" in
+*"usage: mux"*) ;;
+*) fail "an arity error printed no usage summary. The nineteen arity paths
+reach it by exec'ing libexec/mux-help, so this is what says the helper was
+found and ran rather than merely that the shell answered 2." ;;
+esac
+
 # --- and nothing else, ever ---------------------------------------------
 # Sweep every verb the front end accepts, in the failure-prone empty context,
 # and assert the code is one of the three. This is the assertion that keeps the

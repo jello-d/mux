@@ -193,6 +193,25 @@ case "$(mux help 2>&1 | head -1)" in
 usage:*) ;;
 *) fail "bare 'mux help' should print usage" ;;
 esac
+# ONE COPY OF THE TEXT, ASSERTED. `mux --help` and `mux help` were the same
+# in-file function call until 2026-10-05; they are now two ARMS of
+# libexec/mux-help's dispatch (`--usage 0` and the empty topic), and two arms
+# that must agree is the shape that drifts. Byte-equality is the only check
+# that sees it, since both would go on printing something usage-shaped.
+_uh=$(mux --help 2>&1 || true)
+_bh=$(mux help 2>&1 || true)
+[ "$_uh" = "$_bh" ] || fail "'mux --help' and 'mux help' have drifted apart.
+They are two dispatch arms over one usage function, so they must be
+byte-identical; a reader who learns one has learned the other."
+# AND `--usage` IS NOT A TOPIC. It is spelled as a flag precisely so the
+# topic vocabulary stays the four words the refusal names, rather than
+# acquiring a fifth that is a second spelling of `mux --help`.
+_ut=$(mux help usage 2>&1 || true)
+case $_ut in
+*"unknown help topic"*) ;;
+*) fail "'mux help usage' was answered instead of refused, so the internal
+--usage flag has become a documented-looking topic: [$_ut]" ;;
+esac
 
 # --- `help palette` renders the 256-colour grid --------------------------
 # The last functions the suite never reached: help_palette (the one function in

@@ -1,26 +1,35 @@
 #!/bin/sh
-# mux-help: the help TOPICS. `mux help [agents|themes|profiles|palette]`.
+# mux-help: ALL of mux's help. The four topics
+# (`mux help [agents|themes|profiles|palette]`), the usage summary, and the
+# two list helpers they share.
 #
-# EXTRACTED FROM bin/mux (2026-10-05), 265 lines of a 3,554-line entry point,
+# EXTRACTED FROM bin/mux (2026-10-05), 450 lines of a 3,554-line entry point,
 # and separable because every one of these functions only PRINTS. They read
 # shipped and overlay data through mux-data_lib and the profile table through
 # mux-profiles_lib, and they resolve nothing else.
 #
-# WHAT STAYED, AND WHY, because the split is not where you would first guess:
-# `usage()` and its two list helpers are still in bin/mux. usage is called
-# from SIX error paths in the argument parser, each with its own exit code,
-# and that parser is the most load-bearing block in the file. Turning six
-# in-process calls into execs is a change worth making on its own day, not on
-# the way to a release. `mux help` with NO topic therefore still prints usage
-# from there, and this file owns every topic.
+# THE TOPICS CAME FIRST AND usage FOLLOWED THE SAME DAY, and what stayed in
+# bin/mux is a one-line shim: `usage() { exec ... --usage "${1:-2}"; }`. Its
+# twenty-two callers are the error paths of the argument parser, each with its
+# own exit code, and they are unchanged: an exec never returns, which is what
+# `usage; }` already relied on. The first attempt put the exec at all
+# twenty-two sites instead, which traded duplicated TEXT for a duplicated
+# PATH and went over 80 columns in eleven places.
+#
+# NO TOPIC IS USAGE, so bin/mux execs here for the whole `help` verb and the
+# topic VOCABULARY lives beside the topics. `--usage` is spelled as a FLAG
+# rather than a topic so `mux help usage` stays a refusal instead of becoming
+# a second spelling of `mux --help`; test/mux-verbs.t pins that, and pins the
+# two forms being byte-identical, because they are two dispatch arms over one
+# function now rather than one call.
 #
 # SO THE ONE THING IT NEEDS FROM A RESOLVED CONTEXT is the caller's own
-# partition, which `help_profiles` uses to show the layouts for this side.
-# `mux_ctx_mine` answers that in one call, which is what a fresh process can
-# afford for a human-speed verb: about 5ms, against a status bar that must
-# not pay it. The lazy `_ensure_side`/`_cur_part` pair bin/mux used existed
-# only because usage() runs BEFORE the socket block there; here there is no
-# such ordering to dodge.
+# partition, which `help_profiles` and `usage` use to show the layouts for
+# this side. About 5ms, which is what a fresh process can afford for a
+# human-speed verb and what a status bar must not pay. bin/mux had a lazy
+# `_ensure_side`/`_cur_part` pair for it, and that is GONE rather than moved:
+# it existed only because usage() ran before that file's socket block, and
+# here there is no such ordering to dodge.
 set -eu
 
 _libexec=$(dirname "$0")
@@ -320,9 +329,125 @@ help_agents() {
   printf '\n  the agent to call `mux agent-emit` over its lifecycle.\n'
 }
 
+# --- usage, and the lists it shows -----------------------------------------
+# MOVED FROM bin/mux (2026-10-05), the last of the help surface. It stayed
+# behind in the first pass because EIGHT error paths in the argument parser
+# call it, each with its own exit code, and that parser is the most
+# load-bearing block in the file. Those are `exec` now, which is what makes
+# this safe: exec REPLACES the process, so the caller's `echo ... >&2` lands
+# first and this exits with the code it was handed. No return path to get
+# wrong.
+#
+# `_ensure_side` WENT RATHER THAN MOVING. It resolved `_cur_part` lazily
+# because usage() in bin/mux runs BEFORE that file's socket block; here the
+# context is resolved eagerly at the top and there is no ordering to dodge.
+
+# Layout stems for the caller's side plus the shared (rootless) ones: the same
+# one-side-or-the-other view `mux ls` gives for sessions.
+_list_layouts() {
+  mux_prof_all_names | while IFS= read -r _n; do
+    [ "$(mux_prof_partition "$_n")" = "$_cur_part" ] || continue
+    printf '%s ' "$_n"
+  done
+}
+
+# Print "<label><items...>" to stderr, space-separated, wrapping so no line runs
+# past 78 columns; continuation lines are indented to the label's width, so a
+# long list stays in its column instead of wrapping back to the margin.
+_wrap_list() {   # <label> <space-separated items>
+  _lbl=$1; _items=$2
+  _ind=$(printf "%${#_lbl}s" '')
+  _line=$_lbl _first=1
+  for _it in $_items; do
+    if [ "$_first" = 1 ]; then
+      _line=$_lbl$_it; _first=0
+    elif [ "$(( ${#_line} + 1 + ${#_it} ))" -le 78 ]; then
+      _line="$_line $_it"
+    else
+      printf '%s\n' "$_line" >&2
+      _line=$_ind$_it
+    fi
+  done
+  printf '%s\n' "$_line" >&2
+}
+
+# usage [RC]: print help to stderr and exit RC (default 2; `mux --help` passes
+# 0). Ends with the live layouts (go/resume/kill NAME) and colors (new COLOR).
+usage() {
+  cat >&2 <<'EOF'
+usage: mux [OPTION] [VERB] [NAME] [PROFILE]  (OPTION may follow VERB too)
+  (no verb)                  pick a session to attach (fzf or numbered menu)
+  go [NAME|DIR] [PROFILE]    create/attach/switch; agent continues in the pane
+  go --resume                same, but the agent resumes (choose a conversation)
+  kill NAME                  tear the named session down (--all: every one)
+  reload                     re-source tmux.conf on every running mux server
+  ls                         list sessions in the current context
+  new NAME                   create NAME here (binds the name if needed)
+  save [NAME]                snapshot this session (records only deltas)
+  hide/show SESSION          hide/unhide SESSION for this client (strip/cycle)
+                             show --all clears this client's hidden set
+  next-blocked               jump to the session that has needed you longest
+  theme [NAME|next|prev]     set/cycle/show the theme (remembered)
+  rename [OLD] NEW           rename a session (and its matching layout)
+  edit [NAME]                open a profile in $EDITOR
+  resume [PARTITION [SESSION]]
+                             rebuild a partition's sessions (--list to see
+                             them); SESSION is where to focus afterwards.
+                             --no-wait-env builds them even when a declared
+                             session pointer has not arrived yet
+  sane                       put the terminal back after a wedged session
+  skill [NAME]               print the agent instructions for this mux
+  demo                       a throwaway mux to look at (--stop)
+  keys                       what the key bindings do (prefix ?)
+  setup AGENT                wire that agent's hooks to mux (--remove,
+                             --dry-run, --yes)
+                             (--agents-md for the AGENTS.md form)
+  latch HOST[:PART] [SESS]   hold an attachment to a remote mux open across
+                             drops (bring your own transport; see man 1 mux)
+  why [NAME]                 show each resolved value and where it came from
+  views [MODE]               who is attached, and what that costs
+  agent-doctor               does recorded agent state match reality? (--repair)
+  log [-n N] [-f] [SUBSYS]   what mux changed, and what it could not do
+  agent-hook EVENT           an agent lifecycle event (wiring calls this)
+  window [[PART::]SESS:]NAME
+                             open a window in an existing session and go
+                             there. --control/--attention declare what it
+                             is for; `mux agent open` is the detached form
+  even [--all]               put panes back to the declared shape (prefix-E)
+  undo-pane                  put back the pane you just closed (prefix-u)
+  check                      audit mux's install: package data, deps, overlay
+  migrate-profiles           convert pre-rename *.layout files (--apply)
+  scan                       rebuild the project discovery map (--list)
+  --no-agent                 go/new without the agent (its pane is a shell)
+  --attach                   go: attach a live session whose root differs
+  --attach-only              go: attach if live, else refuse (never create)
+  --all                      kill/show: act on every session
+  --force                    overwrite an existing profile (save/new)
+  help [TOPIC]               this help; TOPIC = agents|themes|profiles|palette
+  -h, --help                 alias for bare `help`
+  -V, --version              print the version
+EOF
+  echo >&2
+  _wrap_list "  profiles (mux go NAME):    " "$(_list_layouts)"
+  _wrap_list "  themes  (mux theme NAME):  " \
+    "$(mux_data_stems_line themes .theme)"
+  _wrap_list "  agents  (agent NAME):      " \
+    "$(mux_data_stems_line agents .agent)"
+  exit "${1:-2}"
+}
+
 # THE TOPIC VOCABULARY IS HERE, not in bin/mux, so adding a topic is one edit
 # in one file. bin/mux only answers the EMPTY case, which is usage.
 case ${1:-} in
+# --usage [RC] is bin/mux's eight parser error paths and its -h/--help flag,
+# reaching the one copy of the usage text. NOT a topic: it is deliberately
+# spelled as a flag so `mux help usage` stays an unknown topic rather than
+# becoming a second spelling of `mux --help`.
+--usage)           shift; usage "${1:-2}" ;;
+# NO TOPIC IS USAGE, which is why bin/mux can now exec straight here for the
+# whole verb instead of branching first. `mux help` and `mux --help` are the
+# same question and there is one copy of the answer.
+'')                usage 0 ;;
 agents)            help_agents ;;
 themes|colors)     help_colors ;;
 profiles|layouts)  help_profiles ;;

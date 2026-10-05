@@ -3925,3 +3925,23 @@ t mux-resolve
 -   _hs=$(printf '%s' "$1" | cksum | awk '{print $1}')
 +   _hs=0
 m gave every name the same theme
+= help-usage-prints-nothing
+f libexec/mux-help
+t mux-exit
+- --usage)           shift; usage "${1:-2}" ;;
++ --usage)           shift; exit "${1:-2}" ;;
+m printed no usage summary
+
+= help-bare-drifts-from-dash-dash-help
+f libexec/mux-help
+t mux-verbs
+- '')                usage 0 ;;
++ '')                usage 0 2>&1 | sed 's/$/ /' >&2; exit 0 ;;
+m have drifted apart
+
+= help-usage-is-reachable-as-a-topic
+f libexec/mux-help
+t mux-verbs
+- --usage)           shift; usage "${1:-2}" ;;
++ --usage|usage)     shift; usage "${1:-2}" ;;
+m answered instead of refused

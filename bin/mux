@@ -367,114 +367,14 @@ _profile_root() {   # <name>
   printf '%s' "$_r"
 }
 
-# Work/personal (or any) filtering. A layout's SIDE is a property of its ROOT,
-# and which side the caller is on both come from the context hook (see
-# mux-context_lib); mux core just compares tokens. A layout shows when its side
-# is `shared` (rootless / any context) or equals the caller's side. Resolved
-# once,
-# lazily: usage() lists layouts before the socket block below runs.
-_cur_part=''
-_ensure_side() {
-  [ -n "$_cur_part" ] && return 0
-  mux_ctx_resolve || :
-  _cur_part=$MUX_CTX_PARTITION
 
-}
-
-# Layout stems for the caller's side plus the shared (rootless) ones: the same
-# one-side-or-the-other view `mux ls` gives for sessions.
-_list_layouts() {
-  _ensure_side
-  mux_prof_all_names | while IFS= read -r _n; do
-    [ "$(mux_prof_partition "$_n")" = "$_cur_part" ] || continue
-    printf '%s ' "$_n"
-  done
-}
-
-# Print "<label><items...>" to stderr, space-separated, wrapping so no line runs
-# past 78 columns; continuation lines are indented to the label's width, so a
-# long list stays in its column instead of wrapping back to the margin.
-_wrap_list() {   # <label> <space-separated items>
-  _lbl=$1; _items=$2
-  _ind=$(printf "%${#_lbl}s" '')
-  _line=$_lbl _first=1
-  for _it in $_items; do
-    if [ "$_first" = 1 ]; then
-      _line=$_lbl$_it; _first=0
-    elif [ "$(( ${#_line} + 1 + ${#_it} ))" -le 78 ]; then
-      _line="$_line $_it"
-    else
-      printf '%s\n' "$_line" >&2
-      _line=$_ind$_it
-    fi
-  done
-  printf '%s\n' "$_line" >&2
-}
-
-# usage [RC]: print help to stderr and exit RC (default 2; `mux --help` passes
-# 0). Ends with the live layouts (go/resume/kill NAME) and colors (new COLOR).
-usage() {
-  cat >&2 <<'EOF'
-usage: mux [OPTION] [VERB] [NAME] [PROFILE]  (OPTION may follow VERB too)
-  (no verb)                  pick a session to attach (fzf or numbered menu)
-  go [NAME|DIR] [PROFILE]    create/attach/switch; agent continues in the pane
-  go --resume                same, but the agent resumes (choose a conversation)
-  kill NAME                  tear the named session down (--all: every one)
-  reload                     re-source tmux.conf on every running mux server
-  ls                         list sessions in the current context
-  new NAME                   create NAME here (binds the name if needed)
-  save [NAME]                snapshot this session (records only deltas)
-  hide/show SESSION          hide/unhide SESSION for this client (strip/cycle)
-                             show --all clears this client's hidden set
-  next-blocked               jump to the session that has needed you longest
-  theme [NAME|next|prev]     set/cycle/show the theme (remembered)
-  rename [OLD] NEW           rename a session (and its matching layout)
-  edit [NAME]                open a profile in $EDITOR
-  resume [PARTITION [SESSION]]
-                             rebuild a partition's sessions (--list to see
-                             them); SESSION is where to focus afterwards.
-                             --no-wait-env builds them even when a declared
-                             session pointer has not arrived yet
-  sane                       put the terminal back after a wedged session
-  skill [NAME]               print the agent instructions for this mux
-  demo                       a throwaway mux to look at (--stop)
-  keys                       what the key bindings do (prefix ?)
-  setup AGENT                wire that agent's hooks to mux (--remove,
-                             --dry-run, --yes)
-                             (--agents-md for the AGENTS.md form)
-  latch HOST[:PART] [SESS]   hold an attachment to a remote mux open across
-                             drops (bring your own transport; see man 1 mux)
-  why [NAME]                 show each resolved value and where it came from
-  views [MODE]               who is attached, and what that costs
-  agent-doctor               does recorded agent state match reality? (--repair)
-  log [-n N] [-f] [SUBSYS]   what mux changed, and what it could not do
-  agent-hook EVENT           an agent lifecycle event (wiring calls this)
-  window [[PART::]SESS:]NAME
-                             open a window in an existing session and go
-                             there. --control/--attention declare what it
-                             is for; `mux agent open` is the detached form
-  even [--all]               put panes back to the declared shape (prefix-E)
-  undo-pane                  put back the pane you just closed (prefix-u)
-  check                      audit mux's install: package data, deps, overlay
-  migrate-profiles           convert pre-rename *.layout files (--apply)
-  scan                       rebuild the project discovery map (--list)
-  --no-agent                 go/new without the agent (its pane is a shell)
-  --attach                   go: attach a live session whose root differs
-  --attach-only              go: attach if live, else refuse (never create)
-  --all                      kill/show: act on every session
-  --force                    overwrite an existing profile (save/new)
-  help [TOPIC]               this help; TOPIC = agents|themes|profiles|palette
-  -h, --help                 alias for bare `help`
-  -V, --version              print the version
-EOF
-  echo >&2
-  _wrap_list "  profiles (mux go NAME):    " "$(_list_layouts)"
-  _wrap_list "  themes  (mux theme NAME):  " \
-    "$(mux_data_stems_line themes .theme)"
-  _wrap_list "  agents  (agent NAME):      " \
-    "$(mux_data_stems_line agents .agent)"
-  exit "${1:-2}"
-}
+# usage IS A ONE-LINE SHIM over libexec/mux-help, which holds the only copy of
+# the text and the two list helpers it shares with the topics. It EXECS, so it
+# never returns, which is what every error path below already relied on: each
+# ends with `usage` and its own exit code. Written as a function rather than 21
+# inline execs on purpose, because a path repeated at every call site is the
+# duplication this split was removing, one layer out.
+usage() { exec "$LIBEXEC/mux-help" --usage "${1:-2}"; }
 
 # --- options and the verb in either order, then positionals ----------------
 # ONE loop takes both: an option is an option wherever it sits, and the first
@@ -630,29 +530,16 @@ name_arg=${1:-}
 layout_arg=${2:-}
 
 
-# THE HELP TOPICS MOVED to libexec/mux-help (2026-10-05): 265 lines of pure
-# output. `usage` stayed, because six error paths in the parser below call
-# it with their own exit codes; see cmd_help.
-# THE TOPICS LIVE IN libexec/mux-help (2026-10-05): 265 lines of pure output
-# that resolve nothing but the caller's own partition. What stays here is the
-# EMPTY case, because that is `usage`, and usage is called from six error
-# paths in the argument parser below, each with its own exit code. Turning
-# those six into execs is a change worth its own day rather than being done
-# on the way to a release, so the split is where the dependency is: bare help
-# is usage, every topic is the helper, and the topic VOCABULARY lives with
-# the topics so adding one is a single edit in a single file.
-cmd_help() {
-  case ${1:-} in
-  '') usage 0 ;;
-  *)  exec "$LIBEXEC/mux-help" "$@" ;;
-  esac
-}
-
-# "$@" matters: this was an inline block, where $1 was the script's first
-# POSITIONAL: the topic. Extracting it into a function without passing
-# them made $1 the function's own, which is unset, so every
-# `mux help TOPIC` silently printed the usage summary instead.
-if [ "$cmd" = help ]; then cmd_help "$@"; fi
+# HELP IS ENTIRELY libexec/mux-help (2026-10-05): the topics, the usage
+# summary, and the two list helpers they share. The empty topic IS usage, so
+# this needs no branch of its own and the topic VOCABULARY lives with the
+# topics, which makes adding one a single edit in a single file.
+#
+# "$@" IS LOAD-BEARING. This was once an inline block reading the script's
+# own positionals, and a first attempt at extracting it dropped them, which
+# made every `mux help TOPIC` print the usage summary instead: an argument
+# this file can only pass on, never interpret.
+if [ "$cmd" = help ]; then exec "$LIBEXEC/mux-help" "$@"; fi
 
 # Root and identity both derive from the project: the git toplevel if we are in
 # a repo, else the current directory. tmux forbids ':' and '.' in a session
@@ -811,10 +698,6 @@ fi
 # LIST of them, and `for n in $set` is never safe for one.
 _RS_NL='
 '
-# `_cur_part` IS NOT SET HERE ANY MORE. Its only readers are usage and
-# _list_layouts, which run BEFORE this point, which is exactly why
-# _ensure_side resolves lazily. The assignment that used to sit here was
-# unobservable once the help topics left.
 # Nothing knows this context. Say so ONCE, here in the front end, never from
 # mux-context_lib, which mux-style and mux-agent-render call every status
 # interval, where output pops a view-mode buffer over the active pane.
