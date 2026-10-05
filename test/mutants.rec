@@ -3571,3 +3571,17 @@ t mux-indicator
 -                                 proc.stdout.readline(), STALE)
 +                                 proc.stdout.readline(), 86400)
 m went silent past the staleness
+
+= strip-humming-falls-to-the-unknown-look
+f libexec/mux-agent-state-render
+t mux-strip
+-   humming) sty=$STY_HUMMING; acc=$ACC_HUMMING ;;
++   humming) sty=$STY_UNKNOWN; acc=$ACC_UNKNOWN ;;
+m carries no background
+
+= strip-humming-is-idles-own-chip
+f libexec/mux-agent-state-render
+t mux-strip
+- STY_HUMMING='fg=colour231,bg=#1b6b2a,bold'
++ STY_HUMMING=$STY_IDLE
+m same background

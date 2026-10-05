@@ -419,6 +419,31 @@ _hage=$(vis "$_o" | sed -n "$_hpat")
 states and a new one silently loses it. Measured: the first version rendered
 the gear with an empty age column."
 
+# AND IT CARRIES A CHIP LOOK OF ITS OWN, which is the SECOND hardcoded
+# per-state list behind this one chip and was missed when the first was fixed.
+# `_style` maps a state to a style and an accent, and its `*)` arm is the dim
+# `unknown` look: a bare fg and NO bg. So a new state does not render wrongly,
+# it renders as the colour reserved for "mux cannot say", which is how this
+# shipped. MEASURED LIVE on a real session: `#[fg=colour250]` with no
+# background, indistinguishable from an agentless chip, while every other live
+# state draws a filled one.
+#
+# READ OFF AN ORDINARY CHIP, NOT THE CURRENT ONE, which is the whole reason
+# this needs its own render: `render CURRENT ...` makes charlie the CURRENT
+# session, whose body is deliberately white on every theme so that "where am
+# I" never rides on a hue, and whose state colour lives in the FRAME instead.
+# Extracting a bg from that chip reads `fg=colour232` and proves nothing.
+_sty() { printf '%s' "$1" | sed -n \
+  "s/.*#\\[\\([^]]*\\)\\] $2 charlie.*/\\1/p"; }
+_bg() { printf '%s' "$1" | sed -n 's/.*\(bg=[^],]*\).*/\1/p'; }
+_hsty=$(_sty "$(render alpha 400)" "$MUX_GLYPH_HUMMING")
+case ${_hsty:-} in
+*bg=*) ;;
+*) fail "the humming chip carries no background: [$_hsty]. It fell through
+_style's \`*)\` arm to the dim UNKNOWN look, so a session that is ready with
+work still running draws as one mux knows nothing about." ;;
+esac
+
 # AND THE CONTROL, which is what makes the gear the sidecar's doing rather
 # than a fixture that cannot fail: the OTHER idle sessions still draw a check.
 kill "$_sjob" 2>/dev/null; wait "$_sjob" 2>/dev/null || true
@@ -426,6 +451,21 @@ _o=$(render charlie 400)
 has "$_o" "$MUX_GLYPH_IDLE" "with the job gone the strip must go back to the
 check with nothing re-emitted, or the mark never clears"
 no_has "$_o" "$MUX_GLYPH_HUMMING" "the gear outlived the work it stood for"
+
+# AND IT IS NOT IDLE'S BACKGROUND, asserted separately from "it has one"
+# because the two mutations are different bugs and one "they differ" check
+# kills neither: a chip painted exactly like idle is a state whose only cue is
+# the glyph, and a chip with no bg at all is the bug above. The brief was one
+# hue at two depths, not one chip at two glyphs. Taken from the SAME session
+# now that its job has gone, so nothing is added to the fixture: a case
+# inserted mid-file re-points every later assertion, which this suite has
+# already paid for.
+_isty=$(_sty "$(render alpha 400)" "$MUX_GLYPH_IDLE")
+[ -n "$(_bg "$_isty")" ] || fail "precondition: no idle bg to compare against
+(idle style read as [$_isty])"
+[ "$(_bg "$_hsty")" != "$(_bg "$_isty")" ] || fail "humming and idle draw the
+same background [$(_bg "$_hsty")], so the only thing separating 'done' from
+'still running' is the glyph."
 
 # --- THE PRUNE WAS DELETING SIDECARS, which is a bug this change found -----
 # The prune reads every file in the record directory, and a sidecar parses

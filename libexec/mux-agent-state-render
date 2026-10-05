@@ -71,6 +71,13 @@ STY_WORKING='fg=colour211,bg=colour56,bold'
 # to land colour120 on a green that reads well as this chip body, so unlike
 # ACC_IDLE below it wants no hex. Keep it colourNN; do not "fix" it to a hex.
 STY_IDLE='fg=colour232,bg=colour120,bold'
+# HUMMING keeps idle's HUE and darkens it, because the turn really did end: the
+# hue says "nothing wants you", the depth says "something is still running".
+# A TRUECOLOR hex for the reason ACC_IDLE gives below, and NOT colourNN: this
+# terminal's palette shifts the green cube toward blue, so an indexed dark
+# green reads blue, and a chip that reads as a different hue reads as a
+# different STATE. Same value the tray draws, so the two surfaces agree.
+STY_HUMMING='fg=colour231,bg=#1b6b2a,bold'
 STY_NONE='fg=colour250'
 STY_UNKNOWN='fg=colour250'
 
@@ -81,6 +88,9 @@ ACC_IDLE='#7faa00'       # warm (yellow-leaning) green as a TRUECOLOR hex, not
        # toward blue, so colourNN greens read blue; a hex goes
        # out as a direct RGB escape (tmux Tc), bypassing the
        # palette, so this stays truly green on the chip.
+ACC_HUMMING='#1b6b2a'    # the chip's own body, and dark enough to read on the
+       # current session's white frame, which is the one place
+       # an accent has to survive.
 ACC_NONE=colour250       # gray, agentless recedes
 ACC_UNKNOWN=colour250
 
@@ -340,6 +350,7 @@ _style() {
     else    sty=$STY_BLOCK_FRESH; acc=$ACC_BLOCK_FRESH
     fi ;;
   working) sty=$STY_WORKING; acc=$ACC_WORKING ;;
+  humming) sty=$STY_HUMMING; acc=$ACC_HUMMING ;;
   idle)    sty=$STY_IDLE;    acc=$ACC_IDLE ;;
   none|'') sty=$STY_NONE;    acc=$ACC_NONE ;;
   # UNWIRED borrows the unknown STYLE on purpose: both mean "mux cannot
