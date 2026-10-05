@@ -513,7 +513,10 @@ amb() {   # -> stderr of a run with the given env
     "$HERE/libexec/mux-latch" --max-tries 1 box k 2>&1 >/dev/null
 }
 
-# THE FAR SIDE'S OWN MESSAGE IS NEVER REPLACED BY A GUESS. This is the
+# THE FAR SIDE'S OWN MESSAGE IS NEVER REPLACED BY A GUESS.
+# conventions: allow -- the line below QUOTES a message an earlier version
+# printed, verbatim, across a wrapped code span. Rewording it would make the
+# record false rather than fix any prose. This is the
 # regression that mattered: an earlier version reported `gone -- its tmux server
 # went away` whenever stderr carried no `mux:` prefix, and tmux's own messages
 # carry none. A `mux resume` that could not attach said "open terminal failed:

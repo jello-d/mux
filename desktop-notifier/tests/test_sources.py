@@ -256,12 +256,17 @@ class TransportFromConfig(unittest.TestCase):
         return d
 
     def test_the_config_key_is_READ(self):
+        # conventions: allow -- every `--` in this class sits inside a kubectl
+        # command TEMPLATE, where it is kubectl's own end-of-options separator
+        # between the pod and the remote argv. It is syntax under test, not
+        # punctuation, so rewording it would change what is being asserted.
         self._conf("desktop-notifier-transport kubectl exec %h -- %q\n")
         self.assertEqual(transport(), "kubectl exec %h -- %q")
 
     def test_it_reaches_the_argv(self):
         """Separate from reading it: a value parsed and then dropped on the
         floor looks identical from the config's side."""
+        # conventions: allow -- kubectl's separator, as above.
         self._conf("desktop-notifier-transport kubectl exec %h -- %q\n")
         self.assertEqual(remote_argv("pod")[:3], ["kubectl", "exec", "pod"])
 
@@ -277,6 +282,7 @@ class TransportFromConfig(unittest.TestCase):
         """`# desktop-notifier-transport ...` is how somebody disables it.
         Reading it
         anyway would silently ignore the disabling."""
+        # conventions: allow -- kubectl's separator, as above.
         self._conf("  # desktop-notifier-transport kubectl exec %h -- %q\n")
         self.assertEqual(transport(), DEFAULT_TRANSPORT)
 

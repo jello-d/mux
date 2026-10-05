@@ -482,6 +482,9 @@ if [ -s "$_dash" ]; then
   printf 'FAIL %s: grep pattern from a variable, with no `--`:\n' "$_name" >&2
   sed 's/^/  /' "$_dash" >&2
   printf 'A name starting with `-` is read as OPTIONS.\n' >&2
+  # conventions: allow -- the dashes below are the end-of-options marker this
+  # check exists to require, printed as the example to copy. Rewording them
+  # would print advice that fails the very rule it is giving.
   printf 'Write it as: grep -qxF -- "$x"\n' >&2
   exit 1
 fi

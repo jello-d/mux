@@ -632,7 +632,7 @@ EOF
 $_recset
 EOF
   if [ -n "$_unrec" ]; then
-    warn "live but NOT in the session set:$_unrec -- a reboot loses" \
+    warn "live but NOT in the session set:$_unrec; a reboot loses" \
       "them, since mux resume rebuilds the set and nothing else." \
       "Record: mux go <name>"
   fi
