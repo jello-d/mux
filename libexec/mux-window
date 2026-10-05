@@ -27,8 +27,8 @@ set -eu
 
 _libexec=$(dirname "$0")
 _lib=$_libexec/../lib
-for _l in mux-addr_lib mux-sessions_lib mux-class_lib mux-window_lib \
-    mux-context_lib; do
+for _l in mux-conf_lib mux-addr_lib mux-sessions_lib mux-class_lib \
+    mux-window_lib mux-context_lib; do
   [ -r "$_lib/$_l" ] || {
     echo "mux: $_l missing (incomplete install)" >&2; exit 1; }
   # shellcheck source=/dev/null

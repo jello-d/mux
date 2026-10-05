@@ -25,6 +25,9 @@ set -eu
 # Sibling libs in this script's own (colocated) libexec dir.
 _libexec=$(dirname "$0")
 _lib=$_libexec/../lib
+# mux-conf_lib FIRST: mux-context_lib reads $MUX_DIR/config through
+# mux_conf_clean, and says so in its own header.
+. "$_lib/mux-conf_lib"
 . "$_lib/mux-agent-state_lib"
 
 # ARGUMENTS: [--all] [--attached] [NS]

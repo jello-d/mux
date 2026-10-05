@@ -3800,3 +3800,16 @@ t setup
 -   echo "$PKG:      package. Refresh it with: ./setup.sh desktop-notifier" >&2
 +   echo "$PKG:      package. Refresh it with: ./setup.sh indicator" >&2
 m names a verb this setup.sh does not accept
+
+# THE CONFIG'S COMMENT RULE HAS ONE HOME, and this reader did not use it: its
+# own sed dropped a full-line comment and left an INLINE one in the value. Not
+# cosmetic, because the value is EXECUTED (context-command) or parsed as a
+# list of variable names (env-ready), where the stray `#` reads as a name
+# nothing manages, `mux resume` exits 2, ssh-classify calls that `refused`,
+# and a latch gives up for ever on a box that is fine.
+= context-conf-skips-the-comment-rule
+f lib/mux-context_lib
+t mux-context
+-   _cc=$(mux_conf_clean <"$_cf")
++   _cc=$(cat "$_cf")
+m inline-comment-stripped

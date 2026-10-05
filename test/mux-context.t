@@ -24,6 +24,11 @@ MUX_DIR=$T/conf
 MUX_SHARE=$T/share
 export MUX_DIR MUX_SHARE
 mkdir -p "$MUX_DIR/partitions" "$MUX_DIR/contexts" "$MUX_SHARE/partitions"
+# mux-conf_lib FIRST, which mux-context_lib's header declares: its config
+# read goes through mux_conf_clean, so the one comment rule covers this file
+# too. Without it the reader answers nothing and every resolution is baseline,
+# which is how the suite found the missing source rather than by review.
+. "$HERE/lib/mux-conf_lib"
 . "$HERE/lib/mux-context_lib"
 
 eq() { [ "$2" = "$3" ] || fail "$1: got [$2] want [$3]"; }
@@ -168,5 +173,32 @@ esac
 case $_p in
 *manifest*) ;; *) fail "partitions omitted manifest: [$_p]" ;;
 esac
+
+# --- A COMMENT IN THE CONFIG IS A COMMENT HERE TOO -------------------------
+# This reader used to carry its OWN sed, which dropped a full-line comment
+# and left an INLINE one inside the value, so it disagreed with every other
+# config reader in the tree about the same bytes. Not cosmetic: the value is
+# EXECUTED (context-command) or validated as a list of variable names
+# (env-ready), and in the second case the stray `#` reads as a name nothing
+# manages, which makes `mux resume` exit 2, which ssh-classify calls
+# `refused`, which is TERMINAL. A latch gives up for ever on a box that is
+# fine, because somebody commented their own config.
+#
+# TWO KEYS, TWO ASSERTIONS, because they fail differently and one check kills
+# neither: the command is run and the list is parsed.
+printf '%s\n' \
+  '# a full-line comment' \
+  'context-command  tok   # which severance am I in' \
+  'env-ready  WAYLAND_DISPLAY  # wait for the compositor' >"$MUX_DIR/config"
+eq inline-comment-stripped "$(mux_ctx_conf env-ready)" WAYLAND_DISPLAY
+mux_ctx_resolve || fail "a commented context-command line should still
+resolve: the inline comment is being passed to the command as arguments"
+eq inline-comment-cmd "$MUX_CTX_TOKEN" bare
+
+# ... and a hash with NO space before it is part of the token, which is the
+# other half of the one rule and the reason it cannot be a plain `s/#.*//`:
+# a colour literal is the shape that proved it.
+printf 'env-ready  A#B\n' >"$MUX_DIR/config"
+eq hash-inside-token "$(mux_ctx_conf env-ready)" 'A#B'
 
 pass

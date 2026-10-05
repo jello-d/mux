@@ -1,6 +1,11 @@
 #!/bin/sh
 # mux-context_lib: the mux CONTEXT seam. Sourced (functions only).
 #
+# NEEDS mux-conf_lib, and the caller must source it FIRST. Nothing in this
+# tree has a lib source another lib, so a dependency is declared here and met
+# by whoever loads us; relying on who happens to source first is how a
+# standalone helper stops being standalone.
+#
 # mux core knows nothing about any particular notion of "context" (a
 # work/personal split, a k8s namespace, a git host, ...). It asks an OPTIONAL
 # command for ONE WORD and decides everything else itself.
@@ -71,11 +76,35 @@ mux_ctx_valid() {       # <token>
   [ "${#1}" -le 63 ]
 }
 
-# One value from $MUX_DIR/config (invariants only; today just context-command).
+# One value from $MUX_DIR/config (the invariants: context-command, env-ready,
+# and the latch-* seams, which latch reads with its own three-layer `_seam`).
+#
+# THROUGH `mux_conf_clean`, WHICH IT DID NOT USE, and that was a live defect
+# rather than untidiness. Its own sed dropped a FULL-LINE comment and left an
+# INLINE one in the value, so this reader disagreed with every other config
+# reader in the tree about the same file. Measured:
+#
+#     env-ready  WAYLAND_DISPLAY   # wait for the compositor
+#       here        -> [WAYLAND_DISPLAY   # wait for the compositor]
+#       mux_env_ready then reports `#` as a name nothing manages, so
+#       `mux resume` EXITS 2, which ssh-classify reads as `refused`, which
+#       is TERMINAL: a latch gives up permanently on a box that is fine.
+#
+#     context-command  sev current  # a note
+#       here        -> [sev current  # a note], which is then executed
+#
+# Both are reachable by anyone who comments their own config, which is
+# exactly what a documented config invites. The rule has one home for this
+# reason; a second copy of it is a second answer about the same bytes.
 mux_ctx_conf() {        # <key>
   _cf=$MUX_DIR/config
   [ -f "$_cf" ] || return 0
-  sed -e 's/\r$//' -e '/^[[:space:]]*#/d' "$_cf" \
+  # CLEANED INTO A VARIABLE FIRST so the one line that carries the rule can
+  # be a mutation anchor: the corpus matches whole lines and a continuation
+  # backslash can never be one, which this tree has twice answered by
+  # reshaping the code rather than exempting it.
+  _cc=$(mux_conf_clean <"$_cf")
+  printf '%s\n' "$_cc" \
   | awk -v k="$1" '$1==k{sub("^"k"[ \t]+",""); print; exit}'
 }
 
