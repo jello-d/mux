@@ -130,4 +130,39 @@ drwx------) ;;
 *) fail "the tmux socket dir is not private: $(ls -ld "$TMUX_TMPDIR")" ;;
 esac
 
+# --- EVERY NAME MUX EXPORTS IS ACCOUNTED FOR HERE ------------------------
+# ASKED AS A CLASS, not one hole at a time, which is the only version of this
+# that cannot rot. Four inherited handles have escaped this sandbox so far
+# (`$TMUX`, `MUX_SHARE`, `XDG_RUNTIME_DIR`, `MUX_VIEW_SOCKET`), each found by
+# falling into it, and each time the fix was one more name. A DERIVED PATH IS
+# NOT THE ONLY WAY OUT OF A SANDBOX, AN INHERITED HANDLE IS ANOTHER, and the
+# second is invisible because nothing about the test looks wrong.
+#
+# SO THE RULE IS CHECKED RATHER THAN REMEMBERED: anything mux EXPORTS is a
+# value a test can inherit, so this file must either pin it or unset it. The
+# next export gains a failing assertion the day it is written, which is what
+# the three previous holes cost a debugging session each for.
+_unacc=
+# WORD-SPLITTING IS THE POINT HERE, not an oversight: the corpus is variable
+# NAMES, matched as `[A-Z_]+`, so no element can contain a space or a glob
+# character and a `while read` loop would buy nothing but a subshell.
+# shellcheck disable=SC2013
+for _v in $(grep -ohE 'export [A-Z_]+' "$HERE"/bin/mux "$HERE"/libexec/* \
+    "$HERE"/lib/* 2>/dev/null | awk '{print $2}' | sort -u); do
+  grep -q "\b$_v\b" "$HERE/test/harness_lib" || _unacc="$_unacc $_v"
+done
+[ -z "$_unacc" ] || fail "mux exports these and the harness neither pins nor
+unsets them, so a suite run inheriting one tests against the developer's own
+state:$_unacc
+
+Add it to the \`unset\` line (or pin it, if tests need a value), beside
+TMUX, MUX_SHARE and MUX_VIEW_SOCKET."
+
+# AND THE ONE THAT MOTIVATED IT IS ASSERTED DIRECTLY, because the sweep above
+# only proves the NAME is mentioned somewhere in the file: a comment would
+# satisfy it. `mux-views_lib` reaches for this exactly when `$TMUX` is unset,
+# which is the state this harness creates.
+[ -z "${MUX_VIEW_SOCKET:-}" ] || fail "MUX_VIEW_SOCKET survived into a test,
+so every views call here would run against tmux -L [$MUX_VIEW_SOCKET]"
+
 pass

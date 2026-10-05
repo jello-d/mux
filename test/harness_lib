@@ -219,7 +219,17 @@ trap "rm -rf $_CLEAN" EXIT INT TERM
 # THE SUITE ALREADY PROVES THE UNSET CASE IS RIGHT, which is why this is safe:
 # CI has no MUX_SHARE at all and every test that wants one passes it explicitly
 # (`MUX_SHARE="$HERE/share"`) or clears it (`env -u MUX_SHARE`).
-unset TMUX TMUX_PANE MUX_SHARE
+#
+# `MUX_VIEW_SOCKET` IS THE FOURTH OF THE SAME FAMILY, and the only export this
+# file did not account for: asked as a CLASS rather than noticed, by listing
+# every name mux exports and checking each against this file. It is an
+# override seam, read as `${MUX_VIEW_SOCKET:-}` in mux-views and
+# mux-views_lib, whose own comment says an explicit one WINS as every other
+# MUX_* var does. And the condition guarding it is `[ -z "$TMUX" ]`, which is
+# exactly the state the line above creates, so an inherited value would send
+# every views call in the suite to `tmux -L <the developer's socket>`.
+# `test/mux-views.t` passes its own value, so nothing loses anything.
+unset TMUX TMUX_PANE MUX_SHARE MUX_VIEW_SOCKET
 
 # AND `XDG_RUNTIME_DIR` IS THE THIRD HOLE, found 2026-10-01 the same way. The
 # HOME pin cannot cover it: it is an absolute path of its own, so every test
