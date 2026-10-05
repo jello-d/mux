@@ -174,6 +174,17 @@ WHAT GOES IN HERE
 =================
 
   config                one directive per line; only what OVERRIDES a default
+                        EVERY knob it accepts, with its default and why you
+                        would change it, is documented in
+                          $_shr/$PKG/share/config.sample
+                        Nothing needs configuring: mux's defaults live in its
+                        CODE, so they hold on a box with no config at all.
+                        That sample is all commented out on purpose. An ACTIVE
+                        line restating a default is a second copy that can
+                        drift, and one did: this config once set three latch
+                        seams to what mux already used, got one of them
+                        subtly wrong, and broke \`mux latch\` the day a
+                        hook moved.
   partitions/           one <name>.partition per partition
   layouts/              saved layouts (mux save writes here)
   profiles, profiles.d/ per-project settings
