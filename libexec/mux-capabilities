@@ -1,0 +1,196 @@
+#!/bin/sh
+# mux-capabilities: what this mux can do, declared rather than discovered.
+#
+#   mux capabilities [--all]
+#
+# EXTRACTED FROM bin/mux (2026-10-05) AND THE MOVE PAID FOR ITSELF TWICE. It is
+# 153 lines out of a 3,554-line entry point, which is the ordinary argument;
+# the second one is that this block sat BEFORE the early exec dispatch, so
+# every hot-path invocation parsed it. `mux style` and `mux agent-render` run
+# per client per status-interval and `mux agent-emit` fires on every agent
+# state change, and all three were parsing a capability manifest they never
+# call. That is exactly what the dispatch's own comment promises does not
+# happen ("this script is never parsed past here on a hot path"), and the
+# promise was true only of what came AFTER it.
+#
+# THE VERB LIST IS STILL READ OUT OF bin/mux BY THE TEST, not from here:
+# test/mux-capabilities.t scrapes both `case` blocks there to prove every
+# DISPATCHABLE verb is classified below, so a new verb nobody declared fails
+# the suite. That is the half a curated list cannot have, and it is unaffected
+# by this move: the dispatch stayed where it is and only the manifest left.
+#
+# A FRESH PROCESS CAN ANSWER THIS, which is what made it separable: the two
+# questions `_cap_usable` asks are about $MUX_DIR/config and $PATH, neither of
+# which needs bin/mux's resolved session state. Nothing here resolves a
+# context, a name or a socket.
+set -eu
+
+_libexec=$(dirname "$0")
+_lib=$_libexec/../lib
+# mux-conf_lib for the ONE comment rule: `_cap_usable` reads a directive out
+# of $MUX_DIR/config, and a reader with its own idea of what a comment is was
+# a live defect in this package three days ago.
+. "$_lib/mux-conf_lib"
+MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
+[ -d "${MUX_SHARE:-}" ] || MUX_SHARE=$_lib/../share
+
+# THE VERSION IS bin/mux's, asked rather than copied. A second MUX_VERSION
+# here is the second copy of a fact that can drift, and the release procedure
+# already has three (the source, the tag, the formula) held together by a
+# test. Reading it keeps this helper from becoming a fourth.
+MUX_VERSION=${MUX_VERSION:-$(sed -n 's/^MUX_VERSION=//p' \
+  "$_libexec/../bin/mux" 2>/dev/null | head -1)}
+# EVERY verb and seam this mux knows, each classified. `mux capabilities` prints
+# the CONTRACT ones with their interface version and whether they are usable
+# here; the internal ones are listed so that nothing can be forgotten.
+#
+# WHY THE WHOLE SET IS ENUMERATED, including what this build does NOT implement.
+# A present-only list makes absence ambiguous: a consumer cannot tell "this mux
+# does not support it" from "whoever added the verb forgot the line". Declaring
+# the full set makes absence mean exactly one thing, that this mux is older than
+# the capability itself, and it turns "not usable right now" into a value rather
+# than a silence. That distinction is what a remote reader needs: `no` means
+# never here, `unavailable` means implemented but not usable in this context,
+# and both of those are answers.
+#
+# test/mux-capabilities.t asserts every DISPATCHABLE verb appears below, so a
+# new verb nobody classified fails the suite. That is the half a curated list
+# cannot have: omission becomes a test failure instead of a silent gap.
+#
+# A CONTRACT VERSION IS AN INTERFACE VERSION, not the release. Bump it when the
+# OUTPUT or the semantics change, never for an implementation change. Presence
+# alone is not enough: `agent-list` could keep its name and go back to emitting
+# an epoch instead of an age, which is precisely the property a cross-machine
+# reader depends on and could not otherwise detect.
+#
+# `latch-fallback none` is the worked example of a forward declaration, and it
+# is not padding: latch deliberately drives ONE transport, with an ordered
+# fallback list agreed as a later refactor, so a caller wanting several can ask
+# here instead of discovering by failure. `attach-only` was the previous one and
+# is now `contract 1`, which is the lifecycle working as intended: a declared
+# absence became a declared presence, and no consumer had to sniff a version to
+# notice.
+_cap_manifest() {
+  cat <<'CAPS'
+capabilities contract 1
+agent-list contract 1
+agent-summary contract 1
+agent-doctor contract 1
+check contract 1
+notify contract 1
+context contract 1
+latch contract 1
+sane contract 1
+host-color contract 1
+log contract 1
+agent-hook contract 1
+even contract 1
+undo-pane contract 1
+unknown-name contract 1
+agent contract 7
+window contract 1
+skill contract 2
+setup contract 1
+demo contract 1
+keys contract 1
+update-env contract 1
+attach-only contract 1
+latch-fallback none
+agent-emit internal
+agent-render internal
+landing internal
+click internal
+cycle internal
+migrate-profiles internal
+next-blocked internal
+notice-flush internal
+pin internal
+refresh internal
+scan internal
+status-banner internal
+style internal
+themes internal
+views internal
+edit internal
+go internal
+help internal
+hide internal
+kill internal
+kill-all internal
+ls internal
+new internal
+reload internal
+rename internal
+resume internal
+save internal
+show internal
+show-all internal
+theme internal
+why internal
+CAPS
+}
+
+# Is a CONTRACT usable in this context? Only two have a contextual answer; the
+# rest are pure readers that work headless, so they are always usable. Answering
+# "unavailable" where it is not true would be worse than not answering: a
+# consumer would skip a capability that works.
+_cap_usable() {   # <name>
+  case $1 in
+  latch)
+    # Implemented, but useless without a transport. The default is
+    # ssh; an override may name anything. Only the first WORD is
+    # checked, since the rest is that transport's own arguments.
+    _lt=${MUX_LATCH_TRANSPORT:-}
+    if [ -z "$_lt" ] && [ -r "$MUX_DIR/config" ]; then
+      _lt=$(mux_conf_clean 2>/dev/null <"$MUX_DIR/config" \
+        | awk '$1 == "latch-transport" { print $2
+          exit }')
+    fi
+    [ -n "$_lt" ] || _lt=ssh
+    command -v "${_lt%% *}" >/dev/null 2>&1 ;;
+  context)
+    # A context-command must be CONFIGURED and resolvable. Without one
+    # the baseline stands, which is a working mux but not this seam.
+    [ -r "$MUX_DIR/config" ] || return 1
+    grep -qE '^[[:space:]]*context-command[[:space:]]' \
+      "$MUX_DIR/config" 2>/dev/null ;;
+  *) return 0 ;;
+  esac
+}
+
+# mux capabilities [--all]
+#
+# Line based, one `NAME VALUE [unavailable]` per capability, after a leading
+# `mux <version>`. Always exits 0: it is a pure report, and a non-zero exit here
+# would be indistinguishable from the transport (see EXIT STATUS in the man
+# page). --all adds the internal verbs with their class, which is what the test
+# reads to prove nothing was forgotten.
+_cmd_capabilities() {
+  _all=0
+  [ "${1:-}" = --all ] && _all=1
+  printf 'mux %s
+' "$MUX_VERSION"
+  _cap_manifest | while read -r _cn _cc _cv; do
+    case $_cc in
+    none)     printf '%s no\n' "$_cn" ;;
+    internal)
+      # An `if`, not `[ ... ] && printf`: as the last command of
+      # the loop body a false test makes the whole pipeline
+      # non-zero, and under set -e that aborts the function before
+      # its `exit 0` ever runs. The verb then reported FAILURE
+      # while printing a perfectly correct answer.
+      if [ "$_all" = 1 ]; then
+        printf '%s internal\n' "$_cn"
+      fi ;;
+    contract)
+      if _cap_usable "$_cn"; then
+        printf '%s %s\n' "$_cn" "$_cv"
+      else
+        printf '%s %s unavailable\n' "$_cn" "$_cv"
+      fi ;;
+    esac
+  done
+  exit 0
+}
+
+_cmd_capabilities "$@"

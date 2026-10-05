@@ -196,7 +196,9 @@ manifest, so nothing declares whether they are a contract or internal:
 
 $_missing
 
-Add each to _cap_manifest in bin/mux as 'contract <n>' or 'internal'."
+Add each to _cap_manifest in libexec/mux-capabilities as 'contract <n>'
+or 'internal'. The verb LISTS are still scraped from bin/mux; only the
+manifest moved."
 
 # The reverse is NOT required: a capability may be a seam rather than a verb
 # (notify, context) or a known-but-absent one (latch). But anything declared a

@@ -223,13 +223,13 @@ t mux-wire
 m failed SILENTLY
 
 = caps-omission-guard-off
-f bin/mux
+f libexec/mux-capabilities
 t mux-capabilities
 - rename internal
 m NOT in the capability
 
 = caps-usable-always-false
-f bin/mux
+f libexec/mux-capabilities
 t mux-capabilities
 -       if _cap_usable "$_cn"; then
 +       if false; then
