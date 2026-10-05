@@ -579,6 +579,80 @@ no_has "cannot address" "every session name is clean here, so the marker must
 stay silent rather than reporting its own existence"
 
 
+# --- ASSERTED VERSUS ACTUAL: THE RECORDED SET AND THE SERVER --------------
+# `mux resume` rebuilds the SET and nothing else, so a live session missing
+# from it is lost by the next reboot with nothing having said so. The two
+# directions are deliberately NOT symmetric and each is asserted on its own,
+# because one assertion that "they differ" would pass on either.
+_SETF=$MUX_STATE/sessions.probe
+
+# BOTH DIRECTIONS PRESENT AT ONCE, which is what makes the asymmetry
+# observable: `two` is live and unrecorded, `gone` is recorded and not live.
+printf 'one\ntwo\n' >"$T/sessn"
+printf 'one\t/tmp\ngone\t/tmp\n' >"$_SETF"
+check >/dev/null
+has "two" "a live session absent from the set went unreported: a reboot loses
+it, and the set is the only thing mux resume rebuilds"
+no_has "[FAIL]" "an unrecorded session is drift rather than breakage: every
+attach records, so it heals, and a provisioner must not fail over it"
+[ "$RC" -eq 0 ] || fail "unrecorded sessions must not fail the audit"
+
+# AND THE OTHER DIRECTION IS NOT A FINDING. mux sets no `session-closed` hook
+# (measured: it fires on a kill-session, never on a kill-server, and never for
+# the LAST session because the server exits first), so a session whose last
+# pane took a stray ^D stays recorded for ever. That is the DESIGN, not drift:
+# a ^D is one keystroke from detach, which is the whole reason `mux undo-pane`
+# exists, so rebuilding it on the next resume is the wanted answer. Reporting
+# it would make the marker cry wolf on an ordinary working day.
+printf 'one\ntwo\n' >"$T/sessn"
+printf 'one\t/tmp\ntwo\t/tmp\ngone\t/tmp\n' >"$_SETF"
+check >/dev/null
+# MATCHED ON THE MESSAGE AND NOT ON THE `[WARN]` PREFIX, which my first
+# version got wrong and only a probe found: continuation lines are indented
+# and the opening one is not, so a pattern carrying the prefix plus three
+# spaces matched nothing and the assertion read as coverage. Every live
+# session IS recorded in this case, so the whole WARN must be absent.
+no_has "live but NOT" "a recorded session that is not up raised a WARN.
+Nothing removes an entry when a session dies by any route other than
+\`mux kill\`, so that state is reached by an accidental ^D and is exactly
+what the set is for"
+# ... and it is STATED anyway, because a marker printing a bare `ok` cannot be
+# caught lying about what it measured. This is the half that answers "did
+# resume come back short?" after the log has scrolled away.
+has "resume would also rebuild" "the pass line does not say which recorded
+sessions are not up, so the audit cannot be asked what it measured"
+has "gone" "the pass line does not NAME the session, and the useful
+post-mortem is always about the one that is missing"
+
+# A SET THAT AGREES SAYS SO, WITH ITS COUNT. `ok` alone cannot be told from a
+# marker that stopped matching, which is the 149-to-129 lesson this tree paid
+# for in its own linter.
+printf 'one\ntwo\n' >"$T/sessn"
+printf 'one\t/tmp\ntwo\t/tmp\n' >"$_SETF"
+check >/dev/null
+has "session set agrees with the server" "an agreeing set is not reported, so
+there is no way to tell the comparison ran from it having been removed"
+has "2 live" "the agreeing line states no count, so a marker that stopped
+seeing sessions would read identically to one that saw them all"
+
+# READ-ONLY, WHICH IS THE CONTRACT THIS WHOLE FILE EXISTS FOR. `mux_sess_list`
+# reaches `mux_state_path`, which ADOPTS a pre-0.38 copy by MOVING it out of
+# the cache. A check that migrates is a check that damages what it inspects,
+# and this package has already shipped that twice: `mux check` once spawned a
+# tmux server to ask about bindings, and the agent-state directory adopted on
+# a READ path and froze a live record for an hour.
+rm -f "$_SETF"
+mkdir -p "$T/cache"
+printf 'cached\t/tmp\n' >"$T/cache/sessions.probe"
+check >/dev/null
+[ -f "$T/cache/sessions.probe" ] || fail "the audit MOVED the pre-0.38
+session set out of the cache. A check must never be able to change what it
+inspects, and the adoption belongs to a verb the user chose to run."
+[ ! -f "$_SETF" ] || fail "the audit created the state copy of the session
+set, so it performed the migration it must only observe"
+rm -f "$T/cache/sessions.probe"
+
+
 # --- tmux itself: the one hard runtime dependency -------------------------
 rm -f "$T/bin/tmux"
 check >/dev/null

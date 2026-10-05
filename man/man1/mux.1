@@ -788,15 +788,31 @@ It also asks whether mux is WORKING, not merely installed, because everything
 above is a presence check and a presence check says
 .B [OK]
 to a box that is fully installed and fully broken. So it asks tmux what it is
-actually configured to do: that prefix
-.BR ( ", " ) ", " b ", " r " and " R
-are bound to mux verbs rather than to whatever tmux left there, and that
+actually configured to do: that every prefix key and every hook
+.I share/mux.tmux
+binds is bound to a mux verb rather than to whatever tmux left there, and that
 .I status\-right
 and
 .I status\-left
-are still mux's own jobs. With no server for this partition these are skipped:
-a healthy state on a fresh boot or a headless box, and the skip is
-reported rather than passed over in silence.
+are still mux's own jobs. The expected lists are READ OUT OF THE FRAGMENT
+rather than written down, so they grow with the features instead of going
+stale; naming them here would be the second copy that drifts. With no server
+for this partition these are skipped: a healthy state on a fresh boot or a
+headless box, and the skip is reported rather than passed over in silence.
+.IP
+It also compares the recorded session set with what the server actually
+holds, which is the only answer to "did
+.B mux resume
+come back short?" once the log has scrolled away. A session that is LIVE and
+not recorded is a WARN, because resume rebuilds the set and nothing else, so a
+reboot loses it; the remedy is to attach it once, since every attach records.
+The opposite case is reported but is not a fault: nothing prunes an entry when
+a session dies by any route other than
+.BR "mux kill" ,
+so a stray
+.B ^D
+leaves the name recorded, and bringing it back on the next resume is the
+wanted answer.
 .IP
 These are READ\-ONLY queries. The check deliberately never runs
 .BR "mux agent-render" ,

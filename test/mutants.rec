@@ -3440,6 +3440,42 @@ t mux-check
 +     _nda=; false || return 1
 m the name is ACTIVATABLE
 
+# THE SET-VERSUS-SERVER MARKER. Three guards reaching the output by three
+# routes, so each gets its own record: this tree's two-guards rule, applied
+# before a survivor found it rather than after.
+#
+# READ-ONLY IS THE FIRST ONE and it is the contract the whole file exists
+# for: `mux_sess_list` without `ro` reaches the adoption in mux_state_path,
+# which MOVES a pre-0.38 copy out of the cache. A check that migrates is a
+# check that damages what it inspects.
+= check-session-set-read-adopts
+f libexec/mux-check
+t mux-check
+-   _recset=$(mux_sess_list "${MUX_CTX_PARTITION:-}" ro)
++   _recset=$(mux_sess_list "${MUX_CTX_PARTITION:-}")
+m MOVED the pre-0.38
+
+= check-unrecorded-session-silent
+f libexec/mux-check
+t mux-check
+-   if [ -n "$_unrec" ]; then
++   if false; then
+m a live session absent from the set
+
+= check-set-line-names-nothing
+f libexec/mux-check
+t mux-check
+-         "rebuild$_unlive" ;;
++         "rebuild" ;;
+m does not NAME the session
+
+= check-set-agreement-uncounted
+f libexec/mux-check
+t mux-check
+-     '') ok "session set agrees with the server ($_nliv live, all recorded)" ;;
++     '') ok "session set agrees with the server" ;;
+m agreeing line states no count
+
 = render-records-do-not-accumulate
 f libexec/mux-agent-state-render
 t mux-strip

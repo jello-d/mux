@@ -58,8 +58,7 @@ mux_state_dir() {
 # nothing rather than an error, and the old copy is left intact so a later run
 # can still adopt it.
 mux_state_path() {      # <relative path>
-  _mpd=$(mux_state_dir)
-  _mpn=$_mpd/$1
+  _mpn=$(mux_state_path_ro "$1")
   _mpo=$(mux_cache_dir)/$1
   if [ ! -e "$_mpn" ] && [ -e "$_mpo" ]; then
     if mkdir -p "$(dirname "$_mpn")" 2>/dev/null; then
@@ -67,4 +66,26 @@ mux_state_path() {      # <relative path>
     fi
   fi
   printf '%s' "$_mpn"
+}
+
+# mux_state_path_ro REL -> the SAME path, and NOTHING ELSE. No adoption, no
+# mkdir, no move: a pure derivation, safe from a caller that must not write.
+#
+# THE DOOR EXISTS BECAUSE A READER THAT MIGRATES TAKES A SNAPSHOT, which this
+# package has already paid full price for once: the agent-state directory did
+# its adoption inside `mux_agent_dir`, eleven of whose twelve callers are
+# read-only, and a checkout invocation COPIED the live records at a moment
+# nobody chose. The copy then froze a session as `working` for an hour while
+# every beat refreshed the snapshot, and no timestamp rule could tell the two
+# apart afterwards. The fix there was to move the adoption to the installer,
+# which is the only moment atomic with the switchover.
+#
+# The adoption above stays where it is, deliberately: its one consumer is the
+# session set, whose next reader after an upgrade really is the `mux resume`
+# that needs it. What was missing is a way to ASK WITHOUT ACTING, and
+# `mux check` is the caller that needs it: its own contract says it must
+# never be able to damage what it inspects, and it had been calling the
+# adopting form since the edit-draft marker was written.
+mux_state_path_ro() {   # <relative path>
+  printf '%s/%s' "$(mux_state_dir)" "$1"
 }

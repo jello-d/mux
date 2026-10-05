@@ -360,7 +360,7 @@ fi
 # 5. unsaved edit drafts. A draft survives an unparseable save on purpose, so
 # the work is handed back rather than eaten, but a forgotten one means an edit
 # you think you made is not in effect anywhere. Surface it.
-_ed=$(mux_state_path edit)
+_ed=$(mux_state_path_ro edit)
 if [ -d "$_ed" ]; then
   for _d in "$_ed"/*.profile; do
     [ -e "$_d" ] || continue
@@ -565,12 +565,15 @@ else
   # provisioner's. Nothing is broken either. The session works; it simply
   # cannot be named in an address, because `work::api` would split there
   # and a plain `tmux -t` could not reach it either.
+  # ASKED ONCE and used twice, because the marker below needs the same
+  # answer: a round trip is the cost on this path, not the parsing.
+  _live=$(_vt list-sessions -F "#{session_name}" 2>/dev/null || true)
   _unaddr=
   while IFS= read -r _s; do
     [ -n "$_s" ] || continue
     mux_sess_name_clean "$_s" || _unaddr="$_unaddr[$_s] "
   done <<EOF
-$(_vt list-sessions -F "#{session_name}" 2>/dev/null)
+$_live
 EOF
   case ${_unaddr% } in
   '') ;;
@@ -578,6 +581,69 @@ EOF
       "-- a colon is reserved for PARTITION::SESSION and SESSION:WINDOW," \
       "and tmux uses it the same way. Rename: mux rename OLD NEW" ;;
   esac
+
+  # --- ASSERTED VERSUS ACTUAL: THE RECORDED SET AND THE SERVER ----------
+  # The session set is what `mux resume` rebuilds after a reboot, and until
+  # now nothing compared it with reality. So "did resume come back short?"
+  # was answerable from the log at the moment it happened (resume logs the
+  # names it rebuilt AND the ones it could not) and from nowhere at all
+  # afterwards, which is the drift-detector this tree's rules ask for
+  # whenever one fact is written down in two places.
+  #
+  # ONLY ONE DIRECTION IS A FINDING, and that was decided by measuring the
+  # hooks rather than by reasoning about the set's semantics:
+  #
+  # LIVE AND NOT RECORDED is a session a reboot LOSES. `mux resume` rebuilds
+  #   the set and nothing else, so a session missing from it is gone with no
+  #   warning at the one moment it cannot be reconstructed. One-directional
+  #   harm, so a WARN, and the remedy already exists: every attach records,
+  #   idempotently, precisely so a set can heal.
+  #
+  # RECORDED AND NOT LIVE is NOT reported, and the reason is worth writing
+  #   down because it is tempting. mux's fragment sets no `session-closed`
+  #   hook (measured: `set-hook -g session-closed` fires on a kill-session
+  #   and NOT on a kill-server, and never for the LAST session, because the
+  #   server exits first), so the set is subtractive on `mux kill` alone. A
+  #   session whose last pane took a stray ^D therefore stays recorded, and
+  #   that is the DESIGN rather than drift: a ^D is one keystroke from
+  #   detach, which is the whole reason `mux undo-pane` exists, so bringing
+  #   it back on the next resume is the wanted answer. It is still STATED on
+  #   the pass line, because a marker that prints a bare `ok` cannot be
+  #   caught lying about what it measured.
+  #
+  # READ-ONLY, THROUGH THE DOOR BUILT FOR IT. `mux_sess_list` reaches
+  # `mux_state_path`, which ADOPTS a pre-0.38 copy by moving it, and a check
+  # that migrates is a check that damages what it inspects. The `ro` form is
+  # a pure derivation.
+  _recset=$(mux_sess_list "${MUX_CTX_PARTITION:-}" ro)
+  _unrec=
+  while IFS= read -r _s; do
+    [ -n "$_s" ] || continue
+    printf '%s\n' "$_recset" | grep -qxF -- "$_s" || _unrec="$_unrec $_s"
+  done <<EOF
+$_live
+EOF
+  _unlive=
+  while IFS= read -r _s; do
+    [ -n "$_s" ] || continue
+    printf '%s\n' "$_live" | grep -qxF -- "$_s" || _unlive="$_unlive $_s"
+  done <<EOF
+$_recset
+EOF
+  if [ -n "$_unrec" ]; then
+    warn "live but NOT in the session set:$_unrec -- a reboot loses" \
+      "them, since mux resume rebuilds the set and nothing else." \
+      "Record: mux go <name>"
+  fi
+  _nrec=$(printf '%s\n' "$_recset" | grep -c . || true)
+  _nliv=$(printf '%s\n' "$_live" | grep -c . || true)
+  if [ -z "$_unrec" ]; then
+    case $_unlive in
+    '') ok "session set agrees with the server ($_nliv live, all recorded)" ;;
+    *)  ok "session set: $_nrec recorded, $_nliv live; resume would also" \
+        "rebuild$_unlive" ;;
+    esac
+  fi
 fi
 
 exit "$RC"

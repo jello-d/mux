@@ -99,14 +99,23 @@ mux_sess_name_clean() {   # <name>
   return 0
 }
 
-mux_sess_file() {       # [partition]
+# A SECOND ARGUMENT ASKS WITHOUT ACTING. The adoption above is a WRITE, and
+# `mux check` must never be able to damage what it inspects, so the one
+# read-only consumer says so and gets a pure derivation. Every other caller
+# is a verb that is entitled to migrate, and they are unchanged.
+mux_sess_file() {       # [partition] [ro]
   _sk=${1:-${MUX_CTX_PARTITION:-global}}
-  mux_state_path "sessions.$_sk"
+  if [ -n "${2:-}" ]; then
+    mux_state_path_ro "sessions.$_sk"
+  else
+    mux_state_path "sessions.$_sk"
+  fi
 }
 
-# mux_sess_list [key] -> every recorded name, one per line, insertion order.
-mux_sess_list() {       # [key]
-  _sf=$(mux_sess_file "${1:-}")
+# mux_sess_list [key] [ro] -> every recorded name, one per line, insertion
+# order.
+mux_sess_list() {       # [key] [ro]
+  _sf=$(mux_sess_file "${1:-}" "${2:-}")
   [ -f "$_sf" ] || return 0
   cut -f1 "$_sf" 2>/dev/null | grep . || true
 }
