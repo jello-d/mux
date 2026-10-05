@@ -992,6 +992,10 @@ printf '%s\n' "$*" >>"$CMDS"
 exit 0
 EOF
 chmod +x "$T/bin/echoargv"
+# conventions: allow -- every `--` below is ssh's OWN end-of-options
+# separator inside an EXPECTED argv. The message quotes the wanted value
+# verbatim so it can be compared to reality; rewording it would make the
+# message stop matching the string the assertion actually tests.
 _got=$(argv "$T/bin/echoargv -p %p:22 %h -- %c" box api)
 [ "$_got" = '-p 22 box -- mux go api' ] \
   || fail "with no port in the target, %p:22 must fall back to the template's
@@ -1005,6 +1009,10 @@ _got=$(argv "$T/bin/echoargv -p %p:22 %h -- %c" box:2222 api)
 # wrong in the direction that dials a host which does not exist while looking
 # like it worked. Brackets are the one unambiguous way to write IPv6 with a
 # port.
+# conventions: allow -- every `--` below is ssh's OWN end-of-options
+# separator inside an EXPECTED argv. The message quotes the wanted value
+# verbatim so it can be compared to reality; rewording it would make the
+# message stop matching the string the assertion actually tests.
 _got=$(argv "$T/bin/echoargv -p %p:22 %h -- %c" 'fe80::1' api)
 [ "$_got" = '-p 22 fe80::1 -- mux go api' ] \
   || fail "an IPv6 literal must be left whole. Wanted
