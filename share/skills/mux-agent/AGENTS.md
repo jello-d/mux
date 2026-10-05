@@ -101,6 +101,25 @@ WITH SEVERAL AGENT WINDOWS, `--window` IS REQUIRED. The bare form refuses
 rather than reading whichever worker ranks worst, and the refusal lists the
 ids to choose from.
 
+## Watching for changes instead of asking repeatedly
+
+```sh
+mux agent stream              # one JSON object per line, forever
+mux agent stream --any -i 1   # every partition, checked every second
+```
+
+Prints the same object `mux agent status` does, **one per line**, and only
+when something CHANGES. The first line is the current state, so you are never
+blank waiting for the first event.
+
+- **Prefer this to a poll loop.** Asking repeatedly costs a process per ask;
+  a stream costs one and tells you sooner.
+- **A heartbeat line** (`{"status":"ok","heartbeat":true}`) arrives during
+  quiet periods, so you can tell a calm machine from a dead connection. If
+  heartbeats stop, treat the source as UNKNOWN, never as calm.
+- **It exits when you stop reading**, so closing the pipe is how you stop it.
+  Over a transport that means a dropped connection cleans up the far side.
+
 ## Waiting for an agent
 
 ```sh

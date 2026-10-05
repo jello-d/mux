@@ -673,6 +673,32 @@ survive in its environment. A process that detaches into its own session (a
 true daemon) is deliberately NOT counted: it is no longer this turn's
 leftover work. The scan is Linux\-only and degrades to plain
 .BR idle .
+.IP
+.B mux agent stream
+is
+.B status
+on a loop: the SAME document, one object per LINE, emitted only when something
+changes. The first line is the current state, so a consumer is never blank
+waiting for an event.
+.IP
+IT EXISTS TO MOVE THE POLLING. The tray opened a connection to every watched
+host every few seconds; with a stream the polling happens ON the watched box
+and only CHANGES cross the network, which is also what makes a notification
+possible on the machine the human is actually sitting at.
+.IP
+A HEARTBEAT (\fB{"status":"ok","heartbeat":true}\fR) arrives during quiet
+periods, and it is not optional decoration: polling could tell a calm host
+from an unreachable one by the exit code, and a silent stream cannot. A
+consumer that stops seeing heartbeats must draw UNKNOWN, never calm. The same
+write is how the stream learns ITS reader has gone, so closing the pipe is how
+you stop one and a dropped connection cleans up the far side.
+.IP
+.B \-i " " \fISECONDS\fR
+sets the check interval (default 2, matching
+.BR status-interval )
+and
+.B \-\-heartbeat " " \fISECONDS\fR
+the quiet-period keepalive (default 15).
 .TP
 .B mux agent-list " [" \fINS\fR ]
 Per\-session agent state, machine readable, one line each:

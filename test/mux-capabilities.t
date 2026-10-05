@@ -165,7 +165,15 @@ for _v in $_sub; do
   # answering usage is correct for them. The question is whether the verb
   # EXISTS, and the dispatcher has exactly one answer for one that does
   # not, so that is what this looks for.
-  _o=$("$HERE/bin/mux" agent "$_v" 2>&1 || true)
+  # `| head -1` BECAUSE ONE VERB NEVER RETURNS. `stream` runs until its
+  # reader goes away, which is the point of it, so a bare call here hung the
+  # whole suite rather than failing it: the shape test/mutate's own header
+  # warns about, met in an audit rather than in a mutation. `head` closes the
+  # pipe after the first line and the producer dies on the write, which is a
+  # property this stream is built to have and needs no `timeout` on PATH.
+  # Every verb answers with ONE JSON object, so a single line is the whole
+  # answer for all the others.
+  _o=$("$HERE/bin/mux" agent "$_v" 2>&1 | head -1 || true)
   case $_o in
   *"unknown agent verb"*) fail "capabilities declares the agent contract
 and \`mux agent $_v\` is scraped from its dispatch, but invoking it says

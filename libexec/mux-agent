@@ -70,7 +70,7 @@ _usage() {
   # mutation record cannot anchor a line ending in a continuation backslash,
   # and the guard that the status WORD is honoured is worth keeping killable.
   # Same move as the `untrusted` reason in mux-latch, for the same reason.
-  _uv='status|peers|read|wait|send|open|class'
+  _uv='status|stream|peers|read|wait|send|open|class'
   _out usage 2 "usage: mux agent <$_uv> ..."
 }
 
@@ -79,7 +79,7 @@ _verb=${1:-}
 shift
 
 case $_verb in
-status|peers|read|wait|send|open|class) ;;
+status|stream|peers|read|wait|send|open|class) ;;
 *) _out usage 2 "unknown agent verb: $_verb" ;;
 esac
 
@@ -1043,6 +1043,15 @@ fi
 _all=0
 _att=1
 _spart=
+# THE CADENCE IS LOCAL, which is the whole point of streaming: today the tray
+# opens an ssh every 5s per host, and with a stream the polling happens ON the
+# watched box and only CHANGES cross the network. 2s matches the status bar's
+# own interval, so the tray is never staler than the strip beside it.
+_sint=${MUX_AGENT_STREAM_INTERVAL:-2}
+# Far slower, because it is not a liveness probe for the DATA: it only has to
+# arrive often enough that a consumer can call a silent stream dead, and often
+# enough that this process notices its reader has gone.
+_shb=${MUX_AGENT_STREAM_HEARTBEAT:-15}
 while [ $# -gt 0 ]; do
   case $1 in
   --all)      _all=1; shift ;;
@@ -1053,6 +1062,19 @@ while [ $# -gt 0 ]; do
   # because a tray item means somebody is looking at it, and an agent
   # asking what is going on wants the same answer a human would see.
   --any)      _att=0; shift ;;
+  # STREAM-ONLY, and accepted on `status` too rather than given their own
+  # parser: one flag table for one document means `status` and `stream`
+  # cannot drift about what they were asked for.
+  -i|--interval)
+    [ -n "${2:-}" ] || _out usage 2 "-i needs seconds"
+    case $2 in
+    ''|*[!0-9]*|0) _out usage 2 "-i needs whole seconds, 1 or more" ;;
+    esac
+    _sint=$2; shift 2 ;;
+  --heartbeat)
+    [ -n "${2:-}" ] || _out usage 2 "--heartbeat needs seconds"
+    case $2 in ''|*[!0-9]*) _out usage 2 "--heartbeat needs seconds" ;; esac
+    _shb=$2; shift 2 ;;
   --) shift; break ;;
   *)  _out usage 2 "unknown option: $1" ;;
   esac
@@ -1075,23 +1097,62 @@ if [ "$_all" -eq 0 ]; then
   [ -n "$_spart" ] || _spart=global
 fi
 
-set -- --all
-[ "$_att" -eq 0 ] || set -- "$@" --attached
-_rows=$("$_libexec/mux-agent-state-summary" "$@" 2>/dev/null) || _rows=
+# ONE PRODUCER FOR TWO VERBS. `stream` is `status` on a loop, so the document
+# is built here and never twice: a second copy is how the polled answer and
+# the streamed one start disagreeing about the same instant, which is the
+# worst possible bug in a presenter that may be fed by either.
+_status_doc() {
+  set -- --all
+  [ "$_att" -eq 0 ] || set -- "$@" --attached
+  _rows=$("$_libexec/mux-agent-state-summary" "$@" 2>/dev/null) || _rows=
 
-# `<partition> <state> <count>` per line into one object per line, then one
-# array. Read with a field split rather than `read -r a b c` so a malformed
-# line cannot silently shift the count into the state.
-_items=$(
-  printf '%s\n' "$_rows" | while IFS=' ' read -r _p _st _n; do
-    [ -n "${_p:-}" ] || continue
-    [ -n "${_st:-}" ] || continue
-    [ -z "$_spart" ] || [ "$_p" = "$_spart" ] || continue
-    printf '{"partition":%s,"state":%s,"count":%s}\n' \
-      "$(mux_json_str "$_p")" "$(mux_json_str "$_st")" \
-      "$(mux_json_num "${_n:-}")"
-  done | mux_json_array
-)
+  # `<partition> <state> <count>` per line into one object per line, then one
+  # array. Read with a field split rather than `read -r a b c` so a malformed
+  # line cannot silently shift the count into the state.
+  _items=$(
+    printf '%s\n' "$_rows" | while IFS=' ' read -r _p _st _n; do
+      [ -n "${_p:-}" ] || continue
+      [ -n "${_st:-}" ] || continue
+      [ -z "$_spart" ] || [ "$_p" = "$_spart" ] || continue
+      printf '{"partition":%s,"state":%s,"count":%s}\n' \
+        "$(mux_json_str "$_p")" "$(mux_json_str "$_st")" \
+        "$(mux_json_num "${_n:-}")"
+    done | mux_json_array
+  )
+  printf '{"status":"ok","partitions":%s}\n' "$_items"
+}
 
-printf '{"status":"ok","partitions":%s}\n' "$_items"
+if [ "$_verb" = stream ]; then
+  _sdoc=$(_status_doc)
+  printf '%s\n' "$_sdoc"
+  _slast=$_sdoc
+  _squiet=0
+  while :; do
+    sleep "$_sint"
+    _sdoc=$(_status_doc)
+    if [ "$_sdoc" != "$_slast" ]; then
+      printf '%s\n' "$_sdoc"
+      _slast=$_sdoc
+      _squiet=0
+      continue
+    fi
+    # QUIET AND DEAD MUST NOT LOOK THE SAME, which is the one thing polling
+    # gave away for free: there, a non-zero exit could only be the transport.
+    # A stream that simply stops speaking could be a calm host or a wedged
+    # ssh, and this package has measured both (a blackholed port, and a
+    # responsive peer making no progress for 342s).
+    #
+    # AND THE HEARTBEAT WORKS IN BOTH DIRECTIONS, which is why it is a write
+    # rather than a timer the consumer keeps: it is also how THIS process
+    # learns its reader has gone. Without it a remote stream would poll a
+    # box for ever after the tray that asked for it died.
+    _squiet=$((_squiet + _sint))
+    if [ "$_squiet" -ge "$_shb" ]; then
+      printf '{"status":"ok","heartbeat":true}\n'
+      _squiet=0
+    fi
+  done
+fi
+
+_status_doc
 exit 0

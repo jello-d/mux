@@ -1615,15 +1615,15 @@ m part-needs-a-name
 = agent-status-unfiltered-by-default
 f libexec/mux-agent
 t mux-agent
-- [ "$_att" -eq 0 ] || set -- "$@" --attached
+-   [ "$_att" -eq 0 ] || set -- "$@" --attached
 + true
 m empty-arr
 
 = agent-count-emitted-as-a-string
 f libexec/mux-agent
 t mux-agent
--       "$(mux_json_num "${_n:-}")"
-+       "$(mux_json_str "${_n:-}")"
+-         "$(mux_json_num "${_n:-}")"
++         "$(mux_json_str "${_n:-}")"
 m status-count
 
 = agent-peers-root-not-looked-up
@@ -1926,7 +1926,7 @@ m cannot be assembled exited 0
 = agent-status-is-scoped
 f libexec/mux-agent
 t mux-agent
--     [ -z "$_spart" ] || [ "$_p" = "$_spart" ] || continue
+-       [ -z "$_spart" ] || [ "$_p" = "$_spart" ] || continue
 +     [ -z "$_spart" ] || [ "$_p" = "$_p" ] || continue
 m scoped-default
 
@@ -3515,3 +3515,38 @@ t mux-strip
 -     blocked|working|idle|humming) _d=$(fmt_age "$_a") ;;
 +     blocked|working|idle) _d=$(fmt_age "$_a") ;;
 m dropped its age
+
+= stream-opens-silent
+f libexec/mux-agent
+t mux-agent-stream
+-   printf '%s\n' "$_sdoc"
++   :
+m nothing was emitted in two seconds
+
+= stream-emits-while-quiet
+f libexec/mux-agent
+t mux-agent-stream
+-     if [ "$_sdoc" != "$_slast" ]; then
++     if true; then
+m emitted while NOTHING changed
+
+= stream-no-heartbeat
+f libexec/mux-agent
+t mux-agent-stream
+-     if [ "$_squiet" -ge "$_shb" ]; then
++     if false; then
+m no heartbeat in five seconds
+
+= stream-heartbeat-looks-like-a-change
+f libexec/mux-agent
+t mux-agent-stream
+-       printf '{"status":"ok","heartbeat":true}\n'
++       printf '{"status":"ok","heartbeat":true,"partitions":[]}\n'
+m cannot tell a keepalive
+
+= stream-interval-unvalidated
+f libexec/mux-agent
+t mux-agent-stream
+-     ''|*[!0-9]*|0) _out usage 2 "-i needs whole seconds, 1 or more" ;;
++     '') _out usage 2 "-i needs whole seconds, 1 or more" ;;
+m was accepted
