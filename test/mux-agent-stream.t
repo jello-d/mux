@@ -37,6 +37,16 @@ stream() {   # <args...>: run in the background, output to $T/out
   _spid=$!
 }
 stop() { kill "$_spid" 2>/dev/null; wait "$_spid" 2>/dev/null || true; }
+# AND FROM THE EXIT TRAP TOO, which is not belt and braces: `fail` EXITS, so
+# every assertion that fires skips the `stop` below it and leaves a stream
+# running against a scratch directory the harness has just deleted. Harmless
+# in a green run and not in a red one, which means a MUTATION RUN leaks one
+# per killed record. MEASURED, both ways: a deliberately failing run left
+# THREE alive before this line and ZERO after it, and ten were found on this
+# box from `/tmp/tmp.*/tree/` copies that no longer existed. Same family as
+# the tmux sockets this suite leaked for months, and invisible for the same
+# reason: one more anonymous `sh` looks like everybody else's.
+t_trap 'kill ${_spid:-0} 2>/dev/null || true'
 lines() { wc -l <"$T/out" | tr -d ' '; }
 
 # --- THE FIRST LINE IS THE CURRENT STATE -----------------------------------

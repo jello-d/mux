@@ -196,4 +196,51 @@ env XDG_RUNTIME_DIR="$_nf" "$HERE/bin/mux" agent-summary global \
   || fail "mux created the retired un-namespaced path on a box that never had
 one, so the thing being retired comes back by itself"
 
+# --- --sessions: ONE LINE PER SESSION, AND NOTHING OF THE OTHER SHAPE ------
+# `--sessions` reports `<partition> <state> <session>` where the collapsed
+# form reports `<partition> <state> <count>`. Two shapes from one command, so
+# the one thing that must never happen is a line of the wrong one: a reader
+# splitting on the third field takes `global none 0` as a session literally
+# CALLED `0`, in the `none` state, and publishes it. That is exactly what the
+# caller's-partition guarantee did when sessions mode was added, because the
+# fallback line that provides it is a state and a count by construction.
+#
+# NO per-session equivalent is emitted instead, deliberately: the guarantee is
+# "a consumer always gets at least one line", and a partition with no sessions
+# has no session lines to give. A consumer of `--sessions` asks a different
+# question and an empty answer is the true one.
+# ITS OWN FIXTURE, because earlier cases in this file retire state
+# directories and by here there is none left. Without it `_so` is EMPTY and
+# every assertion below passes over nothing: measured, two deliberate
+# mutations both survived, which is how the vacuity was found rather than
+# reasoned about.
+mkdir -p "$XDG_RUNTIME_DIR/mux/agent-state/shp"
+agent_rec "$XDG_RUNTIME_DIR/mux/agent-state/shp/s1" idle %1 100 "two words" -
+agent_rec "$XDG_RUNTIME_DIR/mux/agent-state/shp/s2" blocked %2 100 solo -
+_so=$(WATCHED= sum --all --sessions)
+[ -n "$_so" ] || fail "precondition: --sessions answered nothing, so every
+assertion below is about an empty string"
+case $_so in
+*"two words"*) ;;
+*) fail "the session whose name contains a SPACE did not survive, so the
+session is not last on the line: [$_so]" ;;
+esac
+case $_so in
+*" none "*) fail "a collapsed \`none\` line leaked into --sessions output,
+where the third field is a SESSION NAME: a reader publishes a session called
+\`0\` that does not exist. [$_so]" ;;
+esac
+# AN EXACT COMPARISON, and that shape is forced rather than chosen: a
+# session name may contain SPACES (which is why it is last on the line), so
+# no field COUNT can tell `shp idle two words` from an added age in
+# `shp idle 0 solo`. Comparing the whole sorted answer catches both, plus a
+# dropped session and a wrong state, and needs no rule about field counts.
+_sowant='shp blocked solo
+shp idle two words'
+_sogot=$(printf '%s\n' "$_so" | sort)
+[ "$_sogot" = "$_sowant" ] || fail "--sessions did not answer exactly one
+line per session:
+  got  [$_sogot]
+  want [$_sowant]"
+
 pass

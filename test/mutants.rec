@@ -3693,7 +3693,21 @@ m two reads a second apart differ
 
 = summary-sessions-carry-an-age
 f libexec/mux-agent-state-summary
-t mux-agent
+t mux-agent-summary
 -       printf '%s%s %s\n' "${_pfx:+$_pfx }" "$_state" "$_s"
 +       printf '%s%s %s %s\n' "${_pfx:+$_pfx }" "$_state" 0 "$_s"
-m status-sess-0
+m did not answer exactly one
+
+= summary-sessions-report-the-collapsed-state
+f libexec/mux-agent-state-summary
+t mux-agent-summary
+-       printf '%s%s %s\n' "${_pfx:+$_pfx }" "$_state" "$_s"
++       printf '%s%s %s\n' "${_pfx:+$_pfx }" "$_worst" "$_s"
+m did not answer exactly one
+
+= summary-collapsed-fallback-leaks-into-sessions
+f libexec/mux-agent-state-summary
+t mux-agent-summary
+- [ "$_sess_mode" -eq 0 ] || exit 0
++ :
+m leaked into --sessions output

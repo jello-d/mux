@@ -194,6 +194,13 @@ for _d in "$_root"/*; do
   fi
 done
 [ "$_att" -eq 0 ] || exit 0
+# COLLAPSED MODE ONLY. `none 0` is a state and a COUNT, so in --sessions mode
+# it is a line of the wrong shape: a reader splitting `<partition> <state>
+# <session>` takes it as a session literally called `0`. There is no
+# per-session equivalent to emit, because the guarantee this provides is "a
+# consumer always gets at least one line", and a partition with no sessions
+# has no session lines to give.
+[ "$_sess_mode" -eq 0 ] || exit 0
 case " $_seen " in
 *" ${_ns:-global} "*) ;;
 *) printf '%s %s\n' "${_ns:-global}" "none 0" ;;
