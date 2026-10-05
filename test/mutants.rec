@@ -383,7 +383,7 @@ t mux-latch
 m report must say the
 
 = why-unknown-answers-success
-f bin/mux
+f lib/mux-why_lib
 t mux-why
 -      && [ -z "$w_file" ]; then
 +      && false; then
@@ -3945,3 +3945,16 @@ t mux-verbs
 - --usage)           shift; usage "${1:-2}" ;;
 + --usage|usage)     shift; usage "${1:-2}" ;;
 m answered instead of refused
+= why-lib-missing-is-silent
+f bin/mux
+t mux-why
+-   [ -r "$MUX_LIB/mux-why_lib" ] || {
++   [ -r "$MUX_LIB/mux-why_lib" ] || [ 1 = 1 ] || {
+m a lost why lib must name itself
+
+= why-lib-sourced-eagerly
+f bin/mux
+t mux-why
+- if [ -r "$_ctx_lib" ]; then . "$_ctx_lib"
++ . "$MUX_LIB/mux-why_lib"; if [ -r "$_ctx_lib" ]; then . "$_ctx_lib"
+m sourced EAGERLY and every verb
