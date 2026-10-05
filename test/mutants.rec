@@ -3890,3 +3890,38 @@ t mux-check
 -   elif [ -f "$_cfgf" ]; then
 +   elif false; then
 m with no config.sample the marker must
+
+# THE PARTITION IS AN ARGUMENT, and that is the whole risk of lifting these
+# out of bin/mux: they read the global `$part` there, which happened to hold
+# the right value in the one file that set it. A lib still reaching for a
+# caller's variable works in that file and answers about nothing anywhere
+# else. The set is keyed BY partition, so the wrong one answers about another
+# partition's sessions, which is an isolation boundary crossed silently.
+= resolve-typed-roots-ignores-partition
+f lib/mux-resolve_lib
+t mux-resolve
+-   _tr=$(mux_sess_root "$1" "$2")
++   _tr=$(mux_sess_root "$1")
+m did not find a recorded session in its OWN partition
+
+# AND AN ABSENT PARTITION MUST REFUSE. The empty string names a real-looking
+# set file, so without this the caller gets a confident answer about a set
+# nobody keeps: plausible, wrong and silent. The first version guarded with
+# `${2:?}` INSIDE a command substitution, which is a subshell, so the
+# expansion failure killed only that and the function returned 0.
+= resolve-typed-roots-no-partition-ok
+f lib/mux-resolve_lib
+t mux-resolve
+-     echo "mux_resolve_typed_roots: no partition given" >&2; return 2; }
++     : ; }
+m with NO partition answered successfully
+
+# A THEME DERIVED FROM THE NAME, so one project wears one colour on every
+# machine with nothing configured and nothing to sync. Nothing else shares
+# this derivation, so a drift is invisible until two boxes disagree.
+= resolve-hash-theme-not-hashed
+f lib/mux-resolve_lib
+t mux-resolve
+-   _hs=$(printf '%s' "$1" | cksum | awk '{print $1}')
++   _hs=0
+m gave every name the same theme

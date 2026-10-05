@@ -294,8 +294,11 @@ fi
 # fallback here, unlike mux_conf_clean above: a normalizer has a safe degraded
 # mode, a data resolver has none (it would silently resolve nothing), so a
 # missing lib is a broken install and says so.
+# mux-resolve_lib LAST of these: it calls into mux-data_lib, mux-scan_lib and
+# mux-sessions_lib, and declares that in its own header. No lib sources
+# another here, so the order in this list is the dependency.
 for _l in mux-paths_lib mux-data_lib mux-profiles_lib mux-scan_lib \
-    mux-sessions_lib mux-class_lib mux-log_lib; do
+    mux-sessions_lib mux-class_lib mux-log_lib mux-resolve_lib; do
   [ -r "$MUX_LIB/$_l" ] || {
     echo "mux: $MUX_LIB/$_l missing (incomplete install)" >&2
     exit 1; }
@@ -362,104 +365,6 @@ _profile_root() {   # <name>
       | awk '$1=="root"{print $2; exit}')
   fi
   printf '%s' "$_r"
-}
-
-# Space-joined NAMEs for one data kind: what the help listings and the theme
-# cycler want (one line, or a word-splittable list). Feeds `mux --help`, so it
-# lists the themes and agents actually available on this box, shipped ones and
-# overlay ones alike.
-_stems_line() {   # <kind> <ext>
-  mux_data_stems "$1" "$2" | tr '\n' ' '
-}
-
-# A theme chosen deterministically from a session NAME, so a project wears a
-# stable colour with nothing configured and two projects share one only by
-# coincidence. cksum is POSIX and its exact value does not matter: only that
-# the same name always lands on the same theme.
-#
-# The index is into the SORTED theme set, so adding or removing a theme
-# reshuffles every session that has not pinned one. Cosmetic, and pinning is one
-# `mux theme -p` away. Deliberately NOT unique-per-live-session: an identity you
-# can learn ("api is the green one") beats one that avoids every collision but
-# changes between launches.
-_hash_theme() {   # <session name>
-  _ht=$(mux_data_stems themes .theme)
-  [ -n "$_ht" ] || return 0
-  _hn=$(printf '%s\n' "$_ht" | grep -c .)
-  [ "$_hn" -gt 0 ] || return 0
-  _hs=$(printf '%s' "$1" | cksum | awk '{print $1}')
-  printf '%s\n' "$_ht" | sed -n "$(( _hs % _hn + 1 ))p"
-}
-
-
-# The PROJECT a bare invocation refers to: the git toplevel if we are in a
-# repo, else the current directory. The ONE derivation, used for both the
-# default session NAME and the default root, so `mux new` writes a layout under
-# exactly the name `mux go` will later look for. They used to disagree: new
-# took the cwd basename and go the git toplevel basename, so a `mux new` run
-# anywhere but a repo's top level wrote a layout go could never find.
-_project_base() {   # [dir]
-  if [ -n "${1:-}" ]; then
-    ( cd "$1" 2>/dev/null \
-      && { git rev-parse --show-toplevel 2>/dev/null || pwd; } )
-  else
-    git rev-parse --show-toplevel 2>/dev/null || pwd
-  fi
-}
-
-# Is this argument a PATH rather than a session name? A session name never
-# contains a slash (mux derives them from basenames and folds ':' and '.'), so
-# a slash, a leading ~, or a bare . / .. is unambiguous.
-_is_path() {   # <arg>
-  case $1 in
-  '~'|'~/'*|.|..|*/*) return 0 ;;
-  esac
-  return 1
-}
-
-# The scan map for this context, self-correcting: entries whose path has since
-# vanished are dropped (a moved repo must read as a MISS, not as a hit that
-# fails later at build), and a miss rebuilds the map once and asks again. Those
-# two checks are the whole staleness story: no TTL, no timer.
-_map_lookup() {   # <name> -> matching project paths, one per line
-  _mk=$part
-  _mp=$(mux_scan_lookup "$1" "$_mk" | while IFS= read -r _d; do
-    [ -n "$_d" ] && [ -d "$_d" ] && printf '%s\n' "$_d"
-  done)
-  if [ -z "$_mp" ]; then
-    mux_scan_build "$_mk" 2>/dev/null || true
-    _mp=$(mux_scan_lookup "$1" "$_mk")
-  fi
-  printf '%s' "$_mp"
-}
-
-# Every candidate root for a TYPED name, one "SOURCE<TAB>ROOT" line each, in
-# the order `go` trusts them. A session you HAD outranks the map: it is the only
-# source that knows where a profile-less `mux go` was rooted. No lines means
-# nothing knows the name; more than one means the name is ambiguous.
-#
-# `go` and `why` share this ON PURPOSE. `why` used to derive a typed name's root
-# as the CURRENT DIRECTORY, consulting neither source, so `mux why NAME` cheerly
-# described a session `go` would have flatly refused to build: reporting a
-# root for an ambiguous name, and for a name nothing knew at all. An explanation
-# that contradicts the thing it explains is worse than no explanation, and this
-# verb exists only to be trusted.
-#
-# Irrelevant when a profile DECLARES a root (`hasroot`): both callers skip the
-# map entirely then, because the declaration already answered.
-_typed_roots() {   # <name> -> SOURCE<TAB>ROOT lines
-  _tr=$(mux_sess_root "$1" "$part")
-  if [ -n "$_tr" ] && [ -d "$_tr" ]; then
-    printf 'a session you had\t%s\n' "$_tr"
-    return 0
-  fi
-  # `|| [ -n "$_d" ]`: _map_lookup ends its last path with NO newline, and
-  # a bare `while read` discards an unterminated final line, which would
-  # silently drop one candidate, turning an ambiguous name into a
-  # confidently wrong single hit.
-  _map_lookup "$1" | while IFS= read -r _d || [ -n "$_d" ]; do
-    [ -n "$_d" ] && printf 'the discovery map\t%s\n' "$_d"
-  done
 }
 
 # Work/personal (or any) filtering. A layout's SIDE is a property of its ROOT,
@@ -565,9 +470,9 @@ EOF
   echo >&2
   _wrap_list "  profiles (mux go NAME):    " "$(_list_layouts)"
   _wrap_list "  themes  (mux theme NAME):  " \
-    "$(_stems_line themes .theme)"
+    "$(mux_data_stems_line themes .theme)"
   _wrap_list "  agents  (agent NAME):      " \
-    "$(_stems_line agents .agent)"
+    "$(mux_data_stems_line agents .agent)"
   exit "${1:-2}"
 }
 
@@ -752,9 +657,9 @@ if [ "$cmd" = help ]; then cmd_help "$@"; fi
 # Root and identity both derive from the project: the git toplevel if we are in
 # a repo, else the current directory. tmux forbids ':' and '.' in a session
 # name, so fold them to '-' in a derived name.
-base=$(_project_base)
+base=$(mux_resolve_project_base)
 bypath=0
-if [ -n "$name_arg" ] && _is_path "$name_arg"; then
+if [ -n "$name_arg" ] && mux_resolve_is_path "$name_arg"; then
   # A session addressed by its ROOT. Deliberately NOT the same as
   # `cd <path> && mux go`: a bare go climbs to the git toplevel, which
   # would turn a subdirectory session's root into its enclosing repo.
@@ -773,7 +678,7 @@ if [ -n "$name_arg" ] && _is_path "$name_arg"; then
   if [ -n "$name" ]; then
     base=$_bp
   else
-    base=$(_project_base "$_bp")
+    base=$(mux_resolve_project_base "$_bp")
     name=$(basename "$base")
   fi
 elif [ -n "$name_arg" ]; then
@@ -1340,7 +1245,7 @@ _theme_remember() {     # reads $_s and $_t
 }
 
 cmd_theme() {
-  _themes=$(_stems_line themes .theme)
+  _themes=$(mux_data_stems_line themes .theme)
   if [ -z "$name_arg" ]; then _theme_show; fi
   [ -n "${TMUX:-}" ] || {
     echo "mux: theme must run in a session" >&2; exit 1; }
@@ -1390,7 +1295,7 @@ _why_resolve_name() {
   # exactly as it does for a bare `mux go`, so `why` must too, or it
   # reports a whole filesystem path as the session's name.
   w_bypath=0
-  [ -n "$name_arg" ] && _is_path "$name_arg" && w_bypath=1
+  [ -n "$name_arg" ] && mux_resolve_is_path "$name_arg" && w_bypath=1
   wh=$name_arg
   if [ -z "$wh" ] || [ "$w_bypath" -eq 1 ]; then
     wh=$(mux_prof_by_root "$base")
@@ -1495,7 +1400,7 @@ _why_derived_root() {
      || [ -n "$(_why_get root)" ]; then
     return 0
   fi
-  w_hits=$(_typed_roots "$wh")
+  w_hits=$(mux_resolve_typed_roots "$wh" "$part")
   w_nhit=$(printf '%s' "$w_hits" | grep -c . || true)
   if [ "$w_nhit" -eq 1 ]; then
     w_droot=$(mux_fold_tilde \
@@ -1582,7 +1487,7 @@ cmd_why() {
   if [ -n "$MUX_CFG_theme" ]; then
     w_dth=$MUX_CFG_theme; w_dsrc="this context's theme"
   elif [ "${MUX_CFG_derive:-hash}" = hash ]; then
-    w_dth=$(_hash_theme "$wh"); w_dsrc="hashed from the name"
+    w_dth=$(mux_resolve_hash_theme "$wh"); w_dsrc="hashed from the name"
   else
     w_dth=$MUX_THEME_FALLBACK; w_dsrc="mux's fallback"
   fi
@@ -1901,7 +1806,8 @@ _save_deltas() {
   # Theme: only when it is not the one this name would hash to anyway.
   sv_theme=$(tm show-options -t "=$sv_sess" -qv @mux-theme \
     2>/dev/null || true)
-  if [ -n "$sv_theme" ] && [ "$sv_theme" != "$(_hash_theme "$sv_name")" ]
+  sv_hash=$(mux_resolve_hash_theme "$sv_name")
+  if [ -n "$sv_theme" ] && [ "$sv_theme" != "$sv_hash" ]
   then
     sv_pairs="$sv_pairs theme=$sv_theme"
   fi
@@ -2695,8 +2601,8 @@ fi
 if [ -n "$name_arg" ] && [ "$bypath" -eq 0 ] && [ "$cmd" != new ] \
    && [ "$hasroot" -eq 0 ]; then
   # The session set first, then the map: the precedence lives in
-  # _typed_roots, which `mux why` reads too so the two cannot drift.
-  hits=$(_typed_roots "$name" | cut -f2)
+  # mux_resolve_typed_roots, which `mux why` reads too so the two cannot drift.
+  hits=$(mux_resolve_typed_roots "$name" "$part" | cut -f2)
   nhit=$(printf '%s\n' "$hits" | grep -c . || true)
   if [ "$nhit" -eq 1 ]; then
     base=$hits
@@ -2920,7 +2826,7 @@ if [ -z "$want_theme" ]; then
   if [ -n "$MUX_CFG_theme" ]; then
     want_theme=$MUX_CFG_theme          # a context said so
   elif [ "${MUX_CFG_derive:-hash}" = hash ]; then
-    want_theme=$(_hash_theme "$name")  # nobody did; derive one
+    want_theme=$(mux_resolve_hash_theme "$name")  # nobody did; derive one
   else
     want_theme=$MUX_THEME_FALLBACK
   fi

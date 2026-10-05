@@ -1,0 +1,132 @@
+#!/bin/sh
+# mux-resolve_lib: how mux turns a NAME into a project. Sourced (functions
+# only).
+#
+# THE SHARED SURFACE BETWEEN `go` AND `why`, which is the whole reason this is
+# a lib. `_typed_roots`'s own comment already said so in bin/mux ("`go` and
+# `why` share this ON PURPOSE") and recorded what it cost when they did not:
+# `why` derived a typed name's root as the CURRENT DIRECTORY, consulting
+# neither source, so `mux why NAME` cheerfully described a session `go` would
+# have flatly refused to build. An explanation that contradicts the thing it
+# explains is worse than none.
+#
+# EXTRACTED FROM bin/mux (2026-10-05) as the precursor to moving `why` out of
+# it. Not for size: `why` cannot leave until these can be reached from a
+# second file, and nothing else about `why` is hard.
+#
+# NEEDS THREE LIBS, and the CALLER sources them, which is the convention
+# throughout (no lib sources another: a sourced POSIX sh file sees the
+# CALLER'S $0, measured in dash, bash and ksh, so it cannot locate a sibling):
+#
+#   mux_resolve_hash_theme   needs mux-data_lib       (mux_data_stems)
+#   mux_resolve_map_lookup   needs mux-scan_lib       (mux_scan_lookup/_build)
+#   mux_resolve_typed_roots  needs mux-sessions_lib   (mux_sess_root)
+#
+# AND THE PARTITION IS AN ARGUMENT NOW, not a global. In bin/mux these two
+# read `$part`, the entry point's own resolved partition, which is exactly the
+# coupling that keeps code from moving: a lib that reaches for a caller's
+# variable works in one file and silently answers about nothing anywhere else.
+# The same correction `mux_ctx_mine` needed about "the caller" this week,
+# applied to a value instead of a position.
+# The PROJECT a bare invocation refers to: the git toplevel if we are in a
+# repo, else the current directory. The ONE derivation, used for both the
+# default session NAME and the default root, so `mux new` writes a layout under
+# exactly the name `mux go` will later look for. They used to disagree: new
+# took the cwd basename and go the git toplevel basename, so a `mux new` run
+# anywhere but a repo's top level wrote a layout go could never find.
+mux_resolve_project_base() {   # [dir]
+  if [ -n "${1:-}" ]; then
+    ( cd "$1" 2>/dev/null \
+      && { git rev-parse --show-toplevel 2>/dev/null || pwd; } )
+  else
+    git rev-parse --show-toplevel 2>/dev/null || pwd
+  fi
+}
+
+# Is this argument a PATH rather than a session name? A session name never
+# contains a slash (mux derives them from basenames and folds ':' and '.'), so
+# a slash, a leading ~, or a bare . / .. is unambiguous.
+mux_resolve_is_path() {   # <arg>
+  case $1 in
+  '~'|'~/'*|.|..|*/*) return 0 ;;
+  esac
+  return 1
+}
+
+# The scan map for this context, self-correcting: entries whose path has since
+# vanished are dropped (a moved repo must read as a MISS, not as a hit that
+# fails later at build), and a miss rebuilds the map once and asks again. Those
+# two checks are the whole staleness story: no TTL, no timer.
+# -> matching project paths, one per line
+mux_resolve_map_lookup() {   # <name> <partition>
+  # GUARDED IN THE FUNCTION'S OWN SHELL, not with `${2:?}` inside a command
+  # substitution, which was the first version and is the bug this package has
+  # now shipped three times: a substitution is a SUBSHELL, so the expansion
+  # failure kills only that, the variable comes back empty and the function
+  # RETURNS 0. test/mux-resolve.t caught it, which is what a lib test is for.
+  #
+  # A RETURN RATHER THAN AN EXIT, because this is a lib: `${2:?}` would take
+  # the caller's whole shell down, and a caller under `set -e` propagates a
+  # non-zero return anyway.
+  [ -n "${2:-}" ] || {
+    echo "mux_resolve_map_lookup: no partition given" >&2; return 2; }
+  _mk=$2
+  _mp=$(mux_scan_lookup "$1" "$_mk" | while IFS= read -r _d; do
+    [ -n "$_d" ] && [ -d "$_d" ] && printf '%s\n' "$_d"
+  done)
+  if [ -z "$_mp" ]; then
+    mux_scan_build "$_mk" 2>/dev/null || true
+    _mp=$(mux_scan_lookup "$1" "$_mk")
+  fi
+  printf '%s' "$_mp"
+}
+
+# Every candidate root for a TYPED name, one "SOURCE<TAB>ROOT" line each, in
+# the order `go` trusts them. A session you HAD outranks the map: it is the only
+# source that knows where a profile-less `mux go` was rooted. No lines means
+# nothing knows the name; more than one means the name is ambiguous.
+#
+# `go` and `why` share this ON PURPOSE. `why` used to derive a typed name's root
+# as the CURRENT DIRECTORY, consulting neither source, so `mux why NAME` cheerly
+# described a session `go` would have flatly refused to build: reporting a
+# root for an ambiguous name, and for a name nothing knew at all. An explanation
+# that contradicts the thing it explains is worse than no explanation, and this
+# verb exists only to be trusted.
+#
+# Irrelevant when a profile DECLARES a root (`hasroot`): both callers skip the
+# map entirely then, because the declaration already answered.
+mux_resolve_typed_roots() {   # <name> <partition> -> SOURCE<TAB>ROOT lines
+  [ -n "${2:-}" ] || {
+    echo "mux_resolve_typed_roots: no partition given" >&2; return 2; }
+  _tr=$(mux_sess_root "$1" "$2")
+  if [ -n "$_tr" ] && [ -d "$_tr" ]; then
+    printf 'a session you had\t%s\n' "$_tr"
+    return 0
+  fi
+  # `|| [ -n "$_d" ]`: the lookup ends its last path with NO newline, and
+  # a bare `while read` discards an unterminated final line, which would
+  # silently drop one candidate, turning an ambiguous name into a
+  # confidently wrong single hit.
+  mux_resolve_map_lookup "$1" "$2" | while IFS= read -r _d || [ -n "$_d" ]; do
+    [ -n "$_d" ] && printf 'the discovery map\t%s\n' "$_d"
+  done
+}
+
+# A theme chosen deterministically from a session NAME, so a project wears a
+# stable colour with nothing configured and two projects share one only by
+# coincidence. cksum is POSIX and its exact value does not matter: only that
+# the same name always lands on the same theme.
+#
+# The index is into the SORTED theme set, so adding or removing a theme
+# reshuffles every session that has not pinned one. Cosmetic, and pinning is one
+# `mux theme -p` away. Deliberately NOT unique-per-live-session: an identity you
+# can learn ("api is the green one") beats one that avoids every collision but
+# changes between launches.
+mux_resolve_hash_theme() {   # <session name>
+  _ht=$(mux_data_stems themes .theme)
+  [ -n "$_ht" ] || return 0
+  _hn=$(printf '%s\n' "$_ht" | grep -c .)
+  [ "$_hn" -gt 0 ] || return 0
+  _hs=$(printf '%s' "$1" | cksum | awk '{print $1}')
+  printf '%s\n' "$_ht" | sed -n "$(( _hs % _hn + 1 ))p"
+}

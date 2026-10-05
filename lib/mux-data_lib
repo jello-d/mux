@@ -55,3 +55,14 @@ mux_data_files() {
   done
   return 0
 }
+
+# mux_data_stems_line KIND EXT -> the same NAMEs, space joined on one line.
+#
+# MOVED HERE FROM bin/mux (2026-10-05) because it crosses a file boundary now:
+# `usage` asks it for the themes and agents a box actually has, and `cmd_theme`
+# asks it for the cycle order. One of those is on its way out of the entry
+# point. A one-line formatting wrapper is not worth two copies, and its home is
+# beside the question it reformats.
+mux_data_stems_line() {   # <kind> <ext>
+  mux_data_stems "$1" "$2" | tr '\n' ' '
+}
