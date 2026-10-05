@@ -171,6 +171,42 @@ def transport():
             or _conf("desktop-notifier-transport") or DEFAULT_TRANSPORT)
 
 
+# Partitions this daemon says nothing about, on either surface. SHIPPED
+# NON-EMPTY, which is a shipped DEFAULT and so wants justifying against this
+# tree's own rule that one which cannot succeed everywhere is worse than none:
+# this names BEHAVIOUR rather than a location, it is correct on every machine,
+# and it is one line to turn off. `mux demo` drives four pretend agents
+# through the real machinery for ever, so without it a demo fills the
+# notification daemon with news about sessions that do not exist. That used to
+# be suppressed by an env pair the demo exported into the hook it invoked, and
+# that mechanism is structurally gone: the raiser is now a separate long-lived
+# process no demo can reach.
+DEFAULT_IGNORE = ("mux.demo",)
+
+
+def ignored():
+    """Partition names to say nothing about, as a frozenset.
+
+    Env, then `$MUX_DIR/config`, then the shipped default: the same
+    environment-over-config-over-shipped order every mux seam uses.
+
+    `none` IS THE EMPTY SET, rather than an empty value, for the reason
+    `latch-fallback none` already exists: a key present but blank is
+    indistinguishable from a key absent in a line-oriented config, so "ignore
+    nothing" needs a word. That word is how somebody watching the demo turns
+    its banners ON, which is the whole reason this is a filter rather than a
+    hardcoded refusal: a validation could not be opted out of.
+    """
+    raw = (os.environ.get("MUX_DESKTOP_NOTIFIER_IGNORE")
+           or _conf("desktop-notifier-ignore"))
+    if raw is None:
+        return frozenset(DEFAULT_IGNORE)
+    names = [w for w in raw.replace(",", " ").split() if w]
+    if len(names) == 1 and names[0] == "none":
+        return frozenset()
+    return frozenset(names)
+
+
 def activate_hook():
     """What to run LOCALLY after a click, or None. Env, then config, UNSET.
 
@@ -185,7 +221,7 @@ def activate_hook():
     to be usher's job.
 
     So mux specifies the SHAPE of the answer and the integrator supplies the
-    mechanism, exactly as MUX_NOTIFY_SEND and context-command already do. The
+    mechanism, exactly as context-command already does. The
     hook is handed the LABEL as its one argument.
 
     UNSET BY DEFAULT, and that is the third answer rather than a missing one:

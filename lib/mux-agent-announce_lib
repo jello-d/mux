@@ -1,0 +1,110 @@
+#!/bin/sh
+# mux-agent-announce_lib - WHICH state changes are worth interrupting a human
+# for, and what to say about them. Sourced by `mux agent stream`; functions
+# only, source it, do not run it.
+#
+# NEEDS `mux-json_lib` (for the escaper) AND `mux-agent-state_lib` (to resolve
+# a session's pane), and says so because relying on whoever sources first is
+# how a standalone helper stops being standalone: this file is not usable on
+# its own and a caller that forgets gets `mux_json_str: not found` on stderr
+# and a document with empty fields, which is a corrupt answer rather than a
+# refusal.
+#
+# IT LIVES HERE BECAUSE THE STREAM RUNS BESIDE THE TMUX SERVER. Every fact the
+# decision needs (is this the pane you are looking at, what does the layout
+# say, whose attention is owed) is a property of a pane on THIS box at the
+# moment it changed, so the only process that can answer is one running here.
+# `mux-agent-state-emit` used to, which is why banners for a LATCHED session
+# appeared on the far machine where nobody was sitting: a hook cannot reach
+# the box the human is at, and that was never fixable from inside it.
+#
+# AND A LIB RATHER THAN A BLOCK INSIDE THE STREAM, so the policy can be
+# asserted directly instead of through a long-lived process that only speaks
+# on a timer. These rules carried ~200 lines of assertions when they lived in
+# emit; driving them through a loop would have made every one of them slow and
+# racy for no gain.
+
+# _gate PARTITION SESSION -> 0 when a transition in this session is worth
+# ANNOUNCING to a human. EXACTLY the rules `mux-agent-state-emit` has always
+# applied, moved here rather than copied: emit no longer raises anything, so
+# this is the only place they live.
+#
+# AND THIS IS WHY IT IS HERE RATHER THAN IN THE DAEMON. All three facts are
+# properties of a pane on THIS box at THIS moment, and the stream runs beside
+# the tmux server by definition, so it can simply ask. A presenter reading the
+# far end of an ssh pipe cannot, and visibility is not something it could
+# reasonably guess: a latch IS the human's live view of a remote pane, so
+# "do not interrupt me about the pane I am staring at" is a real rule even
+# across a transport.
+#
+# THREE CALLS, NOT ONE JOINED FORMAT, deliberately: an unset tmux option
+# renders EMPTY, so a space-joined answer collapses its fields and shifts
+# every value after it, which is the bug the state record's own `-` marker
+# exists to prevent. This runs once per ANNOUNCEMENT, which is a human-scale
+# event, so three forks on that path buy obvious correctness cheaply.
+mux_announce_gate() {
+  _gp=$1 _gs=$2
+  _gd=$(mux_agent_dir "$_gp")
+  _gpane=$(mux_agent_pane "$_gd" "$_gs")
+  # No pane means the record outlived it. The transition is real and nothing
+  # can be asked about where it happened, so it is ANNOUNCED: failing toward
+  # the human is the direction that cannot invert the signal.
+  [ -n "${_gpane:-}" ] || return 0
+  _gvf='#{&&:#{pane_active},#{&&:#{window_active},#{session_attached}}}'
+  _gvis=$(tmux -L "$_gp" display-message -p -t "$_gpane" "$_gvf" \
+    2>/dev/null || true)
+  _galw=$(tmux -L "$_gp" display-message -p -t "$_gpane" \
+    '#{@mux-notify-always}' 2>/dev/null || true)
+  _gatt=$(tmux -L "$_gp" display-message -p -t "$_gpane" \
+    '#{@mux-attention}' 2>/dev/null || true)
+  # `agent` ALONE SUPPRESSES, and it overrides `notify always`: that directive
+  # answers "even when I am looking at it", about VISIBILITY, while this
+  # answers whether the banner is addressed to this human at all. `hybrid`
+  # means both, so it announces.
+  [ "$_gatt" != agent ] || return 1
+  [ "$_galw" = 1 ] || [ "$_gvis" != 1 ]
+}
+
+# _announces OLD NEW: one announce line per session whose state has changed in
+# a way worth interrupting a human for.
+#
+# ITS OWN LINE KIND, not a field on the session row, because an announcement
+# is an EVENT and a row is a STATE. On the row it would make two identical
+# states differ by the announcement, so the stream would emit a second,
+# near-identical document to clear it; and a consumer could not tell a replay
+# from a fresh event. A separate line leaves the state document idempotent,
+# which is the property its whole change-only economy rests on.
+#
+# `humming` COUNTS AS THE TURN ENDING, and that is the one place this cannot
+# simply mirror emit. emit never writes `humming`: it writes `idle`, and a
+# READER derives humming from the sidecar. So emit sees working -> idle and
+# announces, while the stream sees working -> humming and would announce
+# nothing, then humming -> idle and announce nothing either, because the turn
+# did not end on that edge. Every turn that left background work would lose
+# its banner. The turn ends at working -> {idle,humming}; the later
+# humming -> idle is the JOB finishing, which is not news.
+mux_announce_lines() {
+  _aold=$1
+  printf '%s\n' "$2" | while IFS=' ' read -r _ap _ast _asn; do
+    [ -n "${_asn:-}" ] || continue
+    [ -z "${_spart:-}" ] || [ "$_ap" = "$_spart" ] || continue
+    case $_ast in blocked|idle|humming) ;; *) continue ;; esac
+    _aprev=
+    while IFS=' ' read -r _bp _bst _bsn; do
+      [ "${_bsn:-}" = "$_asn" ] || continue
+      [ "$_bp" = "$_ap" ] || continue
+      _aprev=$_bst
+    done <<EOF
+$_aold
+EOF
+    # Only out of `working`, which is the same edge emit used: a same-state
+    # re-emit is not news and neither is you starting something.
+    [ "$_aprev" = working ] || continue
+    mux_announce_gate "$_ap" "$_asn" || continue
+    case $_ast in blocked) _akind=blocked ;; *) _akind=finished ;; esac
+    printf '{"status":"ok","announce":{"partition":%s,"session":%s,' \
+      "$(mux_json_str "$_ap")" "$(mux_json_str "$_asn")"
+    printf '"kind":%s}}\n' "$(mux_json_str "$_akind")"
+  done
+}
+

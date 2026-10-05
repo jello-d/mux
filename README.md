@@ -956,10 +956,14 @@ reads your override first, then the shipped default.
   run with the calling PID and prints ONE DNS-label token on stdout (or
   nothing, for the baseline). A bare name resolves against `$MUX_DIR` before
   `$PATH`, so the same config travels between machines.
-- **Notify from a non-freedesktop platform:** set `MUX_NOTIFY_SEND` and
-  `MUX_NOTIFY_CLOSE`. Send is called `CMD URGENCY SUMMARY BODY` and prints an
-  id; close is called `CMD ID`. The id is opaque to mux, so any token the two
-  agree on works. `mux check` reports which path is live.
+- **Notify on a platform of your own:** mux raises no banners itself. The
+  optional `mux-desktop-notifier` does, reading `mux agent stream`, which is
+  what lets a LATCHED session's banner appear where you are sitting rather
+  than on the machine the agent runs on. A platform that is not freedesktop
+  wants a notifier of its own against that same stream; the rest of mux does
+  not change and does not need to know. Either surface can be switched off
+  (`--no-tray`, `--no-toasts`), and `desktop-notifier-ignore` names partitions
+  it should say nothing about.
 
 ## Reference
 

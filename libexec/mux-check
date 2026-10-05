@@ -95,60 +95,66 @@ else bad "mux not on PATH: the tmux fragment reaches it as \`mux <verb>\`"; fi
 
 # 1c. Desktop notifications: OPTIONAL, so a gap is a WARN, never a FAIL; a
 # headless box or a bare tty is a perfectly healthy mux that simply nudges
-# nobody. Reported in TWO halves, because the second is the one that used to be
-# assumed. Raising needs notify-send. CLEARING a notification mux already
-# raised needs a way to call org.freedesktop.Notifications.CloseNotification;
-# without one, mux still nudges you, but a "needs you" whose pane has since
-# died stays on screen until swatted by hand. That asymmetry was invisible for
-# as long as the close was hardcoded to mako's own CLI.
-if [ -n "${MUX_NOTIFY_SEND:-}${MUX_NOTIFY_CLOSE:-}" ]; then
-  if [ -n "${MUX_NOTIFY_SEND:-}" ] && [ -n "${MUX_NOTIFY_CLOSE:-}" ]; then
-    ok "notifications overridden (MUX_NOTIFY_SEND/CLOSE)"
-  else
-    warn "notifications: set MUX_NOTIFY_SEND and MUX_NOTIFY_CLOSE" \
-      "together, or neither, since half an override leaves the" \
-      "other half on the built-in path"
-  fi
-elif command -v notify-send >/dev/null 2>&1; then
-  # THE THIRD HALF, and it is the one this marker used to assume. Having
-  # notify-send says mux can RAISE; it says nothing about anything being able
-  # to DISPLAY. Found live: the binary present, no daemon owning the name, and
-  # every notification dying with `Message recipient disconnected from message
-  # bus without replying` while this line read [OK].
-  #
-  # `|| _nd=$?` AND NOT A BARE CALL: a three-answer function returns non-zero
-  # for two of its three answers, and this file runs under `set -e`. That
-  # exact shape truncated the whole environment plan a day ago.
-  _nd=0; mux_notify_daemon || _nd=$?
-  _ncl=$(_mux_notify_closer)
+# nobody.
+#
+# MUX RAISES NOTHING ITSELF ANY MORE, which changes what this can honestly
+# report. `mux-desktop-notifier` raises every banner now, from the event
+# stream, because that is the only thing able to reach the box the human is
+# sitting at: a hook raises on the box the AGENT runs on, so every blocked
+# LATCHED session spent years popping a toast on a remote desktop. So the old
+# question (is `notify-send` here, can something close one) is not the
+# question any more, and both halves of that seam are gone.
+#
+# TWO THINGS STILL WORTH ASKING, and this box can answer both:
+#   is anything able to DISPLAY a notification        (the session bus)
+#   is mux's notifier installed to raise one          (a file on disk)
+#
+# AND IT CANNOT ASK WHETHER THE NOTIFIER IS RUNNING, which is said rather than
+# guessed: that is the notifier's own `setup.sh check`, which compares three
+# copies including the live process, and mux core must not learn systemd to
+# find out. Installed-and-not-running is therefore the one gap this marker
+# leaves, and it is covered one package over.
+_nd=0; mux_notify_daemon || _nd=$?
+_nbin=${MUX_DESKTOP_NOTIFIER_BIN:-$HOME/.local/bin}/mux-desktop-notifier
+# `-e` AND `-L`, because this is a symlink into a venv: `-e` follows it, so a
+# DANGLING one (the venv removed, the link left) answers false and would read
+# as "never installed" when it is really "installed and broken". The rename
+# taught this exact lesson a few hours ago.
+if [ -e "$_nbin" ] || [ -L "$_nbin" ]; then
   if [ "$_nd" -eq 1 ]; then
     # A REAL FINDING, and a WARN rather than a FAIL for the reason the whole
     # block is optional: which daemon runs is the user's desktop, not mux's
     # install, and a provisioner's apply cannot repair it.
-    warn "notifications raise but NOTHING DISPLAYS them: no daemon owns" \
-      "org.freedesktop.Notifications and nothing on this session bus" \
-      "offers to start one"
-  elif [ "$_ncl" = none ]; then
-    warn "notifications raise but never clear: no gdbus, busctl," \
-      "dbus-send or makoctl to close one with"
+    warn "notifications: the notifier is installed but NOTHING DISPLAYS" \
+      "them: no daemon owns org.freedesktop.Notifications and nothing on" \
+      "this session bus offers to start one"
   elif [ "$_nd" -eq 3 ]; then
     # NOBODY HOME IS NOT NOBODY COMING. The name is D-Bus activatable, so the
     # first notification starts a daemon, and this is the ordinary state for
     # the first minutes after a boot. Reporting it as a fault was this check
     # being wrong in the opposite direction to the bug it was added to fix.
-    ok "notifications (notify-send, cleared via $_ncl; no daemon up yet," \
-      "D-Bus will start one on demand)"
+    ok "notifications (notifier installed; no daemon up yet, D-Bus will" \
+      "start one on demand)"
   elif [ "$_nd" -eq 2 ]; then
     # SAID, NOT GUESSED. Over ssh there is no session bus to ask, and
     # reporting the desktop broken from a context that cannot see it is the
-    # mistake the WAYLAND_DISPLAY validator made this week.
-    ok "notifications (notify-send, cleared via $_ncl; no bus to" \
-      "confirm a daemon from here)"
+    # mistake the WAYLAND_DISPLAY validator made this week. It is also the
+    # NORMAL answer on a watched box: the notifier belongs on the desktop,
+    # not on every machine mux runs on.
+    ok "notifications (notifier installed; no bus to confirm a daemon" \
+      "from here)"
   else
-    ok "notifications (notify-send -> a live daemon, cleared via $_ncl)"
+    ok "notifications (notifier installed -> a live daemon)"
   fi
+elif [ "$_nd" -eq 2 ]; then
+  # No bus and no notifier is the ordinary shape of a box you LATCH TO: its
+  # banners are raised where you are sitting, so saying anything stronger
+  # here would be a finding about every remote machine in the fleet.
+  ok "notifications are raised by the desktop notifier, not from here"
 else
-  warn "no notify-send: mux will not raise desktop notifications"
+  warn "no desktop notifier here, so mux raises no notifications:" \
+    "install it with ./setup.sh desktop-notifier, or ignore this on a" \
+    "box you only ever reach from another one"
 fi
 
 # 2. package DATA (share): the dir plus the pieces mux reads at runtime.

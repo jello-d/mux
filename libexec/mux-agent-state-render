@@ -42,10 +42,6 @@ _lib=$_libexec/../lib
 # the strip's own look, which the picker does not share.
 . "$_lib/mux-agent-state_lib"
 
-# Closing a notification whose pane has died (the prune below) is the same
-# operation mux-agent-state-emit performs when a state changes, so both take it
-# from one place rather than each knowing a daemon's CLI.
-. "$_lib/mux-notify_lib"
 
 # The view indicator lives at the RIGHT END of this strip, so its width has to
 # come out of the same budget the reduction tiers spend. It is drawn from here
@@ -175,9 +171,11 @@ $1
   return 1
 }
 
-# Prune phantoms once: drop any state file whose pane is gone, closing any
-# notification it still holds, so a pane killed while blocked leaves no stale
-# "needs you" behind (best effort on any platform; see mux-notify_lib).
+# Prune phantoms once: drop any state file whose pane is gone. It used to
+# close the notification that record still held, which it no longer can and no
+# longer needs to: banners belong to `mux-desktop-notifier` now, and it
+# withdraws its own when the session it announced stops being blocked or
+# vanishes from the stream altogether. The id this read is a permanent `-`.
 #
 # ONLY when the pane list is non-empty. An empty one does not mean every pane
 # died: it means the QUERY failed, and the commonest way is a socket
@@ -214,7 +212,6 @@ if [ -d "$dir" ] && [ -n "${live# }" ]; then
     case $f in *.beat|*.hum) continue ;; esac
     read -r st win pane ep nid ss <"$f" || continue
     case "$live" in *" $pane "*) continue ;; esac
-    mux_notify_close "$nid"
     # The sidecars go WITH the record they describe, or a pruned pane leaves
     # orphans nothing will ever collect.
     rm -f "$f" "$f.beat" "$f.hum"

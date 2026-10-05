@@ -236,44 +236,21 @@ loc=$(tmux display-message -p -t "$TMUX_PANE" \
 _win=${loc%% *}
 _sess=${loc#* }
 
-# Clear a notification we raised for THIS pane once the agent leaves the state
-# that raised it (you answered, restarted, or the turn moved on), so a
-# "needs you" does not sit stale for manual dismissal. Carry the id across
-# same-state re-emits; on any real change drop it, closing any live one first.
-# mux_notify_close is best effort on every platform and cannot fail.
-notif=$_pnotif
-# `-` is the absent marker, so it never reaches mux_notify_close as an id.
-[ "${_pnotif:-}" = - ] && _pnotif=
-
-# AGE THE ID OUT. A freedesktop notification id is a small integer the daemon
-# assigns sequentially and REUSES after it restarts, so an id kept long enough
-# stops referring to our banner and starts referring to somebody else's.
-# Closing it then dismisses an unrelated notification.
+# THE NOTIFICATION ID IS GONE, and the field it lived in is not.
 #
-# The carry above is per-state, not per-notification, so a session that finishes
-# and is never touched again holds its id forever: found on `charon` holding id
-# 522 for 32 HOURS, which the next transition would have "closed".
+# mux raises no banners: `mux-desktop-notifier` does, from the stream, and it
+# holds its own ids on the box the human is at. So there is nothing here to
+# carry across a re-emit, nothing to age out, and nothing to close. The whole
+# lifecycle this block used to run (carry the id, drop it past
+# MUX_NOTIF_TTL because a freedesktop id is small, sequential and REUSED after
+# a daemon restart, close it on a real change) went with it.
 #
-# Dropping a stale id loses nothing, and that is only true because of the 0.14
-# change to `normal` urgency: a normal notification EXPIRES on its own, so an id
-# older than any plausible expiry window names a banner that is already gone.
-# Under the old `critical` (never expires) this would have been a real leak
-# instead, which is worth knowing if that urgency is ever reconsidered.
-_ttl=${MUX_NOTIF_TTL:-3600}
-if [ -n "$_pnotif" ] && [ -n "${_pepoch:-}" ]; then
-  case $_pepoch in
-  ''|*[!0-9]*) ;;
-  *)
-    if [ "$(( $(date +%s) - _pepoch ))" -gt "$_ttl" ]; then
-      _pnotif= notif=
-    fi ;;
-  esac
-fi
-
-if [ -n "$_pnotif" ] && [ "$state" != "$_pstate" ]; then
-  mux_notify_close "$_pnotif"
-  notif=
-fi
+# THE FIELD STAYS AS A PERMANENT `-`, deliberately, and this is the one piece
+# of the old design worth keeping: the record is six fields read by a single
+# `read -r` in several programs, and narrowing that format has cost this
+# package a day before. A dead field costs one byte; a format change costs
+# every reader.
+notif=-
 
 # Push notification when the agent stops needing the CPU and starts needing YOU:
 # a real transition FROM working INTO blocked (permission) or idle (finished).
@@ -281,61 +258,32 @@ fi
 # not when you are already looking at this pane (it is the active pane of the
 # active window of an attached session), since the bar already shows it; a
 # session opts out with the `notify always` layout directive
-# (@mux-notify-always). mux_notify_send keeps the id so the block above can
-# clear it later, and no-ops on a box with no daemon.
-if [ "$_pstate" = working ] && [ "$state" != working ]; then
-  _vf='#{&&:#{pane_active},#{&&:#{window_active},#{session_attached}}}'
-  _vis=$(tmux display-message -p -t "$TMUX_PANE" "$_vf" \
-    2>/dev/null || true)
-  _always=$(tmux display-message -p -t "$TMUX_PANE" \
-    '#{@mux-notify-always}' 2>/dev/null || true)
-  # WHOSE ATTENTION IS THIS, and the notification path is where the answer
-  # matters most. The strip is a glance; a banner is an INTERRUPT, so a run
-  # with several orchestrated workers would ring the bell repeatedly for
-  # decisions the human was never going to make. A worker answers to its
-  # supervisor, which already knows: it is the thing that is waiting.
-  #
-  # `agent` ALONE SUPPRESSES. `hybrid` means both, so it notifies: a pane the
-  # human may also be asked about must not go quiet, and failing toward the
-  # human is the direction that cannot invert the signal.
-  #
-  # AND IT OVERRIDES `notify always`, deliberately: that directive answers
-  # "even when I am looking at it", a question about VISIBILITY, while this
-  # one answers whether the banner is addressed to this human at all. A
-  # layout that says `notify always` on a worker is describing the window,
-  # not volunteering the human.
-  _attn=$(tmux display-message -p -t "$TMUX_PANE" \
-    '#{@mux-attention}' 2>/dev/null || true)
-  if [ "$_attn" = agent ]; then
-    _always=0; _vis=1
-  fi
-  if [ "$_always" = 1 ] || [ "$_vis" != 1 ]; then
-    # Both at NORMAL urgency. `blocked` used to be critical, which
-    # in mako and dunst alike means "never expire": the banner
-    # outlived the prompt it announced and had to be dismissed by
-    # hand, every time. Urgency is not how mux says which state
-    # this is: the summary line says it, and the strip and the
-    # tray hold it persistently. See mux-notify_lib.
-    #
-    # $_sess is the one computed at the top, deliberately NOT
-    # recomputed here. This block used to re-derive it as
-    # ${loc%% *}, correct back when the probe asked for
-    # `#{session_name} #{window_index}`. Flipping that order
-    # fixed the top copy and left this one reading the WINDOW
-    # INDEX, so raising a notification overwrote $_sess with
-    # `0` and the record written below named a session `0`.
-    # The session then had NO state on the strip (it looked
-    # idle while the agent worked) and the banner said
-    # "Claude finished: 0". One value, one place.
-    case $state in
-    blocked) notif=$(mux_notify_send normal \
-        "Claude needs you: $_sess" \
-        "permission or input") ;;
-    idle)    notif=$(mux_notify_send normal \
-        "Claude finished: $_sess" "your turn") ;;
-    esac
-  fi
-fi
+# (@mux-notify-always).
+# RAISING MOVED TO THE DESKTOP NOTIFIER, and this is where it used to be.
+# The gate that lived here (a real transition out of `working`, not into the
+# pane you are looking at, `@mux-notify-always`, `@mux-attention`) now lives
+# in `mux agent stream`, which runs beside this tmux server and can ask tmux
+# exactly the same questions. Nothing was dropped: the rules moved, they did
+# not change.
+#
+# WHY IT COULD NOT STAY. A hook raises the banner on the box the AGENT runs
+# on, which is the one machine that may well have nobody sitting at it: every
+# blocked LATCHED session has been popping a toast on a remote desktop for as
+# long as latch has existed. That is structural rather than a bug in the
+# notification path, and it is not fixable from here, because a hook has no
+# way to reach the box the human is at. A stream does.
+#
+# ONE OWNER, SO THERE IS NOTHING TO DRIFT. Keeping a raise here for the local
+# case and delegating the remote one would be two notification paths free to
+# disagree about wording, urgency and when to fire. A box running no notifier
+# therefore gets no banners, which `mux check` says rather than leaving you to
+# notice, and which is the same call the tray already makes about an
+# unattached partition.
+#
+# THE CLOSE PATHS ABOVE STAY, and they are not dead code: a record written by
+# an OLDER mux carries a real notification id, so during an upgrade there are
+# banners on this box that only this file knows how to withdraw. They become
+# no-ops once every record has been rewritten, which is one turn per session.
 
 # Fields: state session window pane epoch notif-id. Space separated, one line.
 #

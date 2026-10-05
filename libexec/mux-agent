@@ -244,9 +244,13 @@ WSEOF
 }
 
 case $_verb in
-read|wait|send|class)
+read|wait|send|class|stream)
   . "$_lib/mux-paths_lib"
   . "$_lib/mux-agent-state_lib" ;;
+esac
+case $_verb in
+stream)
+  . "$_lib/mux-agent-announce_lib" ;;
 esac
 
 if [ "$_verb" = read ]; then
@@ -1152,7 +1156,12 @@ if [ "$_verb" = stream ]; then
   _collect
   _sdoc=$(_status_doc)
   printf '%s\n' "$_sdoc"
-  _slast=$_sdoc _ssnap="$_rows$_srows"
+  # THE FIRST DOCUMENT ANNOUNCES NOTHING, by construction rather than by a
+  # flag: the previous session states are seeded from this very tick, so the
+  # first diff can only happen on the second. A stream that announced its
+  # opening state would toast every finished turn on the box each time a
+  # daemon started or a connection came back.
+  _slast=$_sdoc _ssnap="$_rows$_srows" _sprev=$_srows
   _squiet=0
   while :; do
     sleep "$_sint"
@@ -1171,7 +1180,12 @@ if [ "$_verb" = stream ]; then
     fi
     if [ "$_sdoc" != "$_slast" ]; then
       printf '%s\n' "$_sdoc"
-      _slast=$_sdoc
+      # AFTER the state, so a consumer has repainted before it is asked to
+      # interrupt anybody, and so a banner can never describe a state the
+      # reader has not seen yet.
+      _alines=$(mux_announce_lines "$_sprev" "$_srows")
+      [ -z "$_alines" ] || printf '%s\n' "$_alines"
+      _slast=$_sdoc _sprev=$_srows
       _squiet=0
       continue
     fi

@@ -308,12 +308,6 @@ CAPS
 # consumer would skip a capability that works.
 _cap_usable() {   # <name>
   case $1 in
-  notify)
-    # Raising needs a send path. The override pair counts, since an
-    # integrator supplying it has declared one.
-    [ -n "${MUX_NOTIFY_SEND:-}" ] && return 0
-    command -v notify-send >/dev/null 2>&1 && return 0
-    return 1 ;;
   latch)
     # Implemented, but useless without a transport. The default is
     # ssh; an override may name anything. Only the first WORD is

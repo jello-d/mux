@@ -277,11 +277,12 @@ _hz=$(getconf CLK_TCK 2>/dev/null || echo 100)
 #          would claim the turn just finished, which is the one thing we know
 #          is false; keeping it reports the wait as at least that long, a true
 #          lower bound that errs toward drawing the eye rather than away.
-#   notif  kept. Closing a banner is the emit path's job and needs the
-#          MUX_NOTIFY_CLOSE seam, so dropping the id here would orphan the
-#          banner instead of closing it. Carried through, the next real
-#          transition closes it the ordinary way. MUX_NOTIF_TTL covers the
-#          case where no next transition ever comes.
+#   notif  kept, and it is now always `-`: no notification id is ever
+#          recorded, because mux raises no banners. `mux-desktop-notifier`
+#          holds its own ids on the box the human is at and withdraws them
+#          when the state it announced stops being true. The FIELD stays so
+#          the record is six fields read by one `read -r`, which several
+#          programs do and narrowing has cost a day before.
 #
 # Atomic through a temp file and mv, the same way emit writes, so a renderer or
 # a summary reading concurrently sees one record or the other and never a

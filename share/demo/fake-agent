@@ -21,15 +21,22 @@
 # rather than like a dead shell. That matters for a demo more than it sounds.
 set -eu
 
-# NO DESKTOP NOTIFICATIONS FROM A DEMO. mux raises one on a working -> blocked
-# transition for a pane you are not looking at, which is correct for real work
-# and wrong here: four pretend agents cycling forever would fill the
-# notification daemon with news about sessions that do not exist. The seam mux
-# already has for this is an env pair, so the demo simply points it at `true`.
-# Suppressed HERE rather than in mux-demo, so it stays the demo's own decision
-# and is visible to anyone reading the pretend agent.
-MUX_NOTIFY_SEND=true; MUX_NOTIFY_CLOSE=true
-export MUX_NOTIFY_SEND MUX_NOTIFY_CLOSE
+# NO DESKTOP NOTIFICATIONS FROM A DEMO, and it is no longer this file's to
+# arrange. Four pretend agents cycling forever would fill the notification
+# daemon with news about sessions that do not exist, so this used to point
+# mux's notification seam at `true`. That worked because the RAISER was a hook
+# this script invoked, so an environment variable reached it.
+#
+# IT IS A SEPARATE LONG-LIVED PROCESS NOW. `mux-desktop-notifier` raises every
+# banner, from the event stream, and there is no variable a demo can set that
+# it reads: the suppression was structurally inapplicable rather than broken.
+#
+# SO THE NOTIFIER IGNORES THIS PARTITION BY DEFAULT, which is better than a
+# refusal here could have been: it is a FILTER, so somebody who wants to watch
+# the demo's banners can turn it off (`desktop-notifier-ignore none`), where
+# validating the name instead could never have been opted out of. It keys on
+# the demo's socket, which already contains a dot precisely so the partition
+# machinery cannot address it. See DEFAULT_IGNORE in the notifier's sources.
 
 _label=${1:-demo}
 _mode=${2:-cycle}

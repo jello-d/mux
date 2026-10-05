@@ -168,23 +168,63 @@ has "no scan roots" "silent about discovery being off"
 has "discovery is off" "did not say what that means"
 printf 'scan %s/src 2\n' "$T" >"$T/conf/partitions/probe.partition"
 
-# --- notifications are reported in TWO halves ----------------------------
-# Raising and clearing can be separately absent, and a box that raises but
-# cannot clear accumulates dead banners: the failure the old mako-only
-# close produced everywhere that was not mako.
-printf '#!/bin/sh\nexit 0\n' >"$T/bin/notify-send"
-chmod +x "$T/bin/notify-send"
+# --- notifications: the notifier, not notify-send ------------------------
+# mux raises nothing itself now, so what this marker can honestly report
+# changed with it: `notify-send` being on PATH says nothing about whether
+# anything will ever raise a banner, because the thing that raises them is a
+# separate package on the DESKTOP box. A box you only ever latch to has its
+# banners raised where you are sitting, so a finding here would be a finding
+# about every remote machine in the fleet.
+# UNDER THE PINNED HOME, which is where the marker looks: it resolves
+# `${MUX_DESKTOP_NOTIFIER_BIN:-$HOME/.local/bin}`, so planting the link on the
+# curated PATH instead proves nothing. The first version did exactly that and
+# reported a dangling link as absent, which is a fact about the fixture.
+_nbd=$HOME/.local/bin
+mkdir -p "$_nbd"
+rm -f "$_nbd/mux-desktop-notifier"
+# A BUS THAT ANSWERS, because without one the marker correctly says it cannot
+# tell and the finding never fires: measured, the sandbox has no gdbus, so the
+# first version of this asserted a WARN against the "no bus to ask from here"
+# arm and failed for a reason that had nothing to do with the notifier. That
+# hedge is deliberate (a box you only latch to must not report a finding about
+# every machine in the fleet), so a test about the finding has to supply the
+# bus the finding needs.
+cat >"$T/bin/gdbus" <<'GD'
+#!/bin/sh
+case "$*" in
+*NameHasOwner*)          printf '(false,)\n' ;;
+*ListActivatableNames*)  printf "([''],)\n" ;;
+esac
+exit 0
+GD
+chmod +x "$T/bin/gdbus"
 check >/dev/null
-has "notifications raise but never clear" "no report of a missing closer"
-[ "$RC" -eq 0 ] || fail "an absent notification path must not FAIL"
-printf '#!/bin/sh\nexit 0\n' >"$T/bin/gdbus"; chmod +x "$T/bin/gdbus"
+has "no desktop notifier here" "a missing notifier was not reported"
+[ "$RC" -eq 0 ] || fail "an absent notification path must not FAIL: it is
+optional, and a provisioner's apply cannot install somebody's desktop"
+
+# AND IT IS CREDITED WHEN PRESENT. Asserted on a DANGLING symlink, which is
+# the state a rename or a removed venv leaves behind: `-e` follows a symlink
+# and answers false for one, so a check testing only `-e` would read
+# "installed and broken" as "never installed" and send you to install
+# something that is already there.
+ln -sfn "$T/nowhere/mux-desktop-notifier" "$_nbd/mux-desktop-notifier"
 check >/dev/null
-has "cleared via gdbus" "a usable closer was not credited"
+case $OUT in
+*"no desktop notifier here"*) fail "a dangling notifier link read as absent,
+so the one state a rename leaves behind is the one this cannot see" ;;
+esac
+# `notify-send` IS NO LONGER PART OF THE QUESTION, and its absence being
+# silent is the assertion worth keeping from the case that used to live here:
+# mux does not raise banners, so a box without libnotify installed is not a
+# box with a mux problem. Reporting on it would be a finding about somebody
+# else's package.
 rm -f "$T/bin/notify-send"
 check >/dev/null
-has "no notify-send" "silent about being unable to notify at all"
-printf '#!/bin/sh\nexit 0\n' >"$T/bin/notify-send"
-chmod +x "$T/bin/notify-send"
+case $OUT in
+*notify-send*) fail "the check still reports on notify-send, which mux no
+longer uses: the notifier raises banners now and does it over the bus" ;;
+esac
 
 # --- ... AND A THIRD HALF: can anything actually DISPLAY one? -------------
 # THIS MARKER SAID [OK] ON A BOX WHERE NOTIFICATIONS FAILED OUTRIGHT, which
@@ -272,11 +312,16 @@ indistinguishable from one backed by a real live daemon"
 [ "$RC" -eq 0 ] || fail "being unable to ask is not a failure"
 _bus '(true,)' "([ 'org.freedesktop.Notifications' ],)"
 
-# Both overrides set is a supported path; half an override is a mistake.
+# AND THE OLD OVERRIDE PAIR IS NOT CONSULTED. `MUX_NOTIFY_SEND` and
+# `MUX_NOTIFY_CLOSE` are gone: they had no caller once the raising moved, and
+# a seam nobody crosses is not a seam. Asserted because a check still reading
+# them would credit an override that does nothing, which is worse than not
+# offering one: the user would believe they had redirected their banners.
 check MUX_NOTIFY_SEND=true MUX_NOTIFY_CLOSE=true >/dev/null
-has "notifications overridden" "the override pair was not recognised"
-check MUX_NOTIFY_SEND=true >/dev/null
-has "together, or neither" "half an override was not called out"
+case $OUT in
+*overridden*) fail "the check credited a retired override pair, so a user
+setting it would believe their notifications had been redirected" ;;
+esac
 
 # --- the product WORKING, not merely installed ----------------------------
 # Everything above is a presence check: files exist, commands resolve, config

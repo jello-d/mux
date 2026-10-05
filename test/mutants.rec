@@ -61,12 +61,6 @@ t mux-session-names
 + if false; then
 m resurrected 'working'
 
-= notif-ttl-never-expires
-f libexec/mux-agent-state-emit
-t mux-notify
-- _ttl=${MUX_NOTIF_TTL:-3600}
-+ _ttl=999999999
-m was closed
 
 = prune-guard-removed
 f libexec/mux-agent-state-render
@@ -2974,18 +2968,12 @@ t mux-next-blocked
 +   pair=$(mux_agent_state "$dir" "$s")
 m was offered to the human
 
-= notification-rings-for-a-worker
-f libexec/mux-agent-state-emit
-t mux-notify
-# A BANNER IS THE ONE SURFACE THAT INTERRUPTS, which is why R2 calls this the
-# worse half: a run with several workers rings the bell repeatedly for
-# decisions the human was never going to make. The supervisor is the thing
-# that is waiting and it already knows. Three cases guard it together (agent
-# silent, undeclared notifies, hybrid notifies), so a mutation that merely
-# silenced everything dies on the control rather than passing.
--     _always=0; _vis=1
-+     _always=0
-m owed to its SUPERVISOR rang
+= announce-worker-rings-the-human
+f lib/mux-agent-announce_lib
+t mux-announce
+-   [ "$_gatt" != agent ] || return 1
++   [ "$_gatt" != xxxxx ] || return 1
+m a worker's pane rang the human
 
 = open-selects-the-new-window
 f lib/mux-window_lib

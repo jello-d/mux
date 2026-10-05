@@ -2523,19 +2523,36 @@ THE LINE BETWEEN THE TWO IS ONE QUESTION: does mux rebuild it? Stamps and the
 discovery map do. The session set and a draft do not. Anything left in the old
 location is adopted automatically on first touch, so an upgrade loses nothing.
 .TP
-.BR MUX_NOTIFY_SEND ", " MUX_NOTIFY_CLOSE
-Replace the built-in notification path, for a platform that is not freedesktop.
-.B MUX_NOTIFY_SEND
-is invoked as
-.RI "CMD " "URGENCY SUMMARY BODY"
-and should print an id on stdout;
-.B MUX_NOTIFY_CLOSE
-is invoked as
-.RI "CMD " ID
-with whatever send printed. The id is opaque to mux, so any token the pair
-agrees on works. Set both or neither;
-.B mux check
-reports which path is live.
+.BR MUX_DESKTOP_NOTIFIER_TRAY ", " MUX_DESKTOP_NOTIFIER_TOASTS
+Switch off either surface of
+.BR mux-desktop-notifier ,
+independently; both are on by default. Set to
+.B 0
+to disable, or pass
+.B \-\-no\-tray
+or
+.B \-\-no\-toasts
+to the daemon. mux itself raises no notifications: the notifier does, from
+.BR "mux agent stream" ,
+which is the only thing able to reach the machine you are sitting at. A box
+you reach by
+.B mux latch
+therefore raises its banners where YOU are, not where the agent runs.
+.TP
+.B MUX_DESKTOP_NOTIFIER_IGNORE
+Partitions the notifier says nothing about, on either surface; also
+.B desktop\-notifier\-ignore
+in
+.IR $MUX_DIR/config ,
+or
+.B \-\-ignore
+.I NAME
+per invocation. The word
+.B none
+means ignore nothing. Defaults to the
+.B mux demo
+socket, so a demo does not fill your notification daemon with news about
+sessions that do not exist; clear it to watch the demo's banners.
 .TP
 .B MUX_STYLE_PROC
 Relocate
@@ -2551,21 +2568,10 @@ did. Same seam, and the same reason, as
 .BR MUX_DOCTOR_PROC .
 .TP
 .B MUX_NOTIF_TTL
-Seconds after which a recorded notification id is considered stale and dropped
-rather than closed. Default 3600.
-.IP
-A freedesktop id is a small integer the daemon assigns sequentially and REUSES
-after it restarts, so an id held long enough stops naming our banner and starts
-naming somebody else's. mux carries an id per STATE, not per notification, so a
-session that finishes and is never touched again keeps its id indefinitely:
-found on one holding an id for 32 hours, which the next transition would
-have dutifully closed.
-.IP
-Dropping a stale id costs nothing, and that is only true because mux sends
-.B normal
-urgency, which expires on its own. Were that ever changed back to
-.BR critical ,
-which never expires, this would become a leak instead of a safeguard.
+Retired, and nothing reads it. mux records no notification id because it
+raises no banners; the notifier holds its own and withdraws one when the state
+it announced stops being true. See
+.BR MUX_DESKTOP_NOTIFIER_TOASTS .
 .TP
 .BR MUX_LATCH_TRANSPORT ", " MUX_LATCH_AUTH ", " MUX_LATCH_PROBE ", " \
 MUX_LATCH_CLASSIFY ", " MUX_LATCH_STATUS

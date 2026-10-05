@@ -1140,7 +1140,7 @@ class Entry(unittest.TestCase):
         old = m.run
         m.run = boom
         try:
-            m.main()          # must simply return
+            m.main([])        # must simply return
         finally:
             m.run = old
 
@@ -1156,7 +1156,7 @@ class Entry(unittest.TestCase):
         m.run = boom
         try:
             with self.assertRaises(RuntimeError):
-                m.main()
+                m.main([])
         finally:
             m.run = old
 
@@ -1531,3 +1531,294 @@ class StreamingFeed(unittest.TestCase):
                          "to polling, so a blip costs it streaming for the "
                          "rest of the daemon's life")
         self.assertIsNone(f.rows, "an unreachable host must read unknown")
+
+
+class Toasts(unittest.TestCase):
+    """The daemon raises every banner now, local and remote alike.
+
+    WHY IT MOVED AT ALL. `mux-agent-state-emit` raised it on the box the AGENT
+    runs on, which is the one machine that may have nobody sitting at it:
+    every blocked latched session has been popping a toast on a remote desktop
+    for as long as latch has existed. A hook cannot reach the box the human is
+    at, so the fix was never available there.
+
+    THE DECISION IS STILL THE WATCHED BOX'S, and these tests are only about
+    presentation: wording, and when a banner stops being true.
+    """
+
+    class Bus:
+        """A notification service that records rather than draws."""
+
+        def __init__(self, fail=False):
+            self.calls = []
+            self.closed = []
+            self._next = 100
+            self._fail = fail
+
+        async def introspect(self, *a):
+            return None
+
+        def get_proxy_object(self, *a):
+            return self
+
+        def get_interface(self, *a):
+            return self
+
+        async def call_notify(self, app, replaces, icon, summary, body,
+                              actions, hints, timeout):
+            if self._fail:
+                raise RuntimeError("no notification daemon")
+            self.calls.append((app, replaces, summary, body))
+            self._next += 1
+            return self._next
+
+        async def call_close_notification(self, nid):
+            self.closed.append(nid)
+
+    def _toaster(self, **kw):
+        sni = _fresh()
+        bus = self.Bus(**kw)
+        return sni, bus, sni.Toaster(bus)
+
+    def test_a_blocked_announcement_names_the_session(self):
+        """The session name is the whole point of carrying sessions on the
+        wire: a banner that names only the partition tells you a box needs
+        you and not which agent."""
+        sni, bus, t = self._toaster()
+        asyncio.run(t.announce("boxa", "global", "api", "blocked"))
+        self.assertEqual(len(bus.calls), 1)
+        self.assertIn("api", bus.calls[0][2])
+        self.assertIn("needs you", bus.calls[0][2])
+
+    def test_a_finished_announcement_differs_from_blocked(self):
+        sni, bus, t = self._toaster()
+        asyncio.run(t.announce("boxa", "global", "api", "finished"))
+        self.assertIn("finished", bus.calls[0][2])
+        self.assertNotIn("needs you", bus.calls[0][2])
+
+    def test_a_REMOTE_banner_names_the_host(self):
+        """emit could never say which machine, because it only ever ran on
+        one. Two boxes running a session of the same name would otherwise
+        produce identical banners, which is the lesson the tray spent two
+        releases learning about colour."""
+        sni, bus, t = self._toaster()
+        asyncio.run(t.announce("northwood", "global", "api", "finished",
+                               local=False))
+        self.assertIn("northwood", bus.calls[0][3])
+
+    def test_a_LOCAL_banner_does_not(self):
+        """The control, and the reason it is a separate case: a banner that
+        said "on this-box" every time would be noise on the common path."""
+        sni, bus, t = self._toaster()
+        asyncio.run(t.announce("here", "global", "api", "finished",
+                               local=True))
+        self.assertNotIn("here", bus.calls[0][3])
+
+    def test_a_SECOND_announcement_replaces_the_first(self):
+        """A session that blocks, is answered and blocks again should leave
+        ONE banner rather than a column of them. The id we already hold is
+        passed as `replaces`, which is what the freedesktop spec is for."""
+        sni, bus, t = self._toaster()
+        asyncio.run(t.announce("boxa", "global", "api", "blocked"))
+        first = bus.calls[0]
+        asyncio.run(t.announce("boxa", "global", "api", "blocked"))
+        self.assertEqual(first[1], 0, "the first must not replace anything")
+        self.assertNotEqual(bus.calls[1][1], 0,
+                            "the second must replace the first, not stack")
+
+    def test_a_banner_is_WITHDRAWN_when_it_stops_being_true(self):
+        """The half emit did by carrying an id in the record. A `blocked`
+        banner announces a prompt that is waiting; once that pane is not
+        blocked the prompt has been answered and the banner is a lie."""
+        sni, bus, t = self._toaster()
+        asyncio.run(t.announce("boxa", "global", "api", "blocked"))
+        nid = bus.calls[0]
+        asyncio.run(t.sync("boxa", {"global": {"api": "working"}}))
+        self.assertEqual(len(bus.closed), 1, f"not withdrawn (raised {nid})")
+
+    def test_a_banner_SURVIVES_while_it_is_still_true(self):
+        """The control, and it is the load-bearing direction: a sync that
+        closed everything would pass any count-based check while making every
+        banner vanish on the next answer, which is a prompt you never see."""
+        sni, bus, t = self._toaster()
+        asyncio.run(t.announce("boxa", "global", "api", "blocked"))
+        asyncio.run(t.sync("boxa", {"global": {"api": "blocked"}}))
+        self.assertEqual(bus.closed, [],
+                         "a still-blocked session had its banner withdrawn")
+
+    def test_a_VANISHED_session_has_its_banner_withdrawn(self):
+        """Its pane is gone, so the prompt it announced cannot still be
+        waiting. Without this a killed session leaves a banner asking for
+        input that nothing can receive."""
+        sni, bus, t = self._toaster()
+        asyncio.run(t.announce("boxa", "global", "api", "blocked"))
+        asyncio.run(t.sync("boxa", {"global": {}}))
+        self.assertEqual(len(bus.closed), 1)
+
+    def test_a_finished_banner_goes_when_the_turn_STARTS_again(self):
+        sni, bus, t = self._toaster()
+        asyncio.run(t.announce("boxa", "global", "api", "finished"))
+        asyncio.run(t.sync("boxa", {"global": {"api": "humming"}}))
+        self.assertEqual(bus.closed, [],
+                         "humming is still the turn having ended")
+        asyncio.run(t.sync("boxa", {"global": {"api": "working"}}))
+        self.assertEqual(len(bus.closed), 1)
+
+    def test_another_HOST_is_not_touched(self):
+        """`stale` is asked per host because a feed only ever answers for its
+        own. Sweeping every key on one host's answer would withdraw a banner
+        for a box that has said nothing."""
+        sni, bus, t = self._toaster()
+        asyncio.run(t.announce("boxa", "global", "api", "blocked"))
+        asyncio.run(t.announce("boxb", "global", "api", "blocked"))
+        asyncio.run(t.sync("boxa", {"global": {}}))
+        self.assertEqual(len(bus.closed), 1,
+                         "one host's answer withdrew another host's banner")
+
+    def test_TOASTS_off_raises_nothing(self):
+        sni = _fresh()
+        bus = self.Bus()
+        t = sni.Toaster(bus, enabled=False)
+        asyncio.run(t.announce("boxa", "global", "api", "blocked"))
+        self.assertEqual(bus.calls, [])
+
+    def test_a_desktop_with_no_notification_daemon_is_not_fatal(self):
+        """The tray is the persistent half of this signal and goes on being
+        right. Said once rather than swallowed, because silence here is
+        indistinguishable from a stream that announced nothing."""
+        sni, bus, t = self._toaster(fail=True)
+        got = asyncio.run(t.announce("boxa", "global", "api", "blocked"))
+        self.assertIsNone(got)
+
+
+class Surfaces(unittest.TestCase):
+    """The two switches, and that each leaves the other alone."""
+
+    def test_both_default_ON(self):
+        sni = _fresh()
+        self.assertEqual(sni.flags([])[:2], (True, True))
+
+    def test_each_flag_turns_off_only_its_own(self):
+        sni = _fresh()
+        self.assertEqual(sni.flags(["--no-tray"])[:2], (False, True))
+        self.assertEqual(sni.flags(["--no-toasts"])[:2], (True, False))
+
+    def test_both_can_go(self):
+        sni = _fresh()
+        self.assertEqual(sni.flags(["--no-tray", "--no-toasts"])[:2],
+                         (False, False))
+
+    def test_a_flag_WINS_over_the_environment(self):
+        """A flag is passed by whoever launched this process and the
+        environment is inherited from whatever launched it, so the flag is
+        the more specific of the two."""
+        sni = _fresh(MUX_DESKTOP_NOTIFIER_TOASTS="0")
+        self.assertEqual(sni.flags([])[1], False, "the env must be read")
+        self.assertEqual(sni.flags(["--toasts"])[1], True,
+                         "a flag must override the inherited environment")
+
+    def test_an_UNKNOWN_argument_is_refused(self):
+        """Never ignored. `setup.sh install PREFIX=/var/tmp/x` installed to
+        the REAL prefix and said it worked, because the argument was never
+        read; a daemon that ignored `--no-toasts` would be the same defect
+        with a banner instead of a prefix."""
+        sni = _fresh()
+        with self.assertRaises(SystemExit):
+            sni.flags(["--no-tost"])
+
+
+class Ignored(unittest.TestCase):
+    """Partitions this daemon says nothing about, on either surface.
+
+    THE DEMO IS WHY IT SHIPS NON-EMPTY. `mux demo` drives four pretend agents
+    through the REAL machinery for ever, so it produces real transitions, and
+    without a filter a demo fills the notification daemon with news about
+    sessions that do not exist. That used to be suppressed by an env pair the
+    demo exported into the hook it invoked, and that mechanism is structurally
+    gone now that the raiser is a separate long-lived process no demo can
+    reach: there is no variable a demo can set that this daemon reads.
+
+    A FILTER RATHER THAN A HARDCODED REFUSAL, which is the point: validating
+    the name instead (a demo socket contains a dot, so it is not a DNS label)
+    would have been one line and could never be opted OUT of. Somebody
+    watching the demo and wanting to see its banners has to be able to.
+    """
+
+    def _doc(self, part, state="blocked", session="api"):
+        return (f'{{"status":"ok","partitions":[{{"partition":"{part}",'
+                f'"state":"{state}","count":1,"sessions":'
+                f'[{{"session":"{session}","state":"{state}"}}]}}]}}\n'
+                ).encode()
+
+    def _ann(self, part, session="api", kind="blocked"):
+        return (f'{{"status":"ok","announce":{{"partition":"{part}",'
+                f'"session":"{session}","kind":"{kind}"}}}}\n').encode()
+
+    def test_an_ignored_partition_announces_nothing(self):
+        sni = _fresh()
+        sni.IGNORE = frozenset(["mux.demo"])
+        f = sni.Feed(["unused"], stream_argv=["unused"])
+        f._ingest(self._ann("mux.demo"))
+        self.assertEqual(f.pending, [],
+                         "an ignored partition reached the toaster")
+
+    def test_a_WATCHED_partition_still_does(self):
+        """The control, and it is what makes the silence the filter's doing
+        rather than an ingest that drops every announcement."""
+        sni = _fresh()
+        sni.IGNORE = frozenset(["mux.demo"])
+        f = sni.Feed(["unused"], stream_argv=["unused"])
+        f._ingest(self._ann("global"))
+        self.assertEqual(f.pending, [("global", "api", "blocked")])
+
+    def test_an_ignored_partition_gets_no_tray_item_either(self):
+        """`ignore` naming only the banners would be a filter whose name
+        lies. `parse_all`'s DNS-label rule already drops a demo namespace for
+        the tray by accident; this does it on purpose, and does it for a real
+        partition somebody wants hidden, which that rule never could."""
+        sni = _fresh()
+        sni.IGNORE = frozenset(["work"])
+        f = sni.Feed(["unused"], stream_argv=["unused"])
+        f._ingest(self._doc("work"))
+        self.assertEqual(f.rows, {}, "an ignored partition kept its rows")
+        self.assertEqual(f.sessions.get("work"), None)
+
+    def test_ignoring_is_not_the_same_as_UNREACHABLE(self):
+        """The distinction the whole indicator rests on: `{}` is "it answered
+        and has nothing for you", `None` is "could not ask". Collapsing them
+        would paint an ignored partition's host `unknown`, which is the one
+        reading that must never be invented."""
+        sni = _fresh()
+        sni.IGNORE = frozenset(["work"])
+        f = sni.Feed(["unused"], stream_argv=["unused"])
+        f._ingest(self._doc("work"))
+        self.assertIsNotNone(f.rows,
+                             "an ignored partition made its host unknown")
+
+    def test_the_default_ignores_the_demo(self):
+        sni = _fresh()
+        self.assertIn("mux.demo", sni.flags([])[2])
+
+    def test_ignore_none_turns_the_filter_OFF(self):
+        """How somebody watching the demo asks to see its banners. A word
+        rather than an empty value, for the reason `latch-fallback none`
+        already exists: a key present but blank reads identically to a key
+        absent, so "ignore nothing" needs saying."""
+        sni = _fresh()
+        self.assertEqual(sni.flags(["--ignore", "none"])[2], frozenset())
+
+    def test_ignore_ADDS_to_what_was_resolved(self):
+        sni = _fresh()
+        got = sni.flags(["--ignore", "work"])[2]
+        self.assertIn("work", got)
+        self.assertIn("mux.demo", got,
+                      "--ignore replaced the resolved set instead of adding")
+
+    def test_a_dangling_ignore_is_refused(self):
+        """`--ignore` with nothing after it would otherwise silently ignore
+        nothing, which is the shape `setup.sh install PREFIX=...` taught this
+        repo to refuse: an argument that reads as configuration and does
+        nothing is worse than one that errors."""
+        sni = _fresh()
+        with self.assertRaises(SystemExit):
+            sni.flags(["--ignore"])

@@ -38,6 +38,7 @@ from dbus_next.service import ServiceInterface, dbus_property, method, signal
 
 from .render import MARK_PALETTE, host_mark, icon_pixmap, parse_pair
 from .slots import Slots
+from . import sources
 from .sources import (activate_cmd, activate_hook, load as load_sources,
                       streams as load_streams,
                       local_label, remote_argv, valid_partition)
@@ -66,6 +67,17 @@ CTL = os.environ.get("MUX_DESKTOP_NOTIFIER_CTL")
 # is a listdir of a tmpfs, but a host appearing a few seconds after you latch is
 # imperceptible, while an item flickering in and out is not.
 DISCOVER = float(os.environ.get("MUX_DESKTOP_NOTIFIER_DISCOVER", "5"))
+# THE TWO SURFACES, EACH SWITCHABLE, BOTH ON. This daemon is the only thing
+# that draws mux on a desktop, so turning one off has to be possible without
+# losing the other: a bar with its own agent widget wants the toasts and not
+# the icon, and somebody who finds banners rude wants the icon and not the
+# toasts. OFF means INERT rather than absent, so nothing downstream has to
+# know which surfaces exist.
+TRAY = os.environ.get("MUX_DESKTOP_NOTIFIER_TRAY", "1") != "0"
+TOASTS = os.environ.get("MUX_DESKTOP_NOTIFIER_TOASTS", "1") != "0"
+# Partitions to say nothing about, on EITHER surface. Resolved in sources.py
+# beside the other seams; `mux.demo` by default, see DEFAULT_IGNORE there.
+IGNORE = sources.ignored()
 # A STREAM THAT STOPS SPEAKING IS NOT A CALM HOST. This is the one thing
 # polling gave away for free: there a non-zero exit could only be the
 # transport, so `unknown` was trustworthy. A stream has no such signal, which
@@ -529,6 +541,135 @@ async def _query_all(argv):
     return parse_all(out.decode("utf-8", "replace"))
 
 
+class Toaster:
+    """Raises and withdraws desktop notifications. The ONLY thing that does.
+
+    WHY IT MOVED HERE AT ALL. `mux-agent-state-emit` used to raise the banner
+    itself, on the box the AGENT runs on, which is the one machine that may
+    well have nobody sitting at it: every blocked latched session has been
+    popping a toast on a remote desktop for as long as latch has existed.
+    Structural, not a bug in the notification path, and unfixable there: a
+    hook cannot reach the box the human is at. A stream can.
+
+    THE DECISION IS STILL THE WATCHED BOX'S. All of "is this the pane you are
+    looking at", `@mux-notify-always` and `@mux-attention` are properties of a
+    pane over there at the moment it changed, so the stream applies them and
+    sends a verdict. This class owns WORDING and LIFETIME and nothing else.
+
+    OVER THE SESSION BUS, not through `notify-send`, and the reason is the id.
+    A banner has to be withdrawn when the thing it announced stops being true,
+    which needs the id back; `notify-send -p` gives one, and closing it then
+    needs a second backend chosen from whatever happens to be installed, which
+    is a problem this daemon does not have. It is already a bus client with a
+    connection in hand, and `notify-send` is itself only a bus client.
+    """
+
+    IFACE = "org.freedesktop.Notifications"
+    PATH = "/org/freedesktop/Notifications"
+
+    def __init__(self, bus, enabled=True, app="mux"):
+        self._bus = bus
+        self._enabled = enabled
+        self._app = app
+        self._iface = None
+        # (host, partition, session) -> (id, kind). The kind is kept because
+        # it decides when the banner stops being true: a `blocked` one goes
+        # when the pane is no longer blocked, a `finished` one when the turn
+        # starts again. Without it there is no rule, only a timer.
+        self._ids = {}
+
+    async def _notifications(self):
+        if self._iface is None:
+            intro = await self._bus.introspect(self.IFACE, self.PATH)
+            obj = self._bus.get_proxy_object(self.IFACE, self.PATH, intro)
+            self._iface = obj.get_interface(self.IFACE)
+        return self._iface
+
+    def text(self, host, session, kind, local):
+        """The banner, and the HOST is in it when there is one to name.
+
+        emit could never say which machine, because it only ever ran on one.
+        A daemon watching several can, and without it two boxes running the
+        same session name produce identical banners: the tray spent two
+        releases learning that lesson about colour.
+        """
+        if kind == "blocked":
+            summary = f"Claude needs you: {session}"
+            body = "permission or input"
+        else:
+            summary = f"Claude finished: {session}"
+            body = "your turn"
+        if not local and host:
+            body = f"{body} (on {host})"
+        return summary, body
+
+    async def announce(self, host, part, session, kind, local=True):
+        """Raise one, replacing any we already hold for that session."""
+        if not self._enabled:
+            return None
+        key = (host, part, session)
+        summary, body = self.text(host, session, kind, local)
+        try:
+            iface = await self._notifications()
+            # REPLACING our own previous id rather than stacking: a session
+            # that goes blocked, is answered and blocks again should leave one
+            # banner, not a column of them. 0 means "a new one".
+            prev = self._ids.get(key)
+            nid = await iface.call_notify(
+                self._app, prev[0] if prev else 0, "", summary, body, [],
+                {}, -1)
+        except Exception as e:
+            # A desktop with no notification daemon is not an error here: the
+            # tray is the persistent half of this signal and still works. Said
+            # once rather than swallowed, because silence here looks identical
+            # to a stream that never announced anything.
+            print(f"mux-desktop-notifier: notify failed: {e}", flush=True)
+            return None
+        self._ids[key] = (nid, kind)
+        return nid
+
+    async def withdraw(self, host, part, session):
+        if not self._enabled:
+            return
+        held = self._ids.pop((host, part, session), None)
+        if held is None:
+            return
+        try:
+            iface = await self._notifications()
+            await iface.call_close_notification(held[0])
+        except Exception:
+            # Best effort, which the banner's own urgency is what makes safe:
+            # banner is at NORMAL urgency so it expires by itself, which is
+            # what makes a missed close cost nothing. This is also why
+            # `blocked` is not `critical`, a lesson already paid for.
+            pass
+
+    def stale(self, host, sessions):
+        """Which held banners no longer describe anything true.
+
+        A `blocked` banner stops being true when that pane is no longer
+        blocked; a `finished` one when the turn starts again. A session that
+        has VANISHED counts too: its pane is gone, so the prompt it announced
+        cannot still be waiting.
+        """
+        out = []
+        for (h, part, sess), (_nid, kind) in self._ids.items():
+            if h != host:
+                continue
+            state = (sessions.get(part) or {}).get(sess)
+            if kind == "blocked":
+                if state != "blocked":
+                    out.append((h, part, sess))
+            elif state not in ("idle", "humming"):
+                out.append((h, part, sess))
+        return out
+
+    async def sync(self, host, sessions):
+        """Withdraw every banner this host's latest answer has outdated."""
+        for key in self.stale(host, sessions):
+            await self.withdraw(*key)
+
+
 class Feed:
     """One host's answer, shared by every item that host publishes.
 
@@ -543,7 +684,7 @@ class Feed:
     mechanisms for one fact is how a tray starts disagreeing with itself.
     """
 
-    def __init__(self, argv, stream_argv=None):
+    def __init__(self, argv, stream_argv=None, on_event=None):
         self.argv = argv
         # The streaming form of the same source, when there is one. A feed
         # with it does not poll at all; see `run`.
@@ -557,6 +698,17 @@ class Feed:
         # `unknown` or waits. Without it every item flashed unknown for one
         # tick at startup, before its host had been asked even once.
         self.asked = False
+        # Announcements this feed has read and nobody has presented yet, and
+        # the per-session states a presenter needs to know when to withdraw
+        # one. Both are EMPTY rather than None: "no events" is a fact, where
+        # `rows is None` deliberately means "could not ask".
+        self.pending = []
+        self.sessions = {}
+        # Called after every line that could change what a presenter should
+        # show. A CALLBACK rather than the supervisor draining on its own
+        # timer, because that timer is 5s and a banner five seconds late is a
+        # banner about something you have already noticed.
+        self.on_event = on_event
         self._ev = asyncio.Event()
 
     def partitions(self):
@@ -614,6 +766,19 @@ class Feed:
         last good value for ever, which is precisely the bug this whole
         indicator exists to avoid: an unreachable box showing whatever it last
         said. `parse_all` already draws that line; this only has to respect it.
+
+        AND AN ANNOUNCEMENT IS A THIRD KIND, which has to be recognised here
+        for exactly the heartbeat's reason: it carries no `partitions`, so
+        falling through would blank every item on this host at the moment it
+        has something to say. It is not an answer either, so it returns False
+        and leaves `rows` alone; the pending event is picked up by `watch`,
+        which is the async side that can act on it.
+
+        THE DECISION IS NOT OURS. The watched box has already applied every
+        rule about whether a human should be interrupted, because every fact
+        those rules need (is this the pane you are looking at, what does the
+        layout say, whose attention is owed) is a property of a pane on THAT
+        machine at the moment it changed. This end only presents.
         """
         text = line.decode("utf-8", "replace")
         try:
@@ -622,7 +787,50 @@ class Feed:
             doc = None
         if isinstance(doc, dict) and doc.get("heartbeat"):
             return False
+        if isinstance(doc, dict) and isinstance(doc.get("announce"), dict):
+            _a = doc["announce"]
+            _p, _s = _a.get("partition"), _a.get("session")
+            _k = _a.get("kind")
+            # VALIDATED, because this crosses a transport and goes on to a
+            # notification body: a feed answering junk must not be able to
+            # put arbitrary text on the user's desktop. An unknown kind is
+            # dropped rather than guessed, which under-reports rather than
+            # announcing something mux never meant.
+            if (isinstance(_p, str) and isinstance(_s, str)
+                    and _k in ("blocked", "finished") and _s
+                    and _p not in IGNORE):
+                self.pending.append((_p, _s, _k))
+            return False
         self.rows = parse_all(text)
+        # THE PER-SESSION STATES, kept beside the rows rather than folded into
+        # them: `parse_all`'s shape is read in several places and widening it
+        # would change every one of them. These exist only so a banner can be
+        # CLOSED when the thing it announced stops being true, which is the
+        # half emit used to do by carrying an id in the record.
+        if self.rows is not None and IGNORE:
+            # BOTH SURFACES, because `ignore` naming only the banners would be
+            # a filter whose name lies. `parse_all` already drops a name that
+            # is not a DNS label, which covers the demo for the tray by
+            # accident; this covers it on purpose and covers a real partition
+            # somebody wants hidden, which that rule never could.
+            for _k in [k for k in self.rows if k in IGNORE]:
+                del self.rows[_k]
+        self.sessions = {}
+        if isinstance(doc, dict) and self.rows is not None:
+            for _row in doc.get("partitions") or []:
+                if not isinstance(_row, dict):
+                    continue
+                _pn = _row.get("partition")
+                if not isinstance(_pn, str) or _pn in IGNORE:
+                    continue
+                _by = {}
+                for _sr in _row.get("sessions") or []:
+                    if not isinstance(_sr, dict):
+                        continue
+                    _sn, _st = _sr.get("session"), _sr.get("state")
+                    if isinstance(_sn, str) and isinstance(_st, str):
+                        _by[_sn] = _st
+                self.sessions[_pn] = _by
         self.asked = True
         return True
 
@@ -677,7 +885,19 @@ class Feed:
                             break   # silent past the heartbeat: not trusted
                         if not line:
                             break   # the stream ended
-                        if self._ingest(line):
+                        _ans = self._ingest(line)
+                        if self.on_event is not None:
+                            try:
+                                await self.on_event(self)
+                            except Exception as e:
+                                # A PRESENTER MUST NOT KILL THE FEED. The
+                                # tray is the persistent half of this signal
+                                # and goes on being right even if a banner
+                                # cannot be raised, so a failure here is said
+                                # and dropped.
+                                print("mux-desktop-notifier: "
+                                      f"event failed: {e}", flush=True)
+                        if _ans:
                             _back = RESPAWN
                             # USABLE, not merely "worth repainting".
                             # `_ingest` answers True for any line that is not
@@ -1115,6 +1335,30 @@ async def _supervise():
     # host assigned this tick is invisible to the next one until the write
     # lands, which is a race for nothing.
     _slots = Slots(len(MARK_PALETTE))
+    # ONE TOASTER FOR THE PROCESS, on its own connection, because it holds the
+    # notification ids: a per-host one would lose them on every reconnect and
+    # leave banners nobody can withdraw. `TOASTS` off makes it inert rather
+    # than absent, so nothing downstream needs to know.
+    _toast_bus = await MessageBus(bus_type=BusType.SESSION).connect()
+    _toaster = Toaster(_toast_bus, enabled=TOASTS)
+    _local = sources.local_label()
+
+    async def _present(feed):
+        """Everything a feed read that a human should be shown.
+
+        WITHDRAW BEFORE RAISING, deliberately: a session that finishes and
+        immediately starts again should not have its new banner replaced by
+        the withdrawal of its old one. The order is the only thing keeping
+        those two straight, since both act on the same key.
+        """
+        _hn = getattr(feed, "host", None)
+        if feed.rows is not None:
+            await _toaster.sync(_hn, feed.sessions)
+        while feed.pending:
+            _pt, _ps, _pk = feed.pending.pop(0)
+            await _toaster.announce(_hn, _pt, _ps, _pk,
+                                    local=(_hn == _local))
+
     while True:
         try:
             hosts = dict(load_sources(mux_bin=MUX))
@@ -1133,7 +1377,10 @@ async def _supervise():
         # the price of not asking a second question to find out what to ask.
         for _h, _argv in hosts.items():
             if _h not in feeds:
-                _f = Feed(_argv, _streams.get(_h))
+                _f = Feed(_argv, _streams.get(_h), on_event=_present)
+                # The feed carries its own label, so one presenter serves
+                # every host without a closure per feed.
+                _f.host = _h
                 feeds[_h] = (_f, asyncio.create_task(_f.run()))
         for _h in [h for h in feeds if h not in hosts]:
             _f, _t = feeds.pop(_h)
@@ -1142,6 +1389,13 @@ async def _supervise():
 
         want = item_set(hosts, feeds, known)
 
+        # WITH THE TRAY OFF, NOTHING IS PUBLISHED AND THE FEEDS STILL RUN.
+        # The feeds are what the toasts come from, so suppressing the icon
+        # must not suppress the signal: `want` going empty makes `reconcile`
+        # withdraw whatever is up and add nothing, which is the same path a
+        # detach already takes rather than a second way to not draw.
+        if not TRAY:
+            want = {}
         drop, add = reconcile(want, live)
 
         # ANNOUNCED OFF THE SAME DIFF, rather than recomputing `set(want) !=
@@ -1184,6 +1438,56 @@ async def _supervise():
             _item.set_mark(_mk, _ink, want[_label][2] if _label in want
                            else None)
         await asyncio.sleep(DISCOVER)
+
+
+def flags(argv, tray=None, toasts=None, ignore=None):
+    """argv -> (tray, toasts, ignore). A PURE FUNCTION, so the one thing
+    a daemon
+    cannot be asked twice about is testable without starting one.
+
+    THE FLAG WINS OVER THE ENVIRONMENT, which is this fleet's own precedence
+    read correctly for once: a flag is passed by whoever launched this
+    process, an environment variable is inherited from whatever launched it,
+    and the more specific of the two is the flag. An unknown argument is
+    REFUSED rather than ignored, because `setup.sh install PREFIX=...` taught
+    this repo that an installer which ignores an argument installs somewhere
+    else and says it worked.
+    """
+    tray = TRAY if tray is None else tray
+    toasts = TOASTS if toasts is None else toasts
+    ignore = set(IGNORE if ignore is None else ignore)
+    _pend = None
+    for a in argv:
+        if _pend == "ignore":
+            # `none` CLEARS rather than adding a partition called `none`,
+            # which is the same word the config uses for the same reason: a
+            # partition is a DNS label, so `none` is a legal name and the
+            # collision is real, but one nobody will meet and the alternative
+            # is a second spelling of "ignore nothing".
+            if a == "none":
+                ignore = set()
+            else:
+                ignore.add(a)
+            _pend = None
+            continue
+        if a == "--no-tray":
+            tray = False
+        elif a == "--no-toasts":
+            toasts = False
+        elif a == "--tray":
+            tray = True
+        elif a == "--toasts":
+            toasts = True
+        elif a == "--ignore":
+            _pend = "ignore"
+        else:
+            raise SystemExit(f"mux-desktop-notifier: unknown argument '{a}'\n"
+                             "usage: mux-desktop-notifier "
+                             "[--no-tray] [--no-toasts]")
+    if _pend is not None:
+        raise SystemExit("mux-desktop-notifier: --ignore needs a partition "
+                         "name (or `none`)")
+    return tray, toasts, frozenset(ignore)
 
 
 async def run():

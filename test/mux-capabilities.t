@@ -24,8 +24,7 @@ _name=mux-capabilities
 . "$(dirname "$0")/harness_lib"
 
 mkdir -p "$T/bin" "$T/conf"
-# No notify-send on PATH, so the `notify` capability has a contextual answer to
-# give. The ordinary tools still have to be put back explicitly.
+# The ordinary tools have to be put back explicitly on this curated PATH.
 for _c in sed awk grep cut tr head tail wc cat ls id date find sort basename \
     dirname mktemp rm mkdir cp mv readlink; do
   _p=$(command -v "$_c" 2>/dev/null) && ln -sf "$_p" "$T/bin/$_c"
@@ -67,11 +66,17 @@ _rc=0; caps >/dev/null 2>&1 || _rc=$?
 # `no` means this build does not have it at all. All three are ANSWERS.
 [ "$(val "$_o" agent-list)" = "1 " ] \
   || fail "agent-list should be usable: [$(val "$_o" agent-list)]"
-case $(val "$_o" notify) in
-*unavailable*) ;;
-*) fail "with no notify-send, notify should read unavailable, got
-[$(val "$_o" notify)]" ;;
-esac
+# `notify` IS THE SETTING VERB, not the ability to raise one. `mux notify
+# always|away` writes a per-pane tmux option that the STREAM reads when it
+# decides whether a transition is worth announcing, so it is usable wherever
+# mux can set an option, which is everywhere. It used to answer `unavailable`
+# without `notify-send`, which was true while mux raised its own banners and
+# became a lie the moment the raising moved to the desktop notifier: a
+# capability that reports on somebody else's package is one a consumer cannot
+# act on.
+[ "$(val "$_o" notify)" = "1 " ] \
+  || fail "notify is a per-pane SETTING verb and is always usable, but reads
+[$(val "$_o" notify)]"
 [ "$(val "$_o" latch-fallback)" = "no " ] \
   || fail "an ordered fallback list is not implemented, so latch-fallback
 must read 'no': got [$(val "$_o" latch-fallback)]"
