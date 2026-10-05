@@ -7,17 +7,23 @@
 # client every status-interval, and a verb nobody called must not cost a lib.
 #
 # A SOURCED LIB AND NOT AN EXECUTED HELPER, the same call mux-why_lib made
-# and for a sharper reason: two of the things this needs are bin/mux's OWN
-# functions, not any lib's. `tm` is the tmux wrapper that carries the
-# partition's `-L` socket, and `emit_window` is the window/pane serialiser
-# the build path and this one share. A separate process would have to grow a
-# second copy of both, and a second copy of the serialiser in particular
-# would let `mux save` write a profile `mux go` cannot rebuild.
+# and for a sharper reason: what this needs is bin/mux's OWN `tm`, the tmux
+# wrapper that carries the partition's `-L` socket. A separate process would
+# have to grow a second copy, and this package has shipped the wrong-socket
+# bug THREE times, every time because one answer was derived in two places.
+#
+# AND `emit_window` CAME WITH IT (2026-10-05), from bin/mux, where it had
+# exactly one caller: this file. The comment here used to call it "the
+# serialiser the build path and this one share", which was simply false by
+# the time it was written: the build path emits nothing, it READS directives.
+# So 54 lines sat in the entry point to serve one lib, and a lib reached back
+# into its caller for a function. `is_shell` travels with it, being
+# emit_window's only consumer.
 #
 # THE CALLER SOURCES THE DEPENDENCIES, because a sourced POSIX sh file sees
 # the CALLER's `$0` and so cannot resolve its own siblings:
 #
-#     from bin/mux       tm  emit_window
+#     from bin/mux       tm
 #     mux-conf_lib       mux_conf_clean
 #     mux-data_lib       mux_data_find mux_data_stems
 #     mux-profiles_lib   mux_fold_tilde mux_prof_drop mux_prof_file
@@ -34,7 +40,77 @@
 # same shell they already lived in, so they are exactly as private as before,
 # and renaming would have moved mutation anchors and made the move's
 # differential about two things at once.
+# True when a pane's current command is just a shell (so it maps to a bare
+# directive, no command). tmux re-quotes pane_start_command, so the clean signal
+# is pane_current_command: a single word.
+is_shell() {
+  case $1 in
+  sh|-sh|bash|-bash|ksh|-ksh|zsh|-zsh|dash|fish|login) return 0 ;;
+  *) return 1 ;;
+  esac
+}
+
+# Emit `pane`/`bottom` directives for one window ("=SESSION:INDEX"): top panes
+# in index order first, then the full-width bottom if the window has one (marked
+# by @mux-bottom, carrying its SPEC). The command is the pane's CURRENT command
+# (best-effort); a shell pane emits a bare directive.
+emit_window() {
+  tm list-panes -t "$1" -F \
+   "#{pane_index}|#{@mux-bottom}|#{@mux-agent}|#{@mux-control}|\
+#{@mux-attention}|#{pane_current_command}" \
+  | sort -t'|' -k1,1n | while IFS='|' read -r _pi _pb _pa _pk _pn _pc; do
+    [ -z "$_pb" ] || continue
+    # @mux-agent, set at build: an agent that has exited (or was
+    # never installed) looks exactly like a shell here, so without
+    # the mark a round trip would turn `pane agent` into `pane`.
+    if [ -n "$_pa" ]; then printf 'pane    agent\n'
+    elif is_shell "$_pc"; then printf 'pane\n'
+    else printf 'pane    %s\n' "$_pc"; fi
+    # AND THE CLASS ROUND-TRIPS, for exactly the reason one line up: without
+    # it a save-then-build cycle silently reclasses a worker to `human`, the
+    # safe default, and a supervisor then cannot type into its own worker.
+    # The same loss `@mux-agent` is already here to prevent.
+    #
+    # OMITTED WHEN IT IS THE DEFAULT, because a layout holds only what
+    # OVERRIDES: an explicit `control human` is indistinguishable from the
+    # absence of the line, so emitting it would be noise that reads as a
+    # decision.
+    case $_pk in
+    agent|hybrid) printf 'control %s\n' "$_pk" ;;
+    esac
+    # AND THE SAME FOR ATTENTION, separately rather than in one arm with the
+    # line above: the two markers answer different questions and a session
+    # can easily declare one and not the other (an agent-supervised worker
+    # the human still wants to SEE is `control agent` with attention left
+    # alone). Folding them would make that unsayable.
+    case $_pn in
+    agent|hybrid) printf 'attention %s\n' "$_pn" ;;
+    esac
+  done
+  tm list-panes -t "$1" -F '#{@mux-bottom}|#{pane_current_command}' \
+  | while IFS='|' read -r _pb _pc; do
+    [ -n "$_pb" ] || continue
+    if is_shell "$_pc"; then printf 'bottom  %s\n' "$_pb"
+    else printf 'bottom  %s %s\n' "$_pb" "$_pc"; fi
+  done
+}
+
 # --- save: snapshot the live session ---------------------------------------
+# Records the session the way everything else does: as a DEVIATION. It reads the
+# arrangement off the live session (window names, each pane's current command,
+# any full-width bottom from @mux-bottom) and then writes only what mux could
+# not have worked out for itself:
+#
+#   - the arrangement, as layouts/<name>.layout, unless it is byte-for-byte one
+#     that already exists: saving a session you never rearranged should not
+#     mint a private copy of the shipped default;
+#   - a row, carrying root only when the name would not derive from it, theme
+#     only when it is not the one the name hashes to, and layout only when it is
+#     not `default`.
+#
+# So `mux save` on an untouched session can correctly write NOTHING. Pane
+# commands are best-effort: review them. Runs inside a session; NAME defaults
+# to the session name.
 # Shared state, in the order the steps below set it:
 #   _save_identify      sv_sess sv_name
 #   _save_capture       sv_tmp        (the arrangement, as directives)

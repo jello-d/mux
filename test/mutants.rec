@@ -2967,7 +2967,7 @@ t mux-pane-class
 m was accepted and should be refused
 
 = control-class-lost-on-save
-f bin/mux
+f lib/mux-save_lib
 t mux-save
 # THE ROUND TRIP, and the same defect `@mux-agent` two fields earlier already
 # exists to prevent. Dropping this emits a layout with no class, so the next
@@ -2993,7 +2993,7 @@ t mux-pane-class
 m 'attention' with no pane
 
 = attention-class-lost-on-save
-f bin/mux
+f lib/mux-save_lib
 t mux-save
 # THE SECOND MARKER'S ROUND TRIP, and its own record rather than a shared
 # one, because the two are emitted by two `case` arms on purpose: a pane can
