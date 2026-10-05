@@ -3950,7 +3950,7 @@ f bin/mux
 t mux-why
 -   [ -r "$MUX_LIB/mux-why_lib" ] || {
 +   [ -r "$MUX_LIB/mux-why_lib" ] || [ 1 = 1 ] || {
-m a lost why lib must name itself
+m must name itself
 
 = why-lib-sourced-eagerly
 f bin/mux

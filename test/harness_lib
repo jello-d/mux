@@ -372,3 +372,78 @@ t_pty() {   # <typescript-file> <command string>
   *)   return 127 ;;
   esac
 }
+
+# --- a scratch INSTALL PREFIX, for asserting about mux's own libs -----------
+# bin/mux self-locates from `$0` and has no path env seam, by design, so the
+# only way to give it a different lib tree is to stand it in one. bin/ and
+# lib/ are COPIES, because the point of having one is to remove or poison a
+# file; libexec/ and share/ are links, since nothing resolves those through
+# readlink.
+#
+# A HARNESS HELPER AND NOT A PER-TEST BLOCK, because the verb clusters are
+# moving into lazily sourced libs one at a time (why, save, edit, theme,
+# 2026-10-05) and each one owes the same two assertions. Written once, the
+# third lib costs two lines instead of forty.
+#
+# NEVER THE CHECKOUT. Removing a lib there to see what happens would reach
+# every other session on this box, which is the sandbox rule this suite has
+# already broken three times ($TMUX, MUX_SHARE, XDG_RUNTIME_DIR).
+t_prefix() {   # -> $T_PREFIX, a runnable mux whose lib/ is yours to break
+  T_PREFIX=$T/t_prefix
+  [ ! -d "$T_PREFIX" ] || return 0
+  mkdir -p "$T_PREFIX/bin"
+  cp "$HERE/bin/mux" "$T_PREFIX/bin/mux"
+  cp -R "$HERE/lib" "$T_PREFIX/lib"
+  ln -s "$HERE/libexec" "$T_PREFIX/libexec"
+  ln -s "$HERE/share" "$T_PREFIX/share"
+}
+
+# THE TWO PROPERTIES A LAZILY SOURCED LIB OWES, and they are invisible to
+# every assertion about what the verb PRINTS: they are about the move.
+#
+#   1. it is read ONLY by its own verb. The front end is parsed on every
+#      invocation, so an eager source puts the lib on every verb's path.
+#      Measured with a POISONED lib (one that kills the shell when read), so
+#      another verb still answering proves it was never read.
+#   2. a MISSING lib names itself and exits 1, rather than failing with the
+#      shell's own wording and a code nobody chose.
+#
+# THE POISON CASE RUNS FIRST, and the order is load-bearing rather than tidy:
+# an eager source breaks the MISSING case too, on the shell's wording, so with
+# removal first a mutation that regresses laziness lands on the wrong
+# assertion and the corpus reports an error instead of a kill.
+#
+# CALLER SUPPLIES THE RUNNER, since each test already has one that pins
+# MUX_DIR, PATH and the rest for its own fixture. It must take a verb and
+# echo both streams.
+t_lib_lazy() {   # <runner-fn> <lib name> <own verb> <other verb>
+  _tl_r=$1; _tl_l=$2; _tl_v=$3; _tl_o=$4
+  t_prefix
+  # THE CONTROL FIRST, or both cases below pass for the wrong reason.
+  _tl_out=$("$_tl_r" "$_tl_v" 2>&1) \
+    || fail "t_lib_lazy: the scratch prefix cannot run '$_tl_v': $_tl_out"
+
+  printf 'echo POISONED >&2\nexit 9\n' >"$T_PREFIX/lib/$_tl_l"
+  _tl_out=$("$_tl_r" "$_tl_o" 2>&1) || fail "mux $_tl_o died with a poisoned
+$_tl_l, so the lib is sourced EAGERLY and every verb now pays for it:
+$_tl_out"
+  case $_tl_out in
+  *POISONED*) fail "mux $_tl_o read $_tl_l, so it is sourced EAGERLY and
+every verb now pays for it" ;;
+  esac
+  _tl_rc=0; _tl_out=$("$_tl_r" "$_tl_v" 2>&1) || _tl_rc=$?
+  [ "$_tl_rc" -eq 9 ] || fail "mux $_tl_v did not read $_tl_l at all
+(rc=$_tl_rc), so the poison case above proves nothing"
+
+  rm -f "$T_PREFIX/lib/$_tl_l"
+  _tl_rc=0; _tl_out=$("$_tl_r" "$_tl_v" 2>&1) || _tl_rc=$?
+  case $_tl_out in
+  *"$_tl_l missing"*) ;;
+  *) fail "a lost $_tl_l must name itself; got: $_tl_out" ;;
+  esac
+  [ "$_tl_rc" -eq 1 ] || fail "a lost $_tl_l exited $_tl_rc, want 1. An
+install missing a file is this package's exit 1, and a verb that cannot run
+must not answer 0 or borrow the shell's code."
+  # RESTORED, so a later case in the same file is not reading a hole.
+  cp "$HERE/lib/$_tl_l" "$T_PREFIX/lib/$_tl_l"
+}

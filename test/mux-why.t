@@ -155,56 +155,20 @@ has "$_o" "no context-command" "ctx: none configured"
 # --- THE REPORT IS A LAZILY SOURCED LIB (2026-10-05) ----------------------
 # 243 lines moved to lib/mux-why_lib, and the two properties that split
 # carries are invisible to every assertion above: they are about the MOVE,
-# not about the report.
+# not about the report. t_lib_lazy drives both (it is read only by its own
+# verb, and a missing one names itself and exits 1) against a scratch
+# prefix, because interfering with the checkout's lib would reach every
+# other session on this box.
 #
-# A SCRATCH PREFIX, because asserting either one means interfering with the
-# lib, and doing that in the checkout would reach every other session on the
-# box as well as this test. bin/mux self-locates from $0, with no env seam,
-# so the only way to give it a different lib tree is to stand it in one:
-# bin/ and lib/ are COPIES (one file gets removed, another poisoned) and
-# libexec/share are links, since nothing resolves those through readlink.
-_P=$T/prefix
-mkdir -p "$_P/bin"
-cp "$HERE/bin/mux" "$_P/bin/mux"
-cp -R "$HERE/lib" "$_P/lib"
-ln -s "$HERE/libexec" "$_P/libexec"
-ln -s "$HERE/share" "$_P/share"
+# `ls` IS THE OTHER VERB because it runs nearly the whole file before
+# dispatching, which is the range an eager source would live in. Measured: a
+# source placed just ABOVE the why branch is not caught, and is also not a
+# regression, since every verb that exits earlier still never reads it.
 runp() {
   ( cd "$T" && env -u MUX_SHARE -u TMUX -u TMUX_PANE \
     MUX_DIR="$T/conf" MUX_CACHE="$T/cache" PATH="$T/bin:$PATH" \
-    "$_P/bin/mux" "$@" 2>&1 )
+    "$T_PREFIX/bin/mux" "$@" 2>&1 )
 }
-# The control FIRST: this prefix answers at all, or the two cases below
-# would pass for the wrong reason.
-_o=$(runp why) || fail "the scratch prefix cannot run why: $_o"
-has "$_o" "where" "prefix: the control report did not render"
-
-# 1. IT IS SOURCED ONLY FOR `why`, which is why the branch sources it rather
-# than the top of the file: the front end is parsed on every invocation, and
-# a verb nobody called must not cost a lib.
-#
-# A POISONED LIB IS WHAT MEASURES IT: a file that kills the shell when read,
-# so another verb still answering proves it was never read. `mux ls` is the
-# probe because it runs nearly the whole file before dispatching, which is
-# the range an eager source would live in. Measured: a source placed just
-# ABOVE the why branch is not caught here and is also not a regression, since
-# every verb that exits earlier still never reads it.
-printf 'echo POISONED >&2\nexit 9\n' >"$_P/lib/mux-why_lib"
-_o=$(runp ls) || fail "mux ls died with a poisoned why lib, so the lib is
-sourced EAGERLY and every verb now pays for it: $_o"
-no_has "$_o" POISONED "mux ls read the why lib"
-_rc=0; _o=$(runp why) || _rc=$?
-[ "$_rc" -eq 9 ] || fail "why did not read the lib at all (rc=$_rc), so the
-poison test above proves nothing"
-
-# 2. A MISSING LIB IS LOUD. `mux why` is a whole verb, so a `.` of an absent
-# file would otherwise fail with the SHELL's wording and a code nobody
-# chose, which this package calls an incomplete install and says so.
-rm -f "$_P/lib/mux-why_lib"
-_rc=0; _o=$(runp why) || _rc=$?
-has "$_o" "mux-why_lib missing" "a lost why lib must name itself"
-[ "$_rc" -eq 1 ] || fail "a lost why lib exited $_rc, want 1. An install
-missing a file is this package's exit 1, and a verb that cannot run must not
-answer 0 or borrow the shell's code."
+t_lib_lazy runp mux-why_lib why ls
 
 pass
