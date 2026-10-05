@@ -2665,6 +2665,15 @@ the
 .B latch\-*
 seams, and
 .BR env\-ready .
+Every key, with its default and why you would change it, is documented in
+.IR $MUX_SHARE/config.sample ,
+which ships beside the code and is held against it by a test rather than by
+anyone remembering to update it. Copy what you need from there; do NOT copy
+the file, since every line in it is commented out precisely because an
+ACTIVE restatement of a default is a second copy that can drift, and one
+once did, breaking
+.B mux latch
+on every machine that had it.
 .IP
 .B env\-ready
 .I NAME ...
