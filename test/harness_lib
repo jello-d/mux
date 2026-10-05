@@ -131,8 +131,15 @@ t_trap() {
 #
 # Pinning the variables one at a time would have fixed those three tests and
 # left the next new location exposed. Pinning HOME fixes every location mux will
-# ever derive, including ones nobody has written yet, which is the only version
-# of this that cannot rot. A test that needs a real path still has $HERE.
+# ever derive, including ones nobody has written yet. A test that needs a real
+# path still has $HERE.
+#
+# IT IS NOT "the only version of this that cannot rot", WHICH IS WHAT THIS
+# COMMENT USED TO CLAIM, and the correction is worth keeping because the claim
+# reads as total and is not: HOME only decides what mux DERIVES, and every
+# MUX_* path has an OVERRIDE that beats a derivation. So an exported MUX_DIR
+# walks straight out of the sandbox a HOME pin builds, and did (see the unset
+# line below). Pin the root AND unset the overrides; neither alone is enough.
 # The REAL home, captured before the pin. A test that needs to READ something
 # optional the user installed (the indicator's venv, say) has no other way
 # to find it once HOME points into T. Reading is all it is for: the pin's
@@ -229,7 +236,29 @@ trap "rm -rf $_CLEAN" EXIT INT TERM
 # exactly the state the line above creates, so an inherited value would send
 # every views call in the suite to `tmux -L <the developer's socket>`.
 # `test/mux-views.t` passes its own value, so nothing loses anything.
+#
+# AND `MUX_DIR` IS THE FIFTH, found 2026-10-05 BY FALLING INTO IT, which also
+# makes the note beside the HOME pin wrong: it says MUX_DIR, MUX_CACHE and
+# MUX_STATE are "covered by the HOME pin", and MUX_DIR is not, BY DESIGN. It
+# is an override, so an exported one WINS over whatever HOME would derive, and
+# `bin/mux` exports it into every session it builds, so it is set in every
+# pane a human runs this suite from.
+#
+# MEASURED, not reasoned: `sh test/setup.t` rewrote the developer's real
+# ~/.config/mux/README on every run, because setup.sh's README writer reads
+# `${MUX_DIR:-...}` and that test pins PREFIX, HOME and XDG_CONFIG_HOME but
+# not this. Benign in content (the file is generated and carries mux's own
+# marker, so nothing hand-written was eaten) and a breach all the same: the
+# sandbox is either closed or it is not.
+#
+# MUX_CACHE AND MUX_STATE GO TOO, as the same class rather than because
+# either was caught: both are the same shape of override, and asking the
+# question per-name is how this family got to five.
+#
+# THE UNSET CASE IS PROVEN BY CI, which has none of them, and every test that
+# wants one passes it explicitly.
 unset TMUX TMUX_PANE MUX_SHARE MUX_VIEW_SOCKET
+unset MUX_DIR MUX_CACHE MUX_STATE
 
 # AND `XDG_RUNTIME_DIR` IS THE THIRD HOLE, found 2026-10-01 the same way. The
 # HOME pin cannot cover it: it is an absolute path of its own, so every test
