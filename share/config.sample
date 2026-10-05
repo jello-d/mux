@@ -86,6 +86,10 @@
 # Five seams, each also settable as MUX_LATCH_<NAME> in the environment,
 # which wins over this file. mux owns the state machine; the transport is
 # yours. See mux(1) LATCH.
+#
+# `none` AS THE VALUE TURNS A SEAM OFF, on any of them. An EMPTY value does
+# NOT: it reads as absent and falls through to the default, so there has to be
+# a positive spelling for "I do not want one".
 
 # latch-transport TEMPLATE
 #
@@ -119,13 +123,24 @@
 
 # latch-probe HOOK
 #
-# A cheap question asked BEFORE each attempt. Unset means no opinion and
-# latch proceeds, which is deliberately not the same as a hook answering 78
-# (cannot tell), which makes it wait. `ssh-probe` traverses the same auth
-# path under timeout(1), so it catches a peer that completes key exchange and
-# then makes no progress, which no ssh option can bound.
+# A cheap question asked BEFORE each attempt. `ssh-probe` traverses the same
+# auth path under timeout(1), so it catches the one hang no ssh option can
+# bound: a RESPONSIVE peer making no progress, where ConnectTimeout is
+# satisfied by the banner and every ServerAlive probe is answered. Measured on
+# the author's fleet at 342s, once 5m42s, with nothing on screen.
 #
-# Default: unset, so nothing is probed.
+# `none` TURNS IT OFF, and no probe means no opinion: latch attempts, and the
+# attempt is the probe. An EMPTY value is not an off switch, it reads as
+# absent and falls through to the default. Cost of leaving it on: 0.57s
+# reachable, 5.03s blackholed, 0.03s unresolvable, once per attempt, which on
+# a healthy link is once per attach.
+#
+# A DIFFERENT TRANSPORT NEEDS A DIFFERENT PROBE: the hook is handed the
+# target's PORT, so on an Eternal Terminal latch this would test SSH on
+# etserver's port and park latch in a backoff about a reachable host. Set
+# `latch-probe et-probe` there.
+#
+# Default: ssh-probe
 #latch-probe   ssh-probe
 
 # latch-status HOOK

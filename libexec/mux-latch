@@ -126,9 +126,23 @@ _seam() {   # <env value> <config key> [default]
 # Only the FIRST word is resolved, because a hook value is a command LINE and
 # the rest is its arguments. A value containing a slash is a path already and is
 # left exactly alone.
+#
+# `none` TURNS A SEAM OFF, and it exists because `latch-probe` now has a
+# default. A DEFAULT WITH NO OPT-OUT IS WORSE THAN NO DEFAULT: an empty config
+# value reads as absent in `_seam` (so a bare `latch-probe` line falls through
+# to the default), and a value `_hook` cannot resolve exits 2 loudly by
+# design, so without this there was no spelling for "I do not want one".
+# Uniform across every seam rather than special-cased for the probe, because
+# `latch-restore none` and `latch-auth none` are things somebody may mean, and
+# one word is easier to document than five exceptions. It is the same word
+# `mux capabilities` already uses for a declared absence.
+#
+# A hook genuinely CALLED `none` is reachable as `./none` or by full path,
+# which is the whole cost.
 _hook() {   # <value> -> the value with its command resolved
   case ${1:-} in
   '' | */*) printf '%s' "${1:-}"; return 0 ;;
+  none) return 0 ;;
   esac
   _hn=${1%% *}; _ha=${1#"$_hn"}
   for _hd in "$MUX_DIR/latch" "$MUX_SHARE/latch"; do
@@ -199,13 +213,38 @@ TRANSPORT=$(_seam "${MUX_LATCH_TRANSPORT:-}" latch-transport "$_DEF_TRANSPORT")
 AUTH=$(_hook "$(_seam "${MUX_LATCH_AUTH:-}" latch-auth ssh-auth)")
 _c_seam=$(_seam "${MUX_LATCH_CLASSIFY:-}" latch-classify ssh-classify)
 CLASSIFY=$(_hook "$_c_seam")
-# PROBE has NO default, and that is a decision rather than an omission: mux
-# ships share/latch/ssh-probe but does not wire it. No probe means no opinion,
-# so the attempt itself is the probe, which is right because a probe costs a
-# round trip before EVERY attempt and only pays off when the host is down.
-# Shipping a hook and running it are different acts, and that difference is the
-# whole point of having a library.
-PROBE=$(_hook "$(_seam "${MUX_LATCH_PROBE:-}" latch-probe '')")
+# PROBE DEFAULTS TO ssh-probe, which it did not until 2026-10-05. The old
+# default was none, argued as "a probe costs a round trip before EVERY attempt
+# and only pays off when the host is down". Both halves turned out weaker than
+# they read:
+#
+# IT ALSO PAYS OFF WHEN THE HOST IS UP. The case no ssh option can bound is a
+# RESPONSIVE peer making no progress: a box mid-boot that completes key
+# exchange and then blocks, measured on this fleet at 342s and once at 5m42s
+# with nothing on screen. ConnectTimeout is satisfied by the banner and
+# ServerAlive never fires because every probe is answered. ssh-probe traverses
+# the same auth path under timeout(1), so it is the only thing that bounds it.
+# That case was found AFTER the old comment was written.
+#
+# AND THE COST IS ONCE PER ATTACH, not per second. Measured against a real
+# remote: 0.57s reachable, 5.03s blackholed, 0.03s unresolvable. On a healthy
+# link there is one attempt and then hours of being attached; in a retry loop
+# the delays are already 2 to 60s, so 0.57s is noise. With a ControlMaster the
+# first line of the hook (`ssh -O check`) makes it milliseconds.
+#
+# THE DECIDING EVIDENCE WAS DEPLOYMENT: both machines in this fleet carried
+# `latch-probe ssh-probe` by hand, in the same direction, which is the signal
+# this tree trusts over any argument.
+#
+# IT STILL KNOWS NOTHING ABOUT A TRANSPORT, which is the line that matters:
+# the probe is handed the TARGET's port, so on an Eternal Terminal latch this
+# default would test SSH on ET's port and park latch in a backoff about a host
+# that is fine. ET therefore needs `latch-probe et-probe` beside the transport
+# and classify lines it already sets, and the man page's ET section says so.
+# Gating the default on the transport would mean re-learning what a transport
+# is, which is exactly the `case $TRANSPORT in *ssh*)` built-in 0.31 deleted.
+# `latch-probe none` turns it off: see `_hook`.
+PROBE=$(_hook "$(_seam "${MUX_LATCH_PROBE:-}" latch-probe ssh-probe)")
 STATUS=$(_hook "$(_seam "${MUX_LATCH_STATUS:-}" latch-status '')")
 # RESTORE runs after every transport return, before anything is reported.
 # See the call site for why it has to be first.

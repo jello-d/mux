@@ -3825,3 +3825,25 @@ t mux-context
 -   mux_ctx_resolve 2>/dev/null || return 0
 +   mux_ctx_resolve 2>/dev/null || true
 m mine-unresolvable-is-empty
+
+# THE PROBE DEFAULT, changed 2026-10-05 on deployment evidence: both machines
+# in this fleet carried `latch-probe ssh-probe` by hand. It bounds the one
+# hang no ssh option can, a RESPONSIVE peer making no progress, measured at
+# 342s and once 5m42s with nothing on screen.
+= latch-probe-has-no-default
+f libexec/mux-latch
+t mux-latch
+- PROBE=$(_hook "$(_seam "${MUX_LATCH_PROBE:-}" latch-probe ssh-probe)")
++ PROBE=$(_hook "$(_seam "${MUX_LATCH_PROBE:-}" latch-probe '')")
+m ran no ssh-probe
+
+# AND ITS OFF SWITCH, which the default made necessary. An EMPTY config value
+# reads as absent in `_seam` and falls through to the default, and a value
+# `_hook` cannot resolve exits 2 by design, so without this word there is no
+# spelling for "I do not want one" and a user cannot undo a default.
+= latch-hook-none-is-not-off
+f libexec/mux-latch
+t mux-latch
+-   none) return 0 ;;
++   nonexx) return 0 ;;
+m probe turned off latch should just attempt

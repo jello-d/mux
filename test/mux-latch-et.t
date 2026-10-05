@@ -114,10 +114,21 @@ _stub_line=$T/bin/et${_line#et}
 # CAPTURED, for the reason mux-latch.t records at its own no-probe case: if
 # latch refuses before attempting, its message is the only thing that says why,
 # and `>/dev/null 2>&1` is where that went.
+# AND THE PROBE IS NAMED, which this case did NOT do until `latch-probe`
+# gained a default (2026-10-05) and this assertion went red: with nothing set,
+# latch ran the shipped SSH probe before an ET attempt, found `box`
+# unreachable, and never invoked the stub at all. That is not a harness
+# accident, it is the documented consequence of the new default reproducing
+# itself, because the probe is handed the TARGET's port and on an ET latch
+# that port is etserver's rather than sshd's. An ET user therefore sets
+# `latch-probe et-probe` (or `none`) beside the transport and classify lines
+# they already set, which is exactly what the man page's ET section now says,
+# and this line is the suite agreeing with that advice.
 _eo=$(env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
   ETLOG="$T/argv" \
   MUX_LATCH_TRANSPORT="$_stub_line" \
   MUX_LATCH_CLASSIFY=et-classify \
+  MUX_LATCH_PROBE=none \
   MUX_LATCH_AUTH=true \
   "$HERE/libexec/mux-latch" --max-tries 1 box proj 2>&1) || true
 _got=$(cat "$T/argv" 2>/dev/null || true)

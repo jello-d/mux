@@ -24,6 +24,19 @@ AUTHLOG=$T/authlog      # one line per auth question
 SCRIPT=$T/script        # the transport's scripted answers: "<exit> <stderr>"
 export STATES TRIES AUTHLOG SCRIPT
 
+# THE PROBE SEAM IS PINNED OFF FOR THE WHOLE FILE, and it has to be: as of
+# 2026-10-05 `latch-probe` DEFAULTS to the shipped ssh-probe, so any fixture
+# that does not pin it reaches for the real network and answers "the target is
+# not reachable" about a host called `box`. Twenty invocations here set no
+# probe, and pinning once beats pinning twenty times for the usual reason: the
+# twenty-first would be written without it.
+#
+# AN EXPORT, SO A PER-CASE `env MUX_LATCH_PROBE=...` STILL WINS, which is what
+# the cases that genuinely exercise a probe already do. The one case that
+# asserts the DEFAULT uses `env -u` to see past this.
+MUX_LATCH_PROBE=none
+export MUX_LATCH_PROBE
+
 cat >"$T/bin/status" <<'EOF'
 #!/bin/sh
 printf '%s\n' "$1" >>"$STATES"
@@ -380,12 +393,19 @@ MAXT=3 latch box proj >/dev/null; unset MAXT
 [ "$(n_tries)" = 0 ] || fail "an unexpected probe exit was treated as usable"
 printf '0\n' >"$T_PROBE"
 
-# --- NO PROBE CONFIGURED MEANS PROCEED, not wait -----------------------
-# The default configuration has no probe seam, and `_ask ""` answers 2 for it,
+# --- `latch-probe none` MEANS PROCEED, not wait ------------------------
+# NO PROBE AND NO OPINION ARE THE SAME THING, and `_ask ""` answers 2 for it,
 # the same code a probe that RAN and could not tell returns. Those are opposite
 # instructions: proceed versus wait. Conflating them made a stock `mux latch`
 # sit in `unknown` and never attach once, which a smoke test caught and this
 # suite did not, because every other case here configures a probe.
+#
+# IT IS SPELLED `none` NOW, because the probe GAINED A DEFAULT (ssh-probe) and
+# a default with no opt-out is worse than no default: an empty config value
+# reads as absent in `_seam`, so a bare `latch-probe` line falls through to the
+# default, and a value `_hook` cannot resolve exits 2 by design. This case is
+# therefore also the test that the off switch exists at all: before the word
+# was added, reaching this state was impossible.
 _saveprobe=$T/bin/probe
 printf '0\n' >"$SCRIPT"
 : >"$STATES"; : >"$TRIES"
@@ -398,16 +418,54 @@ _lo=$(env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" \
   STATES="$STATES" TRIES="$TRIES" SCRIPT="$SCRIPT" \
   MUX_LATCH_TRANSPORT="$T/bin/transport %h %s" \
   MUX_LATCH_AUTH=true \
+  MUX_LATCH_PROBE=none \
   MUX_LATCH_STATUS="$T/bin/status" \
   MUX_LATCH_SLEEP="$T/bin/nosleep" \
   MUX_LATCH_BACKOFF=1 \
   "$HERE/libexec/mux-latch" --max-tries 3 box proj 2>&1) || _lr=$?
-[ "$_lr" = 0 ] || fail "with no probe configured latch should just attempt and
+[ "$_lr" = 0 ] || fail "with the probe turned off latch should just attempt and
 report the session ending; got exit $_lr and states [$(seq_of)]
 latch said: ${_lo:-<nothing>}"
 [ "$(n_tries)" = 1 ] \
-  || fail "with no probe configured latch attempted $(n_tries) times;
+  || fail "with the probe turned off latch attempted $(n_tries) times;
 no probe means no opinion, so the attempt itself is the probe"
+
+# --- AND THE DEFAULT IS ssh-probe, NOT nothing -------------------------
+# The evidence for changing it was deployment: both machines in this fleet
+# carried `latch-probe ssh-probe` by hand, in the same direction.
+#
+# ASSERTED BY NAME THROUGH THE REAL RESOLUTION ORDER, with a recording
+# `ssh-probe` planted in the $MUX_DIR overlay and NOTHING configured. That is
+# what makes it a question about the default rather than about the text of the
+# source: a stubbed transport attaches either way, so an attach assertion
+# would pass with no probe wired at all. No new product flag was added for
+# this, which would have been a surface existing only for a test.
+mkdir -p "$T/conf/latch"
+_dmark=$T/default-probe-ran
+cat >"$T/conf/latch/ssh-probe" <<EOF
+#!/bin/sh
+: >"$_dmark"
+exit 0
+EOF
+chmod +x "$T/conf/latch/ssh-probe"
+rm -f "$_dmark"
+printf '0\n' >"$SCRIPT"
+: >"$STATES"; : >"$TRIES"
+env -u MUX_LATCH_PROBE \
+  XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
+  STATES="$STATES" TRIES="$TRIES" SCRIPT="$SCRIPT" \
+  MUX_LATCH_TRANSPORT="$T/bin/transport %h %s" \
+  MUX_LATCH_AUTH=true \
+  MUX_LATCH_STATUS="$T/bin/status" \
+  MUX_LATCH_SLEEP="$T/bin/nosleep" \
+  MUX_LATCH_BACKOFF=1 \
+  "$HERE/libexec/mux-latch" --max-tries 3 box proj >/dev/null 2>&1 || true
+[ -f "$_dmark" ] || fail "with NOTHING configured latch ran no ssh-probe. The
+default bounds the one hang no ssh option can: a RESPONSIVE peer making no
+progress, measured on this fleet at 342s with nothing on screen, where
+ConnectTimeout is satisfied by the banner and every ServerAlive probe is
+answered."
+rm -f "$T/conf/latch/ssh-probe" "$_dmark"
 
 # --- an unusable target is retried, not escalated ----------------------
 printf '1\n' >"$T_PROBE"

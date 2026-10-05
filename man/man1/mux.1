@@ -1747,13 +1747,38 @@ which consults a live control master and then
 neither connects, and together they cost about 12ms.
 .TP
 .BR MUX_LATCH_PROBE " (" latch\-probe )
-Is the target usable? Same three answers. NO PROBE MEANS NO OPINION, and that is
-the default: latch just attempts, and the attempt is the probe. That is a
-different instruction from a probe that ran and could not tell, which waits, and
-conflating the two once made a stock latch wait forever and never attach. mux
-SHIPS
-.I share/latch/ssh\-probe
-without wiring it; shipping a hook and running it are different acts.
+Is the target usable? Same three answers. Defaults to the shipped
+.BR ssh\-probe ,
+and the reason is the one hang no ssh option can bound: a RESPONSIVE peer
+making no progress. A box mid\-boot completes key exchange and then blocks, so
+.I ConnectTimeout
+is already satisfied by the banner and
+.I ServerAlive
+never fires because every probe is answered. Measured on this author's fleet
+at 342 seconds, once at 5m42s, with nothing on screen the whole time.
+ssh\-probe traverses the same auth path under
+.BR timeout (1),
+so it turns that silence into a visible backoff. It costs one bounded round
+trip per ATTEMPT, which is once per attach on a healthy link (measured: 0.57s
+reachable, 5.03s blackholed, 0.03s unresolvable) and noise inside a retry loop
+whose delays are already 2 to 60 seconds.
+.IP
+.B none
+TURNS ANY SEAM OFF, and no probe means no opinion: latch just attempts, and
+the attempt is the probe. That is a different instruction from a probe that
+ran and could not tell, which WAITS, and conflating the two once made a stock
+latch wait forever and never attach. An empty value is not an off switch: it
+reads as absent and falls through to the default.
+.IP
+IT IS STILL AN ssh HOOK, so a different transport needs a different probe. The
+probe is handed the target's PORT, so on an Eternal Terminal latch this default
+would test SSH on etserver's port and park latch in a backoff about a host that
+is perfectly reachable. See
+.B Eternal Terminal
+below, which sets
+.BR latch\-probe .
+mux will not gate the default on the transport: that would mean knowing what a
+transport is, which is the one thing these five seams exist to avoid.
 .TP
 .BR MUX_LATCH_CLASSIFY " (" latch\-classify )
 Given
@@ -1851,7 +1876,7 @@ ordered fallback list is a later refactor rather than a rewrite:
 is a per\-transport verdict, and across several transports the aggregate is
 blocked only when every one of them is.
 .SS Eternal Terminal
-A second transport ships as data, not code. Two lines in
+A second transport ships as data, not code. Three lines in
 .IR MUX_DIR /config:
 .PP
 .RS
@@ -1862,9 +1887,19 @@ latch\-probe      et\-probe
 .fi
 .RE
 .PP
+THE THIRD LINE IS NOT OPTIONAL, which changed when
+.B latch\-probe
+gained a default. Leave it out and latch runs the shipped SSH probe before
+every ET attempt, handing it the TARGET's port, which is etserver's and not
+sshd's: it finds nothing listening and parks latch in a backoff about a host
+that is perfectly reachable. mux's own suite reproduced exactly that the day
+the default landed.
+.B latch\-probe none
+is the other correct answer if you would rather not probe at all.
+.PP
 .B et\-probe
-IS WORTH WIRING HERE THOUGH IT IS OFF BY DEFAULT FOR ssh, and the reason is
-measured rather than argued. With etserver stopped, one attempt:
+EARNS ITS PLACE ON ITS OWN TERMS TOO, and the reason is measured rather than
+argued. With etserver stopped, one attempt:
 .PP
 .RS
 .nf
