@@ -220,7 +220,7 @@ fi
 _hcb=$T/hardcoded
 ( cd "$HERE" && grep -rnE \
   '(^|[^rn])/bin/(true|false|grep|sed|awk|tr|wc|head|tail|sort|cut)\b' \
-  bin lib libexec test share setup.sh indicator 2>/dev/null \
+  bin lib libexec test share setup.sh desktop-notifier 2>/dev/null \
   | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' \
   | grep -v '^test/lint\.t:' ) >"$_hcb" || true
 if [ -s "$_hcb" ]; then
@@ -246,7 +246,7 @@ fi
 _wcl=$T/wcl
 _wclre='\[ *"\$\([^)]*wc -l[^)]*\)" *=|= *"\$\([^)]*wc -l\)"'
 ( cd "$HERE" && grep -rnE "$_wclre" \
-  bin lib libexec test share setup.sh indicator 2>/dev/null \
+  bin lib libexec test share setup.sh desktop-notifier 2>/dev/null \
   | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' \
   | grep -v '^test/lint\.t:' ) >"$_wcl" || true
 if [ -s "$_wcl" ]; then
@@ -287,7 +287,7 @@ fi
 # looks for, the same reason the dash-name rule below excludes its own message.
 _trp=$T/traps
 ( cd "$HERE" && grep -rnE "trap '[^']*rm -rf[^']*\\\$" \
-  bin lib libexec test share setup.sh indicator 2>/dev/null \
+  bin lib libexec test share setup.sh desktop-notifier 2>/dev/null \
   | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' \
   | grep -vE '^test/lint\.t:' ) >"$_trp" || true
 if [ -s "$_trp" ]; then

@@ -152,12 +152,27 @@ $(cat "$T/out")"
 # to bump. Here the sandbox venv does not exist at all, which is one of the
 # three answers that check distinguishes.
 : >"$T/bin/mux-desktop-notifier"
-run install >"$T/out" 2>&1 || fail "install errored with an indicator present"
-grep -q 'tray indicator' "$T/out" || fail "an installed indicator that does not
-match the package was not reported, so a silent tray skew is the default:
+run install >"$T/out" 2>&1 || fail "install errored with a notifier present"
+grep -q 'desktop notifier differs' "$T/out" || fail "an installed notifier that
+does not match the package was not reported, so a silent skew is the default:
 $(cat "$T/out")"
-grep -q 'setup.sh indicator' "$T/out" || fail "the notice did not name the
-command that fixes it; a gap named without a remedy invites two different fixes"
+# THE REMEDY IS EXTRACTED AND RUN, not grepped for. Asserting the STRING
+# `setup.sh indicator` is what let that advice outlive the verb: the rename
+# made it invalid and this assertion went on passing, because the notice still
+# said it. Advice has no test unless the test uses it, which is the defect
+# class this package keeps meeting (`mux agent-doctor` told you to wait for an
+# event that could no longer arrive, for two releases).
+_rem=$(sed -n 's/.*Refresh it with: \.\/setup\.sh \([a-z-]*\).*/\1/p' \
+  "$T/out" | head -1)
+[ -n "$_rem" ] || fail "the notice did not name the command that fixes it; a
+gap named without a remedy invites two different fixes: $(cat "$T/out")"
+_ro=$(run "$_rem" check 2>&1) || true
+case $_ro in
+*"unknown command"*|*"unexpected argument"*)
+  fail "the notice names a verb this setup.sh does not accept: [$_rem]. That
+is advice that cannot come true, which is worse than no advice: a provisioner
+acting on it loops for ever applying a line that does nothing." ;;
+esac
 rm -f "$T/bin/mux-desktop-notifier"
 
 # --- DISCOVERY: WHAT THE INSTALL DOES ABOUT NO ROOTS ----------------------
@@ -586,14 +601,14 @@ case $_o in
 *) fail "the refusal did not name the offending argument: [$_o]" ;;
 esac
 
-# AND THE ONE VERB THAT TAKES MORE STILL DOES. `indicator` passes a verb and
-# its flags through to the sub-package, so the guard must exempt it: this is
-# the half a blanket arity check would break, and it would break the path a
-# provisioner uses rather than one a human types.
-_o=$(run indicator check 2>&1) && _rc=0 || _rc=$?
+# AND THE ONE VERB THAT TAKES MORE STILL DOES. `desktop-notifier` passes a
+# verb and its flags through to the sub-package, so the guard must exempt it:
+# this is the half a blanket arity check would break, and it would break the
+# path a provisioner uses rather than one a human types.
+_o=$(run desktop-notifier check 2>&1) && _rc=0 || _rc=$?
 case $_o in
 *"unexpected argument"*|*"is a SETTING"*)
-  fail "the arity guard swallowed the indicator passthrough, which is the one
+  fail "the arity guard swallowed the notifier passthrough, which is the one
 verb that legitimately takes another: [$_o]" ;;
 esac
 

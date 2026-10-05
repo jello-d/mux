@@ -10,7 +10,7 @@
 #   ./setup.sh check       audit install + deps; [OK]/[FAIL] markers; drift rc
 #   ./setup.sh test        run the in-repo test suite (test/run)
 #   ./setup.sh version     the packaged version
-#   ./setup.sh all         install + the optional tray indicator
+#   ./setup.sh all         install + the optional desktop notifier
 #   ./setup.sh desktop-notifier [VERB]   drive the optional notifier
 #                          passthrough to desktop-notifier/setup.sh;
 #                          VERB defaults to
@@ -586,15 +586,15 @@ _scan_root_step() {
 _indicator_notice() {
   [ -e "$_bin/mux-desktop-notifier" ] || return 0
   sh "$_root/desktop-notifier/setup.sh" check >/dev/null 2>&1 && return 0
-  echo "$PKG: NOTE the installed tray indicator differs from this package" >&2
+  echo "$PKG: NOTE the installed desktop notifier differs from this" >&2
   echo "$PKG:      (or its daemon is running older code). It polls a mux" >&2
   echo "$PKG:      contract, so leaving it behind loses items silently." >&2
-  echo "$PKG:      Refresh it with: ./setup.sh indicator" >&2
+  echo "$PKG:      package. Refresh it with: ./setup.sh desktop-notifier" >&2
   # LOGGED BECAUSE `mux check` CANNOT SEE IT: the verdict comes from the
   # indicator's own three-copy check, which core deliberately does not run.
   # So without this the skew is reported once, to a terminal that may not
   # exist, and never again.
-  _slog "the installed tray indicator is behind: ./setup.sh indicator"
+  _slog "the installed notifier is behind: ./setup.sh desktop-notifier"
 }
 
 do_uninstall() {
@@ -704,7 +704,7 @@ do_paths() {
 }
 
 _U="usage: setup.sh [install|uninstall|check|paths|test|version|all|\
-  desktop-notifier]"
+desktop-notifier]"
 # --- ARGUMENTS PAST THE VERB ARE REFUSED, NEVER IGNORED --------------------
 # FOUND BY MAKING THE MISTAKE, on a live box: `sh setup.sh install
 # PREFIX=/var/tmp/scratch` installed to the REAL prefix and printed its usual
@@ -737,13 +737,14 @@ _badarg() {   # <verb> <offending argument>
   exit 2
 }
 # `desktop-notifier` is the one verb that legitimately takes more: it passes a
-# verb and its flags straight through to the sub-package. `indicator` is its
-# former name and is still accepted, for the reason R10 records about shipping
-# order: a provisioner calls this by name, so refusing the old spelling the
-# moment mux renames it would break that caller until its own change lands.
-# The overlap costs nothing and lets the two repos move independently.
+# verb and its flags straight through to the sub-package.
+#
+# `indicator` WAS ACCEPTED HERE TOO, as the former name, which is what let the
+# provisioner that calls this by name move independently rather than needing a
+# flag day. Both repos have been renamed and deployed, so the overlap has done
+# its job and gone: an alias nobody uses is a second spelling to keep working.
 case "${1:-help}" in
-desktop-notifier|indicator) ;;
+desktop-notifier) ;;
 *) [ "$#" -le 1 ] || _badarg "${1:-help}" "$2" ;;
 esac
 
@@ -756,7 +757,7 @@ case "${1:-help}" in
   version)   _v=$(git -C "$_root" describe --tags --always 2>/dev/null || true)
              echo "${_v:-$PKG (unversioned)}" ;;
   all)       do_install; sh "$_root/desktop-notifier/setup.sh" install ;;
-  desktop-notifier|indicator)                              # passthrough
+  desktop-notifier)                                        # passthrough
              shift; exec sh "$_root/desktop-notifier/setup.sh" "$@" ;;
   -h|--help|help) echo "$_U" ;;
   *) echo "setup.sh: unknown command '${1:-}'" >&2; echo "$_U" >&2; exit 2 ;;

@@ -32,7 +32,7 @@ done
 printf '#!/bin/sh\nexit 0\n' >"$T/bin/tmux"; chmod +x "$T/bin/tmux"
 
 caps() {
-  env -u MUX_SHARE -u TMUX -u MUX_NOTIFY_SEND -u MUX_NOTIFY_CLOSE \
+  env -u MUX_SHARE -u TMUX \
     PATH="$T/bin" MUX_DIR="$T/conf" MUX_CACHE="$T/cache" \
     "$HERE/bin/mux" capabilities "$@" 2>&1
 }

@@ -2567,12 +2567,6 @@ the field is never read, so a wrong field index passes unnoticed, which it
 did. Same seam, and the same reason, as
 .BR MUX_DOCTOR_PROC .
 .TP
-.B MUX_NOTIF_TTL
-Retired, and nothing reads it. mux records no notification id because it
-raises no banners; the notifier holds its own and withdraws one when the state
-it announced stops being true. See
-.BR MUX_DESKTOP_NOTIFIER_TOASTS .
-.TP
 .BR MUX_LATCH_TRANSPORT ", " MUX_LATCH_AUTH ", " MUX_LATCH_PROBE ", " \
 MUX_LATCH_CLASSIFY ", " MUX_LATCH_STATUS
 The five

@@ -88,48 +88,6 @@ _retire_old_venv() {
   echo "mux-desktop-notifier: retired the old venv at $OLD_VENV"
 }
 
-# This package was called `mux-indicator` until 2026-10-04. A RENAME IS A
-# MODE SWITCH AND MUST REMOVE WHAT IT REPLACES, which is this fleet's
-# install-placement rule: without this an upgrade leaves a dangling
-# `~/.local/bin/mux-indicator` and, worse, an ENABLED unit pointing at a
-# console script pip has just deleted, so the user manager fails it at every
-# login for ever. The uninstall path in this same file already argues exactly
-# that about a dangling unit being worse than one that is gone.
-#
-# THE OLD DIST GOES TOO, not just the links: `pip install` of the renamed
-# project leaves `mux-indicator` installed beside it, so the venv would carry
-# two copies of the same code and the stale console script would keep working
-# and keep drawing last week's icon. That is the three-copies problem this
-# package's own check exists for, created by the rename itself.
-#
-# AND THE SLOTS FILE IS MIGRATED RATHER THAN ABANDONED, because it is state
-# the package WRITES at runtime and cannot rebuild: it holds which colour each
-# host was assigned, and the order that produced the assignment is gone. Doing
-# it HERE is the rule this repo paid for once already, when a lazy migration
-# in a reader took a snapshot and froze a record for an hour: a path a package
-# writes at runtime is moved by the INSTALLER, because that is the only moment
-# atomic with the switchover.
-_retire_old_name() {
-  _onm=mux-indicator
-  if [ -e "$UNIT_DIR/$_onm.service" ]; then
-    systemctl --user disable --now "$_onm.service" 2>/dev/null || true
-    rm -f "$UNIT_DIR/$_onm.service"
-    systemctl --user daemon-reload 2>/dev/null || true
-    echo "mux-desktop-notifier: retired the $_onm unit"
-  fi
-  rm -f "$BIN_DIR/$_onm"
-  "$VENV/bin/pip" show "$_onm" >/dev/null 2>&1 && {
-    "$VENV/bin/pip" uninstall -q -y "$_onm" >/dev/null 2>&1 || true
-    echo "mux-desktop-notifier: removed the $_onm distribution"; }
-  _ost=${XDG_STATE_HOME:-$HOME/.local/state}/mux
-  [ -f "$_ost/indicator-slots" ] \
-    && [ ! -e "$_ost/desktop-notifier-slots" ] && {
-    mv -f "$_ost/indicator-slots" "$_ost/desktop-notifier-slots" \
-      2>/dev/null && echo "mux-desktop-notifier: carried the colour slots over"
-  }
-  return 0
-}
-
 app() {
   mkdir -p "$(dirname "$VENV")"
   [ -d "$VENV" ] || python3 -m venv "$VENV"
@@ -147,13 +105,6 @@ app() {
 }
 
 service() {
-  # BEFORE the new unit is written, and FROM HERE rather than from `app`:
-  # retiring the previous name is squarely this step's business, and `app`
-  # is the one function this file documents as untestable (it needs a network
-  # and minutes, and stubbing pip would be testing the stub), so a retirement
-  # living there would be a seam nothing ever executes. This package has
-  # shipped that exact mistake before, more than once.
-  _retire_old_name
   mkdir -p "$UNIT_DIR"
   install -m 0644 "$PKG_DIR/$UNIT" "$UNIT_DIR/$UNIT"
   systemctl --user daemon-reload 2>/dev/null || true
@@ -263,7 +214,7 @@ _code_current() {
   done
   if [ -n "$_cc_drift" ]; then
     bad "installed code is STALE or missing:$_cc_drift"
-    bad "  run: setup.sh indicator install   (then the service restarts)"
+    bad "  run: setup.sh desktop-notifier install  (the service restarts)"
   else
     ok "installed code matches the package"
   fi

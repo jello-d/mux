@@ -73,7 +73,7 @@ printf 'scan %s/src 2\n' "$T" >"$T/conf/partitions/probe.partition"
 
 # check [ENV=VAL ...] -> the audit's output; RC holds its exit status.
 check() {
-  OUT=$(env -u MUX_NOTIFY_SEND -u MUX_NOTIFY_CLOSE \
+  OUT=$(env \
     PATH="$T/bin" NO_COLOR=1 MUX_DIR="$T/conf" SESSN="$T/sessn" \
     MUX_SHARE="$T/share" MUX_CACHE="$T/cache" \
     "$@" "$HERE/libexec/mux-check" 2>&1) && RC=0 || RC=$?
@@ -532,7 +532,7 @@ has "tmux state unchecked" "a skipped tmux-state check was silent"
 # already running from, so the shadowed install audits itself and passes.
 mkdir -p "$T/bin2"
 printf '#!/bin/sh\nexit 0\n' >"$T/bin2/mux"; chmod +x "$T/bin2/mux"
-OUT=$(env -u MUX_NOTIFY_SEND -u MUX_NOTIFY_CLOSE \
+OUT=$(env \
   PATH="$T/bin2:$T/bin" NO_COLOR=1 MUX_DIR="$T/conf" \
   MUX_SHARE="$T/share" MUX_CACHE="$T/cache" \
   "$HERE/libexec/mux-check" 2>&1) && RC=0 || RC=$?

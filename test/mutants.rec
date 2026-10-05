@@ -3637,26 +3637,8 @@ t mux-desktop-notifier
 +              else remote_argv(h, tmpl))
 m split across elements
 
-= notifier-rename-keeps-the-old-unit
-f desktop-notifier/setup.sh
-t mux-desktop-notifier-setup
--   _retire_old_name
-+   :
-m unit survived the rename
 
-= notifier-rename-clobbers-the-slots
-f desktop-notifier/setup.sh
-t mux-desktop-notifier-setup
--     && [ ! -e "$_ost/desktop-notifier-slots" ] && {
-+     && [ -e "$_ost" ] && {
-m overwrote the live colour slots
 
-= notifier-rename-leaves-the-old-command
-f desktop-notifier/setup.sh
-t mux-desktop-notifier-setup
--   rm -f "$BIN_DIR/$_onm"
-+   :
-m survived as a dangling symlink
 
 = agent-status-drops-the-sessions
 f libexec/mux-agent
@@ -3699,3 +3681,10 @@ t mux-agent-summary
 - [ "$_sess_mode" -eq 0 ] || exit 0
 + :
 m leaked into --sessions output
+
+= setup-notice-names-a-dead-verb
+f setup.sh
+t setup
+-   echo "$PKG:      package. Refresh it with: ./setup.sh desktop-notifier" >&2
++   echo "$PKG:      package. Refresh it with: ./setup.sh indicator" >&2
+m names a verb this setup.sh does not accept

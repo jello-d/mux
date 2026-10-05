@@ -26,10 +26,7 @@ SETUP=$HERE/desktop-notifier/setup.sh
 [ -x "$SETUP" ] || fail "desktop-notifier/setup.sh is missing or not executable"
 
 mkdir -p "$T/bin" "$T/venv/bin" "$T/xdg"
-# `mv` joined this list when the rename's retirement step arrived: the
-# curated PATH models exactly the tools the code needs, so it CAUGHT the
-# new dependency by failing the migration rather than by anybody noticing.
-for _c in sed awk grep cat rm mv mkdir ln cmp install printf dirname \
+for _c in sed awk grep cat rm mkdir ln cmp install printf dirname \
   basename; do
   _p=$(command -v "$_c" 2>/dev/null) && ln -sf "$_p" "$T/bin/$_c"
 done
@@ -241,7 +238,8 @@ has "render.py" "the stale report did not name the file that drifted"
 Passing is what stopped a provisioner from ever re-running apply."
 # It must say what to DO. A check that reports drift without the remedy makes
 # two reasonable people close it two different ways.
-has "setup.sh indicator install" "the stale report named no remedy"
+has "setup.sh desktop-notifier install" "the stale report named no
+remedy"
 
 # MISSING: a new module that was never installed. Same verdict as drifted:
 # a half-updated install is not a working one.
@@ -428,69 +426,5 @@ case $_vo in
 *'retired venv'*) fail "with no leftover, the check still talks about one:
 [$_vo]" ;;
 esac
-
-# --- THE RENAME RETIRES THE PREVIOUS NAME ---------------------------------
-# This package was `mux-indicator` until 2026-10-04, and A RENAME IS A MODE
-# SWITCH: this fleet's install-placement rule says one must REMOVE what it
-# replaces. The failure if it does not is not cosmetic and not transient. The
-# old unit is ENABLED and points at a console script `pip install` of the
-# renamed project deletes, so the user manager fails it at EVERY LOGIN, for
-# ever, and this file's own uninstall path already argues that a dangling unit
-# is worse than one that is gone.
-#
-# DRIVEN THROUGH `service`, which is where the retirement lives, and that
-# placement is the point: `app` is the one function this file documents as
-# untestable (a network, minutes, and stubbing pip would be testing the stub),
-# so a retirement living there would be a seam nothing ever executes. This
-# package has shipped exactly that twice (both latch hooks, all four
-# envhooks), so it is worth a sentence rather than a shrug.
-mkdir -p "$T/xdg/systemd/user" "$T/bin" "$T/state/mux" "$T/venv/bin"
-printf '#!/bin/sh
-exit 0
-' >"$T/venv/bin/pip"; chmod +x "$T/venv/bin/pip"
-: >"$T/venv/bin/mux-desktop-notifier"
-chmod +x "$T/venv/bin/mux-desktop-notifier"
-printf '[Unit]
-' >"$T/xdg/systemd/user/mux-indicator.service"
-ln -sfn "$T/venv/bin/mux-indicator" "$T/bin/mux-indicator"
-printf 'northwood 2
-' >"$T/state/mux/indicator-slots"
-run service
-[ ! -e "$T/xdg/systemd/user/mux-indicator.service" ] \
-  || fail "the previous name's unit survived the rename: it is ENABLED and
-points at a console script pip has deleted, so the user manager fails it at
-every login from now on"
-# `-L` AND `-e`, NOT `-e` ALONE, and the mutation is what found it: this
-# link points into the venv at a console script pip has deleted, so it is
-# DANGLING, and `-e` follows a symlink and answers false for a dangling one.
-# The assertion therefore passed whether or not the link had been removed,
-# about the one case it exists for. A vacuous assertion reads as coverage.
-[ ! -L "$T/bin/mux-indicator" ] && [ ! -e "$T/bin/mux-indicator" ] \
-  || fail "the previous name's command survived as a dangling symlink on
-PATH, which is what makes it worse than a stale one: it fails rather than
-doing the wrong thing, and nothing says why"
-has 'retired the mux-indicator unit' "a retirement must SAY so: this runs
-once, during an upgrade nobody is watching, and an unexplained disappearance
-is indistinguishable from the install having broken something"
-
-# AND THE COLOUR SLOTS ARE CARRIED OVER, NOT ABANDONED, because they are
-# state the package WRITES and cannot rebuild: the file holds which colour
-# each host was assigned and the order that produced it is gone. Doing it in
-# the INSTALLER is the rule this repo paid for once, when a migration done
-# lazily by a reader took a snapshot and froze a live record for an hour.
-[ -f "$T/state/mux/desktop-notifier-slots" ] || fail "the colour slots were
-not carried over, so every host silently changes colour on upgrade"
-[ ! -e "$T/state/mux/indicator-slots" ] || fail "the old slots file was left
-behind, so the next release cannot tell a migration from a fresh install"
-
-# AND IT NEVER CLOBBERS AN ALREADY-MIGRATED FILE, which is the half an
-# idempotent installer needs: `service` runs on every install, so a second
-# pass must not overwrite the live slots with a stale leftover. Asserted with
-# BOTH present, which is the only state in which the question can be answered.
-printf 'old\n' >"$T/state/mux/indicator-slots"
-printf 'live\n' >"$T/state/mux/desktop-notifier-slots"
-run service
-[ "$(cat "$T/state/mux/desktop-notifier-slots")" = live ] || fail "a re-run
-overwrote the live colour slots with the stale pre-rename file"
 
 pass
