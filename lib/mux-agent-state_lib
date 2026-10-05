@@ -210,65 +210,102 @@ mux_agent_pane_win() {  # <dir> <session> <window>
 # `kill -0` RATHER THAN `/proc`, because the liveness half must work where the
 # detection half does not: only Linux can attribute a process to a pane, but
 # any reader anywhere may be handed a sidecar across a transport.
-# mux_agent_hum_scan -> one pid per line: work this PANE started that is still
-# running, excluding the caller and anything it spawned.
+# mux_agent_hum_scan ROOTPID SELFPID -> one pid per line: work under this pane
+# that is still running, excluding the caller and anything it spawned. ROOTPID
+# is the pane's own process (tmux's `#{pane_pid}`), so attribution is
+# STRUCTURAL: we walk DOWN from the pane rather than searching the box and
+# filtering.
 #
-# ATTRIBUTION IS THE ENVIRONMENT, NOT THE PROCESS TREE, and that was settled by
-# measurement rather than preference. A job that outlives the tool shell which
-# started it RE-PARENTS TO INIT (measured: ppid becomes 1), so "children of the
-# agent" misses exactly the case this feature exists for. What survives is the
-# environment it inherited: `TMUX` and `TMUX_PANE` are still there after
-# re-parenting (measured on the same job).
+# SELFPID IS AN ARGUMENT RATHER THAN `$$` because the PERSPECTIVE is half the
+# question: "excluding the caller" only means anything relative to a position
+# in the tree, and reading `$$` made the answer silently depend on which pane
+# the shell happened to be in. Measured while probing: run from a DIFFERENT
+# pane, the function reported that pane's own agent AS WORK, because the agent
+# was not on the prober's chain. Both callers pass full arity, which also
+# keeps the two shellcheck versions this tree meets from disagreeing about an
+# optional parameter.
 #
-# BOTH VARIABLES, because `TMUX_PANE=%1` is only unique within one SERVER: the
-# loose match found ten processes across other servers, including another
-# pane's live agent, where the pair finds three.
+# WORK THE AGENT STILL HOLDS, which is the whole rule, and it comes from the
+# agent rather than from mux. Claude Code reports a background task exactly
+# while it owns a handle to it, and MEASURED, that handle is visible in the
+# process tree: a `run_in_background` task keeps its TOOL SHELL ALIVE as a
+# child of the agent for the task's whole life.
 #
-# AND THE PREFILTER IS NOT THE TEST. `grep` matches a SUBSTRING, so
-# `TMUX_PANE=%1` also matches `%11`; environ entries are NUL-separated and a
-# NUL is awkward to put in a pattern, so grep narrows the field in one fork and
-# each survivor is then compared EXACTLY, field by field. Cost measured at
-# ~47ms for the pair, against 1.3s for the naive fork-per-process version, and
-# it runs ONCE at the transition rather than on any render.
+#     tracked background task   bash(ppid=agent) -> the job      DESCENDANT
+#     a daemon started long ago ppid 1, its own session          not a child
+#
+# So "is it still under this pane" answers the same question the agent answers
+# for itself, and the two surfaces cannot disagree about what is running.
+#
+# THIS REPLACED AN ENVIRON SEARCH, and the note it replaces was measured on
+# the wrong case. It said a job "RE-PARENTS TO INIT, so children of the agent
+# misses exactly the case this exists for". True of `cmd &` inside a
+# FOREGROUND tool call, which orphans; false of a tracked task, which does
+# not. Keying on `TMUX`+`TMUX_PANE` in the environment therefore found every
+# process that had EVER passed through this pane, including services the agent
+# launched days ago and will never wait for. Measured live: a session read
+# `humming` for 44 hours over a watcher started by an agent that is still
+# running, which is the report that found this.
+#
+# THE LIMIT IS THE OTHER HALF OF THAT, and it is deliberate: an orphaned
+# `cmd &` is invisible here, because nothing holds it. The agent cannot see it
+# either (no handle, no output, nothing to wait for), so mux staying quiet
+# agrees with the only thing that could have told us. Over-reporting is the
+# worse direction: it is unbounded in TIME, since nothing ever clears it.
+#
+# ONE PASS FOR THE PPID TABLE, then a walk down from the root. `/proc/PID/stat`
+# carries the pid in field 1, so the FILENAME is never needed and `cat` can
+# tolerate a process exiting mid-glob; naming the files to awk makes a vanished
+# one FATAL and would silently answer "no work" on a busy box. The comm field
+# is parenthesised and may contain spaces, so ppid is read after stripping
+# through the last `) ` (measured: a process called `we (ird) nam` makes the
+# naive `$4` answer `1`).
 #
 # LINUX ONLY, and it degrades the safe way: without /proc nothing is found, no
 # sidecar is written, and the state stays `idle`. Under-reporting beats
 # claiming activity that cannot be confirmed.
 mux_agent_hum_scan() {
-  [ -n "${TMUX:-}" ] && [ -n "${TMUX_PANE:-}" ] || return 0
-  [ -r /proc/self/environ ] || return 0
-  # Our own chain: this process and every ancestor. The agent and the pane's
-  # shell are both on it, so neither is ever mistaken for leftover work.
-  _hchain=" " _hp=$$
-  while [ -n "$_hp" ] && [ "$_hp" != 1 ]; do
-    _hchain="$_hchain$_hp "
-    _hp=$(awk '/^PPid:/ { print $2 }' "/proc/$_hp/status" 2>/dev/null)
-  done
-  for _hf in $(grep -laF "TMUX_PANE=$TMUX_PANE" /proc/[0-9]*/environ \
-    2>/dev/null || true); do
-    _hpid=${_hf#/proc/}; _hpid=${_hpid%/environ}
-    case $_hchain in *" $_hpid "*) continue ;; esac
-    _mux_hum_mine "$_hpid" && continue
-    _hok=$(tr '\0' '\n' 2>/dev/null <"/proc/$_hpid/environ" | awk \
-      -v p="$TMUX_PANE" -v t="$TMUX" \
-      '$0 == "TMUX_PANE=" p { a = 1 } $0 == "TMUX=" t { b = 1 }
-       END { print (a && b) ? 1 : 0 }')
-    [ "${_hok:-0}" = 1 ] || continue
-    printf '%s\n' "$_hpid"
-  done
-}
-
-# _mux_hum_mine PID -> 0 when PID descends from THIS process, which makes it
-# the scan's own machinery rather than a finding. Without it the subshells a
-# command substitution forks are counted, which is the self-match trap this
-# package has recorded three times in other shapes.
-_mux_hum_mine() {
-  _hm=$1
-  while [ -n "$_hm" ] && [ "$_hm" != 1 ]; do
-    [ "$_hm" = "$$" ] && return 0
-    _hm=$(awk '/^PPid:/ { print $2 }' "/proc/$_hm/status" 2>/dev/null)
-  done
-  return 1
+  _hroot=${1:-} _hself=${2:-}
+  case ${_hroot:-} in ''|*[!0-9]*) return 0 ;; esac
+  case ${_hself:-} in ''|*[!0-9]*) return 0 ;; esac
+  # The seam exists so a test can drive a FABRICATED tree: this is the one
+  # half of the feature that cannot be exercised any other way, and it shipped
+  # with no test at all. Same shape as MUX_STYLE_PROC.
+  _hproc=${MUX_HUM_PROC:-/proc}
+  [ -d "$_hproc" ] || return 0
+  # EVERY QUESTION IS ASKED OF THE ONE SNAPSHOT, which is a correctness
+  # requirement and not a saving. The first version re-read `/proc/PID/status`
+  # per candidate to decide whether it was the scan's own machinery, and the
+  # scan's forks (the `cat`, the awk, the substitution subshell) are alive
+  # when the table is built and GONE a moment later: the ancestry read then
+  # answered nothing, so they could not be attributed and were reported AS
+  # WORK. Measured: three phantom pids per run, reproducibly. A snapshot
+  # cannot race itself, so the walk reads the table and never /proc again.
+  #
+  # TWO EXCLUSIONS, and both are the same self-match trap this package has
+  # recorded in several shapes: anything on our own chain UP (the agent and
+  # the pane's shell sit on it, and neither is work) and anything DOWN from
+  # us (the scan's own forks).
+  cat "$_hproc"/[0-9]*/stat 2>/dev/null | awk -v r="$_hroot" -v me="$_hself" '
+    { _s = $0; sub(/^.*\) /, "", _s); split(_s, _f, " "); par[$1] = _f[2] }
+    END {
+      p = me
+      while (p != "" && p != 0 && !(anc[p]++)) p = par[p]
+      n = 0; st[++n] = r
+      while (n > 0) { c = st[n--]
+        for (q in par) if (par[q] == c && q != c) { st[++n] = q; cand[q] = 1 }
+      }
+      for (q in cand) {
+        if (q in anc) continue
+        mine = 0; p = q
+        while (p != "" && p != 0 && !seen[p]++) {
+          if (p == me) { mine = 1; break }
+          p = par[p]
+        }
+        delete seen
+        if (!mine) print q
+      }
+    }'
 }
 
 mux_agent_humming() {   # <record file>

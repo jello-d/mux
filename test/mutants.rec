@@ -3585,3 +3585,38 @@ t mux-strip
 - STY_HUMMING='fg=colour231,bg=#1b6b2a,bold'
 + STY_HUMMING=$STY_IDLE
 m same background
+
+= humming-the-agent-is-its-own-work
+f lib/mux-agent-state_lib
+t mux-agent-humming
+-         if (q in anc) continue
++         if (0) continue
+m the AGENT is reported as work
+
+= humming-counts-the-scans-own-forks
+f lib/mux-agent-state_lib
+t mux-agent-humming
+-           if (p == me) { mine = 1; break }
++           if (0) { mine = 1; break }
+m the scan itself forked
+
+= humming-walks-the-box-not-the-pane
+f lib/mux-agent-state_lib
+t mux-agent-humming
+-       n = 0; st[++n] = r
++       n = 0; st[++n] = 1
+m re-parented to init is reported as work
+
+= humming-stops-at-the-direct-children
+f lib/mux-agent-state_lib
+t mux-agent-humming
+-         for (q in par) if (par[q] == c && q != c) { st[++n] = q; cand[q] = 1 }
++         for (q in par) if (par[q] == c && q != c) { cand[q] = 1 }
+m the tracked task and its tool shell
+
+= humming-reads-ppid-as-a-plain-field
+f lib/mux-agent-state_lib
+t mux-agent-humming
+-     { _s = $0; sub(/^.*\) /, "", _s); split(_s, _f, " "); par[$1] = _f[2] }
++     { par[$1] = $4 }
+m the AGENT is reported as work

@@ -393,10 +393,18 @@ printf '%s %s %s %s %s %s\n' \
 # ONLY ON `idle`, and the other arm is as load-bearing: any other state CLEARS
 # the sidecar, so a pane that goes back to `working` cannot carry a stale set
 # of pids into its next turn.
+#
+# THE ROOT IS ASKED FOR SEPARATELY rather than added to the location probe
+# above, and that is worth one fork: widening a space-joined answer whose LAST
+# field is a session name (which may contain spaces) is the change that has
+# already cost this package a day. This runs only on the green transition.
 _humf=$file.hum
 if [ "$state" = idle ]; then
+  _hpp=$(tmux display-message -p -t "$TMUX_PANE" '#{pane_pid}' \
+    2>/dev/null || true)
   _htmp=$_humf.$$
-  if mux_agent_hum_scan 2>/dev/null >"$_htmp" && [ -s "$_htmp" ]; then
+  if mux_agent_hum_scan "$_hpp" "$$" 2>/dev/null >"$_htmp" \
+    && [ -s "$_htmp" ]; then
     mv -f "$_htmp" "$_humf" 2>/dev/null || rm -f "$_htmp" 2>/dev/null || true
   else
     rm -f "$_htmp" "$_humf" 2>/dev/null || true
