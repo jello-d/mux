@@ -502,7 +502,14 @@ fi
 # would make two latches to the same box (`box api` and `box web`, which were
 # distinct targets a release ago) collide, and the second would refuse as a
 # duplicate of the first.
-_run=${XDG_RUNTIME_DIR:-/tmp}/mux-latch
+# PER-USER FALLBACK, matching every other site. Plain `/tmp` was a second
+# answer to the same question and a latent multi-user hazard: `mkdir -p`
+# runs at the process umask, so on a box with no XDG_RUNTIME_DIR the first
+# user owns /tmp/mux-latch world-readable, the second cannot write a lock
+# there (silently, this mkdir ends `|| true`) so single flight stops
+# holding, and that user's notifier can read the first one's latched
+# hostnames out of it. test/lint.t refuses any other fallback now.
+_run=${XDG_RUNTIME_DIR:-/tmp/user-$(id -u)}/mux-latch
 mkdir -p "$_run" 2>/dev/null || true
 # THE KEY IS HOST, PARTITION AND SESSION, all three, and it has to be built
 # from the parsed fields now rather than from the target string. Before 0.84 the

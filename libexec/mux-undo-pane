@@ -53,7 +53,10 @@ _lib=$_libexec/../lib
   echo "mux: mux-log_lib missing (incomplete install)" >&2; exit 1; }
 . "$_lib/mux-log_lib"
 
-_run=${XDG_RUNTIME_DIR:-/tmp}/mux-undo
+# PER-USER FALLBACK, matching every other site: see the note in mux-latch.
+# A shared /tmp/mux-undo means the second user on a box with no
+# XDG_RUNTIME_DIR cannot record, so prefix-u silently stops working.
+_run=${XDG_RUNTIME_DIR:-/tmp/user-$(id -u)}/mux-undo
 _tab=$(printf '\t')
 
 _die() { echo "mux: undo-pane: $*" >&2; exit 1; }

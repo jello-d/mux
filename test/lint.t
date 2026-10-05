@@ -230,6 +230,45 @@ if [ -s "$_hcb" ]; then
   exit 1
 fi
 
+# --- A SECOND ANSWER FOR XDG_RUNTIME_DIR -----------------------------------
+# The spec gives that variable no default, so mux has to pick one, and for a
+# while it had picked TWO: `/tmp/user-$(id -u)` at three sites (agent state,
+# the exclude set, the demo) and plain `/tmp` at two (latch's lock directory
+# and undo-pane's record directory).
+#
+# PLAIN /tmp IS SHARED, which is what makes this a bug and not untidiness.
+# Both of those directories are created with `mkdir -p` at the process umask,
+# so on a box with no XDG_RUNTIME_DIR the first user to latch owns
+# /tmp/mux-latch world-readable, and then: the second user cannot write a lock
+# there, silently, because that mkdir ends `|| true`, so single flight stops
+# holding for them; prefix-u stops recording for them; and their
+# mux-desktop-notifier can read the first user's latched hostnames straight
+# out of the directory. Unreachable on a box with a logind session, which is
+# why it sat there.
+#
+# A CHECK RATHER THAN A FUNCTION, deliberately. The obvious fix is one
+# `mux_runtime_dir` in mux-paths_lib, and the two worst sites are LIBS
+# (mux-agent-state_lib, mux-exclude_lib) whose own callers would then each
+# need mux-paths_lib sourced first: about twenty files, ten of them tests, to
+# centralise a one-line DEFAULT. This tree already measured that trade once
+# and came down the same way (`${MUX_DIR:-...}` is open-coded in thirteen
+# byte-identical places on purpose): CENTRALISE A RULE, NOT A DEFAULT. What
+# the default was missing is the thing a rule gets for free, which is somebody
+# noticing when a copy disagrees. That is this.
+_xrd=$T/xrd
+( cd "$HERE" && grep -rn 'XDG_RUNTIME_DIR:-' \
+  bin lib libexec share setup.sh 2>/dev/null \
+  | grep -v 'XDG_RUNTIME_DIR:-/tmp/user-\$(id -u)' \
+  | grep -v 'XDG_RUNTIME_DIR:-}' \
+  | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' ) >"$_xrd" || true
+if [ -s "$_xrd" ]; then
+  printf 'FAIL %s: a different XDG_RUNTIME_DIR fallback:\n' "$_name" >&2
+  sed 's/^/  /' "$_xrd" >&2
+  printf 'mux uses /tmp/user-$(id -u) everywhere. Plain /tmp is\n' >&2
+  printf 'SHARED, so the second user silently cannot write there.\n' >&2
+  exit 1
+fi
+
 # --- `wc -l` IN A STRING COMPARISON ----------------------------------------
 # BSD `wc` PADS ITS COUNT WITH SPACES, so `[ "$(... | wc -l)" = 2 ]` compares
 # `"       2"` with `"2"` as STRINGS: false on macOS, true here. Three of the
