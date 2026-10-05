@@ -55,7 +55,11 @@ done
 _libexec=$(dirname "$0")
 _lib=$_libexec/../lib
 . "$_lib/mux-agent-state_lib"
-. "$_lib/mux-notify_lib"
+# NOT mux-notify_lib, and the absence is the point: this file raised banners
+# until the desktop notifier took them over, and the source outlived the
+# last call to it. A dead dependency on the hottest path mux has (this runs
+# per agent tool call) costs a fork and a parse to define two functions
+# nobody here calls.
 # mux_log, for TRANSITIONS only: see the write below. A beat that merely
 # refreshes an unchanged state is not a change and is not logged, or a busy
 # session would fill the log with "still working" at tool-call rate.
@@ -252,13 +256,6 @@ _sess=${loc#* }
 # every reader.
 notif=-
 
-# Push notification when the agent stops needing the CPU and starts needing YOU:
-# a real transition FROM working INTO blocked (permission) or idle (finished).
-# Not on same-state re-emits, not on ->working (that is you starting it). And
-# not when you are already looking at this pane (it is the active pane of the
-# active window of an attached session), since the bar already shows it; a
-# session opts out with the `notify always` layout directive
-# (@mux-notify-always).
 # RAISING MOVED TO THE DESKTOP NOTIFIER, and this is where it used to be.
 # The gate that lived here (a real transition out of `working`, not into the
 # pane you are looking at, `@mux-notify-always`, `@mux-attention`) now lives
@@ -280,10 +277,15 @@ notif=-
 # notice, and which is the same call the tray already makes about an
 # unattached partition.
 #
-# THE CLOSE PATHS ABOVE STAY, and they are not dead code: a record written by
-# an OLDER mux carries a real notification id, so during an upgrade there are
-# banners on this box that only this file knows how to withdraw. They become
-# no-ops once every record has been rewritten, which is one turn per session.
+# AND THE CLOSE PATHS WENT TOO, which an earlier version of this comment
+# said they had not. They were kept for one release on the argument that a
+# record written by an OLDER mux carries a real id only this file knows how
+# to withdraw; what retired them is not cost but DETECTABILITY, since
+# nothing can say when the last pre-upgrade record has been rewritten, so
+# the shim had no expiry anybody could act on. The one-time price is at most
+# one stranded banner per session, bounded because the urgency was always
+# `normal` and so self-expires, a choice made years earlier for an unrelated
+# reason.
 
 # Fields: state session window pane epoch notif-id. Space separated, one line.
 #

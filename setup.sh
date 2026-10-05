@@ -5,7 +5,7 @@
 # share, and man live. The runtime command stays `mux` (bin/mux); this only
 # wires it in and audits it.
 #
-#   ./setup.sh install     link core bin + libexec + share + man (NO indicator)
+#   ./setup.sh install     link core bin + libexec + share + man (NO notifier)
 #   ./setup.sh uninstall   remove those links
 #   ./setup.sh check       audit install + deps; [OK]/[FAIL] markers; drift rc
 #   ./setup.sh test        run the in-repo test suite (test/run)
