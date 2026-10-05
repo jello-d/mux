@@ -161,6 +161,53 @@ has "both a row and a breakout" "the row/file collision was not surfaced"
 [ "$RC" -eq 0 ] || fail "a drift WARN must not fail the audit"
 rm -rf "$T/conf/profiles" "$T/conf/profiles.d"
 
+# --- A CONFIG DIRECTIVE MUX DOES NOT READ ---------------------------------
+# MEASURED BEFORE THIS EXISTED: three mistyped keys and the audit said
+# `[OK] config overlay` about all of them. Each one is INERT, which is the
+# whole problem: `contextcommand` means no partitions, `latch-prob` means no
+# probe, `env-redy` means nothing waits, and nothing anywhere says so.
+#
+# IT MATTERS MORE NOW A PROVISIONER MAY PLACE THIS FILE: a placed file is
+# re-asserted every run and nobody reads it again, so a key renamed in a
+# later mux sits there doing nothing for as long as the box lives.
+_cfgsave=$T/conf/config.save
+cp "$T/conf/config" "$_cfgsave"
+printf 'context-command cc\nlatch-prob ssh-probe\n' >"$T/conf/config"
+check >/dev/null
+has "latch-prob" "a config key mux does not read went unreported, and an
+inert directive is the worst kind: no error, no effect"
+has "INERT" "the WARN does not say what the consequence is"
+no_has "[FAIL]" "an unknown key must not FAIL the audit: \$MUX_DIR is shared
+between machines and a key from a NEWER mux is a normal state, which is the
+same reason _mux_ctx_merge ignores one in a settings file"
+[ "$RC" -eq 0 ] || fail "an unknown config key failed the audit (rc=$RC)"
+
+# AND A KEY MUX DOES READ IS NOT REPORTED, which is the control: a check that
+# warned about everything would pass the assertion above while being useless.
+# `latch-probe` is the near-miss of the key above, so this also proves the
+# match is exact rather than a substring.
+printf 'context-command cc\nlatch-probe ssh-probe\nenv-timeout 2\n' \
+  >"$T/conf/config"
+check >/dev/null
+no_has "does not read" "a config of entirely VALID keys was reported as
+unknown, so the legal set is not being read correctly"
+has "all ones mux reads" "the pass line is missing, so this marker cannot be
+told from one that stopped running"
+
+# AND WITH NO SAMPLE TO READ IT SAYS SO rather than warning about every key.
+# The legal set comes from share/config.sample, so an install without one (an
+# older payload, or a MUX_SHARE pointing at a different tree, which is the
+# state this box was in the first time this ran) cannot answer the question.
+# Hedging beats a confident wrong answer about a config that is fine.
+mv "$T/share/config.sample" "$T/share/config.sample.off"
+check >/dev/null
+has "cannot audit its keys" "with no config.sample the marker must HEDGE, not
+report every directive as unknown"
+no_has "does not read" "it warned about valid keys with no sample to check
+them against"
+mv "$T/share/config.sample.off" "$T/share/config.sample"
+cp "$_cfgsave" "$T/conf/config"
+
 # --- no scan roots at all: discovery is OFF, and says so ------------------
 rm -f "$T/conf/partitions/probe.partition"
 check >/dev/null

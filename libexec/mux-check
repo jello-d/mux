@@ -220,6 +220,54 @@ if [ -d "$MUX_DIR" ]; then
       fi
     done
   fi
+  # A DIRECTIVE IN config THAT MUX DOES NOT READ. Measured before writing
+  # this: three mistyped keys (`contextcommand`, `latch-prob`, `env-redy`)
+  # and the audit said `[OK] config overlay` about all of them. Every one is
+  # INERT, which is the whole problem: no partitions, no probe, nothing
+  # waiting, and nothing anywhere says so.
+  #
+  # IT MATTERS MORE NOW THAT A PROVISIONER MAY PLACE THIS FILE. A placed file
+  # is re-asserted on every run and nobody reads it again, so a key mux
+  # renames in a later release sits there doing nothing for as long as the
+  # box lives. For `env-ready` that is the feature silently off, which is the
+  # exact failure it was built to prevent.
+  #
+  # THE LEGAL SET COMES FROM share/config.sample, which is NOT a second copy
+  # of it: test/mux-config-sample.t holds that file against the source in
+  # both directions, and against each default's VALUE, so it is a DECLARATION
+  # that cannot drift from the code. Reading it here is cheaper and more
+  # honest than a third list written out in this file.
+  #
+  # A WARN, NEVER A FAIL, and the reason is already written down one layer
+  # over: `_mux_ctx_merge` ignores an unknown key in a settings file because
+  # "a newer mux writing a key this one does not know must not break an older
+  # one", and $MUX_DIR is designed to be SHARED between machines, so a config
+  # ahead of this install is a normal state rather than drift.
+  _cfgf=$MUX_DIR/config
+  _samp=$MUX_SHARE/config.sample
+  if [ -f "$_cfgf" ] && [ -r "$_samp" ]; then
+    _known=$(sed -n 's/^#\{0,1\}\([a-z][a-z-]*\)[ \t].*/\1/p' "$_samp" \
+      | sort -u | tr '\n' ' ')
+    _unk=
+    while read -r _ck _crest; do
+      [ -n "${_ck:-}" ] || continue
+      : "${_crest:-}"
+      case " $_known " in
+      *" $_ck "*) ;;
+      *) _unk="$_unk $_ck" ;;
+      esac
+    done <<EOF
+$(mux_conf_clean <"$_cfgf")
+EOF
+    case ${_unk# } in
+    '') ok "config directives are all ones mux reads" ;;
+    *)  warn "config directive(s) mux does not read:${_unk}"
+        warn "  they are INERT: no error, and no effect. Spelling, or a key"
+        warn "  from a newer mux. Every key is in $_samp" ;;
+    esac
+  elif [ -f "$_cfgf" ]; then
+    ok "config present; cannot audit its keys (no $_samp)"
+  fi
 else warn "no config overlay at $MUX_DIR (using shipped defaults)"; fi
 
 # 4. discovery. A configured root that has since moved means `mux go <name>`

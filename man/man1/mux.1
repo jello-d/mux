@@ -812,6 +812,22 @@ stale; naming them here would be the second copy that drifts. With no server
 for this partition these are skipped: a healthy state on a fresh boot or a
 headless box, and the skip is reported rather than passed over in silence.
 .IP
+It reports a directive in
+.I $MUX_DIR/config
+that mux does NOT read, which is a WARN and not a FAIL. An unknown key is
+INERT: no error, no effect, and nothing anywhere to say so, which for
+.B env\-ready
+means the feature silently off. Measured before the marker existed: three
+mistyped keys and the audit called the overlay healthy. The legal set is read
+from
+.IR $MUX_SHARE/config.sample ,
+which a test holds against the source, so it is a declaration rather than a
+third copy of the list. It stays a WARN because
+.I $MUX_DIR
+is meant to be SHARED between machines, so a key belonging to a newer mux is
+an ordinary state rather than drift, the same reason a settings file ignores
+one.
+.IP
 It also compares the recorded session set with what the server actually
 holds, which is the only answer to "did
 .B mux resume

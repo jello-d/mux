@@ -3847,3 +3847,46 @@ t mux-latch
 -   none) return 0 ;;
 +   nonexx) return 0 ;;
 m probe turned off latch should just attempt
+
+# AN INERT CONFIG DIRECTIVE. Measured before the marker existed: three
+# mistyped keys and the audit said `[OK] config overlay` about all of them. It
+# matters more now a provisioner may PLACE this file, because a placed file is
+# re-asserted every run and nobody reads it again, so a key renamed in a later
+# mux does nothing for as long as the box lives.
+= check-inert-config-key-silent
+f libexec/mux-check
+t mux-check
+-       *) _unk="$_unk $_ck" ;;
++       *) : ;;
+m a config key mux does not read went un
+
+# AND THE MATCH IS EXACT. A substring match calls `latch-prob` a known key
+# because `latch-probe` contains it, which is the near-miss shape this tree
+# already pays for with the padded-case idiom everywhere else.
+= check-config-key-match-is-loose
+f libexec/mux-check
+t mux-check
+-       *" $_ck "*) ;;
++       *$_ck*) ;;
+m a config key mux does not read went un
+
+# A BARE `ok` CANNOT BE TOLD FROM A MARKER THAT STOPPED RUNNING, which is the
+# lesson this repo paid for when its own linter silently went from 149 files
+# to 129 and still said ok.
+= check-config-keys-pass-silent
+f libexec/mux-check
+t mux-check
+-     '') ok "config directives are all ones mux reads" ;;
++     '') : ;;
+m the pass line is missing
+
+# AND THE HEDGE, which fired on its first real run: MUX_SHARE pointed at a
+# deployed payload with no sample in it yet. Without the hedge every valid key
+# in a perfectly good config reads as unknown, which is a confident wrong
+# answer where "I cannot tell from here" is the true one.
+= check-config-keys-no-sample-hedge
+f libexec/mux-check
+t mux-check
+-   elif [ -f "$_cfgf" ]; then
++   elif false; then
+m with no config.sample the marker must
