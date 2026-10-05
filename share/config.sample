@@ -1,0 +1,203 @@
+# mux config.sample - every knob $MUX_DIR/config accepts, with its default.
+#
+# COPY WHAT YOU NEED; DO NOT COPY THE FILE. Every line below is commented
+# out and shows what mux already does, so an uncommented copy of this file
+# changes nothing today and quietly freezes those values at whatever they
+# were the day you copied it.
+#
+# THAT DISTINCTION IS THE WHOLE RULE HERE, and this package learned it the
+# expensive way. A config once restated three latch seams that were already
+# mux's own defaults, and one of them restated it WRONG (it omitted
+# ServerAliveCountMax=3, which mux sets explicitly); a fourth named a hook
+# file a later release had moved, and `mux latch` broke on both machines the
+# day it did. An ACTIVE line is a second copy of a fact that can drift. A
+# COMMENTED one cannot: nothing reads it, so the worst it can do is go out of
+# date as documentation, which is why this file is shipped BESIDE the code
+# and is held against it by `test/mux-config-sample.t` rather than by anyone
+# remembering.
+#
+# SO: set a key here only to OVERRIDE mux, and leave the rest commented.
+#
+# THE FORMAT is one directive per line, `KEY VALUE`, with VALUE running to
+# end of line. A `#` that FOLLOWS WHITESPACE starts a comment and is removed;
+# one inside a token is kept, so `bg=#3f5f00` survives. A trailing backslash
+# is NOT a line join: a wrapped directive silently becomes a truncated one,
+# so every value must fit on one line.
+#
+# A BARE NAME in any hook-shaped value resolves against $MUX_DIR first, then
+# $MUX_SHARE, then $PATH, so this file travels between machines without
+# carrying an absolute path that is right on only one of them.
+#
+# WHAT IS NOT HERE: anything that can differ per context or per partition.
+# Those live in partitions/<name>.partition and contexts/<token>.context,
+# and this file is for the invariants only. See mux(1) FILES.
+
+
+# --- CONTEXT ---------------------------------------------------------------
+
+# context-command COMMAND...
+#
+# The one command mux asks for the current context TOKEN, printed as a single
+# word on stdout. Empty output or a non-zero exit means `global`, the
+# baseline, so a box with no integration is a box with one partition. Whatever
+# backs a boundary (a group, an ACL, a namespace) lives in the integrator;
+# mux only reflects what this answers.
+#
+# Default: unset, which is `global`.
+#context-command   myctx current
+
+
+# --- SESSION ENVIRONMENT ---------------------------------------------------
+
+# env-ready NAME...
+#
+# The session pointers this machine cannot usefully work without. When
+# `mux resume` finds no server for a partition (so this host has not been set
+# up since it came up) and one of these has not arrived, it exits 4 instead
+# of rebuilding every session into an environment that is still starting. A
+# process environment is fixed at exec, so panes built in that window can
+# never gain the value afterwards. A latch retries and each attempt re-reads
+# the environment, so the wait needs nothing else.
+#
+# Each name is checked by running its OWN hook in envhooks.d, so there is no
+# second copy of the liveness question. A name nothing manages is a typo, and
+# `mux check` reports it rather than leaving you a wait that never ends.
+#
+# DECLARED, NEVER DETECTED: a box that will never have a compositor and one
+# whose compositor has not started yet look identical from here, and the
+# second is the whole reason this exists.
+#
+# Default: empty, so nothing waits.
+#env-ready   WAYLAND_DISPLAY WAYFIRE_SOCKET
+
+# env-timeout SECONDS
+#
+# How long one envhooks.d validator may take before its answer is treated as
+# undetermined. Long enough for a connect to a local socket, short enough
+# that a wedged hook is not mistaken for a wedged mux. A non-numeric value is
+# ignored rather than passed to timeout(1), because a typo must not silently
+# disable validation.
+#
+# Default: 2
+#env-timeout   2
+
+
+# --- LATCH -----------------------------------------------------------------
+# Five seams, each also settable as MUX_LATCH_<NAME> in the environment,
+# which wins over this file. mux owns the state machine; the transport is
+# yours. See mux(1) LATCH.
+
+# latch-transport TEMPLATE
+#
+# How to reach the far side. `%h` is the host, `%p:DEFAULT` the port with its
+# fallback, `%c` the remote command as ONE argv element and `%q` the same
+# thing shell-quoted. ssh needs `%q` because it concatenates its arguments
+# and the remote shell re-splits them; `docker exec` and Eternal Terminal
+# need `%c`. The `sh -lc` is load-bearing for ssh and only for ssh: sshd runs
+# a remote command without a login shell, so without it PATH has no ~/.local.
+#
+# Default:
+#latch-transport   ssh -t -o ServerAliveInterval=5 -o ServerAliveCountMax=3 -o ConnectTimeout=10 -p %p:22 %h sh -lc %q
+
+# latch-auth HOOK
+#
+# Asked whether a credential is available before an attempt, so a refusal
+# becomes a WAIT rather than a prompt storm. Exit 0 live, 1 not, 78 cannot
+# tell.
+#
+# Default: ssh-auth
+#latch-auth   ssh-auth
+
+# latch-classify HOOK
+#
+# Turns a transport's exit code and stderr into one state word. ssh exits 255
+# for auth-denied, unreachable and unresolvable alike, so stderr is the only
+# discriminator, and that specificity is exactly why it is a seam.
+#
+# Default: ssh-classify
+#latch-classify   ssh-classify
+
+# latch-probe HOOK
+#
+# A cheap question asked BEFORE each attempt. Unset means no opinion and
+# latch proceeds, which is deliberately not the same as a hook answering 78
+# (cannot tell), which makes it wait. `ssh-probe` traverses the same auth
+# path under timeout(1), so it catches a peer that completes key exchange and
+# then makes no progress, which no ssh option can bound.
+#
+# Default: unset, so nothing is probed.
+#latch-probe   ssh-probe
+
+# latch-status HOOK
+#
+# Run on every state change with the state and its detail, for a bar or an
+# external indicator. Unset means nobody asked.
+#
+# Default: unset.
+#latch-status   my-latch-status
+
+# latch-restore HOOK
+#
+# Repairs the terminal after a transport dies under a live attach. tmux never
+# sends its teardown in that case, so the terminal is left with the cursor
+# hidden, mouse reporting on and the alternate screen up. `stty sane` fixes
+# only the half the kernel owns.
+#
+# Default: mux-sane, mux's own helper.
+#latch-restore   mux-sane
+
+# latch-backoff-rung N
+#
+# Attempts at each delay before doubling it (2s, 4s, 8s ... 60s). Pure
+# doubling reaches the cap on the sixth wait, about a minute in, so a box
+# that reboots and answers again at 90s costs you a full minute of waiting
+# for a host that has been up for most of it. Raise it to be more patient,
+# lower it to climb faster.
+#
+# Default: 5
+#latch-backoff-rung   5
+
+# latch-et-port PORT
+#
+# Which port `et-probe` tests when the target did not name one. Prefer the
+# target (`mux latch box:2022`), which tells the transport and the probe the
+# same thing; this key exists for a target written without one. Also
+# MUX_ET_PORT.
+#
+# Default: 2022
+#latch-et-port   2022
+
+
+# --- DESKTOP NOTIFIER ------------------------------------------------------
+# Read by the optional `mux-desktop-notifier` daemon, not by mux core. Each
+# is also MUX_DESKTOP_NOTIFIER_<NAME> in the environment, which wins.
+
+# desktop-notifier-transport TEMPLATE
+#
+# How the daemon reaches a latched host to stream its agent state. Same
+# tokens as latch-transport. BatchMode is deliberate: a daemon must never
+# block on a prompt nobody is there to answer.
+#
+# Default:
+#desktop-notifier-transport   ssh -o BatchMode=yes -o ConnectTimeout=6 -o StrictHostKeyChecking=accept-new -p %p:22 %h %q
+
+# desktop-notifier-ignore NAME...
+#
+# Partitions the daemon draws no tray item and raises no banner for. `mux
+# demo` runs four pretend agents in a loop, so its namespace is ignored by
+# default; name it here to watch the demo, or add a real partition you would
+# rather not see.
+#
+# Default: mux.demo
+#desktop-notifier-ignore   mux.demo
+
+# desktop-notifier-activate HOOK
+#
+# Run locally after a tray click has switched that host's client, handed the
+# item's LABEL. Clicking switches the session; RAISING the window that shows
+# it means knowing about a compositor, and mux manages sessions inside
+# terminals with no opinion about where a terminal sits. Samples in
+# $MUX_SHARE/desktop-notifier/.
+#
+# Default: unset, so the click does only the part mux owns.
+#desktop-notifier-activate   focus-kitty

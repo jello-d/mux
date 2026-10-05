@@ -1,0 +1,24 @@
+# Per-repo exemptions for test/conventions.t: one path glob per line.
+#
+# THE BAR IS HIGH ON PURPOSE. A glob here drops the named path from ALL of
+# that file's rules, not from the one it offends, so an exemption to protect
+# two lines can silence eight checks over a whole file. Prefer reshaping the
+# file; reach for this only where the format itself makes a rule impossible.
+
+# share/config.sample documents every $MUX_DIR/config knob with its DEFAULT,
+# and two of those defaults (the ssh templates for `latch-transport` and
+# `desktop-notifier-transport`) are 118 and 121 characters. They cannot be
+# wrapped: mux's config parser does NOT join a trailing backslash, it takes
+# it literally, which this package has already paid for once when a wrapped
+# `latch-transport` silently became `ssh -t ... \` with no host and broke
+# `mux latch` on both machines. So a default shown across two lines is a
+# default that does not work when copied, which is the one thing a sample
+# exists to avoid.
+#
+# WHAT THIS DOES NOT COST, because the honest version of an exemption is
+# naming what replaces it: `test/mux-config-sample.t` asserts the rules that
+# matter for this file (no em-dashes or double hyphens, every directive line
+# inside the format, no TABs) AND the ones only it can ask, that the sample
+# documents exactly the keys the source reads, in both directions. The
+# generic checker is removed; coverage is not.
+share/config.sample
