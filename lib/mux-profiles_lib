@@ -185,3 +185,54 @@ mux_prof_drop() {       # <name>
   ' "$_pf" >"$_tmp" || { rm -f "$_tmp"; return 1; }
   mv -f "$_tmp" "$_pf"
 }
+
+# --- the OVERLAY half: a profile's file, its full name set, its partition ---
+# MOVED HERE FROM bin/mux (2026-10-05), because all three are used on BOTH
+# sides of the help extraction: `usage()` stayed in the entry point and
+# `help_profiles` went to libexec/mux-help, and they ask the same three
+# questions. Duplicating them would have been two answers about one profile
+# table, which is what this lib exists to prevent.
+#
+# TWO OF THEM NEED A LIB THIS ONE DOES NOT SOURCE, and the caller supplies it,
+# which is the convention everywhere here (no lib sources another: a sourced
+# POSIX sh file sees the CALLER'S $0, so it cannot locate a sibling):
+#
+#   mux_prof_find       needs mux-data_lib      (mux_data_find)
+#   mux_prof_partition  needs mux-context_lib   (_mux_ctx_file)
+#
+# Both of today's callers, bin/mux and libexec/mux-help, source all three.
+mux_prof_find() {  # <name>
+  _p=$(mux_data_find profiles.d "$1" .profile)
+  [ -n "$_p" ] || _p=$(mux_data_find '' "$1" .layout)
+  printf '%s' "$_p"
+}
+
+mux_prof_all_names() {
+  {
+    mux_prof_names
+    for _f in "$MUX_DIR"/profiles.d/*.profile; do
+      [ -e "$_f" ] || continue
+      _b=${_f##*/}; printf '%s\n' "${_b%.profile}"
+    done
+    for _f in "$MUX_DIR"/*.layout; do
+      [ -e "$_f" ] || continue
+      _b=${_f##*/}; printf '%s\n' "${_b%.layout}"
+    done
+  } | LC_ALL=C sort -u | grep .
+  return 0
+}
+
+mux_prof_partition() {   # <name>
+  _pc=$(mux_prof_get "$1" context)
+  if [ -z "$_pc" ]; then
+    _pf=$(mux_prof_find "$1")
+    [ -n "$_pf" ] && _pc=$(mux_conf_clean <"$_pf" \
+      | awk '$1=="context"{print $2; exit}')
+  fi
+  [ -n "$_pc" ] || { printf 'global'; return 0; }
+  _pcf=$(_mux_ctx_file contexts "$_pc" .context)
+  _pp=
+  [ -n "$_pcf" ] && _pp=$(sed -e '/^[[:space:]]*#/d' "$_pcf" \
+    | awk '$1=="partition"{print $2; exit}')
+  printf '%s' "${_pp:-$_pc}"
+}

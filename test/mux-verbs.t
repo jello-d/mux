@@ -66,6 +66,32 @@ _p=$(mux help profiles)
 case $_p in *alpha*) ;; *) fail "help profiles omits a table row" ;; esac
 case $_p in *bravo*) ;; *) fail "help profiles omits a breakout" ;; esac
 
+# --- help themes NAMES A CONFIGURED DEFAULT, which only a themed box shows --
+# THE CASE A DIFFERENTIAL CANNOT MAKE, and it is why this exists. The help
+# topics moved to libexec/mux-help (2026-10-05) and the first version resolved
+# the context with `mux_ctx_mine`, which runs mux_ctx_resolve inside a COMMAND
+# SUBSTITUTION, so every MUX_CFG_* it sets died with the subshell and
+# MUX_CFG_theme was unset. `mux help themes` was still byte-identical before
+# and after, on every box here, because none of them configures an explicit
+# theme: an UNSET variable and an empty one print the same thing. shellcheck's
+# SC2154 is what saw it.
+#
+# SO THE FIXTURE HAS TO DECLARE ONE. A box whose partition names a theme is
+# the only place the difference is observable, which is the general shape of
+# "a fixture whose value coincides with the obvious constant proves nothing".
+mkdir -p "$T/conf/partitions"
+printf 'theme red\nderive explicit\n' \
+  >"$T/conf/partitions/global.partition"
+_t=$(mux help themes || true)
+case $_t in
+*'default theme'*red*) ;;
+*) fail "help themes does not name the partition's configured theme. That is
+the MUX_CFG_* path, which dies if the context is resolved in a subshell, and
+no before/after comparison on a box with no theme configured can see it:
+$_t" ;;
+esac
+rm -f "$T/conf/partitions/global.partition"
+
 # --- mux why explains each field, and names its source ----------------------
 _w=$(mux why alpha)
 case $_w in

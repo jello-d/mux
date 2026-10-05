@@ -335,31 +335,12 @@ fi
 # files. A leftover .layout is still accepted, with a warning, so that deploying
 # a new mux and converting your config need not happen in the same instant.
 # Delete this fallback (and the mux-check warning) once nobody has one.
-_find_profile() {  # <name>
-  _p=$(mux_data_find profiles.d "$1" .profile)
-  [ -n "$_p" ] || _p=$(mux_data_find '' "$1" .layout)
-  printf '%s' "$_p"
-}
 
 # Every profile NAME available, in any of its forms: a row in the table, a
 # breakout file, or (transitionally) a pre-rename <name>.layout at the overlay
 # root. The table is the PRIMARY form now, so anything that lists profiles has
 # to start here: listing only files showed an empty set to anyone who had
 # done the sensible thing and used rows.
-_profile_names() {
-  {
-    mux_prof_names
-    for _f in "$MUX_DIR"/profiles.d/*.profile; do
-      [ -e "$_f" ] || continue
-      _b=${_f##*/}; printf '%s\n' "${_b%.profile}"
-    done
-    for _f in "$MUX_DIR"/*.layout; do
-      [ -e "$_f" ] || continue
-      _b=${_f##*/}; printf '%s\n' "${_b%.layout}"
-    done
-  } | LC_ALL=C sort -u | grep .
-  return 0
-}
 
 # The PARTITION a profile belongs to. Its `context=` tag names a context; that
 # context's file names a partition (defaulting to the token). An UNTAGGED
@@ -370,27 +351,13 @@ _profile_names() {
 # private knowledge (severance's personal carve-outs inside the work tree), and
 # the messiest thing in the old contract. A profile's root is now purely a
 # session property: where its panes open, never a context signal.
-_profile_partition() {   # <name>
-  _pc=$(mux_prof_get "$1" context)
-  if [ -z "$_pc" ]; then
-    _pf=$(_find_profile "$1")
-    [ -n "$_pf" ] && _pc=$(mux_conf_clean <"$_pf" \
-      | awk '$1=="context"{print $2; exit}')
-  fi
-  [ -n "$_pc" ] || { printf 'global'; return 0; }
-  _pcf=$(_mux_ctx_file contexts "$_pc" .context)
-  _pp=
-  [ -n "$_pcf" ] && _pp=$(sed -e '/^[[:space:]]*#/d' "$_pcf" \
-    | awk '$1=="partition"{print $2; exit}')
-  printf '%s' "${_pp:-$_pc}"
-}
 
 # The root a profile declares, whichever form it is in. Empty when it declares
 # none (the session then roots where it is launched).
 _profile_root() {   # <name>
   _r=$(mux_prof_get "$1" root)
   if [ -z "$_r" ]; then
-    _pf=$(_find_profile "$1")
+    _pf=$(mux_prof_find "$1")
     [ -n "$_pf" ] && _r=$(mux_conf_clean <"$_pf" \
       | awk '$1=="root"{print $2; exit}')
   fi
@@ -513,8 +480,8 @@ _ensure_side() {
 # one-side-or-the-other view `mux ls` gives for sessions.
 _list_layouts() {
   _ensure_side
-  _profile_names | while IFS= read -r _n; do
-    [ "$(_profile_partition "$_n")" = "$_cur_part" ] || continue
+  mux_prof_all_names | while IFS= read -r _n; do
+    [ "$(mux_prof_partition "$_n")" = "$_cur_part" ] || continue
     printf '%s ' "$_n"
   done
 }
@@ -758,283 +725,22 @@ name_arg=${1:-}
 layout_arg=${2:-}
 
 
-# --- help: `mux help [agents|colors|layouts|palette]` -----------------------
-# A proper verb. Bare (and the -h/--help flags) prints the plain usage; `colors`
-# renders each theme in its OWN palette so you see it; `layouts` diagrams each
-# session shape in ASCII. All read-only file work: runs here, before any git
-# or socket touch.
-# Colour only when stdout is a terminal; an empty _RST doubles as the "no
-# colour" flag for _sgr_* below, so `mux help colors | less` stays plain text.
-if [ -t 1 ]; then _RST=$(printf '\033[0m'); else _RST=; fi
-
-# ANSI SGR for one tmux colour spec (colourN or #rrggbb), as fg(38) or bg(48).
-# Colour spec -> SGR parameter fragment. A "0x" or "#" prefix means TRUECOLOR
-# (rrggbb -> R;G;B); anything else is a 256-palette index (a bare number, or
-# colourN). <role> is 38 (fg) or 48 (bg). Empty on an unrecognised spec.
-_sgr_frag() {           # <spec> <38|48>
-  case $1 in
-  '#'*|0x*)
-    _h=${1#\#}; _h=${_h#0x}
-    case $_h in ??????) ;; *) return 0 ;; esac   # need 6 hex digits
-    _r=${_h%????}; _gb=${_h#??}; _g=${_gb%??}; _b=${_h#????}
-    printf '%s;2;%d;%d;%d' "$2" \
-      "$((0x$_r))" "$((0x$_g))" "$((0x$_b))" ;;
-  colour[0-9]*) printf '%s;5;%s' "$2" "${1#colour}" ;;
-  [0-9]*)       printf '%s;5;%s' "$2" "$1" ;;
-  esac
-}
-# Full SGR escape for a colour spec (empty when not a tty or spec unrecognised).
-_sgr_color() {          # <spec> <38|48>
-  [ -n "$_RST" ] || return 0
-  _f=$(_sgr_frag "$1" "$2"); [ -n "$_f" ] && printf '\033[%sm' "$_f"
-}
-# ANSI SGR for a tmux style string ("bg=X fg=Y bold"): fg, then bg, then bold.
-_sgr_style() {          # <style>
-  [ -n "$_RST" ] || return 0
-  for _t in $1; do
-    case $_t in
-    fg=*) _sgr_color "${_t#fg=}" 38 ;;
-    bg=*) _sgr_color "${_t#bg=}" 48 ;;
-    bold) printf '\033[1m' ;;
-    esac
-  done
-}
-help_colors() {
-  echo 'themes (`mux theme NAME`, or a `theme` line in a profile):'
-  echo
-  mux_data_files themes .theme | while IFS= read -r _f; do
-    _n=${_f##*/}; _n=${_n%.theme}
-    _cf=$(mktemp); mux_conf_clean < "$_f" > "$_cf"
-    _bar=$(awk '$1=="bar"{sub(/^bar[ \t]+/,"");print;exit}' "$_cf")
-    _win=$(awk \
-        '$1=="window"{sub(/^window[ \t]+/,"");print;exit}' "$_cf")
-    _acc=$(awk \
-        '$1=="accent"{sub(/^accent[ \t]+/,"");print;exit}' "$_cf")
-    _sel=$(awk \
-        '$1=="select"{sub(/^select[ \t]+/,"");print;exit}' "$_cf")
-    rm -f "$_cf"
-    # select falls back to the window chip (as mux-style does);
-    # accent is fg-only, so show it as a solid bg swatch.
-    [ -n "$_sel" ] || _sel=$_win
-    # Split the bar into its bg/fg tokens so they print in fixed
-    # columns (bg=colour166 is the widest at 12), not a ragged
-    # trailing string where fg never lines up.
-    _bg= _fg=
-    for _t in $_bar; do
-      case $_t in bg=*) _bg=$_t ;; fg=*) _fg=$_t ;; esac
-    done
-    printf '  %-11s %s bar %s %s active %s %s   %s' \
-      "$_n" \
-      "$(_sgr_style "$_bar")" "$_RST" \
-      "$(_sgr_style "$_win")" "$_RST" \
-      "$(_sgr_color "${_acc#fg=}" 48)" "$_RST"
-    printf ' %s sel %s   %-12s %s\n' \
-      "$(_sgr_style "$_sel")" "$_RST" "$_bg" "$_fg"
-  done
-  # The resolved default for THIS context: a hashed theme when `derive
-  # hash` is in force, else the context's own `theme`.
-  if [ "${MUX_CFG_derive:-hash}" = hash ]; then
-    printf '\n  unset themes:   hashed from the session name\n'
-  else
-    printf '\n  default theme:  %s\n' "$MUX_CFG_theme"
-  fi
-}
-# Flatten a profile for display: its own directives, then the window/pane/
-# bottom lines of the layout it names. Takes a NAME, not a path, so a row and a
-# breakout file both reach it. Display-only, so a pipe is fine (no
-# exit-on-error to preserve) and an unresolvable layout just shows nothing.
-_flat_profile() {       # <name>
-  _pf=$(_find_profile "$1")
-  if [ -n "$_pf" ]; then
-    _wl=$(mux_conf_clean < "$_pf" \
-      | awk '$1=="layout"{print $2; exit}')
-    mux_conf_clean < "$_pf" | grep -v '^layout[[:space:]]' || true
-  else
-    _wl=$(mux_prof_get "$1" layout)
-    mux_prof_directives "$1" | grep -v '^layout ' || true
-  fi
-  _lf=$(mux_data_find layouts "${_wl:-default}" .layout)
-  [ -n "$_lf" ] && mux_conf_clean < "$_lf"
-  return 0
-}
-# Draw the window/pane/bottom directives (on stdin) as ASCII boxes: top panes
-# side by side, a full-width bottom strip below when present; one per window.
-_draw_layout() {
-  awk '
-  function rep(c,n,  s){s="";while(n-->0)s=s c;return s}
-  function cell(s,w){return sprintf(" %-" (w-1) "s", substr(s,1,w-1))}
-  # l + (dashes j)*(N-1) + dashes r : a border row with pane junctions.
-  function edge(l,j,r,  i,s){
-    s=l
-    for(i=1;i<=np;i++)s=s rep("─",cw) (i<np?j:r)
-    return s
-  }
-  function flush(  i,m,fw){
-    if(np==0)return
-    print "    " edge("┌","┬","┐")
-    m="    │"; for(i=1;i<=np;i++)m=m cell(p[i],cw)"│"; print m
-    if(bot!=""){                       # merged full-width bottom
-      print "    " edge("├","┴","┤")
-      fw=np*(cw+1)-1
-      print "    │" cell(bl,fw) "│"
-      print "    └" rep("─",fw) "┘"
-    } else print "    " edge("└","┴","┘")
-    np=0; bot=""
-  }
-  BEGIN{cw=11}
-  $1=="window"{flush(); print "    [" $2 "]"}
-  $1=="pane"{$1="";sub(/^ /,"");np++;p[np]=$0}
-  $1=="bottom"{bot=$2; bl="shell " $2}
-  END{flush()}'
-}
-help_profiles() {
-  _ensure_side
-  # Tag the heading with the side only when there is more than one (a hook
-  # is active); the default single-context case stays untagged.
-  _tag=''
-  [ "$_cur_part" = global ] || _tag=" [$_cur_part]"
-  printf 'profiles%s (`mux go NAME`):\n' "$_tag"
-  echo
-  _profile_names | while IFS= read -r _n; do
-    _flat=$(_flat_profile "$_n")
-    _th=$(printf '%s\n' "$_flat" | awk '$1=="theme"{print $2;exit}')
-    _rt=$(printf '%s\n' "$_flat" | awk '$1=="root"{print $2;exit}')
-    [ "$(_profile_partition "$_n")" = "$_cur_part" ] || continue
-    printf '  %s' "$_n"
-    if [ -n "$_th" ]; then          # theme name in its own colour
-      _tf=$(mux_data_find themes "$_th" .theme)
-      _tb=$(mux_conf_clean \
-          < "${_tf:-/dev/null}" 2>/dev/null \
-          | awk '$1=="bar"{sub(/^bar[ \t]+/,"");print;exit}')
-      printf '  theme %s %s %s' \
-        "$(_sgr_style "$_tb")" "$_th" "$_RST"
-    fi
-    printf '  root %s\n' "${_rt:-<the dir you run it in>}"
-    printf '%s\n' "$_flat" | _draw_layout
-    echo
-  done
-}
-# The xterm 256-colour palette as swatches (bg=colourN, contrast fg) so a
-# theme's bg=/fg= number can be picked by eye. Meaningless without colour.
-# palette test BAR_FG BAR_BG ACT_FG ACT_BG: a mock status bar in the given
-# bar and active-chip colours, so a whole theme is judged IN CONTEXT rather
-# than one swatch at a time. Colours: bar fg, bar bg, active-window fg, bg.
-_palette_preview() {    # BAR_FG BAR_BG ACT_FG ACT_BG
-  [ "$#" -eq 4 ] || { echo \
-    "mux: palette test BAR_FG BAR_BG ACT_FG ACT_BG" >&2
-    exit 2; }
-  for _c in "$@"; do
-    [ -n "$(_sgr_frag "$_c" 48)" ] || {
-      echo "mux: bad colour: $_c" >&2; exit 2; }
-  done
-  _b=$(_sgr_color "$2" 48)$(_sgr_color "$1" 38)   # bar bg + fg
-  _a=$(_sgr_color "$4" 48)$(_sgr_color "$3" 38)$(printf '\033[1m')
-  printf 'status bar preview '
-  printf '(bar fg=%s bg=%s, active fg=%s bg=%s):\n\n' \
-    "$1" "$2" "$3" "$4"
-  printf '  %s edit │ %s code %s logs   ⏳ · host 09:41 %s\n' \
-    "$_b" "$_a" "$_b" "$_RST"
-}
-
-# The 256-colour grid. FG is an SGR fragment applied to every cell; empty picks
-# black or white per cell by luminance, so each number stays legible on its own
-# background.
-_palette_grid() {       # [sgr-fg-fragment]
-  awk -v fg="$1" '
-  function fgof(n,  i,r,g,b,l){
-    if(n<16) l=(n==0)?0:(n==7||n>=9)?200:90
-    else if(n<232){
-      i=n-16; b=i%6; i=int(i/6); g=i%6; r=int(i/6)
-      r=r?r*40+55:0; g=g?g*40+55:0; b=b?b*40+55:0
-      l=0.3*r+0.59*g+0.11*b
-    } else l=8+(n-232)*10
-    return l>140?16:231
-  }
-  function cell(n){
-    if(fg!="")
-      return sprintf("\033[48;5;%dm\033[%sm%4d\033[0m",n,fg,n)
-    return sprintf("\033[48;5;%dm\033[38;5;%dm%4d\033[0m",
-      n, fgof(n), n)
-  }
-  function grid(lo,hi,per,  i,c,s){
-    s=""; c=0
-    for(i=lo;i<=hi;i++){
-      s=s cell(i)
-      if(++c==per){print "  " s; s=""; c=0}
-    }
-    if(c>0)print "  " s
-  }
-  BEGIN{
-    print "  system 0-15:";       grid(0,15,16);   print ""
-    print "  cube 16-231:";       grid(16,231,18);  print ""
-    print "  grayscale 232-255:"; grid(232,255,12)
-  }'
-}
-
-help_palette() {        # [FG] | test BAR_FG BAR_BG ACT_FG ACT_BG
-  [ -n "$_RST" ] || { echo 'mux: palette needs a terminal' >&2
-    return 0; }
-  if [ "${1:-}" = test ]; then
-    shift
-    _palette_preview "$@"
-    exit 0
-  fi
-  _fg=                            # empty => B&W contrast per cell
-  if [ -n "${1:-}" ]; then
-    _fg=$(_sgr_frag "$1" 38)
-    [ -n "$_fg" ] || { echo \
-      "mux: palette fg: 0-255, colourN, #rrggbb, or 0x..." >&2
-      exit 2; }
-  fi
-  if [ -n "$_fg" ]; then
-    printf 'palette (fg %s over every bg):\n\n' "$1"
-  else
-    echo 'palette (the 256 colours; any works as fg OR bg):'
-    echo
-  fi
-  _palette_grid "$_fg"
-  [ -n "$_fg" ] || { printf \
-    '\n  tip: `palette N` renders colour N as fg here;\n'
-    printf '       `palette test FG BG FG BG` mocks a bar.\n'; }
-}
-# The agent profiles and how to select one: the mux peer of help_colors, so
-# `pane agent`'s target (and how to add another CLI) is discoverable.
-help_agents() {
-  echo 'agents (the CLI a `pane agent` runs). Choose per session with an'
-  echo '`agent <name>` line in a layout, or `pane <name>` for one pane:'
-  echo
-  mux_data_files agents .agent | while IFS= read -r _f; do
-    _n=${_f##*/}; _n=${_n%.agent}
-    _cf=$(mktemp); mux_conf_clean < "$_f" > "$_cf"
-    _go=$(awk '$1=="go"{sub(/^go[ \t]+/,"");print;exit}' "$_cf")
-    _rs=$(awk \
-        '$1=="resume"{sub(/^resume[ \t]+/,"");print;exit}' "$_cf")
-    rm -f "$_cf"
-    [ "$_n" = claude ] && _n="$_n (default)"
-    printf '  %s\n' "$_n"
-    printf '    go      %s\n' "${_go:-<none>}"
-    printf '    resume  %s\n' "${_rs:-<none>}"
-  done
-  printf '\n  profiles: <name>.agent, a `go` line and a `resume` line:\n'
-  printf '    %s/agents\n' "$MUX_DIR"
-  printf '      (yours: a profile here overrides a shipped one)\n'
-  printf '    %s/agents\n' "$MUX_SHARE"
-  printf '      (shipped)\n'
-  printf '  add a CLI by dropping in one; the state strip also needs'
-  printf '\n  the agent to call `mux agent-emit` over its lifecycle.\n'
-}
+# THE HELP TOPICS MOVED to libexec/mux-help (2026-10-05): 265 lines of pure
+# output. `usage` stayed, because six error paths in the parser below call
+# it with their own exit codes; see cmd_help.
+# THE TOPICS LIVE IN libexec/mux-help (2026-10-05): 265 lines of pure output
+# that resolve nothing but the caller's own partition. What stays here is the
+# EMPTY case, because that is `usage`, and usage is called from six error
+# paths in the argument parser below, each with its own exit code. Turning
+# those six into execs is a change worth its own day rather than being done
+# on the way to a release, so the split is where the dependency is: bare help
+# is usage, every topic is the helper, and the topic VOCABULARY lives with
+# the topics so adding one is a single edit in a single file.
 cmd_help() {
   case ${1:-} in
-  '')      usage 0 ;;
-  agents)   help_agents ;;
-  themes|colors) help_colors ;;
-  profiles|layouts) help_profiles ;;
-  palette) shift; help_palette "$@" ;;
-  *) echo "mux: unknown help topic: $1" \
-    "(agents, themes, profiles, palette)" >&2
-     exit 2 ;;
+  '') usage 0 ;;
+  *)  exec "$LIBEXEC/mux-help" "$@" ;;
   esac
-  exit 0
 }
 
 # "$@" matters: this was an inline block, where $1 was the script's first
@@ -1200,7 +906,10 @@ fi
 # LIST of them, and `for n in $set` is never safe for one.
 _RS_NL='
 '
-_cur_part=$MUX_CTX_PARTITION
+# `_cur_part` IS NOT SET HERE ANY MORE. Its only readers are usage and
+# _list_layouts, which run BEFORE this point, which is exactly why
+# _ensure_side resolves lazily. The assignment that used to sit here was
+# unobservable once the help topics left.
 # Nothing knows this context. Say so ONCE, here in the front end, never from
 # mux-context_lib, which mux-style and mux-agent-render call every status
 # interval, where output pops a view-mode buffer over the active pane.
@@ -1617,7 +1326,7 @@ _theme_remember() {     # reads $_s and $_t
   # the file is the only place decisions live, so it is written now
   # rather than behind a flag you have to remember. A breakout profile
   # takes it in place; everything else becomes a row.
-  _bo=$(_find_profile "$_s")
+  _bo=$(mux_prof_find "$_s")
   case $_bo in
   *.profile)
     _persist_theme "$_bo" "$_t"
@@ -1689,7 +1398,7 @@ _why_resolve_name() {
     wh=$(mux_sess_sanitise "$wh")
   fi
   w_row=0; mux_prof_has "$wh" && w_row=1
-  w_file=$(_find_profile "$wh")
+  w_file=$(mux_prof_find "$wh")
 
   if [ "$w_bypath" -eq 1 ]; then w_src="derived from the path you gave"
   elif [ -n "$name_arg" ]; then w_src="you typed it"
@@ -2597,7 +2306,7 @@ cmd_new() {
     exit 1
   fi
   if [ "$force" -eq 0 ]; then
-    if mux_prof_has "$name" || [ -n "$(_find_profile "$name")" ]
+    if mux_prof_has "$name" || [ -n "$(mux_prof_find "$name")" ]
     then
       echo "mux: $name already has a profile" \
         "(edit it: mux edit $name, or --force)" >&2
@@ -2928,7 +2637,7 @@ prow=
 if [ -n "$layout_arg" ]; then
   # An explicit PROFILE positional wins and must exist: a typo here is
   # an error, never a silent fallback. It may name a row or a breakout.
-  profile=$(_find_profile "$layout_arg")
+  profile=$(mux_prof_find "$layout_arg")
   if [ -z "$profile" ]; then
     mux_prof_has "$layout_arg" && prow=$layout_arg
     [ -n "$prow" ] || {
@@ -2939,7 +2648,7 @@ else
   # to delete the row, so a surviving one is stale, and the file is the
   # thing you deliberately promoted. `mux check` reports the pair as
   # drift rather than leaving it to precedence.
-  profile=$(_find_profile "$name")
+  profile=$(mux_prof_find "$name")
   if [ -z "$profile" ] && mux_prof_has "$name"; then prow=$name; fi
 fi
 case $profile in *.layout)
