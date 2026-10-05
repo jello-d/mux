@@ -1326,3 +1326,143 @@ class Activate(unittest.TestCase):
         asyncio.run(self.sni.activate("a box"))
         hook, _w = self.fired[1]
         self.assertEqual(hook, ["focus-window", "a box"])
+
+
+class StreamingFeed(unittest.TestCase):
+    """A Feed fed by `mux agent stream` rather than by repeated asking.
+
+    THE POINT IS NOT LATENCY. Polling opened a connection to every watched
+    host every few seconds; a stream moves the polling ON to the watched box
+    and sends only CHANGES. What it costs is the one signal polling got free:
+    a non-zero exit could only be the transport, so `unknown` was trustworthy,
+    and a stream that simply stops speaking has no such signal. Hence the
+    producer's heartbeat and this reader's staleness rule, which these tests
+    are mostly about.
+    """
+
+    def _feed(self, sni, argv):
+        f = sni.Feed(["unused"], stream_argv=argv)
+        return f
+
+    def test_an_answer_sets_the_rows(self):
+        sni = _fresh()
+        f = self._feed(sni, ["unused"])
+        line = (b'{"status":"ok","partitions":'
+                b'[{"partition":"global","state":"blocked","count":2}]}\n')
+        self.assertTrue(f._ingest(line), "an answer must wake the items")
+        self.assertEqual(f.rows, {"global": ("blocked", 2)})
+
+    def test_a_HEARTBEAT_is_not_an_answer(self):
+        """The load-bearing one. A heartbeat carries no `partitions`, so
+        `parse_all` yields None for it, and treating that as an answer would
+        blank every item on this host on every keepalive: the calm-host signal
+        turned into a flashing unknown, several times a minute, for ever."""
+        sni = _fresh()
+        f = self._feed(sni, ["unused"])
+        f._ingest(b'{"status":"ok","partitions":'
+                  b'[{"partition":"global","state":"idle","count":0}]}\n')
+        before = f.rows
+        self.assertFalse(f._ingest(b'{"status":"ok","heartbeat":true}\n'),
+                         "a heartbeat must not be reported as an answer")
+        self.assertEqual(f.rows, before,
+                         "a heartbeat changed the rows")
+
+    def test_JUNK_makes_the_host_unknown(self):
+        """And the other direction, which matters just as much: a feed
+        emitting junk fast would never go stale, so it would hold its last
+        good value for ever. That is the original sin of this indicator, an
+        unreachable box showing whatever it last said."""
+        sni = _fresh()
+        f = self._feed(sni, ["unused"])
+        f._ingest(b'{"status":"ok","partitions":'
+                  b'[{"partition":"global","state":"idle","count":0}]}\n')
+        self.assertTrue(f._ingest(b'not json at all\n'))
+        self.assertIsNone(f.rows)
+
+    def test_a_refusal_is_also_unknown(self):
+        sni = _fresh()
+        f = self._feed(sni, ["unused"])
+        self.assertTrue(f._ingest(b'{"status":"refused","message":"no"}\n'))
+        self.assertIsNone(f.rows)
+
+    def test_watch_READS_a_real_stream(self):
+        """End to end against a real subprocess: two documents, then exit."""
+        sni = _fresh()
+        sni.RESPAWN = 3600          # do not respawn inside the test
+        doc = ('{"status":"ok","partitions":'
+               '[{"partition":"global","state":"%s","count":%d}]}')
+        script = ("printf '%s\\n'; sleep 0.2; printf '%s\\n'; sleep 5"
+                  % (doc % ("idle", 0), doc % ("blocked", 3)))
+        f = self._feed(sni, ["sh", "-c", script])
+
+        async def drive():
+            t = asyncio.get_event_loop().create_task(f.watch())
+            await asyncio.sleep(1.0)
+            t.cancel()
+            try:
+                await t
+            except asyncio.CancelledError:
+                pass
+        asyncio.run(drive())
+        self.assertEqual(f.rows, {"global": ("blocked", 3)},
+                         "the LAST document should be the live one")
+
+    def test_a_SILENT_stream_becomes_unknown(self):
+        """The heartbeat's whole reason. A source that connects and then says
+        nothing is indistinguishable from a calm one without a deadline, and
+        this package has measured both failures it hides: a blackholed port,
+        and a responsive peer making no progress for 342 seconds."""
+        sni = _fresh()
+        sni.STALE = 0.5
+        sni.RESPAWN = 3600
+        doc = ('{"status":"ok","partitions":'
+               '[{"partition":"global","state":"idle","count":0}]}')
+        f = self._feed(sni, ["sh", "-c", "printf '%s\\n'; sleep 30" % doc])
+
+        async def drive():
+            t = asyncio.get_event_loop().create_task(f.watch())
+            await asyncio.sleep(0.2)
+            mid = f.rows
+            await asyncio.sleep(1.2)
+            t.cancel()
+            try:
+                await t
+            except asyncio.CancelledError:
+                pass
+            return mid
+        mid = asyncio.run(drive())
+        # `idle` carries no count by contract (parse_all normalises it away),
+        # so None here is the right answer and not a missing field.
+        self.assertEqual(mid, {"global": ("idle", None)},
+                         "precondition: the first document was never read, so "
+                         "the staleness assertion proves nothing")
+        self.assertIsNone(f.rows,
+                          "a stream that went silent past the staleness "
+                          "deadline is still being believed")
+
+    def test_a_stream_that_DIES_becomes_unknown(self):
+        sni = _fresh()
+        sni.RESPAWN = 3600
+        doc = ('{"status":"ok","partitions":'
+               '[{"partition":"global","state":"idle","count":0}]}')
+        f = self._feed(sni, ["sh", "-c", "printf '%s\\n'" % doc])
+
+        async def drive():
+            t = asyncio.get_event_loop().create_task(f.watch())
+            await asyncio.sleep(0.6)
+            t.cancel()
+            try:
+                await t
+            except asyncio.CancelledError:
+                pass
+        asyncio.run(drive())
+        self.assertIsNone(f.rows,
+                          "the stream exited and its last answer is still "
+                          "on screen, which is the stale-icon bug")
+
+    def test_the_staleness_deadline_EXCEEDS_the_producers_heartbeat(self):
+        """A cross-process contract, and the kind that is only wrong once in
+        production. `mux agent stream` beats every 15s by default; a deadline
+        at or below that declares a perfectly healthy feed dead."""
+        sni = _fresh()
+        self.assertGreater(sni.STALE, 15.0)

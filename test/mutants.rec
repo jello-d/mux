@@ -3550,3 +3550,24 @@ t mux-agent-stream
 -     ''|*[!0-9]*|0) _out usage 2 "-i needs whole seconds, 1 or more" ;;
 +     '') _out usage 2 "-i needs whole seconds, 1 or more" ;;
 m was accepted
+
+= indicator-heartbeat-read-as-an-answer
+f indicator/mux_indicator/sni.py
+t mux-indicator
+-         if isinstance(doc, dict) and doc.get("heartbeat"):
++         if False:
+m must not be reported as an answer
+
+= indicator-junk-keeps-the-last-answer
+f indicator/mux_indicator/sni.py
+t mux-indicator
+-         self.rows = parse_all(text)
++         self.rows = parse_all(text) or self.rows
+m test_JUNK_makes_the_host
+
+= indicator-stream-never-goes-stale
+f indicator/mux_indicator/sni.py
+t mux-indicator
+-                                 proc.stdout.readline(), STALE)
++                                 proc.stdout.readline(), 86400)
+m went silent past the staleness

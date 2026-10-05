@@ -39,6 +39,7 @@ from dbus_next.service import ServiceInterface, dbus_property, method, signal
 from .render import MARK_PALETTE, host_mark, icon_pixmap, parse_pair
 from .slots import Slots
 from .sources import (activate_cmd, activate_hook, load as load_sources,
+                      streams as load_streams,
                       local_label, remote_argv, valid_partition)
 
 WATCHER = "org.kde.StatusNotifierWatcher"
@@ -65,6 +66,22 @@ CTL = os.environ.get("MUX_INDICATOR_CTL")
 # is a listdir of a tmpfs, but a host appearing a few seconds after you latch is
 # imperceptible, while an item flickering in and out is not.
 DISCOVER = float(os.environ.get("MUX_INDICATOR_DISCOVER", "5"))
+# A STREAM THAT STOPS SPEAKING IS NOT A CALM HOST. This is the one thing
+# polling gave away for free: there a non-zero exit could only be the
+# transport, so `unknown` was trustworthy. A stream has no such signal, which
+# is why `mux agent stream` sends a heartbeat during quiet periods and why
+# this number exists to notice its absence.
+#
+# IT MUST EXCEED THE PRODUCER'S HEARTBEAT, and that is a CROSS-PROCESS
+# contract: the stream's default is 15s, so anything at or below it declares a
+# perfectly healthy feed dead. Three missed beats is the margin, which also
+# survives a loaded box without flapping.
+STALE = float(os.environ.get("MUX_INDICATOR_STALE", "45"))
+# A dead stream is retried, with a ceiling: a host that is simply gone must
+# not be hammered, and the first retry must still be quick because the usual
+# cause is a restart rather than an outage.
+RESPAWN = float(os.environ.get("MUX_INDICATOR_RESPAWN", "2"))
+RESPAWN_MAX = float(os.environ.get("MUX_INDICATOR_RESPAWN_MAX", "30"))
 # On a state/count change the `_` cursor blinks BLINK_N times at BLINK_MS each,
 # to catch the eye, then settles cursor-on.
 BLINK_N = int(os.environ.get("MUX_INDICATOR_BLINK", "5"))
@@ -524,8 +541,11 @@ class Feed:
     mechanisms for one fact is how a tray starts disagreeing with itself.
     """
 
-    def __init__(self, argv):
+    def __init__(self, argv, stream_argv=None):
         self.argv = argv
+        # The streaming form of the same source, when there is one. A feed
+        # with it does not poll at all; see `run`.
+        self.stream_argv = stream_argv
         # None until the first answer, and again whenever one fails. It is
         # NOT an empty dict: "quiet" and "cannot reach" must stay apart.
         self.rows = None
@@ -563,6 +583,88 @@ class Feed:
                 return UNKNOWN
             return next(iter(self.rows.values()))
         return self.rows.get(part, UNKNOWN)
+
+    async def run(self):
+        """Keep this host's answer current, by whichever means it supports.
+
+        ONE ENTRY POINT so the supervisor does not have to know which: a
+        source gains the ability to stream by appearing in `sources.streams`,
+        and nothing about starting or stopping a feed changes.
+        """
+        if self.stream_argv:
+            await self.watch()
+        else:
+            await self.poll()
+
+    def _ingest(self, line):
+        """One line from a stream -> this feed's rows. True if it was an
+        ANSWER (so the items should be woken), False for a keepalive.
+
+        A HEARTBEAT IS NOT AN ANSWER AND MUST NOT BE READ AS ONE. It carries
+        no `partitions`, so handing it to `parse_all` yields None, which means
+        "do not trust this answer" and would blank every item on this host on
+        every keepalive: the calm-host signal turned into a flashing unknown.
+        It is checked for FIRST and then ignored, carrying liveness only.
+
+        AND A LINE THAT IS NOT AN ANSWER DOES MAKE THIS HOST UNKNOWN. A feed
+        emitting junk fast would otherwise never go stale and would hold its
+        last good value for ever, which is precisely the bug this whole
+        indicator exists to avoid: an unreachable box showing whatever it last
+        said. `parse_all` already draws that line; this only has to respect it.
+        """
+        text = line.decode("utf-8", "replace")
+        try:
+            doc = json.loads(text)
+        except (ValueError, TypeError):
+            doc = None
+        if isinstance(doc, dict) and doc.get("heartbeat"):
+            return False
+        self.rows = parse_all(text)
+        self.asked = True
+        return True
+
+    async def watch(self):
+        """Read a long-lived source, repainting on every answer it sends."""
+        _back = RESPAWN
+        while True:
+            proc = None
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    *self.stream_argv,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.DEVNULL,
+                    # The PAIR, exactly as `_query` documents: a source is an
+                    # arbitrary command and may spawn children that hold the
+                    # pipe, and without the new session the group kill in
+                    # `_reap` would resolve to the DAEMON's own group.
+                    start_new_session=True)
+            except OSError:
+                proc = None
+            if proc is not None:
+                try:
+                    while True:
+                        try:
+                            line = await asyncio.wait_for(
+                                proc.stdout.readline(), STALE)
+                        except asyncio.TimeoutError:
+                            break   # silent past the heartbeat: not trusted
+                        if not line:
+                            break   # the stream ended
+                        if self._ingest(line):
+                            _back = RESPAWN
+                            self._ev.set()
+                            self._ev.clear()
+                finally:
+                    await _reap(proc)
+            # The stream is gone, or went quiet past the point of belief.
+            # NOTHING CAN BE CLAIMED about this host until it comes back, and
+            # saying so is the whole reason the heartbeat exists.
+            self.rows = None
+            self.asked = True
+            self._ev.set()
+            self._ev.clear()
+            await asyncio.sleep(_back)
+            _back = min(_back * 2, RESPAWN_MAX)
 
     async def poll(self):
         """Query forever, waking this host's items after each answer."""
@@ -967,6 +1069,7 @@ async def _supervise():
     while True:
         try:
             hosts = dict(load_sources(mux_bin=MUX))
+            _streams = dict(load_streams(mux_bin=MUX))
         except Exception as e:
             # Discovery failing must never take the daemon down: the items
             # already published are still telling the truth.
@@ -981,8 +1084,8 @@ async def _supervise():
         # the price of not asking a second question to find out what to ask.
         for _h, _argv in hosts.items():
             if _h not in feeds:
-                _f = Feed(_argv)
-                feeds[_h] = (_f, asyncio.create_task(_f.poll()))
+                _f = Feed(_argv, _streams.get(_h))
+                feeds[_h] = (_f, asyncio.create_task(_f.run()))
         for _h in [h for h in feeds if h not in hosts]:
             _f, _t = feeds.pop(_h)
             _t.cancel()

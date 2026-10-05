@@ -93,6 +93,11 @@ DEFAULT_TRANSPORT = (
 # ignores the flag and still answers for everything, so it is safe to send.
 REMOTE_CMD = "sh -lc 'mux agent status --all'"
 LOCAL_CMD = ("agent", "status", "--all")
+# THE STREAMING FORM OF THE SAME QUESTION. `mux agent stream` emits the SAME
+# document one line at a time and only when something changes, so a watcher
+# stops asking: the polling happens on the watched box and only CHANGES cross
+# the network. Same flags, because it is the same question.
+LOCAL_STREAM = ("agent", "stream", "--all")
 
 # A partition name is a DNS label (see mux_ctx_valid): lowercase alphanumerics
 # and hyphens. VALIDATED HERE because the names arrive from the far side and
@@ -272,3 +277,22 @@ def load(run_dir=None, mux_bin="mux"):
             continue         # latched to ourselves: already the local item
         out.append((host, remote_argv(host, tmpl)))
     return out
+
+
+def streams(mux_bin="mux"):
+    """label -> the argv that STREAMS that source, for sources that can.
+
+    SEPARATE FROM `load()` RATHER THAN A THIRD FIELD IN ITS TUPLES, for two
+    reasons. `load()`'s shape is consumed as pairs in several places, and
+    widening it would change every one of them to buy nothing. And the set of
+    sources that can be streamed is going to GROW: the remote half needs a
+    connection it can share before a stream over it is cheaper than a poll, so
+    "which sources stream" wants one explicit place to say so rather than a
+    condition spread across the loader.
+
+    LOCAL ONLY FOR NOW, deliberately. A local stream costs no transport and
+    can be wrong in exactly one way (the process dies), so it is where the
+    reader's staleness and respawn rules get proven before a network is
+    allowed to exercise them.
+    """
+    return [(local_label(), [mux_bin, *LOCAL_STREAM])]
