@@ -845,8 +845,8 @@ remote precisely because the item only exists while a latch does, and the latch
 IS your live view of it.
 
 ```sh
-./indicator/setup.sh          # install + a --user service unit
-./indicator/setup.sh check    # same [OK]/[FAIL] marker contract as mux check
+./desktop-notifier/setup.sh          # install + a --user service unit
+./desktop-notifier/setup.sh check    # the same marker contract as mux check
 ```
 
 ## Commands

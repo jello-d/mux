@@ -1,5 +1,5 @@
 #!/bin/sh
-# mux-indicator-code-check.t - indicator/setup.sh's STALE-CODE marker, which is
+# mux-desktop-notifier-code-check.t - the STALE-CODE marker, which is
 # the one thing standing between a box and silently running month-old code.
 #
 # IT WAS VACUOUS FROM INSIDE THE PACKAGE DIRECTORY. `python -c` puts the CURRENT
@@ -11,11 +11,11 @@
 #
 # Driven against a STUB venv, so no real Python install is needed: the stub is
 # the seam, and it answers the one question setup.sh asks the interpreter.
-_name=mux-indicator-code-check
+_name=mux-desktop-notifier-code-check
 . "$(dirname "$0")/harness_lib"     # HERE=repo root, T=scratch, fail/pass
 
-SETUP=$HERE/indicator/setup.sh
-[ -f "$SETUP" ] || fail "indicator/setup.sh is missing"
+SETUP=$HERE/desktop-notifier/setup.sh
+[ -f "$SETUP" ] || fail "desktop-notifier/setup.sh is missing"
 
 # A venv whose `python` reports where it "imported" the package from.
 #
@@ -27,8 +27,8 @@ SETUP=$HERE/indicator/setup.sh
 mkdir -p "$T/venv/bin"
 cat >"$T/venv/bin/python" <<EOF
 #!/bin/sh
-if [ -f ./mux_indicator/__init__.py ]; then
-  printf '%s\n' "\$PWD/mux_indicator"
+if [ -f ./mux_desktop_notifier/__init__.py ]; then
+  printf '%s\n' "\$PWD/mux_desktop_notifier"
 else
   cat "$T/where"
 fi
@@ -36,20 +36,21 @@ EOF
 chmod +x "$T/venv/bin/python"
 
 run() {   # -> the check's output, rc ignored (a sandbox has no systemd)
-  ( cd "$1" && env MUX_INDICATOR_VENV="$T/venv" \
-    MUX_INDICATOR_BIN="$T/bin" NO_COLOR=1 \
+  ( cd "$1" && env MUX_DESKTOP_NOTIFIER_VENV="$T/venv" \
+    MUX_DESKTOP_NOTIFIER_BIN="$T/bin" NO_COLOR=1 \
     sh "$SETUP" check 2>&1 ) || true
 }
 
 # --- 1. A GENUINELY STALE INSTALL IS REPORTED, from either directory --------
 # The installed copy exists and differs, which is the case the marker is for.
-mkdir -p "$T/installed/mux_indicator"
-for f in "$HERE"/indicator/mux_indicator/*.py; do
-  printf '# not the shipped file\n' >"$T/installed/mux_indicator/${f##*/}"
+mkdir -p "$T/installed/mux_desktop_notifier"
+for f in "$HERE"/desktop-notifier/mux_desktop_notifier/*.py; do
+  printf '# not the shipped file\n' \
+    >"$T/installed/mux_desktop_notifier/${f##*/}"
 done
-echo "$T/installed/mux_indicator" >"$T/where"
+echo "$T/installed/mux_desktop_notifier" >"$T/where"
 
-run "$HERE/indicator" >"$T/inside"
+run "$HERE/desktop-notifier" >"$T/inside"
 run "$T" >"$T/outside"
 
 grep -q 'installed code is STALE' "$T/inside" \
@@ -68,9 +69,10 @@ _o=$(grep -c 'installed code' "$T/outside")
 # The guard must not simply fail always, which would pass every assertion above
 # and make the marker useless in the other direction.
 rm -rf "$T/installed"
-mkdir -p "$T/installed/mux_indicator"
-cp "$HERE"/indicator/mux_indicator/*.py "$T/installed/mux_indicator/"
-run "$HERE/indicator" >"$T/fresh"
+mkdir -p "$T/installed/mux_desktop_notifier"
+cp "$HERE"/desktop-notifier/mux_desktop_notifier/*.py \
+  "$T/installed/mux_desktop_notifier/"
+run "$HERE/desktop-notifier" >"$T/fresh"
 grep -q 'installed code matches' "$T/fresh" \
   || fail "a byte-identical install was reported stale"
 
@@ -78,8 +80,8 @@ grep -q 'installed code matches' "$T/fresh" \
 # The venv importing the source tree cannot answer the question at all: there
 # are not two sides to compare. Covers every other way the paths can converge
 # (an editable install, a symlinked site-packages) rather than just the cwd.
-echo "$HERE/indicator/mux_indicator" >"$T/where"
-run "$HERE/indicator" >"$T/self"
+echo "$HERE/desktop-notifier/mux_desktop_notifier" >"$T/where"
+run "$HERE/desktop-notifier" >"$T/self"
 grep -q 'vacuous' "$T/self" \
   || fail "a self-comparison reported a verdict instead of refusing"
 grep -q 'installed code matches' "$T/self" \

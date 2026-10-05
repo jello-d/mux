@@ -23,7 +23,7 @@ The three that matter most:
 """
 import unittest
 
-from mux_indicator.render import (MARK_LOCAL_INK, MARK_PALETTE,
+from mux_desktop_notifier.render import (MARK_LOCAL_INK, MARK_PALETTE,
                                   STATE_BADGE, STATE_FRAME, mark_ink,
                                   host_mark, icon_pixmap, parse_pair,
                                   _prompt, _screen, _to_argb)
@@ -468,7 +468,7 @@ class MarkOnTheTile(unittest.TestCase):
         beside the middle letter rather than on it. Without a mark that pixel
         is the state's FRAME; with one it is the strip.
         """
-        from mux_indicator.render import _MARK_BACK, _tile
+        from mux_desktop_notifier.render import _MARK_BACK, _tile
         pair = parse_pair("#ffffff #005f87")
         for s in (22, 32, 48):
             marked = _tile("working", 2, s, True, pair, "NWD").load()
@@ -485,7 +485,7 @@ class MarkOnTheTile(unittest.TestCase):
         letters are sized to a third of the tile and allowed to be as wide as
         they need, because the strip beneath them means width costs nothing.
         """
-        from mux_indicator.render import _mark_metrics
+        from mux_desktop_notifier.render import _mark_metrics
         for s in (32, 48):
             f, _w = _mark_metrics(s, "NWD")
             bb = f.getbbox("M")
@@ -508,7 +508,7 @@ class MarkOnTheTile(unittest.TestCase):
         the 0.48 change: a marked tile deliberately drops the host tint, so the
         old comparison would now fail for the right reason and hide this one.
         """
-        from mux_indicator.render import _mark_metrics, _tile
+        from mux_desktop_notifier.render import _mark_metrics, _tile
         pair = parse_pair("#ffffff #005f87")
         for st in STATES:
             for s in (22, 32, 48):
@@ -543,7 +543,7 @@ class MarkOnTheTile(unittest.TestCase):
         """Strip and glyphs come from one measurement. Computed apart they
         drift, and a letter hanging off the end of its own background is the
         exact failure the strip exists to prevent."""
-        from mux_indicator.render import _mark_metrics
+        from mux_desktop_notifier.render import _mark_metrics
         for s in (22, 32, 48, 64):
             f, w = _mark_metrics(s, "NWD")
             widest = max(f.getbbox(c)[2] - f.getbbox(c)[0] for c in "NWD")
@@ -595,7 +595,7 @@ class PartitionLetter(unittest.TestCase):
         no letter that pixel is the cursor; with one it is not, because the
         underscore is not drawn at all.
         """
-        from mux_indicator.render import _tile
+        from mux_desktop_notifier.render import _tile
         for s in (32, 48):
             bot = s - int(s * 0.20)
             cx = int(s * 0.18) + int(s * 0.20) + int(s * 0.12)
@@ -633,7 +633,7 @@ class PartitionLetter(unittest.TestCase):
         it: silently, and only on the multi-host tray, which is exactly the
         case the letter exists for.
         """
-        from mux_indicator.render import _mark_metrics, _tile
+        from mux_desktop_notifier.render import _mark_metrics, _tile
         for s in (22, 32, 48):
             _f, w = _mark_metrics(s, "NWD")
             plain = _tile("none", None, s, True, None, "NWD", 0).load()
@@ -665,7 +665,7 @@ class PartitionLetter(unittest.TestCase):
         shadow still changes the tile. That is two guards for one condition,
         and a difference check kills neither mutation.
         """
-        from mux_indicator.render import _PART_INK
+        from mux_desktop_notifier.render import _PART_INK
         px = tile.load()
         return sum(px[x, y] == _PART_INK
                    for x in range(tile.width)
@@ -689,7 +689,7 @@ class PartitionLetter(unittest.TestCase):
         documents the rule without going brittle over a nudge.
         """
         import math
-        from mux_indicator.render import (MARK_LOCAL_INK, MARK_PALETTE,
+        from mux_desktop_notifier.render import (MARK_LOCAL_INK, MARK_PALETTE,
                                           STATE_INK, _PART_INK)
 
         def lab(c):
@@ -732,7 +732,7 @@ class PartitionLetter(unittest.TestCase):
     def test_the_INK_belongs_to_the_letter_alone(self):
         """Nothing else on a tile wears it, which is what makes every count
         below exact rather than approximate."""
-        from mux_indicator.render import _tile
+        from mux_desktop_notifier.render import _tile
         for s in (22, 32, 48):
             for st in STATES:
                 self.assertEqual(
@@ -748,7 +748,7 @@ class PartitionLetter(unittest.TestCase):
         that is present, correct and unreadable passes every structural check
         ever written about it.
         """
-        from mux_indicator.render import _tile
+        from mux_desktop_notifier.render import _tile
         for s in (22, 32, 48):
             floor = max(12, int(s * 0.8))
             for st in STATES:
@@ -768,7 +768,7 @@ class PartitionLetter(unittest.TestCase):
         about 45% of its ink to the badge's overhang on every state that has
         one, so an equality here separates the two placements outright.
         """
-        from mux_indicator.render import _tile
+        from mux_desktop_notifier.render import _tile
         for s in (22, 32, 48):
             base = self._ink(_tile("none", 9, s, True, part="B"))
             for st in ("idle", "working", "blocked", "unknown"):
@@ -788,7 +788,7 @@ class PartitionLetter(unittest.TestCase):
         primary rule, because fitting a glyph to a column is what made 0.44
         unreadable.
         """
-        from mux_indicator.render import _mark_metrics, _tile
+        from mux_desktop_notifier.render import _mark_metrics, _tile
         for s in (22, 32, 48):
             _f, w = _mark_metrics(s, "NWD")
             for ch in ("A", "B", "M", "W"):
@@ -823,14 +823,14 @@ class FontFallback(unittest.TestCase):
     """
 
     def test_a_missing_font_falls_back_to_the_default(self):
-        from mux_indicator.render import _font
+        from mux_desktop_notifier.render import _font
         f = _font(("/nonexistent/NotAFont.ttf",), 13)
         self.assertIsNotNone(f)
 
     def test_the_FIRST_readable_path_wins(self):
         """The list is ordered by preference, so a fallback that ignored the
         order would silently pick the wrong face on every machine."""
-        from mux_indicator.render import _COND, _font
+        from mux_desktop_notifier.render import _COND, _font
         good = _font((_COND[0],), 13)
         both = _font(("/nonexistent/NotAFont.ttf", _COND[0]), 13)
         self.assertEqual(both.getbbox("M"), good.getbbox("M"))
@@ -839,7 +839,7 @@ class FontFallback(unittest.TestCase):
         """End to end, because the fallback being reachable is not the same as
         the renderer surviving it: every glyph path has to tolerate a bitmap
         default font, including the mark's height-fitting loop."""
-        import mux_indicator.render as R
+        import mux_desktop_notifier.render as R
         old = R._COND
         R._COND = ("/nonexistent/NotAFont.ttf",)
         try:
@@ -854,7 +854,7 @@ class FontFallback(unittest.TestCase):
         """_cap_font walks sizes down looking for one whose cap height fits.
         A bitmap default font ignores the requested size, so the loop can run
         to the bottom: it must return the floor rather than fall off."""
-        import mux_indicator.render as R
+        import mux_desktop_notifier.render as R
         old = R._COND
         R._COND = ("/nonexistent/NotAFont.ttf",)
         try:

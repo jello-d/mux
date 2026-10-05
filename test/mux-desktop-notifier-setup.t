@@ -1,13 +1,14 @@
 #!/bin/sh
-# test/mux-indicator-setup.t - indicator/setup.sh, the last dark file.
+# mux-desktop-notifier-setup.t - desktop-notifier/setup.sh, once dark.
 #
-# A function-level coverage sweep found indicator/setup.sh completely
+# A function-level coverage sweep found desktop-notifier/setup.sh completely
 # unexecuted: app, service, uninstall and check had never run. It is the single
 # source of the install procedure and tackup can delegate to it, so its `check`
 # is a contract someone else reads.
 #
 # SYSTEMCTL IS STUBBED, and that is not tidiness. `setup.sh uninstall` runs
-# `systemctl --user disable --now mux-indicator.service`, and the user manager
+# `systemctl --user disable --now mux-desktop-notifier.service`, and
+# the user manager
 # knows that unit by NAME regardless of where XDG_CONFIG_HOME points, so a
 # test running it unstubbed would stop the developer's actually-running tray.
 # The stub also lets the assertions be about what setup.sh DID rather than about
@@ -18,14 +19,18 @@
 # real user manager. Stubbing pip would be testing the stub. Those stay
 # integration; `setup.sh check` is what reports on them afterwards.
 set -eu
-_name=mux-indicator-setup
+_name=mux-desktop-notifier-setup
 . "$(dirname "$0")/harness_lib"
 
-SETUP=$HERE/indicator/setup.sh
-[ -x "$SETUP" ] || fail "indicator/setup.sh is missing or not executable"
+SETUP=$HERE/desktop-notifier/setup.sh
+[ -x "$SETUP" ] || fail "desktop-notifier/setup.sh is missing or not executable"
 
 mkdir -p "$T/bin" "$T/venv/bin" "$T/xdg"
-for _c in sed awk grep cat rm mkdir ln cmp install printf dirname basename; do
+# `mv` joined this list when the rename's retirement step arrived: the
+# curated PATH models exactly the tools the code needs, so it CAUGHT the
+# new dependency by failing the migration rather than by anybody noticing.
+for _c in sed awk grep cat rm mv mkdir ln cmp install printf dirname \
+  basename; do
   _p=$(command -v "$_c" 2>/dev/null) && ln -sf "$_p" "$T/bin/$_c"
 done
 # Records what it was asked to do and always succeeds, so the script's own
@@ -49,7 +54,7 @@ exit 0
 EOF
 chmod +x "$T/bin/systemctl"
 SCTL=$T/systemctl.log
-UNIT=mux-indicator.service
+UNIT=mux-desktop-notifier.service
 UNITF=$T/xdg/systemd/user/$UNIT
 
 OUT=; RC=0
@@ -57,7 +62,8 @@ run() {   # <verb ...>
   : >"$SCTL"
   RC=0
   OUT=$(env PATH="$T/bin" HOME="$HOME" XDG_CONFIG_HOME="$T/xdg" \
-    MUX_INDICATOR_VENV="$T/venv" MUX_INDICATOR_BIN="$T/bin" \
+    XDG_STATE_HOME="${STATE_HOME:-$T/state}" \
+    MUX_DESKTOP_NOTIFIER_VENV="$T/venv" MUX_DESKTOP_NOTIFIER_BIN="$T/bin" \
     SCTL="$SCTL" SCTL_ENABLED="${SCTL_ENABLED:-disabled}" \
     SCTL_PID="${SCTL_PID:-0}" SCTL_FAIL="${SCTL_FAIL:-}" \
     "$SETUP" "$@" 2>&1) || RC=$?
@@ -92,7 +98,7 @@ case $OUT in
 $OUT" ;;
 esac
 # It must not FIX anything: an audit that installs is not an audit.
-[ ! -e "$T/bin/mux-indicator" ] || fail "check created the bin symlink"
+[ ! -e "$T/bin/mux-desktop-notifier" ] || fail "check created the bin symlink"
 [ ! -e "$UNITF" ] || fail "check installed the unit file"
 
 # --- the markers are PLAIN when captured -------------------------------
@@ -108,14 +114,14 @@ esac
 # Each marker is a distinct question; a check that said [OK] to a box that is
 # half-installed would be worse than one that failed, because it sends you
 # looking elsewhere.
-printf '#!/bin/sh\nexit 0\n' >"$T/venv/bin/mux-indicator"
-chmod +x "$T/venv/bin/mux-indicator"
+printf '#!/bin/sh\nexit 0\n' >"$T/venv/bin/mux-desktop-notifier"
+chmod +x "$T/venv/bin/mux-desktop-notifier"
 run check
 has '[OK]' "with the venv app present, at least one marker must pass"
 [ "$RC" = 1 ] || fail "still incomplete, so check must still fail"
 
 mkdir -p "$T/xdg/systemd/user"
-cp "$HERE/indicator/$UNIT" "$UNITF"
+cp "$HERE/desktop-notifier/$UNIT" "$UNITF"
 run check
 has "$UNIT current" "a unit file matching the package's must read current"
 
@@ -127,7 +133,7 @@ case $OUT in
 *"$UNIT current"*) fail "a DRIFTED unit file read as current. cmp exists here
 precisely so an edited-then-forgotten unit cannot look installed." ;;
 esac
-cp "$HERE/indicator/$UNIT" "$UNITF"
+cp "$HERE/desktop-notifier/$UNIT" "$UNITF"
 
 # --- `service` SAYS WHAT IT DID, and the restart is the point -----------
 # It used to print "installed + enabled" unconditionally while also running
@@ -160,25 +166,27 @@ esac
 
 # ... and anything else is loud and non-zero, because a service that will not
 # start is drift the provisioner has to see.
-SCTL_FAIL='Job for mux-indicator.service failed' run service; unset SCTL_FAIL
+_jf='Job for mux-desktop-notifier.service failed'
+SCTL_FAIL=$_jf run service; unset SCTL_FAIL
 [ "$RC" = 1 ] || fail "a failed restart must exit non-zero, got $RC"
 has "RESTART FAILED" "a failed restart was not reported as one"
 has "OLD code" "the failure did not say what it means for the running daemon"
-has "Job for mux-indicator.service failed" \
+has "Job for mux-desktop-notifier.service failed" \
   "systemctl's own reason was swallowed"
 
 # --- uninstall removes what it installed, and is idempotent ------------
-ln -sf "$T/venv/bin/mux-indicator" "$T/bin/mux-indicator"
+ln -sf "$T/venv/bin/mux-desktop-notifier" "$T/bin/mux-desktop-notifier"
 run uninstall
 [ "$RC" = 0 ] || fail "uninstall must succeed, got $RC"
 [ ! -e "$UNITF" ] || fail "uninstall left the unit file behind"
-[ ! -e "$T/bin/mux-indicator" ] || fail "uninstall left the bin symlink behind"
+[ ! -e "$T/bin/mux-desktop-notifier" ] \
+  || fail "uninstall left the bin symlink behind"
 grep -q 'disable' "$SCTL" || fail "uninstall never asked systemctl to disable:
 $(cat "$SCTL")"
 
 # THE VENV SURVIVES, deliberately: rebuilding it is minutes and a network, so
 # uninstall removing it would make a reinstall expensive for no reason.
-[ -x "$T/venv/bin/mux-indicator" ] \
+[ -x "$T/venv/bin/mux-desktop-notifier" ] \
   || fail "uninstall deleted the venv. It says it leaves it in place, and
 rebuilding is minutes and a network."
 has 'venv' "uninstall should say the venv was left"
@@ -201,21 +209,21 @@ run uninstall
 # python is STUBBED to answer where the package landed, which is what the real
 # check asks it. That keeps this fast and hermetic: building a real venv is
 # minutes and a network, and the thing under test is the COMPARISON.
-SITE=$T/site/mux_indicator
+SITE=$T/site/mux_desktop_notifier
 mkdir -p "$SITE"
 cat >"$T/venv/bin/python" <<EOF
-#!/bin/sh
-# The real check asks the interpreter where mux_indicator lives; everything
-# else it asks (the dbus_next/PIL import) just has to succeed.
+# !/bin/sh The real check asks the interpreter where mux_desktop_notifier lives;
+# everything else it asks (the dbus_next/PIL import) just has to succeed.
 case "\$*" in
-*mux_indicator*os.path.dirname*) echo "$SITE" ;;
+*mux_desktop_notifier*os.path.dirname*) echo "$SITE" ;;
 esac
 exit 0
 EOF
 chmod +x "$T/venv/bin/python"
 
 # In step: every package file has an identical installed copy.
-for _f in "$HERE"/indicator/mux_indicator/*.py; do cp "$_f" "$SITE/"; done
+for _f in "$HERE"/desktop-notifier/mux_desktop_notifier/*.py; do
+  cp "$_f" "$SITE/"; done
 run check
 has "installed code matches" "identical copies were not reported current"
 
@@ -237,7 +245,7 @@ has "setup.sh indicator install" "the stale report named no remedy"
 
 # MISSING: a new module that was never installed. Same verdict as drifted:
 # a half-updated install is not a working one.
-cp "$HERE"/indicator/mux_indicator/render.py "$SITE/render.py"
+cp "$HERE"/desktop-notifier/mux_desktop_notifier/render.py "$SITE/render.py"
 rm -f "$SITE/sources.py"
 run check
 has "sources.py" "a MISSING module was not reported"
@@ -268,12 +276,13 @@ has "not found" "an unimportable package did not report so"
 cat >"$T/venv/bin/python" <<EOF
 #!/bin/sh
 case "\$*" in
-*mux_indicator*os.path.dirname*) echo "$SITE" ;;
+*mux_desktop_notifier*os.path.dirname*) echo "$SITE" ;;
 esac
 exit 0
 EOF
 chmod +x "$T/venv/bin/python"
-for _f in "$HERE"/indicator/mux_indicator/*.py; do cp "$_f" "$SITE/"; done
+for _f in "$HERE"/desktop-notifier/mux_desktop_notifier/*.py; do
+  cp "$_f" "$SITE/"; done
 
 if [ -d "/proc/$$" ]; then
   # NOT RUNNING is not stale: there is no process to be wrong about, and a
@@ -305,7 +314,7 @@ fi
 rm -rf "$T/site"
 
 # --- THE VENV FOLDED INTO MUX'S PAYLOAD ----------------------------------
-# `~/.venvs/mux-indicator` became `~/.local/share/mux/venv` (fleet
+# `~/.venvs/mux-desktop-notifier` became `~/.local/share/mux/venv` (fleet
 # install-placement rule, 2026-10-01): `~/.venvs` had the same ours-only
 # smell as the `~/.local/libexec` that ruling struck, a root at the top of
 # $HOME with ten tenants and nobody else's.
@@ -320,7 +329,7 @@ _vh=$T/vhome
 mkdir -p "$_vh/.local/share"
 _vrun() {   # <verb...>: the installer with HOME and XDG pinned
   env PATH="$T/bin" HOME="$_vh" XDG_CONFIG_HOME="$T/xdg" \
-    XDG_DATA_HOME="$_vh/.local/share" MUX_INDICATOR_BIN="$T/bin" \
+    XDG_DATA_HOME="$_vh/.local/share" MUX_DESKTOP_NOTIFIER_BIN="$T/bin" \
     SCTL="$SCTL" SCTL_ENABLED=disabled SCTL_PID=0 \
     "$SETUP" "$@" 2>&1 || true
 }
@@ -339,11 +348,12 @@ esac
 
 # A SURVIVING OLD VENV IS REPORTED, because install only removes it after a
 # successful rebuild, so a box that has not re-run install yet has two.
-mkdir -p "$_vh/.venvs/mux-indicator"
+mkdir -p "$_vh/.venvs/mux-desktop-notifier"
 _vo=$(_vrun check)
 case $_vo in
 *'retired venv survives'*) ;;
-*) fail "a leftover $_vh/.venvs/mux-indicator was not reported, so it sits
+*) fail "a leftover $_vh/.venvs/mux-desktop-notifier was not reported,
+so it sits
 there unnoticed as a second copy nothing resolves through: [$_vo]" ;;
 esac
 
@@ -373,10 +383,10 @@ esac
 # and makes no network call. That is not testing the stub: the venv BUILD is
 # this file's documented gap, and what is under test here is the guard that
 # runs AFTER it.
-mkdir -p "$T/pkg" "$_vh/.venvs/mux-indicator" "$T/scratch/mux/venv/bin"
+mkdir -p "$T/pkg" "$_vh/.venvs/mux-desktop-notifier" "$T/scratch/mux/venv/bin"
 cp "$SETUP" "$T/pkg/setup.sh"
-printf 'live\n' >"$_vh/.venvs/mux-indicator/marker"
-for _f in pip mux-indicator; do
+printf 'live\n' >"$_vh/.venvs/mux-desktop-notifier/marker"
+for _f in pip mux-desktop-notifier; do
   printf '#!/bin/sh\n:\n' >"$T/scratch/mux/venv/bin/$_f"
   chmod +x "$T/scratch/mux/venv/bin/$_f"
 done
@@ -385,26 +395,27 @@ done
 # on its first line and the `|| true` hid it: the control below is what
 # caught that, which is the whole reason a control is here.
 env PATH="$T/bin:$PATH" HOME="$_vh" XDG_CONFIG_HOME="$T/xdg" \
-  XDG_DATA_HOME="$T/scratch" MUX_INDICATOR_BIN="$T/bin" \
+  XDG_DATA_HOME="$T/scratch" MUX_DESKTOP_NOTIFIER_BIN="$T/bin" \
   SCTL="$SCTL" SCTL_ENABLED=disabled SCTL_PID=0 \
   sh "$T/pkg/setup.sh" app >/dev/null 2>&1 || true
-[ -f "$_vh/.venvs/mux-indicator/marker" ] \
+[ -f "$_vh/.venvs/mux-desktop-notifier/marker" ] \
   || fail "a run against a scratch XDG_DATA_HOME deleted the LIVE venv at
-$_vh/.venvs/mux-indicator. That is bt-sane's incident, in the function this
+$_vh/.venvs/mux-desktop-notifier. That is bt-sane's incident, in the
+# function this
 package shares the shape with."
 
 # AND THE CONTROL: with the venv at its REAL path the retire DOES fire, or
 # the assertion above would hold for a gate that never lets anything through.
 mkdir -p "$_vh/.local/share/mux/venv/bin"
-for _f in pip mux-indicator; do
+for _f in pip mux-desktop-notifier; do
   printf '#!/bin/sh\n:\n' >"$_vh/.local/share/mux/venv/bin/$_f"
   chmod +x "$_vh/.local/share/mux/venv/bin/$_f"
 done
 env PATH="$T/bin:$PATH" HOME="$_vh" XDG_CONFIG_HOME="$T/xdg" \
-  XDG_DATA_HOME="$_vh/.local/share" MUX_INDICATOR_BIN="$T/bin" \
+  XDG_DATA_HOME="$_vh/.local/share" MUX_DESKTOP_NOTIFIER_BIN="$T/bin" \
   SCTL="$SCTL" SCTL_ENABLED=disabled SCTL_PID=0 \
   sh "$T/pkg/setup.sh" app >/dev/null 2>&1 || true
-[ ! -d "$_vh/.venvs/mux-indicator" ] \
+[ ! -d "$_vh/.venvs/mux-desktop-notifier" ] \
   || fail "control: at the REAL payload path the old venv was NOT retired, so
 the gate refuses everything and the assertion above proves nothing"
 
@@ -417,5 +428,69 @@ case $_vo in
 *'retired venv'*) fail "with no leftover, the check still talks about one:
 [$_vo]" ;;
 esac
+
+# --- THE RENAME RETIRES THE PREVIOUS NAME ---------------------------------
+# This package was `mux-indicator` until 2026-10-04, and A RENAME IS A MODE
+# SWITCH: this fleet's install-placement rule says one must REMOVE what it
+# replaces. The failure if it does not is not cosmetic and not transient. The
+# old unit is ENABLED and points at a console script `pip install` of the
+# renamed project deletes, so the user manager fails it at EVERY LOGIN, for
+# ever, and this file's own uninstall path already argues that a dangling unit
+# is worse than one that is gone.
+#
+# DRIVEN THROUGH `service`, which is where the retirement lives, and that
+# placement is the point: `app` is the one function this file documents as
+# untestable (a network, minutes, and stubbing pip would be testing the stub),
+# so a retirement living there would be a seam nothing ever executes. This
+# package has shipped exactly that twice (both latch hooks, all four
+# envhooks), so it is worth a sentence rather than a shrug.
+mkdir -p "$T/xdg/systemd/user" "$T/bin" "$T/state/mux" "$T/venv/bin"
+printf '#!/bin/sh
+exit 0
+' >"$T/venv/bin/pip"; chmod +x "$T/venv/bin/pip"
+: >"$T/venv/bin/mux-desktop-notifier"
+chmod +x "$T/venv/bin/mux-desktop-notifier"
+printf '[Unit]
+' >"$T/xdg/systemd/user/mux-indicator.service"
+ln -sfn "$T/venv/bin/mux-indicator" "$T/bin/mux-indicator"
+printf 'northwood 2
+' >"$T/state/mux/indicator-slots"
+run service
+[ ! -e "$T/xdg/systemd/user/mux-indicator.service" ] \
+  || fail "the previous name's unit survived the rename: it is ENABLED and
+points at a console script pip has deleted, so the user manager fails it at
+every login from now on"
+# `-L` AND `-e`, NOT `-e` ALONE, and the mutation is what found it: this
+# link points into the venv at a console script pip has deleted, so it is
+# DANGLING, and `-e` follows a symlink and answers false for a dangling one.
+# The assertion therefore passed whether or not the link had been removed,
+# about the one case it exists for. A vacuous assertion reads as coverage.
+[ ! -L "$T/bin/mux-indicator" ] && [ ! -e "$T/bin/mux-indicator" ] \
+  || fail "the previous name's command survived as a dangling symlink on
+PATH, which is what makes it worse than a stale one: it fails rather than
+doing the wrong thing, and nothing says why"
+has 'retired the mux-indicator unit' "a retirement must SAY so: this runs
+once, during an upgrade nobody is watching, and an unexplained disappearance
+is indistinguishable from the install having broken something"
+
+# AND THE COLOUR SLOTS ARE CARRIED OVER, NOT ABANDONED, because they are
+# state the package WRITES and cannot rebuild: the file holds which colour
+# each host was assigned and the order that produced it is gone. Doing it in
+# the INSTALLER is the rule this repo paid for once, when a migration done
+# lazily by a reader took a snapshot and froze a live record for an hour.
+[ -f "$T/state/mux/desktop-notifier-slots" ] || fail "the colour slots were
+not carried over, so every host silently changes colour on upgrade"
+[ ! -e "$T/state/mux/indicator-slots" ] || fail "the old slots file was left
+behind, so the next release cannot tell a migration from a fresh install"
+
+# AND IT NEVER CLOBBERS AN ALREADY-MIGRATED FILE, which is the half an
+# idempotent installer needs: `service` runs on every install, so a second
+# pass must not overwrite the live slots with a stale leftover. Asserted with
+# BOTH present, which is the only state in which the question can be answered.
+printf 'old\n' >"$T/state/mux/indicator-slots"
+printf 'live\n' >"$T/state/mux/desktop-notifier-slots"
+run service
+[ "$(cat "$T/state/mux/desktop-notifier-slots")" = live ] || fail "a re-run
+overwrote the live colour slots with the stale pre-rename file"
 
 pass

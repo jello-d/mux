@@ -1,4 +1,4 @@
-# mux-indicator
+# mux-desktop-notifier
 
 An **optional** system-tray indicator for mux's agent-session state. It shows,
 from anywhere, whether a session is waiting on you: a single aggregate glyph
@@ -26,7 +26,7 @@ mux manages sessions inside terminals with no opinion about where a terminal
 sits. So it is a seam, unset by default:
 
 ```
-indicator-activate   focus-kitty
+desktop-notifier-activate   focus-kitty
 ```
 
 The hook is handed the **label** (the host's short name) as its **one and
@@ -45,7 +45,7 @@ and `host_short` is the **tmux server's** hostname, so a latched session
 advertises the *remote's* name in the terminal sitting in front of you. The
 samples match `[label]` with the brackets, because the bare name would also
 match a session called `northwood` or a path in the title.
-Two samples ship in `share/indicator/`, trading different requirements:
+Two samples ship in `share/desktop-notifier/`, trading different requirements:
 
 - `focus-kitty`: kitty remote control (needs `allow_remote_control`),
   matches on the window title
@@ -67,7 +67,8 @@ One command, all userspace (no sudo):
 ```
 
 It builds an isolated environment (a venv, so no system-package or
-externally-managed-environment friction), puts the `mux-indicator` command on
+externally-managed-environment friction), puts the
+`mux-desktop-notifier` command on
 `~/.local/bin`, and installs + enables the systemd **user** service so it starts
 with your graphical session. It is idempotent: re-run it any time to update.
 
@@ -87,7 +88,7 @@ StatusNotifierItem host (waybar's tray, or any desktop's), and `mux` on `PATH`
 (the daemon polls `mux agent status`). Prefer `pipx`? `pipx
 install .` then `./setup.sh service` works too: both land the command at the
 same
-`~/.local/bin/mux-indicator` the unit runs.
+`~/.local/bin/mux-desktop-notifier` the unit runs.
 
 `setup.sh check` asks three separate questions about the code, not one: does
 the package match what is INSTALLED, and does the RUNNING daemon predate what
@@ -101,11 +102,13 @@ The feed is **`mux agent status`**: mux's machine contract, which answers
 JSON for every partition a human is watching. The tray is a program, so it
 reads the surface that promises a stable shape; `mux agent-summary` stays free
 to change for whoever reads it in a terminal. Polled every
-`MUX_INDICATOR_POLL` seconds (default 5).
-Overrides via env: `MUX_BIN` (path to `mux`), `MUX_INDICATOR_BLINK` /
-`_BLINK_MS` (the cursor blink on change), `MUX_INDICATOR_TIMEOUT` (per-source
+`MUX_DESKTOP_NOTIFIER_POLL` seconds (default 5).
+Overrides via env: `MUX_BIN` (path to `mux`), `MUX_DESKTOP_NOTIFIER_BLINK` /
+`_BLINK_MS` (the cursor blink on change),
+`MUX_DESKTOP_NOTIFIER_TIMEOUT` (per-source
 deadline, default 10s). Writing
-`"<state> <count>"` to `/tmp/mux-indicator.ctl` forces a value for testing;
+`"<state> <count>"` to `/tmp/mux-desktop-notifier.ctl` forces a value
+for testing;
 remove the file to revert to the live feed.
 
 ## Several hosts, one tray
@@ -116,16 +119,16 @@ detach and it goes. Nothing to stand up, tear down, or keep in sync, and nothing
 to edit per machine.
 
 ```
-$ mux-indicator
-mux-indicator: watching northwood
-mux-indicator: + northwood
-mux-indicator: northwood = idle None
+$ mux-desktop-notifier
+mux-desktop-notifier: watching northwood
+mux-desktop-notifier: + northwood
+mux-desktop-notifier: northwood = idle None
                                      # ... you run `mux latch northgate`
-mux-indicator: watching northgate, northwood
-mux-indicator: + northgate
-mux-indicator: northgate = working 1
+mux-desktop-notifier: watching northgate, northwood
+mux-desktop-notifier: + northgate
+mux-desktop-notifier: northgate = working 1
                                      # ... you detach
-mux-indicator: - northgate (withdrawn)
+mux-desktop-notifier: - northgate (withdrawn)
 ```
 
 That works because `mux latch` already writes
@@ -147,11 +150,11 @@ does not: it loses to `7bravo` and to anything capitalised. The `mux-` prefix a
 bar's `order` array keys on is unaffected.
 
 The remote command is composed from a template, so ssh is a default and not a
-law: set `indicator-transport` in `$MUX_DIR/config` (or
-`MUX_INDICATOR_TRANSPORT`) to anything that carries a command to a host:
+law: set `desktop-notifier-transport` in `$MUX_DIR/config` (or
+`MUX_DESKTOP_NOTIFIER_TRANSPORT`) to anything that carries a command to a host:
 
 ```
-indicator-transport   kubectl exec %h: %q
+desktop-notifier-transport   kubectl exec %h: %q
 ```
 
 `%h` is the host and `%q` the remote command as **one** argument. That matters:
@@ -306,7 +309,8 @@ Slots are **seeded by name, bumped only on collision, and then sticky**:
 - **Bumped**, because a derived rule alone cannot promise distinctness, and
   distinctness is the entire point. The bump is confined to the hosts that
   actually collide, exactly where the derived rule was already broken.
-- **Sticky**, recorded in `$XDG_STATE_HOME/mux/indicator-slots`, so latching a
+- **Sticky**, recorded in `$XDG_STATE_HOME/mux/desktop-notifier-slots`,
+  so latching a
   third host never moves the second one's colour, and a host you unlatch for an
   afternoon comes back the colour you learned. Delete that file to reshuffle.
 

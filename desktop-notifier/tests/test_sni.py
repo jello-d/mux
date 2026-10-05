@@ -32,7 +32,7 @@ def _fresh(**env):
         if v is None:
             os.environ.pop(k, None)
     try:
-        import mux_indicator.sni as sni
+        import mux_desktop_notifier.sni as sni
         return importlib.reload(sni)
     finally:
         for k, v in old.items():
@@ -102,11 +102,12 @@ class Override(unittest.TestCase):
     """
 
     def test_unset_means_no_override(self):
-        sni = _fresh(MUX_INDICATOR_CTL=None)
+        sni = _fresh(MUX_DESKTOP_NOTIFIER_CTL=None)
         self.assertIsNone(sni._read_override())
 
     def test_missing_file_is_not_an_override(self):
-        sni = _fresh(MUX_INDICATOR_CTL="/nonexistent/mux-indicator-ctl")
+        sni = _fresh(
+                MUX_DESKTOP_NOTIFIER_CTL="/nonexistent/notifier-ctl")
         self.assertIsNone(sni._read_override())
 
     def test_set_and_readable_is_honoured(self):
@@ -116,7 +117,7 @@ class Override(unittest.TestCase):
             fh.write("blocked 4\n")
             path = fh.name
         try:
-            sni = _fresh(MUX_INDICATOR_CTL=path)
+            sni = _fresh(MUX_DESKTOP_NOTIFIER_CTL=path)
             self.assertEqual(sni._read_override(), ("blocked", 4))
         finally:
             os.unlink(path)
@@ -194,7 +195,7 @@ class Query(unittest.TestCase):
         that fell off the network. That is the exact failure this feature exists
         to prevent, so the timeout is load-bearing, not a nicety.
         """
-        sni = _fresh(MUX_INDICATOR_TIMEOUT="0.3")
+        sni = _fresh(MUX_DESKTOP_NOTIFIER_TIMEOUT="0.3")
         self.assertEqual(
             asyncio.run(sni._query([self._stub("idle 0\n", 0, sleep=30)])),
             ("unknown", None))
@@ -226,7 +227,7 @@ class Query(unittest.TestCase):
         # A duration nothing else on this machine will be sleeping for, so the
         # survivor check below cannot match somebody else's process.
         mark = "4919"
-        sni = _fresh(MUX_INDICATOR_TIMEOUT="0.3")
+        sni = _fresh(MUX_DESKTOP_NOTIFIER_TIMEOUT="0.3")
         began = time.monotonic()
         got = asyncio.run(sni._query(["sh", "-c", f"sleep {mark} & exit 0"]))
         took = time.monotonic() - began
@@ -240,15 +241,15 @@ class Query(unittest.TestCase):
         # AND THE SURVIVOR IS THE OTHER, because they fail differently and a
         # single assertion would kill neither mutation. The bounded wait after
         # the kill already caps the DURATION even with no group kill at all, so
-        # timing alone cannot see `killpg` being lost: what is lost then is
-        # the grandchild, which outlives the query as a leaked process, one per
-        # poll, for as long as the host stays unreachable.
-        # `-xf`, an EXACT full-command-line match, not a substring one. A bare
-        # `-f` also matches any shell whose own argv happens to mention the
-        # pattern (including the process running this suite), which is the
-        # self-match trap this project has already paid for once with
-        # `pkill -f "python -m mux_indicator"`. Measured here: 3 matches loose
-        # against 1 exact.
+        # timing alone cannot see `killpg` being lost: what is lost then is the
+        # grandchild, which outlives the query as a leaked process, one per
+        # poll, for as long as the host stays unreachable. `-xf`, an EXACT
+        # full-command-line match, not a substring one. A bare `-f` also matches
+        # any shell whose own argv happens to mention the pattern (including the
+        # process running this suite), which is the self-match trap this project
+        # has already paid for once with `pkill -f "python -m
+        # mux_desktop_notifier"`. Measured here: 3 matches loose against 1
+        # exact.
         if shutil.which("pgrep"):
             alive = subprocess.run(["pgrep", "-xf", f"sleep {mark}"],
                                    capture_output=True, text=True)
@@ -267,7 +268,7 @@ class Query(unittest.TestCase):
         not just that it eventually says `unknown`. A deadline nobody times is
         indistinguishable from no deadline at all."""
         import time
-        sni = _fresh(MUX_INDICATOR_TIMEOUT="0.3")
+        sni = _fresh(MUX_DESKTOP_NOTIFIER_TIMEOUT="0.3")
         began = time.monotonic()
         asyncio.run(sni._query([self._stub("idle 0\n", 0, sleep=30)]))
         self.assertLess(time.monotonic() - began, 5.0,
@@ -297,7 +298,7 @@ class Query(unittest.TestCase):
         """The caller compares against its last value to decide whether to
         repaint; a None would be read as "unchanged" and is what let a stale
         icon persist. Every path must yield a state."""
-        sni = _fresh(MUX_INDICATOR_TIMEOUT="0.3")
+        sni = _fresh(MUX_DESKTOP_NOTIFIER_TIMEOUT="0.3")
         for argv in (["/nonexistent/x"], [self._stub("", 0)],
                      [self._stub("x", 3)]):
             self.assertIsNotNone(asyncio.run(sni._query(argv)))
@@ -413,7 +414,7 @@ class MarkPlan(unittest.TestCase):
 
     def setUp(self):
         import tempfile
-        from mux_indicator.slots import Slots
+        from mux_desktop_notifier.slots import Slots
         self.sni = _fresh()
         self.s = Slots(5, os.path.join(tempfile.mkdtemp(), "slots"))
 
@@ -1022,7 +1023,8 @@ class Watch(unittest.TestCase):
         """The loop polls every POLL seconds forever. Repainting regardless
         would emit NewIcon at the poll rate for every host, which churns the
         tray and defeats the blink that is supposed to mean "look at me"."""
-        sni = _fresh(MUX_INDICATOR_POLL="0.01", MUX_INDICATOR_CTL=None)
+        sni = _fresh(MUX_DESKTOP_NOTIFIER_POLL="0.01",
+                     MUX_DESKTOP_NOTIFIER_CTL=None)
         item = self._Item()
         self._spin(sni, item, [self._source(
             'printf \'{"status":"ok","partitions":'
@@ -1033,7 +1035,8 @@ class Watch(unittest.TestCase):
     def test_a_CHANGED_value_is_repainted(self):
         """The other half, and it has to be asserted separately: a loop that
         never repaints at all satisfies the test above perfectly."""
-        sni = _fresh(MUX_INDICATOR_POLL="0.01", MUX_INDICATOR_CTL=None)
+        sni = _fresh(MUX_DESKTOP_NOTIFIER_POLL="0.01",
+                     MUX_DESKTOP_NOTIFIER_CTL=None)
         import tempfile
         counter = tempfile.mktemp(prefix="muxwatchn")
         self.addCleanup(lambda: os.path.exists(counter) and os.unlink(counter))
@@ -1053,7 +1056,8 @@ class Watch(unittest.TestCase):
     def test_an_UNREACHABLE_source_becomes_unknown_here_too(self):
         """End to end through the loop, not just _query: the path from a failed
         transport to a repainted icon is what the feature promises."""
-        sni = _fresh(MUX_INDICATOR_POLL="0.01", MUX_INDICATOR_CTL=None)
+        sni = _fresh(MUX_DESKTOP_NOTIFIER_POLL="0.01",
+                     MUX_DESKTOP_NOTIFIER_CTL=None)
         item = self._Item()
         self._spin(sni, item, ["/nonexistent/mux-for-a-test"])
         self.assertEqual(item.calls, [("unknown", None)])
@@ -1067,7 +1071,8 @@ class Watch(unittest.TestCase):
             fh.write("blocked 9\n")
             path = fh.name
         self.addCleanup(os.unlink, path)
-        sni = _fresh(MUX_INDICATOR_POLL="0.01", MUX_INDICATOR_CTL=path)
+        sni = _fresh(MUX_DESKTOP_NOTIFIER_POLL="0.01",
+                     MUX_DESKTOP_NOTIFIER_CTL=path)
         item = self._Item()
         self._spin(sni, item, [self._source(
             'printf \'{"status":"ok","partitions":'
@@ -1128,7 +1133,7 @@ class Entry(unittest.TestCase):
         """A KeyboardInterrupt escaping asyncio.run would print a traceback on
         every Ctrl-C and exit non-zero, which for a systemd --user unit reads
         as a crash and triggers the restart policy."""
-        import mux_indicator.__main__ as m
+        import mux_desktop_notifier.__main__ as m
 
         async def boom():
             raise KeyboardInterrupt
@@ -1143,7 +1148,7 @@ class Entry(unittest.TestCase):
         """Only KeyboardInterrupt is caught. Catching more would turn a broken
         daemon into a silently exiting one, which systemd would report as a
         clean stop and nobody would investigate."""
-        import mux_indicator.__main__ as m
+        import mux_desktop_notifier.__main__ as m
 
         async def boom():
             raise RuntimeError("the bus went away")
@@ -1169,7 +1174,8 @@ class Blink(unittest.TestCase):
         return sni.Indicator(label="northwood", **kw)
 
     def test_set_updates_the_state_and_repaints(self):
-        sni = _fresh(MUX_INDICATOR_BLINK="1", MUX_INDICATOR_BLINK_MS="1")
+        sni = _fresh(MUX_DESKTOP_NOTIFIER_BLINK="1",
+                     MUX_DESKTOP_NOTIFIER_BLINK_MS="1")
 
         async def go():
             i = self._item(sni)
@@ -1183,7 +1189,8 @@ class Blink(unittest.TestCase):
     def test_blocked_becomes_NeedsAttention(self):
         """The status a tray host reads to decide whether to highlight the
         item. Getting it wrong makes the loudest state look ordinary."""
-        sni = _fresh(MUX_INDICATOR_BLINK="1", MUX_INDICATOR_BLINK_MS="1")
+        sni = _fresh(MUX_DESKTOP_NOTIFIER_BLINK="1",
+                     MUX_DESKTOP_NOTIFIER_BLINK_MS="1")
 
         async def go():
             i = self._item(sni)
@@ -1200,7 +1207,8 @@ class Blink(unittest.TestCase):
         Finishing on the hidden frame would leave that host's icon permanently
         missing its cursor, which looks like a rendering bug rather than the
         end of an animation."""
-        sni = _fresh(MUX_INDICATOR_BLINK="2", MUX_INDICATOR_BLINK_MS="1")
+        sni = _fresh(MUX_DESKTOP_NOTIFIER_BLINK="2",
+                     MUX_DESKTOP_NOTIFIER_BLINK_MS="1")
 
         async def go():
             i = self._item(sni)
@@ -1218,7 +1226,8 @@ class Blink(unittest.TestCase):
         common case, not the rare one: a busy agent changes state faster than
         the animation runs. Cancelling on the hidden frame without restoring
         would leave the cursor off until something else repainted."""
-        sni = _fresh(MUX_INDICATOR_BLINK="50", MUX_INDICATOR_BLINK_MS="1")
+        sni = _fresh(MUX_DESKTOP_NOTIFIER_BLINK="50",
+                     MUX_DESKTOP_NOTIFIER_BLINK_MS="1")
 
         async def go():
             i = self._item(sni)
@@ -1240,7 +1249,8 @@ class Blink(unittest.TestCase):
         """Two overlapping animations would fight over the same pixmap and the
         icon would flicker at twice the rate, then keep flickering after the
         newer one finished."""
-        sni = _fresh(MUX_INDICATOR_BLINK="50", MUX_INDICATOR_BLINK_MS="1")
+        sni = _fresh(MUX_DESKTOP_NOTIFIER_BLINK="50",
+                     MUX_DESKTOP_NOTIFIER_BLINK_MS="1")
 
         async def go():
             i = self._item(sni)
@@ -1270,14 +1280,14 @@ class Activate(unittest.TestCase):
         async def _fake(argv, what):
             self.fired.append((list(argv), what))
         self.sni._fire = _fake
-        self._env = os.environ.get("MUX_INDICATOR_ACTIVATE")
-        os.environ.pop("MUX_INDICATOR_ACTIVATE", None)
+        self._env = os.environ.get("MUX_DESKTOP_NOTIFIER_ACTIVATE")
+        os.environ.pop("MUX_DESKTOP_NOTIFIER_ACTIVATE", None)
 
     def tearDown(self):
         if self._env is None:
-            os.environ.pop("MUX_INDICATOR_ACTIVATE", None)
+            os.environ.pop("MUX_DESKTOP_NOTIFIER_ACTIVATE", None)
         else:
-            os.environ["MUX_INDICATOR_ACTIVATE"] = self._env
+            os.environ["MUX_DESKTOP_NOTIFIER_ACTIVATE"] = self._env
 
     def test_the_LOCAL_item_runs_mux_directly(self):
         """No transport for our own box: it is the daemon's own machine, not
@@ -1292,11 +1302,11 @@ class Activate(unittest.TestCase):
         carries both, so the COMMAND is the only thing distinguishing a click
         from a poll: send the wrong one and every click silently re-reads
         state it already had."""
-        os.environ["MUX_INDICATOR_TRANSPORT"] = "ssh %h %q"
+        os.environ["MUX_DESKTOP_NOTIFIER_TRANSPORT"] = "ssh %h %q"
         try:
             asyncio.run(self.sni.activate("someotherbox"))
         finally:
-            os.environ.pop("MUX_INDICATOR_TRANSPORT", None)
+            os.environ.pop("MUX_DESKTOP_NOTIFIER_TRANSPORT", None)
         argv, _what = self.fired[0]
         self.assertEqual(argv[0], "ssh")
         self.assertIn("someotherbox", argv)
@@ -1312,7 +1322,7 @@ class Activate(unittest.TestCase):
     def test_the_hook_RUNS_AFTER_and_is_given_the_label(self):
         """Order matters: switching first means the window you are raising
         already shows the right session by the time it comes forward."""
-        os.environ["MUX_INDICATOR_ACTIVATE"] = "focus-window --raise"
+        os.environ["MUX_DESKTOP_NOTIFIER_ACTIVATE"] = "focus-window --raise"
         asyncio.run(self.sni.activate("boxname"))
         self.assertEqual(len(self.fired), 2)
         (_sw, _), (hook, _w) = self.fired
@@ -1322,7 +1332,7 @@ class Activate(unittest.TestCase):
         """A command line in config, not a script. Handing it to `sh -c`
         would make a label containing a space an injection rather than an
         argument."""
-        os.environ["MUX_INDICATOR_ACTIVATE"] = "focus-window"
+        os.environ["MUX_DESKTOP_NOTIFIER_ACTIVATE"] = "focus-window"
         asyncio.run(self.sni.activate("a box"))
         hook, _w = self.fired[1]
         self.assertEqual(hook, ["focus-window", "a box"])

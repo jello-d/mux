@@ -1,12 +1,14 @@
 #!/bin/sh
-# test/mux-indicator.t - run the indicator's Python tests from the shell suite.
+# mux-desktop-notifier.t - the notifier's Python tests, from the suite.
 #
 # The indicator is mux's only non-shell component, and it had NO tests at all
-# until now. A coverage sweep kept reporting indicator/setup.sh as the last dark
+# until now. A coverage sweep kept reporting desktop-notifier/setup.sh
+# as the last dark
 # file while the Python beside it was equally dark and did not even show up,
 # because the sweep only instruments shell.
 #
-# THE TESTS LIVE IN PYTHON, NEXT TO THE CODE (indicator/tests/, stdlib unittest,
+# THE TESTS LIVE IN PYTHON, NEXT TO THE CODE (desktop-notifier/tests/,
+# stdlib unittest,
 # no new dependency), because they assert things only Python can reach: the
 # ARGB byte permutation, that two states never render alike, that an unknown
 # state word cannot kill the daemon. This file exists so `sh test/run` is still
@@ -18,11 +20,11 @@
 # optional extras for an optional component; a box that never installed the
 # tray must not have a red suite because of it.
 set -eu
-_name=mux-indicator
+_name=mux-desktop-notifier
 . "$(dirname "$0")/harness_lib"
 
-IND=$HERE/indicator
-[ -d "$IND/tests" ] || fail "indicator/tests is missing"
+IND=$HERE/desktop-notifier
+[ -d "$IND/tests" ] || fail "desktop-notifier/tests is missing"
 
 # A python that can import the deps. The venv setup.sh builds is the usual one;
 # a system python with them installed works too. Checked by IMPORTING rather
@@ -38,8 +40,8 @@ _py=
 # make this file SKIP on an unconverted box, and a skip is invisible: it
 # would read as "no python with the deps" rather than "the venv moved".
 _vnew=${XDG_DATA_HOME:-$HOME_REAL/.local/share}/mux/venv
-for _c in "${MUX_INDICATOR_VENV:-$_vnew}/bin/python" \
-    "$HOME_REAL/.venvs/mux-indicator/bin/python" \
+for _c in "${MUX_DESKTOP_NOTIFIER_VENV:-$_vnew}/bin/python" \
+    "$HOME_REAL/.venvs/mux-desktop-notifier/bin/python" \
     python3 python; do
   command -v "$_c" >/dev/null 2>&1 || [ -x "$_c" ] || continue
   if "$_c" -c 'import dbus_next, PIL' >/dev/null 2>&1; then
@@ -51,7 +53,7 @@ done
   printf 'skip %s (no python with dbus-next + Pillow)\n' "$_name"
   exit 0; }
 
-# -t . so `from mux_indicator...` resolves against the package, not the tests.
+# -t . so `from mux_desktop_notifier...` resolves against the package.
 _out=$T/out
 if ( cd "$IND" && "$_py" -m unittest discover -s tests -t . ) \
   >"$_out" 2>&1; then

@@ -515,29 +515,29 @@ t mux-host-color
 m refuses: got
 
 = indicator-unknown-verb-installs
-f indicator/setup.sh
-t mux-indicator-setup
+f desktop-notifier/setup.sh
+t mux-desktop-notifier-setup
 -      exit 2 ;;
 +      exit 0 ;;
 m unknown verb must exit 2
 
 = indicator-check-colours-a-pipe
-f indicator/setup.sh
-t mux-indicator-setup
+f desktop-notifier/setup.sh
+t mux-desktop-notifier-setup
 -   if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
 +   if true; then
 m ANSI colour into a pipe
 
 = indicator-stale-unit-reads-current
-f indicator/setup.sh
-t mux-indicator-setup
+f desktop-notifier/setup.sh
+t mux-desktop-notifier-setup
 -   if cmp -s "$PKG_DIR/$UNIT" "$UNIT_DIR/$UNIT" 2>/dev/null
 +   if [ -f "$UNIT_DIR/$UNIT" ]
 m DRIFTED unit file read as current
 
 = indicator-check-never-fails
-f indicator/setup.sh
-t mux-indicator-setup
+f desktop-notifier/setup.sh
+t mux-desktop-notifier-setup
 #
 # RE-ANCHORED when `warn()` joined the marker helpers and the two existing
 # ones gained a space to line up with it: the rider caught the rewording on
@@ -548,8 +548,8 @@ t mux-indicator-setup
 m must exit non-zero
 
 = render-check-keyed-on-count
-f indicator/mux_indicator/render.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/render.py
+t mux-desktop-notifier
 -     elif check:
 +     elif count is None:
 m idle
@@ -640,36 +640,36 @@ t mux-log
 m unwritable PATH made mux_log fail
 
 = indicator-ignores-exit-code
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -     if proc.returncode != 0:          # the transport failed, not the host
 +     if False:
 m unknown
 
 = indicator-unknown-falls-back-to-none
-f indicator/mux_indicator/render.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/render.py
+t mux-desktop-notifier
 -     "unknown": (0x6C, 0x7A, 0x9C, 0xFF),   # slate blue (unreachable)
 + 
 m unknown
 
 = indicator-host-screen-ignored
-f indicator/mux_indicator/render.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/render.py
+t mux-desktop-notifier
 -         return _mix(_BASE, host[1], _HOST_TINT)
 +         pass
 m SCREEN
 
 = indicator-host-prompt-ignored
-f indicator/mux_indicator/render.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/render.py
+t mux-desktop-notifier
 -         return host[0]
 +         pass
 m PROMPT
 
 = indicator-host-refusal-ignored
-f indicator/mux_indicator/render.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/render.py
+t mux-desktop-notifier
 -     if len(parts) != 2:
 +     if False:
 m parsed as a colour
@@ -689,29 +689,29 @@ t mux-latch
 m line 2 must be the target
 
 = indicator-stale-lock-is-polled
-f indicator/mux_indicator/sources.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sources.py
+t mux-desktop-notifier
 -         if not pid.isdigit() or not _alive(int(pid)):
 +         if not pid.isdigit():
 m test_A_STALE_LOCK_IS_SKIPPED
 
 = indicator-local-host-dropped
-f indicator/mux_indicator/sources.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sources.py
+t mux-desktop-notifier
 -     out = [local]
 +     out = []
 m test_the_local_host_is_always_there
 
 = indicator-remote-cmd-word-split
-f indicator/mux_indicator/sources.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sources.py
+t mux-desktop-notifier
 -             out.append(cmd or REMOTE_CMD)
 +             out.extend((cmd or REMOTE_CMD).split())
 m test_the_command_is_ONE_argv_element
 
 = indicator-code-drift-not-recorded
-f indicator/setup.sh
-t mux-indicator-setup
+f desktop-notifier/setup.sh
+t mux-desktop-notifier-setup
 -       || _cc_drift="$_cc_drift $_cc_b"
 +       || :
 m DRIFTED file read as current
@@ -766,8 +766,8 @@ t mux-undo-pane
 m added a pane to a window that was already whole
 
 = indicator-mark-uses-the-prefix
-f indicator/mux_indicator/render.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/render.py
+t mux-desktop-notifier
 -         return (alnum[0] + rest[-2] + rest[-1]).upper()
 +         return (alnum[0] + rest[0] + rest[1]).upper()
 m test_the_tail_is_what_distinguishes
@@ -801,86 +801,86 @@ t mux-resume
 m failed to rebuild was not logged
 
 = indicator-mark-not-drawn
-f indicator/mux_indicator/render.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/render.py
+t mux-desktop-notifier
 -         _mark_strip(d, s, mark)
 +         pass
 m test_the_STRIP_itself_is_drawn
 
 = indicator-mark-overlay-escapes-strip
-f indicator/mux_indicator/render.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/render.py
+t mux-desktop-notifier
 -     d.rounded_rectangle([0, 0, w, s - 1], rad, fill=_MARK_BACK)
 +     d.rounded_rectangle([0, 0, s - 1, s - 1], rad, fill=_MARK_BACK)
 m test_THE_OVERLAY_IS_CONFINED_TO_ITS_STRIP
 
 = indicator-mark-sized-by-width-again
-f indicator/mux_indicator/render.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/render.py
+t mux-desktop-notifier
 -         if bb[3] - bb[1] <= maxh:
 +         if bb[2] - bb[0] <= maxh:
 m test_the_mark_is_sized_by_HEIGHT_not_width
 
 = indicator-local-takes-a-palette-slot
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -                   None if host_of(lab) == local else slots.slot(host_of(lab)))
 +                   slots.slot(host_of(lab)))
 m test_the_LOCAL_host_takes_no_slot
 
 = indicator-ink-ignored-by-the-tile
-f indicator/mux_indicator/render.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/render.py
+t mux-desktop-notifier
 -         _mark_letters(ImageDraw.Draw(img), s, mark, mark_ink(ink))
 +         _mark_letters(ImageDraw.Draw(img), s, mark, mark_ink(None))
 m test_the_ink_actually_reaches_the_pixels
 
 = indicator-host-tint-survives-a-mark
-f indicator/mux_indicator/render.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/render.py
+t mux-desktop-notifier
 -     tint = None if mark else host
 +     tint = host
 m test_a_marked_tile_DROPS_the_host_tint
 
 = indicator-slot-ignores-the-name-seed
-f indicator/mux_indicator/slots.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/slots.py
+t mux-desktop-notifier
 -         want = self.preferred(name)
 +         want = 0
 m test_a_free_preferred_slot_is_ACTUALLY_TAKEN
 
 = indicator-slot-not-sticky
-f indicator/mux_indicator/slots.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/slots.py
+t mux-desktop-notifier
 -         if name in self.table:
 +         if False:
 m test_A_NEW_HOST_DOES_NOT_RESHUFFLE_THE_OLD_ONES
 
 = indicator-slot-collision-not-bumped
-f indicator/mux_indicator/slots.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/slots.py
+t mux-desktop-notifier
 -             if cand not in taken:
 +             if True:
 m test_a_collision_is_bumped_not_shared
 
 = indicator-ink-change-does-not-repaint
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -         if mark == self._mark and ink == self._ink and part == self._part:
 +         if mark == self._mark and part == self._part:
 m test_a_CHANGED_INK_repaints_even_when_the_mark_is_the_same
 
 = indicator-code-check-cwd-tautology
-f indicator/setup.sh
-t mux-indicator-code-check
+f desktop-notifier/setup.sh
+t mux-desktop-notifier-code-check
 -   (cd / && "$VENV/bin/python" -c \
 +   ("$VENV/bin/python" -c \
 m stale code passed when checked from INSIDE
 
 = indicator-code-check-self-comparison
-f indicator/setup.sh
-t mux-indicator-code-check
--   if [ "$_cc_dir" = "$PKG_DIR/mux_indicator" ]; then
+f desktop-notifier/setup.sh
+t mux-desktop-notifier-code-check
+-   if [ "$_cc_dir" = "$PKG_DIR/mux_desktop_notifier" ]; then
 +   if false; then
 m a self-comparison reported a verdict
 
@@ -899,92 +899,92 @@ t mux-latch
 m not cycling
 
 = indicator-reconcile-republishes-everything
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -     add = [(lab, argv) for lab, argv in want.items() if lab not in live]
 +     add = [(lab, argv) for lab, argv in want.items()]
 m test_AN_UNCHANGED_HOST_IS_LEFT_ALONE
 
 = indicator-reregister-on-watcher-leaving
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -     return name == WATCHER and bool(new_owner)
 +     return name == WATCHER
 m test_the_watcher_LEAVING_does_not
 
 = indicator-query-leaks-the-grandchild
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -         os.killpg(proc.pid, SIGKILL)
 +         os.killpg(os.getpgid(proc.pid), SIGKILL)
 m grandchild SURVIVED
 
 = indicator-local-sort-prefix-weak
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 - _LOCAL_SORT = "-"
 + _LOCAL_SORT = "_"
 m test_LOCAL_SORTS_FIRST_against_awkward_hostnames
 
 = indicator-id-ignores-localness
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -         return item_id(self._label, self._local)
 +         return item_id(self._label)
 m test_the_item_reports_it_through_Id
 
 = indicator-watch-repaints-every-tick
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -         if cur != last:
 +         if True:
 m test_AN_UNCHANGED_VALUE_IS_NOT_REPAINTED
 
 = indicator-override-ignored
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -         cur = _read_override() or feed.row(part)
 +         cur = feed.row(part)
 m test_the_OVERRIDE_wins_over_the_source
 
 = indicator-advertises-a-menu-it-lacks
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -         return False
 +         return True
 m test_it_does_NOT_advertise_a_menu
 
 = indicator-cancelled-blink-leaves-cursor-off
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -             self._paint(cursor=True)
 +             pass
 m test_A_CANCELLED_BLINK_ALSO_SETTLES_CURSOR_ON
 
 = indicator-blinks-stack
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -             self._blink.cancel()
 +             pass
 m test_a_SECOND_set_does_not_stack_blinks
 
 = indicator-config-transport-ignored
-f indicator/mux_indicator/sources.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sources.py
+t mux-desktop-notifier
 -                     return parts[1]
 +                     break
 m test_the_config_key_is_READ
 
 = indicator-foreign-pid-read-as-dead
-f indicator/mux_indicator/sources.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sources.py
+t mux-desktop-notifier
 -         return True          # exists, owned by someone else
 +         return False
 m test_a_pid_owned_by_SOMEONE_ELSE_counts_as_alive
 
 = indicator-no-font-fallback
-f indicator/mux_indicator/render.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/render.py
+t mux-desktop-notifier
 -     return ImageFont.load_default()
 +     raise OSError('no font')
 m test_a_TILE_STILL_RENDERS_with_no_fonts_at_all
@@ -1192,22 +1192,22 @@ t mux-next-blocked
 m expected a non-zero exit
 
 = indicator-click-polls-instead
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -         argv = remote_argv(host, cmd=activate_cmd(part))
 +         argv = remote_argv(host)
 m mux next-blocked
 
 = indicator-click-ignores-the-hook
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -     if hook:
 +     if False:
 m test_the_hook_RUNS_AFTER_and_is_given_the_label
 
 = indicator-click-shells-the-hook
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -         await _fire(shlex.split(hook) + args, f"focus {label or me}")
 +         await _fire(["sh", "-c", hook] + args, "focus")
 m test_the_hook_is_SPLIT_not_shelled
@@ -1283,64 +1283,64 @@ t mux-latch
 m line 3 must be the session
 
 = indicator-partition-letter-not-drawn
-f indicator/mux_indicator/render.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/render.py
+t mux-desktop-notifier
 -     d.text((bx - bb[0], by - bb[3]), text, font=f, fill=_PART_INK)
 +     pass
 m test_the_letter_IS_BIG_ENOUGH_TO_READ
 
 = indicator-partition-letter-ignores-which
-f indicator/mux_indicator/render.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/render.py
+t mux-desktop-notifier
 -     f = _part_font(s, text, s - fw - 1 - avoid)
 +     text = "A"; f = _part_font(s, text, s - fw - 1 - avoid)
 m test_two_partitions_DIFFER
 
 = indicator-partition-letter-does-not-blink
-f indicator/mux_indicator/render.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/render.py
+t mux-desktop-notifier
 -     if not cursor:
 +     if False:
 m test_it_BLINKS_on_the_cursor_phase
 
 = indicator-partition-letter-too-small-again
-f indicator/mux_indicator/render.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/render.py
+t mux-desktop-notifier
 - _PART_CAP = 0.46
 + _PART_CAP = 0.04
 m test_the_letter_IS_BIG_ENOUGH_TO_READ
 
 = indicator-partition-letter-buried-by-the-strip
-f indicator/mux_indicator/render.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/render.py
+t mux-desktop-notifier
 -     bx = s - fw - 1 - (bb[2] - bb[0])
 +     bx = 0
 m test_it_KEEPS_CLEAR_OF_THE_MARK_STRIP
 
 = indicator-partition-letter-clamp-removed
-f indicator/mux_indicator/render.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/render.py
+t mux-desktop-notifier
 -             _avoid = _mark_metrics(s, mark)[1] + 1
 +             _avoid = 0
 m test_it_KEEPS_CLEAR_OF_THE_MARK_STRIP
 
 = indicator-partition-ink-shared-with-the-badge
-f indicator/mux_indicator/render.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/render.py
+t mux-desktop-notifier
 - _PART_INK = (0xC8, 0xE8, 0x6A, 0xFF)
 + _PART_INK = (0xF4, 0xF4, 0xF6, 0xFF)
 m test_the_INK_belongs_to_the_letter_alone
 
 = indicator-partition-ink-reads-as-a-state
-f indicator/mux_indicator/render.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/render.py
+t mux-desktop-notifier
 - _PART_INK = (0xC8, 0xE8, 0x6A, 0xFF)
 + _PART_INK = (0xFF, 0xB4, 0x28, 0xFF)
 m will read as that rather than as a partition
 
 = indicator-partition-letter-survives-the-blink
-f indicator/mux_indicator/render.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/render.py
+t mux-desktop-notifier
 -     if part and cursor:
 +     if part:
 m test_it_BLINKS_on_the_cursor_phase
@@ -1367,122 +1367,122 @@ t mux-next-blocked
 m --partition with no name must exit 2
 
 = indicator-partition-letters-no-baseline
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -     ordered = sorted(parts, key=lambda p: (p != BASELINE, p))
 +     ordered = sorted(parts)
 m test_A_IS_ALWAYS_THE_BASELINE
 
 = indicator-one-partition-still-lettered
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -     if len(parts) < 2:
 +     if False:
 m test_ONE_PARTITION_GETS_NO_LETTER
 
 = indicator-solo-key-carries-the-partition
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -     return host if solo else f"{host}:{part}"
 +     return f"{host}:{part}"
 m test_the_solo_form_is_the_OLD_key_unchanged
 
 = indicator-mark-counted-in-items-not-hosts
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -     if len({host_of(lab) for lab in labels}) < 2:
 +     if len(labels) < 2:
 m test_TWO_PARTITIONS_ON_ONE_HOST_GET_NO_MARK
 
 = indicator-missing-partition-reads-calm
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -         return self.rows.get(part, UNKNOWN)
 +         return self.rows.get(part, ("idle", None))
 m test_a_partition_MISSING_from_a_good_answer_is_unknown
 
 = indicator-solo-row-takes-the-first-of-many
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -             if len(self.rows) != 1:
 +             if False:
 m test_a_solo_item_whose_host_grew_a_partition_is_unknown
 
 = indicator-all-rows-trusted
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -         if not isinstance(name, str) or not valid_partition(name):
 +         if not isinstance(name, str):
 m test_a_partition_that_is_not_a_LABEL_is_DROPPED
 
 = indicator-all-junk-state-dropped
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -         out[name] = (state, count) if state in KNOWN else UNKNOWN
 +         out[name] = (state, count)
 m test_a_STATE_mux_would_never_emit_is_unknown_not_dropped
 
 = indicator-refusal-read-as-an-answer
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -     if not isinstance(doc, dict) or doc.get("status") != "ok":
 +     if not isinstance(doc, dict):
 m test_a_REFUSAL_is_none_too
 
 = indicator-unparseable-read-as-empty
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -     except (ValueError, TypeError):
 +     except (ValueError, TypeError) if False else ():
 m test_JUNK_IS_NONE_NOT_EMPTY
 
 = indicator-item-paints-before-the-first-answer
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -         if not feed.asked:
 +         if False:
 m repainted
 
 = indicator-unreachable-host-loses-its-items
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -             parts = known.get(host)
 +             parts = None
 m test_AN_UNREACHABLE_HOST_KEEPS_ITS_ITEMS
 
 = indicator-unknown-host-invents-an-item
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -             if parts is None:
 +             if False:
 m test_a_host_that_has_NEVER_answered_publishes_nothing
 
 = indicator-known-partitions-never-shrink
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -             known[host] = parts
 +             known[host] = sorted(set(known.get(host, [])) | set(parts))
 m test_a_host_that_LOSES_a_partition_loses_its_item
 
 = indicator-running-daemon-not-checked
-f indicator/setup.sh
-t mux-indicator-setup
+f desktop-notifier/setup.sh
+t mux-desktop-notifier-setup
 -   _running_current
 +   :
 m a stopped unit was not reported as such
 
 = indicator-stale-daemon-compared-backwards
-f indicator/setup.sh
-t mux-indicator-setup
+f desktop-notifier/setup.sh
+t mux-desktop-notifier-setup
 -     [ "$_rn_f" -nt "/proc/$_rn_pid" ] || continue
 +     [ "$_rn_f" -ot "/proc/$_rn_pid" ] || continue
 m code older than the process was called stale
 
 = indicator-service-restart-unreported
-f indicator/setup.sh
-t mux-indicator-setup
--     echo "mux-indicator: service $UNIT installed, enabled, RESTARTED"
-+     echo "mux-indicator: service $UNIT installed + enabled"
+f desktop-notifier/setup.sh
+t mux-desktop-notifier-setup
+-     echo "mux-desktop-notifier: service $UNIT installed, enabled, RESTARTED"
++     echo "mux-desktop-notifier: service $UNIT installed + enabled"
 m the restart happened and was not reported
 
 
@@ -1947,14 +1947,14 @@ m part-is-named
 = setup-indicator-drift-is-said
 f setup.sh
 t setup
--   sh "$_root/indicator/setup.sh" check >/dev/null 2>&1 && return 0
+-   sh "$_root/desktop-notifier/setup.sh" check >/dev/null 2>&1 && return 0
 +   return 0
 m was not reported
 
 = setup-indicator-notice-is-quiet
 f setup.sh
 t setup
--   [ -e "$_bin/mux-indicator" ] || return 0
+-   [ -e "$_bin/mux-desktop-notifier" ] || return 0
 +   :
 m fired with no
 
@@ -2727,21 +2727,21 @@ t setup
 m TILDE [share/mux/share/mux.tmux]
 
 = venv-default-outside-the-payload
-f indicator/setup.sh
-t mux-indicator-setup
+f desktop-notifier/setup.sh
+t mux-desktop-notifier-setup
 # THE VENV FOLDS INTO MUX'S PAYLOAD (fleet install-placement rule, ruled
 # 2026-10-01). `~/.venvs` had the same ours-only smell as the
 # `~/.local/libexec` that ruling struck: a root at the top of $HOME with ten
 # tenants, none of them anybody else's. Restoring the old default leaves the
 # package spread over two roots, which is the thing one-payload-tree exists
-# to end, and it passes any test that pins MUX_INDICATOR_VENV.
-- VENV=${MUX_INDICATOR_VENV:-$_mux_pay/venv}
-+ VENV=${MUX_INDICATOR_VENV:-$HOME/.venvs/mux-indicator}
+# to end, and it passes any test that pins MUX_DESKTOP_NOTIFIER_VENV.
+- VENV=${MUX_DESKTOP_NOTIFIER_VENV:-$_mux_pay/venv}
++ VENV=${MUX_DESKTOP_NOTIFIER_VENV:-$HOME/.venvs/mux-desktop-notifier}
 m not inside mux's payload
 
 = venv-leftover-unreported
-f indicator/setup.sh
-t mux-indicator-setup
+f desktop-notifier/setup.sh
+t mux-desktop-notifier-setup
 # `install` REMOVES THE OLD VENV ONLY AFTER A SUCCESSFUL REBUILD, because a
 # failed rebuild that had already deleted it would leave the box with no
 # indicator at all and the running daemon as the last copy. So a box that has
@@ -3097,7 +3097,7 @@ m did not open in the current session
 f setup.sh
 t setup
 # THE VENV LIVES INSIDE THE PAYLOAD and the swap REMOVES the old payload, so
-# without the carry every re-install destroys it and `bin/mux-indicator`
+# without the carry every re-install destroys it and `bin/mux-desktop-notifier`
 # points at nothing. It bites because the two steps are SEPARATE modules in a
 # provisioner: a core install alone (every sweep that does not also touch the
 # indicator) leaves the unit's ExecStart dangling, and `mux check` cannot say
@@ -3111,8 +3111,8 @@ t setup
 m the restage destroyed the payload's venv
 
 = retire-deletes-a-live-venv-from-a-scratch-prefix
-f indicator/setup.sh
-t mux-indicator-setup
+f desktop-notifier/setup.sh
+t mux-desktop-notifier-setup
 # bt-sane's INCIDENT, in the function this package shares the shape with:
 # `OLD_VENV` ignores PREFIX because the old path never had one, so a
 # verification run that builds a venv in a throwaway prefix satisfies the
@@ -3552,22 +3552,22 @@ t mux-agent-stream
 m was accepted
 
 = indicator-heartbeat-read-as-an-answer
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -         if isinstance(doc, dict) and doc.get("heartbeat"):
 +         if False:
 m must not be reported as an answer
 
 = indicator-junk-keeps-the-last-answer
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -         self.rows = parse_all(text)
 +         self.rows = parse_all(text) or self.rows
 m test_JUNK_makes_the_host
 
 = indicator-stream-never-goes-stale
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -                                 proc.stdout.readline(), STALE)
 +                                 proc.stdout.readline(), 86400)
 m went silent past the staleness
@@ -3622,29 +3622,50 @@ t mux-agent-humming
 m the AGENT is reported as work
 
 = indicator-a-doomed-stream-is-never-downgraded
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -                     return      # reachable and cannot stream: poll it
 +                     pass        # reachable and cannot stream: poll it
 m falls_back_to_POLLING
 
 = indicator-downgrades-an-unreachable-host
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -                 if probe is not None:
 +                 if True:
 m answers NEITHER channel
 
 = indicator-any-line-counts-as-streaming
-f indicator/mux_indicator/sni.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
 -                             if self.rows is not None:
 +                             if True:
 m falls_back_to_POLLING
 
 = indicator-remote-stream-is-really-a-poll
-f indicator/mux_indicator/sources.py
-t mux-indicator
+f desktop-notifier/mux_desktop_notifier/sources.py
+t mux-desktop-notifier
 -              else remote_argv(h, tmpl, REMOTE_STREAM))
 +              else remote_argv(h, tmpl))
 m split across elements
+
+= notifier-rename-keeps-the-old-unit
+f desktop-notifier/setup.sh
+t mux-desktop-notifier-setup
+-   _retire_old_name
++   :
+m unit survived the rename
+
+= notifier-rename-clobbers-the-slots
+f desktop-notifier/setup.sh
+t mux-desktop-notifier-setup
+-     && [ ! -e "$_ost/desktop-notifier-slots" ] && {
++     && [ -e "$_ost" ] && {
+m overwrote the live colour slots
+
+= notifier-rename-leaves-the-old-command
+f desktop-notifier/setup.sh
+t mux-desktop-notifier-setup
+-   rm -f "$BIN_DIR/$_onm"
++   :
+m survived as a dangling symlink

@@ -56,7 +56,7 @@ PASS=0; FAIL=0; ERR=0
 
 # Parse under the shell the file actually declares. mux is dash-clean by rule,
 # but the check follows the shebang rather than assuming.
-# BY LANGUAGE, not just by shebang. The corpus reaches indicator/ now, and
+# BY LANGUAGE, not just by shebang. The corpus reaches the notifier now,
 # render.py has no shebang at all, so the shebang-only version fell through to
 # `dash -n` on Python, called every mutation a syntax error, and reported a
 # corpus error for a record that was fine. A parse check that cannot parse the
@@ -68,7 +68,7 @@ _parses() {   # <file>
   # this falling through to `dash -n` on Python and reporting a corpus
   # error for three records that were fine. A selector keyed on a suffix
   # goes stale the moment something is renamed; a shebang travels with the
-  # file. The suffix arm stays for `mux_indicator/*.py`, which are IMPORTED
+  # file. The suffix arm stays for the package's `*.py`, which are IMPORTED
   # and so carry no shebang at all.
   case "$(head -1 "$1")" in
   *python*) _pl=py ;;
@@ -167,7 +167,7 @@ _timed() {   # <test file>
 #
 # MEASURED BEFORE CHANGING ANYTHING (2026-10-01): a full run is 354 records
 # naming only 52 DISTINCT tests, so it was doing 708 test runs where 406 would
-# do, and the redundancy is not spread evenly. `mux-indicator`'s baseline ran
+# do, and the redundancy is not spread evenly. The notifier's baseline ran
 # 59 times at 3.71s, `mux-latch`'s 45 times at 5.69s and `mux-agent`'s 33
 # times at 5.36s: those three alone are about ELEVEN MINUTES of re-proving
 # that an unmutated tree is green. The tree COPY, which looks like the

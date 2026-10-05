@@ -80,8 +80,9 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           set -eu
-          python3 -m venv "$HOME/.venvs/mux-indicator"
-          "$HOME/.venvs/mux-indicator/bin/pip" install -q dbus-next Pillow
+          python3 -m venv "$HOME/.venvs/mux-desktop-notifier"
+          "$HOME/.venvs/mux-desktop-notifier/bin/pip" \
+            install -q dbus-next Pillow
 
       - name: suite
         # `setup.sh test` is the one entry point a consumer uses, so CI runs

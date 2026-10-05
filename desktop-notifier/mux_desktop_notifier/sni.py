@@ -47,25 +47,25 @@ WATCHER_PATH = "/StatusNotifierWatcher"
 ITEM_PATH = "/StatusNotifierItem"
 # State feed. MUX runs `mux agent-summary` ("<state> <count>") as the live
 # source, polled every POLL seconds. CTL is an OPT-IN manual override file for
-# testing: set MUX_INDICATOR_CTL to a path and write "<state> <count>" into it
-# to force a value. UNSET by default, so the deployed service reads ONLY the
-# live feed and no stray /tmp file can silently pin it.
+# testing: set MUX_DESKTOP_NOTIFIER_CTL to a path and write "<state> <count>"
+# into it to force a value. UNSET by default, so the deployed service reads ONLY
+# the live feed and no stray /tmp file can silently pin it.
 MUX = os.environ.get("MUX_BIN", "mux")
 # 5s, not the 1.5s of the single-local-host days: a source may be an ssh round
 # trip now, and polling a remote box thrice a second is rude for a signal that
 # changes on human timescales.
-POLL = float(os.environ.get("MUX_INDICATOR_POLL", "5"))
+POLL = float(os.environ.get("MUX_DESKTOP_NOTIFIER_POLL", "5"))
 # A SOURCE THAT HANGS MUST STILL ANSWER. ssh into a blackholed host does not
 # fail, it SLEEPS, so without a deadline that item would freeze on its last
 # value forever, showing a calm icon for a machine that fell off the network.
 # That is the precise failure this indicator exists to prevent, so the timeout
 # is not a nicety; it is what makes `unknown` reachable.
-TIMEOUT = float(os.environ.get("MUX_INDICATOR_TIMEOUT", "10"))
-CTL = os.environ.get("MUX_INDICATOR_CTL")
+TIMEOUT = float(os.environ.get("MUX_DESKTOP_NOTIFIER_TIMEOUT", "10"))
+CTL = os.environ.get("MUX_DESKTOP_NOTIFIER_CTL")
 # How often to re-read latch's lock directory. Slower than POLL on purpose: this
 # is a listdir of a tmpfs, but a host appearing a few seconds after you latch is
 # imperceptible, while an item flickering in and out is not.
-DISCOVER = float(os.environ.get("MUX_INDICATOR_DISCOVER", "5"))
+DISCOVER = float(os.environ.get("MUX_DESKTOP_NOTIFIER_DISCOVER", "5"))
 # A STREAM THAT STOPS SPEAKING IS NOT A CALM HOST. This is the one thing
 # polling gave away for free: there a non-zero exit could only be the
 # transport, so `unknown` was trustworthy. A stream has no such signal, which
@@ -76,16 +76,16 @@ DISCOVER = float(os.environ.get("MUX_INDICATOR_DISCOVER", "5"))
 # contract: the stream's default is 15s, so anything at or below it declares a
 # perfectly healthy feed dead. Three missed beats is the margin, which also
 # survives a loaded box without flapping.
-STALE = float(os.environ.get("MUX_INDICATOR_STALE", "45"))
+STALE = float(os.environ.get("MUX_DESKTOP_NOTIFIER_STALE", "45"))
 # A dead stream is retried, with a ceiling: a host that is simply gone must
 # not be hammered, and the first retry must still be quick because the usual
 # cause is a restart rather than an outage.
-RESPAWN = float(os.environ.get("MUX_INDICATOR_RESPAWN", "2"))
-RESPAWN_MAX = float(os.environ.get("MUX_INDICATOR_RESPAWN_MAX", "30"))
+RESPAWN = float(os.environ.get("MUX_DESKTOP_NOTIFIER_RESPAWN", "2"))
+RESPAWN_MAX = float(os.environ.get("MUX_DESKTOP_NOTIFIER_RESPAWN_MAX", "30"))
 # On a state/count change the `_` cursor blinks BLINK_N times at BLINK_MS each,
 # to catch the eye, then settles cursor-on.
-BLINK_N = int(os.environ.get("MUX_INDICATOR_BLINK", "5"))
-BLINK_MS = int(os.environ.get("MUX_INDICATOR_BLINK_MS", "250"))
+BLINK_N = int(os.environ.get("MUX_DESKTOP_NOTIFIER_BLINK", "5"))
+BLINK_MS = int(os.environ.get("MUX_DESKTOP_NOTIFIER_BLINK_MS", "250"))
 
 
 class Indicator(ServiceInterface):
@@ -240,16 +240,17 @@ class Indicator(ServiceInterface):
         otherwise hang the bar, which is precisely the failure this whole
         feature exists to make visible.
         """
-        print(f"mux-indicator: activate {self._label or 'local'}", flush=True)
+        print(f"mux-desktop-notifier: activate "
+                  f"{self._label or 'local'}", flush=True)
         asyncio.ensure_future(activate(self._label))
 
     @method()
     def SecondaryActivate(self, x: "i", y: "i"):
-        print(f"mux-indicator: SecondaryActivate at {x},{y}", flush=True)
+        print(f"mux-desktop-notifier: SecondaryActivate at {x},{y}", flush=True)
 
     @method()
     def Scroll(self, delta: "i", orientation: "s"):
-        print(f"mux-indicator: Scroll {delta} {orientation}", flush=True)
+        print(f"mux-desktop-notifier: Scroll {delta} {orientation}", flush=True)
 
     @signal()
     def NewIcon(self):
@@ -391,7 +392,8 @@ def part_of(key):
 
 
 def _read_override():
-    """The opt-in override file (MUX_INDICATOR_CTL) if set + parseable, else
+    """The opt-in override file (MUX_DESKTOP_NOTIFIER_CTL) if set and
+    parseable, else
     None, so with the env unset the live feed is the only source."""
     if not CTL:
         return None
@@ -843,19 +845,19 @@ async def _fire(argv, what):
             *argv, stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.PIPE, start_new_session=True)
     except OSError as e:
-        print(f"mux-indicator: {what} failed to start: {e}", flush=True)
+        print(f"mux-desktop-notifier: {what} failed to start: {e}", flush=True)
         return
     try:
         _o, err = await asyncio.wait_for(proc.communicate(), TIMEOUT)
     except asyncio.TimeoutError:
         await _reap(proc)
-        print(f"mux-indicator: {what} timed out", flush=True)
+        print(f"mux-desktop-notifier: {what} timed out", flush=True)
         return
     if proc.returncode != 0:
         # SAID OUT LOUD. A click that silently does nothing is the worst
         # outcome: it reads as the feature not existing.
         _msg = (err or b"").decode("utf-8", "replace").strip().splitlines()
-        print(f"mux-indicator: {what} exited {proc.returncode}"
+        print(f"mux-desktop-notifier: {what} exited {proc.returncode}"
               f"{': ' + _msg[-1] if _msg else ''}", flush=True)
 
 
@@ -936,7 +938,11 @@ def item_id(label, local=False):
     survives the sort prefix, so an `order` array keyed on it still matches.
     """
     if not label:
-        return "mux-indicator"          # the historical unlabelled id
+        # NOT RENAMED WITH THE PACKAGE, deliberately: this is a BUS id and a
+        # bar's `order` array may name it, so it is a published contract with
+        # something outside this repo rather than a spelling of our own. A
+        # label is always set in practice, so it is reached by nothing here.
+        return "mux-indicator"                 # the historical unlabelled id
     return f"mux-{_LOCAL_SORT if local else ''}{label}"
 
 
@@ -1014,7 +1020,7 @@ async def _watch(item, feed, part=None, label=""):
         if cur != last:
             last = cur
             item.set(*cur)
-            print(f"mux-indicator: {label or 'local'} = "
+            print(f"mux-desktop-notifier: {label or 'local'} = "
                   f"{cur[0]} {cur[1]}", flush=True)
         await feed.changed()
 
@@ -1038,7 +1044,7 @@ async def _publish(index, label, feed, part=None):
     # two machines and the letter says they are not.
     host = await _host_colors(host_of(label))
     if host is None and label:
-        print(f"mux-indicator: {label} has no usable colour pair "
+        print(f"mux-desktop-notifier: {label} has no usable colour pair "
               f"(drawing host-neutral)", flush=True)
     item = Indicator(label=label, host=host,
                      local=(host_of(label) == local_label()))
@@ -1052,9 +1058,9 @@ async def _publish(index, label, feed, part=None):
             obj = bus.get_proxy_object(WATCHER, WATCHER_PATH, intro)
             w = obj.get_interface(WATCHER)
             await w.call_register_status_notifier_item(name)
-            print(f"mux-indicator: + {label} ({name})", flush=True)
+            print(f"mux-desktop-notifier: + {label} ({name})", flush=True)
         except Exception as e:
-            print(f"mux-indicator: register failed for {label}: {e}",
+            print(f"mux-desktop-notifier: register failed for {label}: {e}",
                   flush=True)
 
     # (Re)register whenever the tray watcher (waybar) appears, so a `wb restart`
@@ -1077,7 +1083,7 @@ async def _publish(index, label, feed, part=None):
     if owner:
         await register()
     else:
-        print(f"mux-indicator: {label} waiting for the tray watcher",
+        print(f"mux-desktop-notifier: {label} waiting for the tray watcher",
               flush=True)
     task = asyncio.create_task(_watch(item, feed, part, label))
     return bus, task, item
@@ -1116,7 +1122,7 @@ async def _supervise():
         except Exception as e:
             # Discovery failing must never take the daemon down: the items
             # already published are still telling the truth.
-            print(f"mux-indicator: discovery failed: {e}", flush=True)
+            print(f"mux-desktop-notifier: discovery failed: {e}", flush=True)
             await asyncio.sleep(DISCOVER)
             continue
 
@@ -1143,7 +1149,7 @@ async def _supervise():
         # starts disagreeing with what the daemon actually did.
         if not announced or drop or add:
             _names = ", ".join(sorted(want)) or "none"
-            print(f"mux-indicator: watching {_names}", flush=True)
+            print(f"mux-desktop-notifier: watching {_names}", flush=True)
             announced = True
 
         for label in drop:
@@ -1156,7 +1162,7 @@ async def _supervise():
             # The reason is no longer always a latch: an item also goes
             # when its partition stops being reported, and when a host
             # gains a second one and every key on it is rewritten.
-            print(f"mux-indicator: - {label} (withdrawn)", flush=True)
+            print(f"mux-desktop-notifier: - {label} (withdrawn)", flush=True)
 
         for label, (_feed, _part, _letter) in add:
             index += 1
@@ -1165,7 +1171,7 @@ async def _supervise():
             except Exception as e:
                 # One host that cannot be published must not cost the others,
                 # and the others are exactly where its absence would show.
-                print(f"mux-indicator: could not publish {label}: {e}",
+                print(f"mux-desktop-notifier: could not publish {label}: {e}",
                       flush=True)
 
         # AFTER publishing, not before: a host joining is the tick that turns

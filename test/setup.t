@@ -151,14 +151,14 @@ $(cat "$T/out")"
 # this is content-based rather than keyed on a version somebody must remember
 # to bump. Here the sandbox venv does not exist at all, which is one of the
 # three answers that check distinguishes.
-: >"$T/bin/mux-indicator"
+: >"$T/bin/mux-desktop-notifier"
 run install >"$T/out" 2>&1 || fail "install errored with an indicator present"
 grep -q 'tray indicator' "$T/out" || fail "an installed indicator that does not
 match the package was not reported, so a silent tray skew is the default:
 $(cat "$T/out")"
 grep -q 'setup.sh indicator' "$T/out" || fail "the notice did not name the
 command that fixes it; a gap named without a remedy invites two different fixes"
-rm -f "$T/bin/mux-indicator"
+rm -f "$T/bin/mux-desktop-notifier"
 
 # --- DISCOVERY: WHAT THE INSTALL DOES ABOUT NO ROOTS ----------------------
 # mux used to SHIP `scan ~/src 3`, so this state was unreachable and every
@@ -344,7 +344,8 @@ grep -q 'moving' "$_new/1" \
 # WHY THIS IS NOT HYPOTHETICAL: the indicator's venv folds into the payload,
 # the swap REMOVES the old payload, and the two steps are separate modules in
 # a provisioner. So a core install alone (every sweep that does not also touch
-# the indicator) destroyed the venv and left `bin/mux-indicator` pointing at
+# the notifier) destroyed the venv and left `bin/mux-desktop-notifier`
+# pointing at
 # nothing, with `mux check` unable to say so because the indicator is a
 # different package.
 #
@@ -352,11 +353,11 @@ grep -q 'moving' "$_new/1" \
 # of megabytes; `_place-conversion.md` names hush's version as the one to copy
 # and this is it.
 mkdir -p "$_pay/venv/bin"
-printf '#!/bin/sh\necho venv\n' >"$_pay/venv/bin/mux-indicator"
-chmod +x "$_pay/venv/bin/mux-indicator"
+printf '#!/bin/sh\necho venv\n' >"$_pay/venv/bin/mux-desktop-notifier"
+chmod +x "$_pay/venv/bin/mux-desktop-notifier"
 printf 'carried\n' >"$_pay/venv/marker"
 run install >"$T/vout" 2>&1 || fail "install errored: $(cat "$T/vout")"
-[ -x "$_pay/venv/bin/mux-indicator" ] \
+[ -x "$_pay/venv/bin/mux-desktop-notifier" ] \
   || fail "the restage destroyed the payload's venv, so the indicator's unit
 and its bin link now point at nothing until something rebuilds it"
 grep -qx carried "$_pay/venv/marker" \
@@ -371,7 +372,7 @@ run install >/dev/null 2>&1 || fail "install errored with a stale file"
 [ ! -e "$_pay/stale-probe" ] \
   || fail "the restage kept a file that is not in the repo, so the payload is
 no longer a copy of exactly the shipped tree"
-[ -x "$_pay/venv/bin/mux-indicator" ] || fail "the venv went with it"
+[ -x "$_pay/venv/bin/mux-desktop-notifier" ] || fail "the venv went with it"
 
 # --- THE NOTICES REACH THE LOG, AND ONLY AS EVENTS ------------------------
 # WHY: measured 2026-10-01, a provisioner swallows this script's output

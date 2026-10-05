@@ -25,7 +25,7 @@ design exists to avoid.
 
 SOURCES ARE STILL COMMANDS. The remote command is composed from a TEMPLATE, the
 same seam shape as `latch-transport`, so ssh is a default and not a law: point
-`indicator-transport` at anything that carries a command to a host. mux
+`desktop-notifier-transport` at anything that carries a command to a host. mux
 specifies the shape of the answer, never the mechanism.
 """
 import os
@@ -167,8 +167,8 @@ def _conf(key):
 def transport():
     """The remote-command template: env, then $MUX_DIR/config, then the default.
     The same environment-over-config-over-shipped order every mux seam uses."""
-    return (os.environ.get("MUX_INDICATOR_TRANSPORT")
-            or _conf("indicator-transport") or DEFAULT_TRANSPORT)
+    return (os.environ.get("MUX_DESKTOP_NOTIFIER_TRANSPORT")
+            or _conf("desktop-notifier-transport") or DEFAULT_TRANSPORT)
 
 
 def activate_hook():
@@ -192,8 +192,8 @@ def activate_hook():
     nobody asked for a focus change, so none happens, and the click still does
     the part mux legitimately owns.
     """
-    return (os.environ.get("MUX_INDICATOR_ACTIVATE")
-            or _conf("indicator-activate"))
+    return (os.environ.get("MUX_DESKTOP_NOTIFIER_ACTIVATE")
+            or _conf("desktop-notifier-activate"))
 
 
 def remote_argv(host, template=None, cmd=None):

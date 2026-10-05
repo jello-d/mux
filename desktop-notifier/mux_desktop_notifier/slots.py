@@ -45,7 +45,7 @@ def state_dir():
 
 
 def store_path():
-    return os.path.join(state_dir(), "indicator-slots")
+    return os.path.join(state_dir(), "desktop-notifier-slots")
 
 
 def _load(path):

@@ -1,14 +1,15 @@
 #!/bin/sh
-# share/indicator/focus-kitty - raise the kitty window showing a host's latch.
+# focus-kitty - raise the kitty window showing a host's latch.
 #
-# A `mux-indicator` ACTIVATE hook. Called as `focus-kitty LABEL`, on the box
+# A `mux-desktop-notifier` ACTIVATE hook. Called as `focus-kitty LABEL`,
+# on the box
 # with the tray, AFTER the click has already switched that host's session.
 #
 # SHIPPED BUT NOT WIRED, which is the point of a hook library: mux ships this
 # so you do not have to write it, and whether it RUNS is your config's
 # decision. Wire it in $MUX_DIR/config:
 #
-#     indicator-activate   focus-kitty
+#     desktop-notifier-activate   focus-kitty
 #
 # WHY MUX DOES NOT DO THIS ITSELF. Raising a window means knowing about a
 # compositor, and mux manages sessions inside terminals with no opinion about

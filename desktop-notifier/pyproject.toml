@@ -1,19 +1,19 @@
 [project]
-name = "mux-indicator"
+name = "mux-desktop-notifier"
 version = "0.0.1"
 description = "Optional SNI tray indicator for mux agent-session state"
 requires-python = ">=3.8"
 dependencies = ["dbus-next>=0.2.3", "Pillow>=9"]
 
 [project.scripts]
-mux-indicator = "mux_indicator.__main__:main"
+mux-desktop-notifier = "mux_desktop_notifier.__main__:main"
 
 # EXPLICIT, not auto-discovered. setuptools' flat-layout heuristic happens to
 # exclude a top-level `tests/`, but relying on a heuristic to keep test code
 # out of an installed package is a silent failure waiting for the day the
 # heuristic changes. One line, and the answer is stated.
 [tool.setuptools]
-packages = ["mux_indicator"]
+packages = ["mux_desktop_notifier"]
 
 [build-system]
 requires = ["setuptools>=61"]

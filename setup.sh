@@ -11,8 +11,9 @@
 #   ./setup.sh test        run the in-repo test suite (test/run)
 #   ./setup.sh version     the packaged version
 #   ./setup.sh all         install + the optional tray indicator
-#   ./setup.sh indicator [VERB]  drive the optional indicator sub-package (a
-#                          passthrough to indicator/setup.sh; VERB defaults to
+#   ./setup.sh desktop-notifier [VERB]   drive the optional notifier
+#                          passthrough to desktop-notifier/setup.sh;
+#                          VERB defaults to
 #                          install). Kept OUT of `install`: it is Python + a
 #                          daemon, unlike core mux (shell, no deps but tmux).
 #
@@ -258,7 +259,8 @@ _payload_stage() {
   done
   # THE VENV IS CARRIED ACROSS, because the swap below removes the old
   # payload and the venv lives INSIDE it. Without this every re-install
-  # destroys the indicator's venv and `~/.local/bin/mux-indicator` dangles
+  # destroys the notifier's venv and `~/.local/bin/mux-desktop-notifier`
+  # dangles
   # until something rebuilds it: measured in a scratch prefix, planted venv
   # gone and the link pointing at nothing.
   #
@@ -582,8 +584,8 @@ _scan_root_step() {
 # when no indicator is installed: an optional sub-package must not make the
 # core install noisy for everyone who does not use it.
 _indicator_notice() {
-  [ -e "$_bin/mux-indicator" ] || return 0
-  sh "$_root/indicator/setup.sh" check >/dev/null 2>&1 && return 0
+  [ -e "$_bin/mux-desktop-notifier" ] || return 0
+  sh "$_root/desktop-notifier/setup.sh" check >/dev/null 2>&1 && return 0
   echo "$PKG: NOTE the installed tray indicator differs from this package" >&2
   echo "$PKG:      (or its daemon is running older code). It polls a mux" >&2
   echo "$PKG:      contract, so leaving it behind loses items silently." >&2
@@ -625,8 +627,8 @@ do_uninstall() {
   # a dangling unit that fails at every login is worse than one that is gone.
   [ -z "$_had_venv" ] || {
     echo "$PKG: that INCLUDED the indicator's venv, so its unit and"
-    echo "$PKG:   $_bin/$PKG-indicator now dangle. Clean them up with:"
-    echo "$PKG:   sh indicator/setup.sh uninstall"; }
+    echo "$PKG:   $_bin/$PKG-desktop-notifier now dangle. Clean them up"
+    echo "$PKG:   sh desktop-notifier/setup.sh uninstall"; }
   # AND IT SAYS WHAT IT KEPT. Keeping these is right, because a session set
   # and a log are not the package's to delete; saying nothing about them is
   # not, because "uninstalled" then reads as "gone" while they sit on disk.
@@ -697,11 +699,12 @@ do_paths() {
   printf 'cache\t%s\n'   "${MUX_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/$PKG}"
   _p_rt=${XDG_RUNTIME_DIR:-/tmp/user-$(id -u)}
   printf 'runtime\t%s\n' "$_p_rt/$PKG"
-  printf 'venv\t%s\n'    "${MUX_INDICATOR_VENV:-$_pay/venv}"
+  printf 'venv\t%s\n'    "${MUX_DESKTOP_NOTIFIER_VENV:-$_pay/venv}"
   printf 'policy\t%s\n'  "/etc/$PKG/send-policy"
 }
 
-_U="usage: setup.sh [install|uninstall|check|paths|test|version|all|indicator]"
+_U="usage: setup.sh [install|uninstall|check|paths|test|version|all|\
+  desktop-notifier]"
 # --- ARGUMENTS PAST THE VERB ARE REFUSED, NEVER IGNORED --------------------
 # FOUND BY MAKING THE MISTAKE, on a live box: `sh setup.sh install
 # PREFIX=/var/tmp/scratch` installed to the REAL prefix and printed its usual
@@ -733,10 +736,14 @@ _badarg() {   # <verb> <offending argument>
   printf '%s\n' "$_U" >&2
   exit 2
 }
-# `indicator` is the one verb that legitimately takes more: it passes a verb
-# and its flags straight through to the sub-package.
+# `desktop-notifier` is the one verb that legitimately takes more: it passes a
+# verb and its flags straight through to the sub-package. `indicator` is its
+# former name and is still accepted, for the reason R10 records about shipping
+# order: a provisioner calls this by name, so refusing the old spelling the
+# moment mux renames it would break that caller until its own change lands.
+# The overlap costs nothing and lets the two repos move independently.
 case "${1:-help}" in
-indicator) ;;
+desktop-notifier|indicator) ;;
 *) [ "$#" -le 1 ] || _badarg "${1:-help}" "$2" ;;
 esac
 
@@ -748,8 +755,9 @@ case "${1:-help}" in
   test)      exec sh "$_root/test/run" ;;
   version)   _v=$(git -C "$_root" describe --tags --always 2>/dev/null || true)
              echo "${_v:-$PKG (unversioned)}" ;;
-  all)       do_install; sh "$_root/indicator/setup.sh" install ;;
-  indicator) shift; exec sh "$_root/indicator/setup.sh" "$@" ;;  # passthrough
+  all)       do_install; sh "$_root/desktop-notifier/setup.sh" install ;;
+  desktop-notifier|indicator)                              # passthrough
+             shift; exec sh "$_root/desktop-notifier/setup.sh" "$@" ;;
   -h|--help|help) echo "$_U" ;;
   *) echo "setup.sh: unknown command '${1:-}'" >&2; echo "$_U" >&2; exit 2 ;;
 esac

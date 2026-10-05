@@ -47,7 +47,7 @@ _name=lint
 _list=$T/files
 : >"$_list"
 find "$HERE/bin" "$HERE/lib" "$HERE/libexec" "$HERE/test" "$HERE/share" \
-  "$HERE/indicator" \
+  "$HERE/desktop-notifier" \
   -type f 2>/dev/null | LC_ALL=C sort | while IFS= read -r _f; do
   case $_f in
   # NOT SELECTED BY `.sh`, deliberately. A suffix-keyed selector SILENTLY
@@ -65,7 +65,7 @@ find "$HERE/bin" "$HERE/lib" "$HERE/libexec" "$HERE/test" "$HERE/share" \
     esac ;;
   esac
 done >>"$_list"
-printf '%s\n' "$HERE/setup.sh" "$HERE/indicator/setup.sh" >>"$_list"
+printf '%s\n' "$HERE/setup.sh" "$HERE/desktop-notifier/setup.sh" >>"$_list"
 LC_ALL=C sort -u "$_list" -o "$_list"
 
 # A floor on the count. Without it, a find that matched NOTHING (a layout
@@ -505,7 +505,7 @@ fi
 # comment on a real line is still caught, so the exclusion is as narrow as it
 # can be made with a grep.
 #
-# share/latch/ AND share/indicator/ ARE A DIFFERENT CONTRACT, checked
+# share/latch/ AND share/desktop-notifier/ ARE A DIFFERENT CONTRACT, checked
 # separately below rather than merely excluded. A hook is not a mux command:
 # it answers a QUESTION in three states (0 yes, 1 no, 78 cannot tell), and 78
 # is the whole point: "cannot tell" has to be distinguishable from "no" or
@@ -523,7 +523,7 @@ _ec=$T/exitcodes
 ( cd "$HERE" && grep -rnE '\bexit [0-9]+' bin lib libexec share setup.sh \
   2>/dev/null | grep -vE '\bexit [0123]\b' \
   | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' \
-  | grep -vE '^share/(latch|indicator)/' ) >"$_ec" || true
+  | grep -vE '^share/(latch|desktop-notifier)/' ) >"$_ec" || true
 if [ -s "$_ec" ]; then
   printf 'FAIL %s: an exit code outside the 0/1/2 contract:\n' "$_name" >&2
   sed 's/^/  /' "$_ec" >&2
@@ -536,7 +536,7 @@ fi
 
 # --- the HOOK contract: a latch hook answers 0, 1 or 78, and nothing else ---
 _hc=$T/hookcodes
-( cd "$HERE" && grep -rnE '\bexit [0-9]+' share/latch share/indicator \
+( cd "$HERE" && grep -rnE '\bexit [0-9]+' share/latch share/desktop-notifier \
   2>/dev/null \
   | grep -vE '\bexit (0|1|78)\b' \
   | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' ) >"$_hc" || true
@@ -553,7 +553,7 @@ fi
 # Every shipped hook must be EXECUTABLE. A hook that is present and unrunnable
 # resolves by name, then fails to run, and latch reports the state it could not
 # determine rather than the install that is broken.
-for _h in "$HERE"/share/latch/* "$HERE"/share/indicator/*; do
+for _h in "$HERE"/share/latch/* "$HERE"/share/desktop-notifier/*; do
   [ -e "$_h" ] || continue
   [ -x "$_h" ] || fail "$(basename "$_h") is not executable;
 a hook that cannot run is a hook latch resolves and then cannot use"

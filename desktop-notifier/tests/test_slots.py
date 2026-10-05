@@ -12,7 +12,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from mux_indicator.slots import Slots, state_dir, store_path
+from mux_desktop_notifier.slots import Slots, state_dir, store_path
 
 
 class TestSeeding(unittest.TestCase):
@@ -20,7 +20,7 @@ class TestSeeding(unittest.TestCase):
 
     def setUp(self):
         self.d = tempfile.mkdtemp()
-        self.p = os.path.join(self.d, "indicator-slots")
+        self.p = os.path.join(self.d, "desktop-notifier-slots")
 
     def test_the_seed_is_stable_across_instances(self):
         """The whole point: a fresh daemon, a fresh box, the same answer. A
@@ -55,7 +55,7 @@ class TestCollision(unittest.TestCase):
 
     def setUp(self):
         self.d = tempfile.mkdtemp()
-        self.p = os.path.join(self.d, "indicator-slots")
+        self.p = os.path.join(self.d, "desktop-notifier-slots")
 
     def _colliding_pair(self, width):
         """Two real names that seed to the same slot, found rather than
@@ -102,7 +102,7 @@ class TestSticky(unittest.TestCase):
 
     def setUp(self):
         self.d = tempfile.mkdtemp()
-        self.p = os.path.join(self.d, "indicator-slots")
+        self.p = os.path.join(self.d, "desktop-notifier-slots")
 
     def test_an_assignment_survives_a_restart(self):
         first = Slots(5, self.p)

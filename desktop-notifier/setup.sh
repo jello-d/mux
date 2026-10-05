@@ -1,5 +1,5 @@
 #!/bin/sh
-# setup.sh - set up mux-indicator (the SNI tray icon for mux agent-session
+# setup.sh - set up mux-desktop-notifier (the SNI tray icon for mux
 # state) for the CURRENT user. Standalone: just run `./setup.sh`. This script is
 # the single source of the install procedure; an integrator (a provisioning
 # system) can delegate to it by calling `setup.sh install` / `setup.sh check`,
@@ -16,8 +16,8 @@
 # python3 (for the venv) and, for the service, a systemd --user manager. A tray
 # HOST (waybar's tray, or any desktop's) and `mux` on PATH are runtime needs.
 # Overrides:
-#   MUX_INDICATOR_VENV   venv dir   (default ~/.local/share/mux/venv)
-#   MUX_INDICATOR_BIN    bin dir    (default ~/.local/bin)
+#   MUX_DESKTOP_NOTIFIER_VENV   venv dir   (default ~/.local/share/mux/venv)
+#   MUX_DESKTOP_NOTIFIER_BIN    bin dir    (default ~/.local/bin)
 set -eu
 
 self=$0
@@ -25,7 +25,8 @@ case $self in */*) ;; *) self=$(command -v -- "$self" || echo "$self") ;; esac
 PKG_DIR=$(CDPATH= cd -- "$(dirname -- "$self")" && pwd)
 
 # THE VENV LIVES INSIDE MUX'S PAYLOAD, per the fleet install-placement rule
-# (ruled 2026-10-01). It was `~/.venvs/mux-indicator`, and `~/.venvs` had the
+# (ruled 2026-10-01). It was `~/.venvs/mux-desktop-notifier`, and
+# `~/.venvs` had the
 # same ours-only smell as the `~/.local/libexec` that ruling struck: a root at
 # the top of $HOME with ten tenants, none of them anybody else's. One payload
 # tree per package is the durable reason, and it is what makes uninstall and
@@ -37,12 +38,12 @@ PKG_DIR=$(CDPATH= cd -- "$(dirname -- "$self")" && pwd)
 # A venv is also not reachable by self-location in any case, since its
 # shebangs are absolute.
 _mux_pay=${XDG_DATA_HOME:-$HOME/.local/share}/mux
-VENV=${MUX_INDICATOR_VENV:-$_mux_pay/venv}
+VENV=${MUX_DESKTOP_NOTIFIER_VENV:-$_mux_pay/venv}
 # WHERE IT USED TO BE, named so install can retire it and check can report it
 # rather than each spelling the old path again.
-OLD_VENV=$HOME/.venvs/mux-indicator
-BIN_DIR=${MUX_INDICATOR_BIN:-$HOME/.local/bin}
-UNIT=mux-indicator.service
+OLD_VENV=$HOME/.venvs/mux-desktop-notifier
+BIN_DIR=${MUX_DESKTOP_NOTIFIER_BIN:-$HOME/.local/bin}
+UNIT=mux-desktop-notifier.service
 UNIT_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user
 
 # _retire_old_venv: A REBUILD, NOT A MOVE, and the distinction is the whole
@@ -58,7 +59,7 @@ UNIT_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user
 # the last copy.
 _retire_old_venv() {
   [ -d "$OLD_VENV" ] || return 0
-  [ -x "$VENV/bin/mux-indicator" ] || return 0
+  [ -x "$VENV/bin/mux-desktop-notifier" ] || return 0
   case $OLD_VENV in
   "$HOME"/.venvs/?*) ;;
   *) return 0 ;;
@@ -84,7 +85,49 @@ _retire_old_venv() {
   esac
   rm -rf -- "$OLD_VENV"
   rmdir "$HOME/.venvs" 2>/dev/null || :
-  echo "mux-indicator: retired the old venv at $OLD_VENV"
+  echo "mux-desktop-notifier: retired the old venv at $OLD_VENV"
+}
+
+# This package was called `mux-indicator` until 2026-10-04. A RENAME IS A
+# MODE SWITCH AND MUST REMOVE WHAT IT REPLACES, which is this fleet's
+# install-placement rule: without this an upgrade leaves a dangling
+# `~/.local/bin/mux-indicator` and, worse, an ENABLED unit pointing at a
+# console script pip has just deleted, so the user manager fails it at every
+# login for ever. The uninstall path in this same file already argues exactly
+# that about a dangling unit being worse than one that is gone.
+#
+# THE OLD DIST GOES TOO, not just the links: `pip install` of the renamed
+# project leaves `mux-indicator` installed beside it, so the venv would carry
+# two copies of the same code and the stale console script would keep working
+# and keep drawing last week's icon. That is the three-copies problem this
+# package's own check exists for, created by the rename itself.
+#
+# AND THE SLOTS FILE IS MIGRATED RATHER THAN ABANDONED, because it is state
+# the package WRITES at runtime and cannot rebuild: it holds which colour each
+# host was assigned, and the order that produced the assignment is gone. Doing
+# it HERE is the rule this repo paid for once already, when a lazy migration
+# in a reader took a snapshot and froze a record for an hour: a path a package
+# writes at runtime is moved by the INSTALLER, because that is the only moment
+# atomic with the switchover.
+_retire_old_name() {
+  _onm=mux-indicator
+  if [ -e "$UNIT_DIR/$_onm.service" ]; then
+    systemctl --user disable --now "$_onm.service" 2>/dev/null || true
+    rm -f "$UNIT_DIR/$_onm.service"
+    systemctl --user daemon-reload 2>/dev/null || true
+    echo "mux-desktop-notifier: retired the $_onm unit"
+  fi
+  rm -f "$BIN_DIR/$_onm"
+  "$VENV/bin/pip" show "$_onm" >/dev/null 2>&1 && {
+    "$VENV/bin/pip" uninstall -q -y "$_onm" >/dev/null 2>&1 || true
+    echo "mux-desktop-notifier: removed the $_onm distribution"; }
+  _ost=${XDG_STATE_HOME:-$HOME/.local/state}/mux
+  [ -f "$_ost/indicator-slots" ] \
+    && [ ! -e "$_ost/desktop-notifier-slots" ] && {
+    mv -f "$_ost/indicator-slots" "$_ost/desktop-notifier-slots" \
+      2>/dev/null && echo "mux-desktop-notifier: carried the colour slots over"
+  }
+  return 0
 }
 
 app() {
@@ -98,12 +141,19 @@ app() {
   "$VENV/bin/pip" install -q --force-reinstall --no-deps "$PKG_DIR"
   rm -rf "$PKG_DIR/build" "$PKG_DIR"/*.egg-info    # in-place build detritus
   mkdir -p "$BIN_DIR"
-  ln -sfn "$VENV/bin/mux-indicator" "$BIN_DIR/mux-indicator"
-  echo "mux-indicator: app -> $BIN_DIR/mux-indicator"
+  ln -sfn "$VENV/bin/mux-desktop-notifier" "$BIN_DIR/mux-desktop-notifier"
+  echo "mux-desktop-notifier: app -> $BIN_DIR/mux-desktop-notifier"
   _retire_old_venv
 }
 
 service() {
+  # BEFORE the new unit is written, and FROM HERE rather than from `app`:
+  # retiring the previous name is squarely this step's business, and `app`
+  # is the one function this file documents as untestable (it needs a network
+  # and minutes, and stubbing pip would be testing the stub), so a retirement
+  # living there would be a seam nothing ever executes. This package has
+  # shipped that exact mistake before, more than once.
+  _retire_old_name
   mkdir -p "$UNIT_DIR"
   install -m 0644 "$PKG_DIR/$UNIT" "$UNIT_DIR/$UNIT"
   systemctl --user daemon-reload 2>/dev/null || true
@@ -122,7 +172,7 @@ service() {
   # as a presence check that cannot distinguish installed from working, one
   # layer out, and this package already has that rule written down.
   _svc_err=$(systemctl --user restart "$UNIT" 2>&1) && {
-    echo "mux-indicator: service $UNIT installed, enabled, RESTARTED"
+    echo "mux-desktop-notifier: service $UNIT installed, enabled, RESTARTED"
     return 0; }
   # NO USER MANAGER IS NOT A FAILURE. A headless or pre-login install
   # legitimately cannot start anything, the unit is enabled, and it comes up
@@ -131,23 +181,23 @@ service() {
   # one real case silence every other one too.
   case $_svc_err in
   *"Failed to connect to"*|*"not been booted"*|*"No such file or dir"*)
-    echo "mux-indicator: service $UNIT installed + enabled; no user" \
+    echo "mux-desktop-notifier: service $UNIT installed + enabled; no user" \
       "manager here, so it starts at the next login"
     return 0 ;;
   esac
-  echo "mux-indicator: service $UNIT installed + enabled, but the" \
+  echo "mux-desktop-notifier: service $UNIT installed + enabled, but the" \
     "RESTART FAILED, and it is still running the OLD code:" >&2
-  printf '%s\n' "$_svc_err" | sed 's/^/mux-indicator:   /' >&2
+  printf '%s\n' "$_svc_err" | sed 's/^/mux-desktop-notifier:   /' >&2
   return 1
 }
 
 uninstall() {
   systemctl --user disable --now "$UNIT" 2>/dev/null || true
-  rm -f "$UNIT_DIR/$UNIT" "$BIN_DIR/mux-indicator"
+  rm -f "$UNIT_DIR/$UNIT" "$BIN_DIR/mux-desktop-notifier"
   systemctl --user daemon-reload 2>/dev/null || true
-  echo "mux-indicator: uninstalled (venv $VENV left in place)"
-  echo "mux-indicator: it sits inside mux's payload, so \`mux\`'s own"
-  echo "mux-indicator:   uninstall removes it along with everything else."
+  echo "mux-desktop-notifier: uninstalled (venv $VENV left in place)"
+  echo "mux-desktop-notifier: it sits inside mux's payload, so \`mux\`'s own"
+  echo "mux-desktop-notifier:   uninstall removes it with everything else."
 }
 
 # _code_current: is the INSTALLED code the package's code?
@@ -182,7 +232,8 @@ uninstall() {
 # supports 3.8.
 _installed_dir() {
   (cd / && "$VENV/bin/python" -c \
-    'import mux_indicator,os;print(os.path.dirname(mux_indicator.__file__))' \
+    'import mux_desktop_notifier as m,os
+print(os.path.dirname(m.__file__))' \
     2>/dev/null) || true
 }
 
@@ -198,13 +249,13 @@ _code_current() {
   # check that is correct today and silently vacuous the next time something
   # moves. A comparison with no two sides cannot answer the question, so it
   # says so instead of reporting agreement.
-  if [ "$_cc_dir" = "$PKG_DIR/mux_indicator" ]; then
+  if [ "$_cc_dir" = "$PKG_DIR/mux_desktop_notifier" ]; then
     bad "the venv imports the SOURCE tree ($_cc_dir)"
     bad "  nothing here can be stale or current; this check is vacuous"
     return 0
   fi
   _cc_drift=
-  for _cc_f in "$PKG_DIR"/mux_indicator/*.py; do
+  for _cc_f in "$PKG_DIR"/mux_desktop_notifier/*.py; do
     [ -f "$_cc_f" ] || continue
     _cc_b=${_cc_f##*/}
     cmp -s "$_cc_f" "$_cc_dir/$_cc_b" 2>/dev/null \
@@ -304,7 +355,7 @@ check() {
   # a provisioner gating on the exit code must not be made to loop over one.
   warn() { printf '  %s[WARN]%s %s\n' "$_Y" "$_O" "$*"; }
 
-  if [ -x "$VENV/bin/mux-indicator" ]; then ok "venv app ($VENV)"
+  if [ -x "$VENV/bin/mux-desktop-notifier" ]; then ok "venv app ($VENV)"
   else bad "venv app missing ($VENV); run: install app"; fi
   # A RETIRED VENV THAT SURVIVED. A WARN, not a FAIL: nothing resolves
   # through it once the bin link points at the new one, so it is wasted disk
@@ -321,8 +372,9 @@ check() {
   if "$VENV/bin/python" -c 'import dbus_next, PIL' 2>/dev/null
   then ok "deps import (dbus-next, Pillow)"
   else bad "deps not importable in the venv"; fi
-  if [ -x "$BIN_DIR/mux-indicator" ]; then ok "$BIN_DIR/mux-indicator"
-  else bad "$BIN_DIR/mux-indicator missing"; fi
+  if [ -x "$BIN_DIR/mux-desktop-notifier" ]; then
+    ok "$BIN_DIR/mux-desktop-notifier"
+  else bad "$BIN_DIR/mux-desktop-notifier missing"; fi
   if cmp -s "$PKG_DIR/$UNIT" "$UNIT_DIR/$UNIT" 2>/dev/null
   then ok "$UNIT current"; else bad "$UNIT missing or stale"; fi
   _code_current

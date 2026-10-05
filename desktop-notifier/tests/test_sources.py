@@ -22,8 +22,8 @@ import os
 import tempfile
 import unittest
 
-from mux_indicator import sources
-from mux_indicator.sources import (DEFAULT_TRANSPORT, latched, load,
+from mux_desktop_notifier import sources
+from mux_desktop_notifier.sources import (DEFAULT_TRANSPORT, latched, load,
                                    local_label, remote_argv, transport)
 
 
@@ -176,25 +176,25 @@ class RemoteCommand(unittest.TestCase):
     def test_the_template_is_a_seam(self):
         """ssh is a DEFAULT, not a law: mux specifies the shape of the answer,
         never the mechanism. Same rule `latch-transport` already follows."""
-        old = os.environ.get("MUX_INDICATOR_TRANSPORT")
-        os.environ["MUX_INDICATOR_TRANSPORT"] = "kubectl exec %h -- %q"
+        old = os.environ.get("MUX_DESKTOP_NOTIFIER_TRANSPORT")
+        os.environ["MUX_DESKTOP_NOTIFIER_TRANSPORT"] = "kubectl exec %h -- %q"
         try:
             self.assertEqual(remote_argv("pod")[0], "kubectl")
         finally:
             if old is None:
-                os.environ.pop("MUX_INDICATOR_TRANSPORT", None)
+                os.environ.pop("MUX_DESKTOP_NOTIFIER_TRANSPORT", None)
             else:
-                os.environ["MUX_INDICATOR_TRANSPORT"] = old
+                os.environ["MUX_DESKTOP_NOTIFIER_TRANSPORT"] = old
 
     def test_the_default_is_used_when_nothing_is_configured(self):
-        old = os.environ.get("MUX_INDICATOR_TRANSPORT")
+        old = os.environ.get("MUX_DESKTOP_NOTIFIER_TRANSPORT")
         old_dir = os.environ.get("MUX_DIR")
-        os.environ.pop("MUX_INDICATOR_TRANSPORT", None)
+        os.environ.pop("MUX_DESKTOP_NOTIFIER_TRANSPORT", None)
         os.environ["MUX_DIR"] = tempfile.mkdtemp(prefix="muxconf")
         try:
             self.assertEqual(transport(), DEFAULT_TRANSPORT)
         finally:
-            for k, v in (("MUX_INDICATOR_TRANSPORT", old),
+            for k, v in (("MUX_DESKTOP_NOTIFIER_TRANSPORT", old),
                          ("MUX_DIR", old_dir)):
                 if v is None:
                     os.environ.pop(k, None)
@@ -203,7 +203,7 @@ class RemoteCommand(unittest.TestCase):
 
 
 class TransportFromConfig(unittest.TestCase):
-    """`indicator-transport` in $MUX_DIR/config: the MIDDLE layer of the
+    """`desktop-notifier-transport` in $MUX_DIR/config: the MIDDLE layer of the
     three, and the only one that had never been read.
 
     The env override and the shipped default were both covered; a 2026-09-26
@@ -217,13 +217,13 @@ class TransportFromConfig(unittest.TestCase):
         with open(os.path.join(d, "config"), "w") as fh:
             fh.write(text)
         old_dir = os.environ.get("MUX_DIR")
-        old_env = os.environ.get("MUX_INDICATOR_TRANSPORT")
+        old_env = os.environ.get("MUX_DESKTOP_NOTIFIER_TRANSPORT")
         os.environ["MUX_DIR"] = d
-        os.environ.pop("MUX_INDICATOR_TRANSPORT", None)
+        os.environ.pop("MUX_DESKTOP_NOTIFIER_TRANSPORT", None)
 
         def restore():
             for k, v in (("MUX_DIR", old_dir),
-                         ("MUX_INDICATOR_TRANSPORT", old_env)):
+                         ("MUX_DESKTOP_NOTIFIER_TRANSPORT", old_env)):
                 if v is None:
                     os.environ.pop(k, None)
                 else:
@@ -232,31 +232,32 @@ class TransportFromConfig(unittest.TestCase):
         return d
 
     def test_the_config_key_is_READ(self):
-        self._conf("indicator-transport kubectl exec %h -- %q\n")
+        self._conf("desktop-notifier-transport kubectl exec %h -- %q\n")
         self.assertEqual(transport(), "kubectl exec %h -- %q")
 
     def test_it_reaches_the_argv(self):
         """Separate from reading it: a value parsed and then dropped on the
         floor looks identical from the config's side."""
-        self._conf("indicator-transport kubectl exec %h -- %q\n")
+        self._conf("desktop-notifier-transport kubectl exec %h -- %q\n")
         self.assertEqual(remote_argv("pod")[:3], ["kubectl", "exec", "pod"])
 
     def test_ENV_STILL_BEATS_THE_CONFIG(self):
         """The precedence the whole seam claims: environment, then config,
         then shipped. With the config now actually being read, this is the
         first test that can fail for the right reason."""
-        self._conf("indicator-transport from-the-config %h %q\n")
-        os.environ["MUX_INDICATOR_TRANSPORT"] = "from-the-env %h %q"
+        self._conf("desktop-notifier-transport from-the-config %h %q\n")
+        os.environ["MUX_DESKTOP_NOTIFIER_TRANSPORT"] = "from-the-env %h %q"
         self.assertEqual(transport(), "from-the-env %h %q")
 
     def test_a_COMMENTED_OUT_key_is_not_read(self):
-        """`# indicator-transport ...` is how somebody disables it. Reading it
+        """`# desktop-notifier-transport ...` is how somebody disables it.
+        Reading it
         anyway would silently ignore the disabling."""
-        self._conf("  # indicator-transport kubectl exec %h -- %q\n")
+        self._conf("  # desktop-notifier-transport kubectl exec %h -- %q\n")
         self.assertEqual(transport(), DEFAULT_TRANSPORT)
 
     def test_an_INLINE_comment_is_stripped(self):
-        self._conf("indicator-transport ssh %h %q   # the usual\n")
+        self._conf("desktop-notifier-transport ssh %h %q   # the usual\n")
         self.assertEqual(transport(), "ssh %h %q")
 
     def test_OTHER_directives_are_ignored(self):
@@ -265,19 +266,19 @@ class TransportFromConfig(unittest.TestCase):
         self._conf("context-command severance current\n"
                    "latch-transport ssh -t %h sh -lc %q\n"
                    "\n"
-                   "indicator-transport mine %h %q\n")
+                   "desktop-notifier-transport mine %h %q\n")
         self.assertEqual(transport(), "mine %h %q")
 
     def test_a_key_with_NO_VALUE_is_ignored(self):
         """A bare key is not a template. Returning an empty one would make
         remote_argv produce an empty argv and every host go unknown."""
-        self._conf("indicator-transport\n")
+        self._conf("desktop-notifier-transport\n")
         self.assertEqual(transport(), DEFAULT_TRANSPORT)
 
     def test_an_UNREADABLE_config_falls_back(self):
         """A directory where the file should be: the tray must still come up
         on the default rather than refusing to start."""
-        d = self._conf("indicator-transport nope %h %q\n")
+        d = self._conf("desktop-notifier-transport nope %h %q\n")
         os.remove(os.path.join(d, "config"))
         os.mkdir(os.path.join(d, "config"))
         self.assertEqual(transport(), DEFAULT_TRANSPORT)
@@ -355,13 +356,13 @@ class ActivateSeam(unittest.TestCase):
         with open(os.path.join(d, "config"), "w") as fh:
             fh.write(text)
         old_dir = os.environ.get("MUX_DIR")
-        old_env = os.environ.get("MUX_INDICATOR_ACTIVATE")
+        old_env = os.environ.get("MUX_DESKTOP_NOTIFIER_ACTIVATE")
         os.environ["MUX_DIR"] = d
-        os.environ.pop("MUX_INDICATOR_ACTIVATE", None)
+        os.environ.pop("MUX_DESKTOP_NOTIFIER_ACTIVATE", None)
 
         def restore():
             for k, v in (("MUX_DIR", old_dir),
-                         ("MUX_INDICATOR_ACTIVATE", old_env)):
+                         ("MUX_DESKTOP_NOTIFIER_ACTIVATE", old_env)):
                 if v is None:
                     os.environ.pop(k, None)
                 else:
@@ -377,18 +378,18 @@ class ActivateSeam(unittest.TestCase):
         self.assertIsNone(sources.activate_hook())
 
     def test_the_config_key_is_read(self):
-        self._conf("indicator-activate focus-kitty\n")
+        self._conf("desktop-notifier-activate focus-kitty\n")
         self.assertEqual(sources.activate_hook(), "focus-kitty")
 
     def test_env_beats_config(self):
-        self._conf("indicator-activate from-the-config\n")
-        os.environ["MUX_INDICATOR_ACTIVATE"] = "from-the-env"
+        self._conf("desktop-notifier-activate from-the-config\n")
+        os.environ["MUX_DESKTOP_NOTIFIER_ACTIVATE"] = "from-the-env"
         self.assertEqual(sources.activate_hook(), "from-the-env")
 
     def test_a_hook_with_ARGUMENTS_survives(self):
         """It is a command LINE, not a program name: `focus-window --title`
         has to reach the hook as two words."""
-        self._conf("indicator-activate focus-window --raise\n")
+        self._conf("desktop-notifier-activate focus-window --raise\n")
         self.assertEqual(sources.activate_hook(), "focus-window --raise")
 
 
