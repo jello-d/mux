@@ -57,7 +57,7 @@ _lib=$_libexec/../lib
 _ns=${1:-}
 if [ -z "$_ns" ] && [ -r "$_lib/mux-context_lib" ]; then
   . "$_lib/mux-context_lib"
-  mux_ctx_resolve 2>/dev/null && _ns=$MUX_CTX_PARTITION
+  _ns=$(mux_ctx_mine)
 fi
 dir=$(mux_agent_dir "$_ns")
 

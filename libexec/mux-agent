@@ -93,7 +93,7 @@ _resolve() {   # <session> <partition-or-empty>
   _rp=$2
   if [ -z "$_rp" ] && [ -r "$_lib/mux-context_lib" ]; then
     . "$_lib/mux-context_lib"
-    mux_ctx_resolve 2>/dev/null && _rp=$MUX_CTX_PARTITION
+    _rp=$(mux_ctx_mine)
   fi
   _rd=$(mux_agent_dir "$_rp")
   # EXIT 3, mux's cross-cutting "the name is not known here", rather than
@@ -671,7 +671,7 @@ if [ "$_verb" = open ]; then
   _rp=$_opart
   if [ -z "$_rp" ] && [ -r "$_lib/mux-context_lib" ]; then
     . "$_lib/mux-context_lib"
-    mux_ctx_resolve 2>/dev/null && _rp=$MUX_CTX_PARTITION
+    _rp=$(mux_ctx_mine)
   fi
 
   # CROSS-PARTITION IS REFUSED, AND THIS VERB CROSSES HARDER THAN `send`
@@ -886,7 +886,7 @@ if [ "$_verb" = peers ]; then
   . "$_lib/mux-sessions_lib"
   if [ -z "$_part" ] && [ -r "$_lib/mux-context_lib" ]; then
     . "$_lib/mux-context_lib"
-    mux_ctx_resolve 2>/dev/null && _part=$MUX_CTX_PARTITION
+    _part=$(mux_ctx_mine)
   fi
 
   # AGE, NOT AN EPOCH, and it is resolved HERE against the clock that
@@ -1096,7 +1096,7 @@ done
 if [ "$_all" -eq 0 ]; then
   if [ -z "$_spart" ] && [ -r "$_lib/mux-context_lib" ]; then
     . "$_lib/mux-context_lib"
-    mux_ctx_resolve 2>/dev/null && _spart=$MUX_CTX_PARTITION
+    _spart=$(mux_ctx_mine)
   fi
   # `global` is the namespace mux_agent_dir defaults to, so an
   # unresolvable context scopes to the default rather than widening to

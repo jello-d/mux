@@ -100,7 +100,7 @@ fi
 # partition's boundary grants. Refusing is the direction that can be relaxed
 # later; a human who means it can switch partitions.
 if [ -z "$_wpart" ]; then
-  mux_ctx_resolve 2>/dev/null && _wpart=$MUX_CTX_PARTITION
+  _wpart=$(mux_ctx_mine)
 fi
 mux_ctx_crossing "${_wpart:-global}" 'open a window across' || {
   echo "mux: refusing to open a window in $_wsess: $MUX_CTX_CROSS" >&2

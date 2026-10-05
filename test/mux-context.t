@@ -201,4 +201,53 @@ eq inline-comment-cmd "$MUX_CTX_TOKEN" bare
 printf 'env-ready  A#B\n' >"$MUX_DIR/config"
 eq hash-inside-token "$(mux_ctx_conf env-ready)" 'A#B'
 
+# --- mux_ctx_mine: THE CALLER'S OWN PARTITION, OR NOTHING -----------------
+# Seven places derived this by hand (`mux_ctx_resolve 2>/dev/null &&
+# _x=$MUX_CTX_PARTITION`), every one a headless caller with no $TMUX to take a
+# namespace from. One answer in one place, because this package has shipped
+# the wrong-socket bug three times and every time the cause was one answer
+# derived in two.
+cc 'echo work'
+eq mine-answers "$(mux_ctx_mine)" work
+
+# A HOOK THAT EXITS NON-ZERO IS STILL AN ANSWER, and it is `global`. Measured,
+# because the function's exit status does NOT distinguish these three and
+# reading it as if it did is how the wrong partition gets acted on:
+#
+#     no context-command at all   rc 0  part=global  src=baseline
+#     the command EXITS 1         rc 0  part=global  src=failed
+#     the command names one       rc 0  part=work    src=command
+#
+# So the discriminator is MUX_CTX_SRC, and `mux_ctx_mine` DOES NOT CARRY IT:
+# a command substitution is a subshell, so a caller that must tell a broken
+# hook from an absent one has to call `mux_ctx_resolve` directly. None of the
+# seven callers converted to this helper does, and `mux resume`, which is the
+# one verb that refuses on `failed`, was deliberately not converted. Written
+# down here because the hidden side effect is the trap this tree already paid
+# for when `$(_remote_cmd)` discarded the cache it had just filled.
+printf '#!/bin/sh\nexit 1\n' >"$T/cc"; chmod +x "$T/cc"
+printf 'context-command %s\n' "$T/cc" >"$MUX_DIR/config"
+eq mine-failed-is-global "$(mux_ctx_mine)" global
+
+# EMPTY ONLY WHEN RESOLUTION ITSELF FAILS, which is an INVALID token or
+# partition and nothing else. That is the case the seven hand-written copies
+# guarded with `&&`, and preserving it is the whole reason this returns early
+# rather than printing unconditionally: a caller then decides what an
+# unanswerable context costs it. `mux agent` scopes to global, because failing
+# OPEN is the one answer an actuating verb must not give; `mux resume`
+# refuses, because resuming the baseline hands you another partition's
+# sessions while looking like success.
+cc 'echo NOPE'
+eq mine-unresolvable-is-empty "$(mux_ctx_mine)" ""
+
+# AND A NON-ZERO RESOLVE MUST NOT TAKE THE CALLER DOWN. Every call site is
+# `_x=$(mux_ctx_mine)` under `set -eu`, so a bare non-zero return inside the
+# substitution kills the shell: the exact truncation `mux_env_plan` shipped,
+# where one invalid name silently cut off every name after it.
+_mine_rc=0
+( set -eu; _x=$(mux_ctx_mine); : "$_x" ) || _mine_rc=$?
+[ "$_mine_rc" -eq 0 ] || fail "mux_ctx_mine returned non-zero with an
+unresolvable context, so every caller that assigns it under set -eu dies
+silently inside a command substitution. rc=$_mine_rc"
+
 pass

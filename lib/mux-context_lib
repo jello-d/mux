@@ -278,6 +278,47 @@ mux_ctx_socket() {      # [partition]
   printf '%s' "${1:-$MUX_CTX_PARTITION}"
 }
 
+# mux_ctx_mine -> THIS caller's own partition, or empty if it cannot be told.
+#
+# THE IDIOM, NOT A NEW CAPABILITY: six places across four files spelled out
+# `mux_ctx_resolve 2>/dev/null && _x=$MUX_CTX_PARTITION`, every one of them a
+# headless caller with no $TMUX to take a namespace from. Three lines copied
+# six times is three lines that can disagree six ways, and this tree has
+# shipped the wrong-socket bug three times already, every time because one
+# answer was derived in two places.
+#
+# EMPTY RATHER THAN `global` WHEN RESOLUTION FAILS, which is the half worth
+# stating. Each caller then decides what an unanswerable context costs it:
+# `mux agent` scopes to global because failing OPEN is the one answer an
+# actuating verb must not give, while `mux resume` REFUSES, because resuming
+# the baseline when the hook broke hands you another partition's sessions
+# while looking like success. A helper that picked one of those for everybody
+# would be wrong for the other, so it answers the fact and not the policy.
+#
+# AND IT ANSWERS LESS THAN mux_ctx_resolve DOES, which anyone reaching for it
+# has to know. Measured, because the exit status does NOT separate these and
+# reading it as if it did is how the wrong partition gets acted on:
+#
+#     no context-command at all   rc 0  part=global  src=baseline
+#     the command EXITS 1         rc 0  part=global  src=failed
+#     the command names one       rc 0  part=work    src=command
+#
+# So `failed` arrives here as `global`, and MUX_CTX_SRC is the discriminator.
+# A COMMAND SUBSTITUTION IS A SUBSHELL, so none of MUX_CTX_SRC, MUX_CTX_ERR or
+# the MUX_CFG_* settings survive `_x=$(mux_ctx_mine)`. A caller that needs any
+# of them calls mux_ctx_resolve itself; `mux resume`, the one verb that
+# refuses on `failed`, deliberately still does. That hidden discard is the
+# trap this package already paid for when `$(_remote_cmd)` threw away the
+# negotiation cache it had just filled, and nothing observable broke.
+#
+# THE STDERR IS DISCARDED HERE, deliberately: a caller that wants the reason
+# reads $MUX_CTX_ERR, and these are status-bar and tray paths where a context
+# command's own noise would land in a pane or a log at poll rate.
+mux_ctx_mine() {
+  mux_ctx_resolve 2>/dev/null || return 0
+  printf '%s' "${MUX_CTX_PARTITION:-}"
+}
+
 # mux_ctx_crossing TARGET ACTION -> 0 when this call is being made from INSIDE
 # TARGET's partition, 1 when it would cross one, with the reason in
 # $MUX_CTX_CROSS. ACTION is the verb phrase for the message ("type across",

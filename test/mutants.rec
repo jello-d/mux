@@ -3813,3 +3813,15 @@ t mux-context
 -   _cc=$(mux_conf_clean <"$_cf")
 +   _cc=$(cat "$_cf")
 m inline-comment-stripped
+
+# ONE ANSWER FOR "WHICH PARTITION AM I IN", after seven hand-written copies.
+# The early return is what preserves their `&&`: an UNRESOLVABLE context must
+# answer EMPTY, so each caller decides what that costs it (agent scopes to
+# global, resume refuses). Printing unconditionally hands every one of them
+# `global` instead, which for an actuating verb is failing OPEN.
+= context-mine-answers-on-failure
+f lib/mux-context_lib
+t mux-context
+-   mux_ctx_resolve 2>/dev/null || return 0
++   mux_ctx_resolve 2>/dev/null || true
+m mine-unresolvable-is-empty
