@@ -7,6 +7,16 @@
 # entry point and by mux-cycle / mux-agent-state-render.
 
 # mux_exclude_file <client-name> -> this client's hidden-sessions file path.
+#
+# THE SANITISER KEEPS THE SET ONE FLAT DIRECTORY and nothing more, which is
+# worth saying because it looks like a correctness guard and is not: a client
+# name is a tty path, so an unsanitised key would merely nest
+# (`mux-exclude//dev/pts/0`), and every reader resolves the path through THIS
+# function, so writer and readers agree whichever way it goes. Hence no
+# mutation record: the mutation is unkillable through behaviour, which this
+# package reads as a property with no consequence rather than a missing
+# assertion. Folding is also what makes a collision POSSIBLE at all, so do not
+# read it as preventing one.
 mux_exclude_file() {
   _rt=${XDG_RUNTIME_DIR:-/tmp/user-$(id -u)}
   _ck=$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '_')

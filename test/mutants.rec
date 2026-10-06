@@ -4204,3 +4204,80 @@ t mux-envhooks
 -     exit 2 ;;
 +     exit 1 ;;
 m CANNOT TELL (2)
+
+= notice-key-is-empty-with-no-tty
+f lib/mux-notice_lib
+t mux-notice
+-       *) _nft=unknown ;;
++       *) : ;;
+m key-no-tty
+
+= notice-key-folds-a-dot
+f lib/mux-notice_lib
+t mux-notice
+-     "$(printf '%s' "$_nft" | tr -c 'A-Za-z0-9_.-' '_')"
++     "$(printf '%s' "$_nft" | tr -c 'A-Za-z0-9' '_')"
+m collided after sanitising
+
+= notice-flush-speaks-on-an-empty-queue
+f lib/mux-notice_lib
+t mux-notice
+-   [ -s "$_nqf" ] || return 0
++   true
+m flush-empty
+
+= notice-failed-delivery-reports-success
+f lib/mux-notice_lib
+t mux-notice
+-     return 1
++     return 0
+m could not write anywhere reported
+
+= notice-age-never-reads-in-seconds
+f lib/mux-notice_lib
+t mux-notice
+-              if   [ "$_nage" -lt 90 ];   then _nage="${_nage}s ago"
++              if   [ "$_nage" -lt 0 ];    then _nage="${_nage}s ago"
+m must read in SECONDS
+
+= notice-age-never-reads-in-minutes
+f lib/mux-notice_lib
+t mux-notice
+-              elif [ "$_nage" -lt 5400 ]; then _nage="$(( _nage / 60 ))m ago"
++              elif [ "$_nage" -lt 0 ];    then _nage="$(( _nage / 60 ))m ago"
+m must read in MINUTES
+
+= notice-no-text-without-a-clock
+f lib/mux-notice_lib
+t mux-notice
+-         ''|*[!0-9]*) ;;
++         ''|*[!0-9]*) continue ;;
+m dropped the whole notice
+
+= notice-queues-nothing
+f lib/mux-notice_lib
+t mux-notice
+-     2>/dev/null >>"$_nqf" || true
++     2>/dev/null >/dev/null || true
+m queued NOTHING
+
+= notice-flush-helper-fails-the-hook
+f libexec/mux-notice-flush
+t mux-notice
+- mux_notice_flush "$1" || true
++ mux_notice_flush "$1"
+m helper-failed-rc
+
+= notice-flush-helper-is-unwired
+f libexec/mux-notice-flush
+t mux-notice
+- mux_notice_flush "$1" || true
++ true
+m delivered nothing
+
+= exclude-hides-every-word-of-a-name
+f lib/mux-exclude_lib
+t mux-session-names
+-     *"$MUX_EXCL_NL$2$MUX_EXCL_NL"*) return 0 ;;
++     *"$2"*) return 0 ;;
+m was hidden by 'my project'

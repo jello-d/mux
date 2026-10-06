@@ -50,9 +50,18 @@ exit 0
 EOF
 chmod +x "$T/bin/tmux"
 
-CK=$(printf '%s' client0 | tr -c 'A-Za-z0-9' '_')
-hide() { printf '%s\n' "$@" >"$T/run/mux-exclude/$CK"; }
-unhide() { rm -f "$T/run/mux-exclude/$CK"; }
+# A REAL CLIENT NAME IS A TTY PATH, and the fixture used `client0`: all
+# alphanumeric, so mux_exclude_file's sanitiser was a no-op on it and the
+# derivation ran in a shape it never takes in life. ASKED OF THE LIB rather
+# than re-derived here, which also removes a second copy of the rule: a
+# fixture computing its own answer agrees with whatever it computed.
+CLIENT=/dev/pts/0
+# shellcheck source=/dev/null
+. "$HERE/lib/mux-exclude_lib"
+EXF=$(XDG_RUNTIME_DIR=$T/run mux_exclude_file "$CLIENT")
+mkdir -p "${EXF%/*}"
+hide() { printf '%s\n' "$@" >"$EXF"; }
+unhide() { rm -f "$EXF"; }
 cyc() {
   : >"$OUT"
   env XDG_RUNTIME_DIR="$T/run" PATH="$T/bin:$PATH" \
@@ -63,37 +72,37 @@ cyc() {
 
 # --- the ring keeps a spaced name WHOLE, and in the right place -----------
 unhide
-_r=$(cyc next client0 alpha)
+_r=$(cyc next "$CLIENT" alpha)
 [ "$_r" = "my project" ] \
   || fail "next from alpha reached [$_r], want 'my project'"
-_r=$(cyc next client0 'my project')
+_r=$(cyc next "$CLIENT" 'my project')
 [ "$_r" = zulu ] || fail "next from 'my project' reached [$_r], want zulu"
-_r=$(cyc prev client0 zulu)
+_r=$(cyc prev "$CLIENT" zulu)
 [ "$_r" = "my project" ] \
   || fail "prev from zulu reached [$_r], want 'my project'"
 # ... and it wraps, which word-splitting also broke by inflating the ring.
-_r=$(cyc next client0 zulu)
+_r=$(cyc next "$CLIENT" zulu)
 [ "$_r" = alpha ] || fail "next from zulu should wrap to alpha, got [$_r]"
 
 # A phantom is the specific symptom: a bare `my` or `project` must never be a
 # target, because no such session exists and the switch would fail silently.
 for _bad in my project; do
-  _r=$(cyc next client0 "$_bad")
+  _r=$(cyc next "$CLIENT" "$_bad")
   [ "$_r" != "$_bad" ] || fail "'$_bad' was treated as a real session"
 done
 
 # --- hiding is EXACT, not per word ---------------------------------------
 hide 'my project'
-_r=$(cyc next client0 alpha)
+_r=$(cyc next "$CLIENT" alpha)
 [ "$_r" = zulu ] || fail "hiding 'my project' did not skip it: got [$_r]"
 # The words of the hidden name are NOT hidden. Proven through the ring: with
 # the set holding only `my project`, a session actually named `my` must still
 # be reachable.
 printf 'alpha\nmy\nzulu\n' >"$SESSIONS"
-_r=$(cyc next client0 alpha)
+_r=$(cyc next "$CLIENT" alpha)
 [ "$_r" = my ] || fail "a session named 'my' was hidden by 'my project': [$_r]"
 printf 'alpha\nproject\nzulu\n' >"$SESSIONS"
-_r=$(cyc next client0 alpha)
+_r=$(cyc next "$CLIENT" alpha)
 [ "$_r" = project ] \
   || fail "a session named 'project' was hidden by 'my project': [$_r]"
 printf 'alpha\nmy project\nzulu\n' >"$SESSIONS"
@@ -110,7 +119,7 @@ st %3 blocked zulu
 nb() {
   : >"$OUT"
   env -u TMUX XDG_RUNTIME_DIR="$T/run" PATH="$T/bin:$PATH" \
-    "$HERE/libexec/mux-next-blocked" client0 alpha >/dev/null 2>&1 || true
+    "$HERE/libexec/mux-next-blocked" "$CLIENT" alpha >/dev/null 2>&1 || true
   sed -n 's/.*-t =//p' "$OUT" | head -1
 }
 _r=$(nb)
@@ -197,7 +206,7 @@ st %3 blocked zulu
 render() {
   env -u TMUX -u TMUX_PANE XDG_RUNTIME_DIR="$T/run" MUX_STRIP_WIDTH=400 \
     PATH="$T/bin:$PATH" "$HERE/libexec/mux-agent-state-render" \
-    alpha client0 2>/dev/null | sed 's/#\[[^]]*\]//g'
+    alpha "$CLIENT" 2>/dev/null | sed 's/#\[[^]]*\]//g'
 }
 case "$(render)" in
   *"my project"*) ;;
