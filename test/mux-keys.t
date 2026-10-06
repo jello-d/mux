@@ -91,4 +91,30 @@ grep -q '^bind ? .*mux keys' "$FRAG" \
   || fail "nothing binds prefix ? to \`mux keys\`, so the sheet is only
 reachable by someone who already knows it exists"
 
+# --- AND THE README'S TABLE IS A THIRD COPY -------------------------------
+# `share/keys` is held against the fragment in both directions above, so it
+# cannot drift from what mux binds. The README's own table can, and had: `u`
+# (prefix-u, 0.43) and `E` (prefix-E, 0.50) were both missing, so two shipped
+# bindings were undiscoverable from the file most readers start with. `mux
+# undo-pane` in particular is one keystroke from a detach, which is the whole
+# reason it exists.
+#
+# ONE DIRECTION ONLY, deliberately. The README's table legitimately carries
+# rows share/keys does not (`Space`, `Tab`/`BTab`, a status-chip click): those
+# come from mux-opinions.tmux and from tmux's own defaults, and the cheat
+# sheet documents what MUX binds. So "every key mux binds is in the README" is
+# the assertion, and "nothing else is" would be false by design.
+_rm=$HERE/README.md
+[ -f "$_rm" ] || fail "no README.md to hold the table against"
+_rmiss=
+while IFS="$(printf '\t')" read -r _k _; do
+  case $_k in ''|'#'*) continue ;; esac
+  grep -qF "\`$_k\`" "$_rm" || _rmiss="$_rmiss $_k"
+done <"$KEYSF"
+[ -z "$_rmiss" ] || fail "share/keys describes these bindings and README.md
+names none of them:$_rmiss
+A reader who starts at the README cannot discover them, and share/keys is
+machine-held against the fragment while the README is prose somebody has to
+remember to sweep."
+
 pass

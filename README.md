@@ -20,7 +20,8 @@ The point is that nothing drifts: the session you come back to is the session
 you left.
 
 **You can see which agent needs you, and go there in one key.** Every session
-wears a glyph for its agent: idle, working, or blocked. `prefix b` jumps to
+wears a glyph for its agent: idle, working, blocked, or humming (ready, with
+something it started still running). `prefix b` jumps to
 whichever has been blocked longest, and repeating walks down the urgency order.
 The states come from the agent's own lifecycle hooks, which `mux setup claude`
 wires for you; a session mux started an agent in and has never heard from wears
@@ -906,8 +907,11 @@ Provided by `mux.tmux` (prefix table unless noted; your prefix is untouched):
 | `b`                 | jump to the longest-blocked session           |
 | `B`                 | toggle back to the last session               |
 | `r` / `R`           | refresh / rebuild a wedged pane layout        |
+| `u`                 | put back a pane you closed by accident        |
+| `E`                 | even out every window on this server          |
 | `Space`             | the explorer (`choose-tree`)                  |
 | `Tab` / `BTab`      | next / previous window                        |
+| `?`                 | show this list (also `mux keys`)              |
 | click a status chip | jump straight to that session (needs mouse)  |
 
 ## Configuration

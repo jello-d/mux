@@ -675,15 +675,23 @@ plainly
 again. Nothing fires when a background job ends (the agent is idle and may
 wait hours), so a stored word would be stale with nothing to correct it.
 .IP
-WHAT COUNTS is work attributable to this PANE, found through the environment
-rather than the process tree: a job that outlives the shell which started it
-re\-parents to init, so its parentage is gone while
-.B TMUX
-and
-.B TMUX_PANE
-survive in its environment. A process that detaches into its own session (a
-true daemon) is deliberately NOT counted: it is no longer this turn's
-leftover work. The scan is Linux\-only and degrades to plain
+WHAT COUNTS IS WORK THE AGENT STILL HOLDS, and mux asks the same question the
+agent answers for itself: a background task the agent is tracking keeps its
+tool shell alive as a DESCENDANT of the agent for the task's whole life, which
+is why the agent can still report it. So the scan walks DOWN from the pane's
+own process rather than searching the box and filtering, and the two surfaces
+cannot disagree about what is running.
+.IP
+THE LIMIT IS DELIBERATE: a job detached with
+.B &
+inside a single tool call re\-parents to init, and mux does not count it. The
+agent cannot see it either (no handle, no output, nothing to wait for), so
+staying quiet agrees with the only thing that could have said otherwise.
+Over\-reporting is the worse direction, because nothing ever clears it: a
+process that merely passed through the pane would keep a session
+.B humming
+for as long as it lived. A true daemon in its own session is not counted for
+the same reason. The scan is Linux\-only and degrades to plain
 .BR idle .
 .IP
 .B mux agent stream
@@ -1007,8 +1015,15 @@ never going to make. A SEPARATE question from
 and separate on purpose: an escalation moves attention to the human while the
 supervisor keeps the write access it needs to go on nudging.
 .TP
-.B bottom \fIN\fR | \fIMIN\-MAX\fR
-A full-width bottom shell pane, with a fixed or bounded height in lines.
+.B bottom \fIN\fR | \fIMIN\-MAX\fR " [" \fICOMMAND\fR ]
+A full-width bottom pane, with a fixed or bounded height in lines. With no
+.I COMMAND
+it is a shell; with one, that is what the pane runs.
+.B mux save
+EMITS this form whenever the bottom pane is running something other than a
+shell, so a profile written by a round trip through
+.B save
+carries it.
 .PP
 The split is enforced: an arrangement directive in a profile, or an identity
 directive in a layout, fails loud rather than half-working. With no profile at
@@ -2215,7 +2230,18 @@ about every one.
 .B mux agent read " " \fISESSION\fR
 returns what is on that agent's screen, and
 .B mux agent wait " " \fISESSION\fR " " \fISTATE\fR
-blocks until it gets there, and
+blocks until it gets there, reporting the state it REACHED rather than the one
+asked for.
+.B "wait idle"
+is satisfied by
+.B humming
+as well, because both mean the turn is over and a caller waiting for a session
+to become usable wants either; wait for
+.B humming
+explicitly only if you care that background work is still going.
+.B "wait working"
+stays EXACT, since it means "wait for a turn to START" and a session that has
+already finished one must not satisfy it. And
 .B mux agent send " " \fISESSION\fR " " \fITEXT\fR
 types into that agent's pane.
 .IP
@@ -2419,7 +2445,7 @@ to exactly one exit code; several may share one.
 THE SHAPE IS STABLE OR THE CAPABILITY NUMBER MOVES.
 .B mux capabilities
 declares
-.BR "agent contract 4" ,
+.BR "agent contract 7" ,
 and a breaking change to any of these documents is a new number there,
 which is how a consumer finds out without sniffing a version string.
 .IP
@@ -2685,7 +2711,7 @@ unreachable by the partition machinery by construction.
 Where
 .B mux\-desktop\-notifier
 installs its virtualenv, and where
-.B mux paths
+.B setup.sh paths
 reports it (default
 .IR ~/.local/share/mux/venv ).
 .TP

@@ -208,6 +208,32 @@ unknown, which is the gap a nested dispatch hides from the guard below:
   esac
 done
 
+# --- A CONTRACT NUMBER QUOTED IN PROSE IS A SECOND COPY OF A MACHINE FACT ---
+# `man mux` said `agent contract 4` while mux declared 7, so a consumer reading
+# the reference would have built against a shape three bumps old, in the one
+# sentence that explains the mechanism ("THE SHAPE IS STABLE OR THE CAPABILITY
+# NUMBER MOVES"). The number lives in the manifest; every document that names
+# it is a copy, and this package's rule is that a copy needs a check rather
+# than somebody remembering to sweep the prose on a bump.
+#
+# EVERY DOCUMENT, not just the man page: the README and the shipped skill may
+# name one too, and whichever is wrong is wrong for whoever read that one.
+for _d in "$HERE/man/man1/mux.1" "$HERE/README.md" \
+    "$HERE/share/skills/mux-agent/AGENTS.md"; do
+  [ -f "$_d" ] || continue
+  grep -ohE '\b[a-z][a-z-]* contract [0-9]+' "$_d" | sort -u \
+  | while read -r _cn _ _cv; do
+    _live=$(caps --all | awk -v n="$_cn" '$1==n{print $2}')
+    [ -n "$_live" ] || fail "${_d##*/} names a \`$_cn contract $_cv\` and
+\`mux capabilities\` declares no capability called $_cn at all. Either the
+name was changed and the prose was not swept, or the document invented it."
+    [ "$_live" = "$_cv" ] || fail "${_d##*/} says \`$_cn contract $_cv\` and
+mux declares $_live. A consumer reads the number to find out whether the shape
+it was built against still holds, so a stale one in the reference is worse
+than none: it answers the question without being asked."
+  done
+done
+
 _missing=$(printf '%s\n' "$_dispatched" | while IFS= read -r _v; do
   [ -n "$_v" ] || continue
   printf '%s\n' "$_declared" | grep -qxF "$_v" || printf '%s\n' "$_v"
