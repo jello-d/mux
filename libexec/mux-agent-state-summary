@@ -15,11 +15,10 @@
 #
 # That resolution matters precisely BECAUSE this is the headless caller. Every
 # other consumer of mux-agent-state_lib (the status strip, next-blocked) runs
-# inside tmux and gets its namespace from $TMUX. This one has no $TMUX, so it
-# used to fall back to a hardcoded 'default': the old tmux socket basename.
-# When the personal partition became `global` that name stopped existing, and
-# the tray indicator silently read an empty directory and reported "none 0"
-# forever.
+# inside tmux and gets its namespace from $TMUX. This one has no $TMUX, so a
+# hardcoded fallback is how it silently reads an EMPTY directory and answers
+# "none 0" for ever: the name has to come from the same resolution every other
+# reader uses.
 set -eu
 
 # Sibling libs in this script's own (colocated) libexec dir.
@@ -50,9 +49,8 @@ _lib=$_libexec/../lib
 # remote host that is exactly what a latch already means (the notes say it
 # outright: an item exists only because a latch does, and the latch IS the
 # human's live view of that box), and the local equivalent is an attached
-# client. Without it a partition with a live server and no terminal window
-# showing it published an item nobody could act on: reported live, where a
-# second local partition sat in the tray with nothing on screen behind it.
+# client. Without it, a partition with a live server and no terminal window
+# showing it publishes a tray item nobody can act on.
 #
 # IT IS A FLAG AND NOT THE DEFAULT, because the bare verb's contract is that
 # it answers HEADLESS: from a tray daemon, over ssh, at boot, with no tmux

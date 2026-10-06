@@ -2,10 +2,6 @@
 # mux-go_lib - the session BUILD FLOW: `mux go` and `mux new`, from "is it
 # already up" through two passes over the profile to the attach.
 #
-# EXTRACTED FROM bin/mux (2026-10-05), 581 lines, the largest slice of the
-# breakup. The nine phases and their boundaries are the commit before this
-# one, so each half got its own differential.
-#
 # NINE PHASES AND A DRIVER, in the order `mux_go` calls them:
 #
 #     _go_attach_live    the session is already up: attach or switch

@@ -1,9 +1,6 @@
 #!/bin/sh
 # mux-why_lib - `mux why`: where every resolved value came from.
 #
-# EXTRACTED FROM bin/mux (2026-10-05), 243 lines, and the only one of the
-# breakup's slices that could NOT become an executed helper.
-#
 # WHY SOURCED AND NOT libexec/mux-why. Everything here answers about values
 # bin/mux has ALREADY resolved: `base` (a `git rev-parse`, plus for a path
 # argument an expand, a readlink, a directory check that exits 1 and a

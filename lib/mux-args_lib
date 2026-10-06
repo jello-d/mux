@@ -2,8 +2,8 @@
 # mux-args_lib - the front end's argument VALIDATION: the verb vocabulary, the
 # retired-verb aliases, the per-verb arity table, and the per-flag gates.
 #
-# EXTRACTED FROM bin/mux (2026-10-05), 123 lines, and the boundary is decided
-# by a fact about POSIX sh rather than by taste: WHAT CAN BE A FUNCTION.
+# THE BOUNDARY IS DECIDED BY A FACT ABOUT POSIX SH rather than by taste:
+# WHAT CAN BE A FUNCTION.
 #
 #   the option LOOP stays in bin/mux    it SHIFTS the script's own argv, and
 #                                       a function's `shift` moves the

@@ -99,8 +99,7 @@
 #
 # The two files are kept apart deliberately: an arrangement directive in a
 # profile, or an identity directive in a layout, fails loud rather than
-# half-working. So the same layout serves every profile that names it, which is
-# what `include` used to approximate.
+# half-working. So the same layout serves every profile that names it.
 #
 # The profile and its layout are parsed and VALIDATED together before any tmux
 # call, so a malformed pair builds nothing. root and theme are resolved for the
@@ -135,14 +134,13 @@ case $_self in
 */*) ;;
 *) _self=$(command -v -- "$_self" 2>/dev/null || echo "$_self") ;;
 esac
-# `readlink -f` IN ONE PROCESS WHERE IT EXISTS, a POSIX loop where it does not.
-# macOS had no `readlink -f` until 12.3, and the old `|| echo "$_self"` fallback
-# was silently WRONG rather than merely unresolved: through the install symlink
-# (~/.local/bin/mux) an unresolved $0 makes the prefix ~/.local, so LIBEXEC
-# became ~/.local/libexec while setup.sh installs the namespaced
-# ~/.local/libexec/mux. mux then could not find its own libraries and blamed the
-# install ("missing (incomplete install)"). Reproduced on Linux by stubbing a
-# readlink that rejects -f, which is how test/mux-portability.t pins it.
+# `readlink -f` IN ONE PROCESS WHERE IT EXISTS, a POSIX loop where it does not
+# (macOS has none before 12.3). $0 MUST end up fully resolved: through the
+# install symlink ~/.local/bin/mux, an unresolved $0 puts the prefix at
+# ~/.local, so LIBEXEC becomes ~/.local/libexec while setup.sh installs the
+# namespaced ~/.local/libexec/mux, and mux then cannot find its own libraries
+# and blames the install. test/mux-portability.t pins it with a readlink stub
+# that rejects -f.
 #
 # THE FAST PATH IS FIRST because this runs on every status-bar tick and every
 # agent hook: where `readlink -f` works, this is the one fork it always was.
@@ -180,11 +178,9 @@ else MUX_SHARE=${_self%/*}/../share
 fi
 export MUX_DIR MUX_SHARE   # the helper verbs (mux themes ...) inherit both
 
-# THE CAPABILITY MANIFEST MOVED to libexec/mux-capabilities (2026-10-05). It
-# sat here, ABOVE the dispatch, so every hot-path invocation parsed 153 lines
-# it never called: the dispatch's promise below was true only of what came
-# after it. The VERB LISTS stayed, because test/mux-capabilities.t scrapes
-# both `case` blocks in THIS file to prove every verb is classified.
+# The capability manifest is libexec/mux-capabilities. The VERB LISTS stay
+# here, because test/mux-capabilities.t scrapes both `case` blocks in THIS
+# file to prove every dispatchable verb is classified.
 
 # Fast path: the helper verbs ARE standalone executables in libexec, and the
 # tmux fragment + agent hooks reach them as `mux <verb>` (one entry point, on
@@ -204,6 +200,11 @@ export MUX_DIR MUX_SHARE   # the helper verbs (mux themes ...) inherit both
 #
 # Each site guards on `-r` and says "incomplete install", or a lost lib is
 # the shell's wording and a code nobody chose.
+#
+# A LIB RATHER THAN A HELPER whenever the verb needs `tm` (which carries the
+# partition's -L socket) or any value this file has already resolved: a second
+# process would have to re-derive it, and two answers about one partition is
+# the wrong-socket bug. Each lib's own header names what it needs.
 case ${1:-} in
 cycle)         shift; exec "$LIBEXEC/mux-cycle" "$@" ;;
 click)         shift; exec "$LIBEXEC/mux-click" "$@" ;;
@@ -324,18 +325,17 @@ _profile_root() {   # <name>
 # usage IS A ONE-LINE SHIM over libexec/mux-help, which holds the only copy of
 # the text and the two list helpers it shares with the topics. It EXECS, so it
 # never returns, which is what every error path below already relied on: each
-# ends with `usage` and its own exit code. Written as a function rather than 21
-# inline execs on purpose, because a path repeated at every call site is the
-# duplication this split was removing, one layer out.
+# ends with `usage` and its own exit code. A function rather than 21 inline
+# execs, because a path repeated at every call site is the same duplication one
+# layer out.
 usage() { exec "$LIBEXEC/mux-help" --usage "${1:-2}"; }
 
 # --- options and the verb in either order, then positionals ----------------
 # ONE loop takes both: an option is an option wherever it sits, and the first
 # non-option is the VERB. Once we have a verb the loop stops at the next
 # non-option: those are the positionals, which must stay positional. So `mux
-# --bare go` and `mux go --bare` are the same command; the flag-first form is
-# what the README and the man page have always shown, and it used to die on
-# "unknown verb: --bare".
+# --bare go` and `mux go --bare` are the same command, which is what the README
+# and the man page show.
 #
 # No verb at all -> the session picker: pick=1, then flow as an attach (cmd=go).
 bare=0
@@ -381,7 +381,7 @@ if [ -z "$cmd" ]; then
   cmd=go
 fi
 # --- the verb vocabulary, the arity table and the per-flag gates ----------
-# ALL OF IT IS lib/mux-args_lib (2026-10-05), as `mux_args_check COUNT`,
+# The validation is lib/mux-args_lib, as `mux_args_check COUNT`,
 # sourced unconditionally (every verb reaches this line). The boundary falls
 # here and not around the loop above because a function's `shift` moves the
 # function's positionals, never the caller's; the validation reads only `$#`
@@ -397,7 +397,7 @@ name_arg=${1:-}
 layout_arg=${2:-}
 
 
-# HELP IS ENTIRELY libexec/mux-help (2026-10-05): the topics, the usage
+# Help is entirely libexec/mux-help: the topics, the usage
 # summary, and the two list helpers they share. The empty topic IS usage, so
 # this needs no branch of its own and the topic VOCABULARY lives with the
 # topics, which makes adding one a single edit in a single file.
@@ -479,12 +479,9 @@ sock=$(mux_ctx_socket)
 # The PARTITION KEY: what the session set, the scan map and the agent-state
 # dir are filed under. Same VALUE as $sock (a partition's socket is named
 # after it), different QUESTION: $sock is "which tmux -L", $part is "whose
-# records". Conflating them spread a stale name through eleven sites that
-# wrote ${sock:-default} as a partition key, naming a partition that stopped
-# existing when the personal one became `global` while every library fell back
-# to `global`. Unreachable today (resolve sets a partition or exits), but this
-# was its third sighting and the first two were live: the tray (15cc461) and
-# mux-agent-state-emit (6099078).
+# records". KEEP THEM APART: writing `${sock:-default}` as a partition key
+# names a partition nothing else uses, and every library falls back to
+# `global`, so records are written where no reader looks.
 #
 # The `default` in the SOCKET comparisons below is the same spelling and a
 # different string, and is correct: with no -L, tmux's socket really is named
@@ -493,11 +490,10 @@ part=$MUX_CTX_PARTITION
 # resume's optional PARTITION and SESSION. Only resume takes them today; every
 # other verb acts on the partition you are in, which is the point of a context.
 #
-# POSITIONAL, and the first is ALWAYS the partition, never "whichever of
-# these happens to name one". That magic would change meaning the day you add
-# a partition, and a session sharing a partition's name would silently do the
-# wrong thing, which is the exact shape of bug `mux latch` already shipped
-# once (a default that succeeded at the wrong thing and said nothing).
+# POSITIONAL, and the first is ALWAYS the partition, never "whichever of these
+# happens to name one". That magic changes meaning the day a partition is
+# added, and a session sharing a partition's name would then resume the wrong
+# set while looking like success.
 rs_want=${1:-}
 rs_focus=${2:-}
 # ONE ARGUMENT IS AN ADDRESS, two are the legacy pair, and the discriminator
@@ -599,20 +595,15 @@ tm() {
 # equivalent: into a RUNNING server the fragment delivers status-right, every
 # binding and every hook.
 #
-# THE OVERLAP IS FREE, so this ships before the provisioner drops its line
-# with no flag day. mux.tmux is IDEMPOTENT, proven: the whole
-# `show-options -g` hash, all 271 bindings and even the APPENDED
-# `window-layout-changed` array are byte-identical after one, two and three
-# sourcings, because that hook resets with `set-hook -g` before its three
-# `-ag` appends. The REVERSE is not free and is not claimed: drop the
-# provisioner's line before this is live and a server gets no wiring at all.
-# Two windows; idempotence frees one.
+# DOUBLE-SOURCING IS FREE because mux.tmux is idempotent: its
+# `window-layout-changed` hook resets with `set-hook -g` before its three
+# `-ag` appends, so a server sourced once, twice or three times is
+# byte-identical. The REVERSE is not free: drop a provisioner's `source-file`
+# line before this is live and a server gets no wiring at all.
 #
 # MUX WRITES THE VERSION MARKER, not the fragment, because
-# `set -gF @x '#(mux -V)'` does NOT expand at set time (measured: reads back
-# empty). Better anyway: a fragment left by an OLDER mux compares unequal and
-# re-sources, which closes the staleness that once had `mux check` telling a
-# live server to source a file it already had.
+# `set -gF @x '#(mux -V)'` does not expand at set time. It also means a
+# fragment left by an OLDER mux compares unequal and re-sources.
 #
 # THE PROBE CANNOT CREATE A SERVER, which matters on paths where none exists
 # yet: `show-options -gqv` exits non-zero and spawns nothing (measured),
@@ -645,10 +636,8 @@ tm() {
 # never call this, so they pay nothing. Functions defined by a `.` inside a
 # function are global afterwards, so the guard fires once.
 _mux_env_loaded=0
-# ONE LOADER, TWO CALLERS, and extracted rather than copied the moment the
-# second one appeared: `mux resume`'s readiness gate needs the same libs (in
-# lib/mux-resume_lib since 2026-10-05, calling this), and a second copy of
-# this list is the thing that drifts when a lib is added.
+# TWO CALLERS: the attach path below, and lib/mux-resume_lib's readiness gate.
+# One copy of the list, because a second drifts the day a lib is added.
 # Non-zero means an incomplete install; each caller decides what that costs.
 _mux_env_load() {
   [ "$_mux_env_loaded" -eq 0 ] || return 0
@@ -784,21 +773,17 @@ _reload_one() {   # <socket, or empty for the default server>
 }
 
 cmd_reload() {
-  # THE USER'S CONFIG IS OPTIONAL, which is R10 in one line. This used to
-  # `exit 1` with "no tmux.conf at ...", so mux's own reload DEPENDED on a
-  # file mux neither ships nor owns: on this fleet it belongs to the
-  # provisioner, and removing that project broke `mux reload` outright.
-  #
-  # Now: the file IF PRESENT, then mux's fragment always, in that order, so a
-  # mux binding wins and a box with no tmux.conf reloads correctly.
+  # THE USER'S CONFIG IS OPTIONAL: mux neither ships nor owns a tmux.conf, so
+  # requiring one would make `mux reload` depend on somebody else's file. The
+  # file IF PRESENT, then mux's fragment always, in that order, so a mux
+  # binding wins and a box with no tmux.conf still reloads.
   did=
   if _reload_one ""; then did="$did default"; fi
   # Plus every non-default context server the hook knows, so a reload
   # reaches them regardless of the caller's side.
   # A here-doc, not `for _x in $(...)`: this producer emits one entry per
   # LINE and a name may contain a SPACE, so word splitting turns one entry
-  # into two. Fifth instance of that class in this package; the earlier
-  # four were session names.
+  # into two.
   while IFS= read -r _s; do
     [ -n "$_s" ] || continue
     if _reload_one "$_s"; then did="$did $_s"; fi
@@ -835,9 +820,7 @@ cmd_ls() {
 if [ "$cmd" = ls ]; then cmd_ls; fi
 
 # --- theme: set / cycle / show the current session's colour theme -----------
-# THE WHOLE VERB IS lib/mux-theme_lib (2026-10-05), sourced in the branch. A
-# lib and not a helper because `tm` carries the partition socket; its header
-# names the three libs it needs.
+# `mux theme` is lib/mux-theme_lib.
 if [ "$cmd" = theme ]; then
   [ -r "$MUX_LIB/mux-theme_lib" ] || {
     echo "mux: mux-theme_lib missing (incomplete install)" >&2
@@ -848,10 +831,9 @@ if [ "$cmd" = theme ]; then
 fi
 
 # --- why: where every resolved value came from -----------------------------
-# THE REPORT IS lib/mux-why_lib (2026-10-05), sourced in the branch: 243
-# lines that only DESCRIBE values this file already resolved, so a separate
-# process would need a second copy of the resolution this verb exists to
-# explain. Its header names the five libs it needs.
+# `mux why` is lib/mux-why_lib. It only DESCRIBES values resolved above, so a
+# separate process would need a second copy of the very resolution it reports
+# on.
 if [ "$cmd" = why ]; then
   [ -r "$MUX_LIB/mux-why_lib" ] || {
     echo "mux: mux-why_lib missing (incomplete install)" >&2
@@ -920,9 +902,7 @@ cmd_rename() {
 if [ "$cmd" = rename ]; then cmd_rename; fi
 
 # --- edit: open a profile, and never eat the work ---------------------------
-# THE WHOLE VERB IS lib/mux-edit_lib (2026-10-05), sourced in the branch. A
-# lib and not a helper because `tm` carries the partition socket; its header
-# names the four libs it needs.
+# `mux edit` is lib/mux-edit_lib.
 if [ "$cmd" = edit ]; then
   [ -r "$MUX_LIB/mux-edit_lib" ] || {
     echo "mux: mux-edit_lib missing (incomplete install)" >&2
@@ -933,10 +913,8 @@ if [ "$cmd" = edit ]; then
 fi
 
 # --- save: snapshot the live session ---------------------------------------
-# THE WHOLE VERB IS lib/mux-save_lib (2026-10-05), sourced in the branch,
-# including the serialiser `emit_window` and its `is_shell`, which lived here
-# for one caller. It still needs `tm` from this file; its header has the
-# rest.
+# `mux save` is lib/mux-save_lib, including the serialiser `emit_window` and
+# its `is_shell`.
 if [ "$cmd" = save ]; then
   [ -r "$MUX_LIB/mux-save_lib" ] || {
     echo "mux: mux-save_lib missing (incomplete install)" >&2
@@ -989,13 +967,13 @@ hide|show)
 esac
 
 # --- the session BUILD machinery -------------------------------------------
-# ATTACH, THE PROFILE READER AND THE PANE VOCABULARY ARE lib/mux-build_lib
-# (2026-10-05), sourced unconditionally: 312 lines that `go`, `new` and
-# `resume` share, plus the geometry a session is built at. It reads ten values
-# from this file and calls three of its functions; the header has the list.
+# Attach, the profile reader, the pane vocabulary and the build geometry are
+# lib/mux-build_lib, sourced unconditionally because `go`, `new` and `resume`
+# all share them. It reads ten values from this file and calls three of its
+# functions.
 #
-# Unconditional still saves, because every verb that exits ABOVE this line
-# never reads it: ls, reload, theme, why, edit and save, plus every hot path.
+# Unconditional still saves: every verb that exits ABOVE this line never
+# reads it (ls, reload, theme, why, edit, save, and every hot path).
 [ -r "$MUX_LIB/mux-build_lib" ] || {
   echo "mux: mux-build_lib missing (incomplete install)" >&2
   exit 1; }
@@ -1035,12 +1013,10 @@ if [ "$cmd" = kill ] && [ "$all" -eq 1 ]; then cmd_kill_all; fi
 # Nothing else prunes: that is the whole reason a snapshot of the live set
 # would be wrong.
 #
-# Which left a hole, since the set is pruned ONLY here and this used to
-# require the session to be LIVE: a recorded session whose root has moved or
-# gone is already dead, so it could not be killed and could never be
-# forgotten. `mux resume` called it unbuildable on every run with no way out,
-# and the only fix was hand-editing $MUX_CACHE. So a merely RECORDED name is
-# killable too: nothing to tear down, same sentence either way.
+# SO A MERELY RECORDED NAME IS KILLABLE TOO, with nothing to tear down and the
+# same sentence either way. Requiring the session to be LIVE would make a
+# recorded one whose root has moved unforgettable, and `mux resume` would call
+# it unbuildable on every run with no way out but editing state by hand.
 cmd_kill() {
   if tm has-session -t "=$name" 2>/dev/null; then
     tm kill-session -t "=$name"
@@ -1113,9 +1089,8 @@ cmd_new() {
 if [ "$cmd" = new ]; then cmd_new; fi
 
 # --- resume: bring back this partition's sessions --------------------------
-# THE WHOLE VERB IS lib/mux-resume_lib (2026-10-05), sourced in the branch.
-# A lib and not a helper because it is the heaviest consumer of
-# mux-build_lib there is; its header names the six libs it needs.
+# `mux resume` is lib/mux-resume_lib: the heaviest consumer of mux-build_lib
+# there is, which is why it shares this shell rather than running as one.
 if [ "$cmd" = resume ]; then
   [ -r "$MUX_LIB/mux-resume_lib" ] || {
     echo "mux: mux-resume_lib missing (incomplete install)" >&2
@@ -1126,11 +1101,10 @@ if [ "$cmd" = resume ]; then
 fi
 
 # --- go / new: the session build flow -------------------------------------
-# ALL 581 LINES ARE lib/mux-go_lib (2026-10-05), as nine phases and `mux_go`,
-# sourced unconditionally: every verb with another answer has exited above
-# this line. It reads twenty caller values and calls twenty-three functions
-# across six libs, the longest dependency list in the package, which is the
-# argument for a lib: nothing in that flow is addressable from elsewhere.
+# The build flow is lib/mux-go_lib: nine phases and `mux_go`, sourced
+# unconditionally because every verb with another answer has exited above this
+# line. It reads twenty values from this file, so nothing in that flow is
+# addressable from another process.
 [ -r "$MUX_LIB/mux-go_lib" ] || {
   echo "mux: mux-go_lib missing (incomplete install)" >&2
   exit 1; }

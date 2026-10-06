@@ -2,7 +2,6 @@
 # mux-resume_lib - `mux resume`: bring back a partition's sessions after a
 # reboot, and land on the one you were last using.
 #
-# EXTRACTED FROM bin/mux (2026-10-05), 211 lines, the last of the verb slices.
 # SOURCED rather than its own command for a reason specific to this verb: it
 # calls `mux_attach` from lib/mux-build_lib and `tm` from bin/mux, which
 # carries the partition's `-L` socket. resume's whole job is to REBUILD, so it

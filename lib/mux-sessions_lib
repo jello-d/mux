@@ -7,12 +7,10 @@
 # since which sessions are up is per-machine; it must outlive a reboot, so not
 # /tmp; and it must outlive a CACHE CLEAR, which is the part that was wrong.
 #
-# It lived under $MUX_CACHE until 0.38, where the comment reasoned about cache
-# versus /tmp and never about cache versus state, and ~/.cache is by
-# definition what anything may delete to reclaim space. NOTHING REBUILDS THIS
-# FILE: the set accumulates one `mux go` at a time, so clearing the cache
-# silently destroyed the answer to "what was I working on", and the only
-# moment you would notice is the `mux resume` after a reboot, exactly when you
+# ~/.cache is by definition what anything may delete to reclaim space, and
+# NOTHING REBUILDS THIS FILE: the set accumulates one `mux go` at a time, so a
+# cache clear destroys the answer to "what was I working on", and the only
+# moment you notice is the `mux resume` after a reboot, exactly when you
 # cannot reconstruct it. $MUX_STATE is the XDG home for precisely this:
 # durable, unreconstructible, not precious enough to be data. Palette stamps
 # and the discovery map stay in $MUX_CACHE, correctly, since both regenerate.
@@ -34,12 +32,10 @@
 # exactly as through a profile or the discovery map.
 #
 # Insertion-ordered, so a resume rebuilds in the order you first opened them.
-# THAT ORDER DOES NOT SAY WHERE TO LAND, though this file used to claim it did
-# ("lands you on the oldest, which is usually the one you think of as
-# primary"). Creation order has nothing to do with where you were: reported
-# live after a reboot, a latch came back on the oldest session while the human
-# had been working in the newest, so the message they typed reached the wrong
-# agent. The landing spot is its own fact, recorded separately below.
+# THAT ORDER DOES NOT SAY WHERE TO LAND. Creation order has nothing to do with
+# where you were working, and guessing it costs more than a wrong window: a
+# latch that comes back on the oldest session puts the human's next message in
+# front of the wrong agent. The landing spot is its own fact, below.
 #
 # Keyed on the PARTITION, so each isolated namespace resumes only its own.
 
@@ -56,20 +52,19 @@
 # mux RESERVES THE COLON in a session name, and that reservation is now the
 # grammar's foundation rather than a convenience.
 #
-# IT USED TO BE TMUX'S JOB. Every tmux up to 3.6 rewrote `:` and `.` to `_` in
-# a session name, so `[PARTITION::]SESSION[:WINDOW]` was unambiguous for free.
-# MEASURED ACROSS THREE VERSIONS, that is no longer true:
+# IT CANNOT BE LEFT TO TMUX. Up to 3.6 tmux rewrote `:` and `.` to `_` in a
+# session name, so the address grammar was unambiguous for free. MEASURED
+# ACROSS THREE VERSIONS, that no longer holds:
 #
 #     tmux 3.4    structural: : :: .     verbatim: @ ~ % ^ + = , /
 #     tmux 3.6    structural: : :: .     verbatim: @ ~ % ^ + = , /
 #     tmux 3.7c   structural: (none)     verbatim: everything
 #
 # 3.7 sanitises NOTHING, so a session there can be called `work::api` and no
-# choice of delimiter can rescue the grammar on its own. The premise has to be
-# mux's (the user's call, 2026-10-01), and it costs nothing to keep: a colon
-# is tmux's OWN window separator, so a session named `work:api` cannot be
-# addressed by a raw `tmux -t` either. mux is not fighting tmux here, it is
-# holding a line tmux stopped holding.
+# choice of delimiter rescues the grammar on its own: the premise has to be
+# mux's. It costs nothing, because a colon is tmux's OWN window separator, so
+# a session named `work:api` cannot be addressed by a raw `tmux -t` either.
+# mux is not fighting tmux, it is holding a line tmux stopped holding.
 #
 # `.` IS SANITISED TOO AND FOR A DIFFERENT REASON, which is why the two are
 # not one rule: mux's grammar does not use a dot any more, so a session called
@@ -175,10 +170,10 @@ mux_sess_clear() {      # [key]
 # reboot. Same directory and partition key as the set, being the same
 # question's second half.
 #
-# A SIDECAR RATHER THAN A SIXTH FIELD on the set's lines, the call 0.49 made
-# for the beat mark: the set is read by `cut`/`awk` in several programs and
-# widening a record format has cost this project a day. It is also a different
-# SHAPE, the set being a list where this is one value for the partition.
+# A SIDECAR RATHER THAN A SIXTH FIELD on the set's lines: the set is read by
+# `cut`/`awk` in several programs, so widening the format costs every reader.
+# It is also a different SHAPE, the set being a list where this is one value
+# for the whole partition.
 #
 # ONE LINE, THE SESSION NAME, and only line 1 is ever read. A session name can
 # hold a space (which is why the set is tab-separated), so the whole line is

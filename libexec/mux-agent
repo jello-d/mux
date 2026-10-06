@@ -58,10 +58,9 @@ _lib=$_libexec/../lib
 #   usage         2   this verb does not know what it was asked
 #   no-such-name  3   mux's cross-cutting "the name is not known here"
 #
-# ALWAYS A MESSAGE. The no-message branch this used to carry was unreachable
-# (every failure has a reason), and an unreachable branch is a mutation
-# nothing can kill, which this corpus treats as a signal to delete rather than
-# to test harder. Belt-and-braces reads as safety and measures as untestable.
+# ALWAYS A MESSAGE: every failure here has a reason, so a no-message branch
+# would be unreachable, which is a mutation nothing can kill. Belt-and-braces
+# reads as safety and measures as untestable.
 _out() {   # <status> <exit> <message>
   printf '{"status":%s,"message":%s}\n' \
     "$(mux_json_str "$1")" "$(mux_json_str "$3")"
@@ -118,11 +117,9 @@ _tx() {
 
 # --- WHICH WINDOW, AND WHY NOT AN INDEX ------------------------------------
 # `--window` takes a NAME or a tmux window ID (`@7`). Never an index, and that
-# is a measurement rather than taste: AN INDEX IS A RECYCLABLE SLOT. Measured
-# 2026-10-04 on windows a@1 b@2 c@3: kill b, create d, and index 2 IS d (id
-# @4). A caller holding an index types into a different worker believing it is
-# the one it named, which is the same class as the undo-pane bug where a
-# recycled `@0` restored a dead server's pane.
+# is a measurement rather than taste: AN INDEX IS A RECYCLABLE SLOT. Windows
+# a@1 b@2 c@3, kill b, create d, and index 2 IS d with id @4. A caller holding
+# an index types into a different worker believing it is the one it named.
 #
 # AN ID IS NOT REUSED (@2 retired permanently), and the asymmetry that decides
 # everything here is what a STALE handle does:
@@ -132,10 +129,10 @@ _tx() {
 #
 # So A NAME IS NEVER HANDED TO tmux AS A TARGET: its own name resolution fails
 # OPEN. mux matches the name here, against a listing, and acts only when
-# exactly one window answers. ONLY ACT ON UNIQUENESS rather than enforcing it
-# (the user's call, 2026-10-04): no new invariant to maintain, no renaming that
-# would stop a caller re-deriving the name it chose, and an ambiguous name
-# stays RECOVERABLE because the ID is accepted too.
+# exactly one window answers. ONLY ACT ON UNIQUENESS rather than enforcing it:
+# no new invariant to maintain, no renaming that would stop a caller
+# re-deriving the name it chose, and an ambiguous name stays RECOVERABLE
+# because the ID is accepted too.
 #
 # THE EXIT CODE SAYS NOTHING. All four of those tmux calls exit 0, including
 # the invalid ones, so every check below is on the ANSWER and never on `$?`.
@@ -573,12 +570,11 @@ if [ "$_verb" = send ]; then
     exit 1
   }
 
-  # THE BOUNDARY GATE RUNS UNCONDITIONALLY AND FIRST, which is where my
-  # own first version of it was wrong: it sat inside `_refuse`, and
-  # `idle|working` never reach `_refuse` at all (an ordinary queued
-  # instruction needs no override), so it guarded the two RARE states and
-  # missed the common one. A structural refusal that only fires on the
-  # unusual path is not structural.
+  # THE BOUNDARY GATE RUNS UNCONDITIONALLY AND FIRST, never inside `_refuse`:
+  # `idle|working` never reach `_refuse` at all, since an ordinary queued
+  # instruction needs no override, so a gate placed there guards the two RARE
+  # states and misses the common one. A structural refusal that only fires on
+  # the unusual path is not structural.
   [ -z "$_scross" ] || _refuse cross-partition ''
 
   # THE STATE DECIDES WHETHER AN OVERRIDE IS NEEDED AT ALL. idle and
@@ -695,10 +691,9 @@ $MUX_CTX_CROSS")"
 
   . "$_lib/mux-sessions_lib"
   . "$_lib/mux-window_lib"
-  # NOT IN A `$( )`, deliberately: the engine reports its reason in a
-  # variable, and a command substitution is a subshell that throws it away.
-  # See mux-window_lib, where doing it the other way cost an empty document
-  # on the refusal path.
+  # NOT IN A `$( )`: the engine reports its reason in a VARIABLE, and a
+  # command substitution is a subshell that throws it away, leaving an empty
+  # document on the refusal path. See mux-window_lib.
   _ow=0
   mux_window_open "${_rp:-global}" "$_osess" "$_oname" "$_odir" \
     "$_ocmd" "$_octl" "$_oattn" 0 || _ow=$?
@@ -1111,9 +1106,8 @@ fi
 # _collect -> the document's INPUTS, in `_rows` and `_srows`. Separate from
 # the formatting below because the stream compares these to decide whether
 # anything happened: they are the whole truth the document is built from, and
-# they cost two forks where formatting costs an `awk` per string. So a quiet
-# tick now pays two forks instead of a dozen, which is strictly cheaper than
-# before sessions were carried at all.
+# they cost two forks where formatting costs an `awk` per string, so a quiet
+# tick pays two forks rather than a dozen.
 _collect() {
   set -- --all
   [ "$_att" -eq 0 ] || set -- "$@" --attached

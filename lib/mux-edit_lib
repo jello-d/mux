@@ -1,10 +1,6 @@
 #!/bin/sh
 # mux-edit_lib - `mux edit`: open a profile, and never eat the work.
 #
-# EXTRACTED FROM bin/mux (2026-10-05), 116 lines, SOURCED LAZILY inside the
-# edit branch: the front end is parsed on every invocation and a verb nobody
-# called must not cost a lib.
-#
 # A SOURCED LIB AND NOT AN EXECUTED HELPER, because `tm` is bin/mux's own
 # tmux wrapper and it carries the partition's `-L` socket. A separate process
 # would need a second copy, and this package has shipped the wrong-socket bug

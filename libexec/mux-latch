@@ -181,30 +181,24 @@ _hook() {   # <value> -> the value with its command resolved
 # channel and give up on their own schedule: 5s x 3 means ssh returns 255 in
 # about 15 seconds and latch is back in `probing` where it belongs.
 #
-# AND ConnectTimeout, WHICH COVERS A DIFFERENT PHASE: a NARROWER one than
-# this comment used to claim. Re-measured 2026-09-27 against a peer that stalls
-# at a CHOSEN point, because the original test only ever used a peer that sent
-# nothing at all, and both conclusions drawn from it were over-general:
+# AND ConnectTimeout, WHICH COVERS A DIFFERENT PHASE. Measured against a peer
+# that stalls at a CHOSEN point in the handshake, which is what separates the
+# two: neither option covers the other's column, so both are needed.
 #
 #   peer stalls at        no timeouts   ConnectTimeout=5   ServerAlive 2 x 2
 #   silent (no banner)    hangs         5s                 hangs
 #   banner, then stall    hangs         HANGS              4s
 #   kexinit, then stall   hangs         HANGS              4s
 #
-# So ConnectTimeout covers only up to RECEIVING THE BANNER; the moment one
-# arrives it is satisfied and stops, which is the opposite of "governs the whole
-# setup". And ServerAlive does NOT need a session: it bounds the post-banner
-# handshake perfectly well, which is the opposite of "not until a session
-# exists". Each old claim was true of the one peer it was tested against.
+# ConnectTimeout covers only up to RECEIVING THE BANNER: the moment one
+# arrives it is satisfied and stops. ServerAlive needs no session and bounds
+# the post-banner handshake fine. test/mux-latch-stall.t pins all three rows
+# and reads these options out of the source, so weakening one fails.
 #
-# They are still BOTH needed, for the two halves above, and the pairing is what
-# the table shows: neither covers the other's column.
-#
-# WHAT NEITHER COVERS is a peer that is CONNECTED AND ANSWERING but not making
-# progress: a box mid-boot whose sshd completes key exchange and then blocks
-# in authentication. ServerAlive cannot help by construction: the peer replies
-# to every probe, so no probe goes unanswered and ssh waits. That is the
-# 342s attempt in the log, and bounding it is latch's job, not an ssh option's.
+# WHAT NEITHER COVERS is a peer CONNECTED AND ANSWERING but making no
+# progress: a box mid-boot whose sshd completes key exchange and then blocks.
+# ServerAlive cannot help by construction, since every probe is answered.
+# Bounding that is latch's job, not an ssh option's.
 _DEF_ALIVE='-o ServerAliveInterval=5 -o ServerAliveCountMax=3'
 _DEF_ALIVE="$_DEF_ALIVE -o ConnectTimeout=10"
 _DEF_TRANSPORT="ssh -t $_DEF_ALIVE -p %p:22 %h sh -lc %q"
@@ -213,37 +207,23 @@ TRANSPORT=$(_seam "${MUX_LATCH_TRANSPORT:-}" latch-transport "$_DEF_TRANSPORT")
 AUTH=$(_hook "$(_seam "${MUX_LATCH_AUTH:-}" latch-auth ssh-auth)")
 _c_seam=$(_seam "${MUX_LATCH_CLASSIFY:-}" latch-classify ssh-classify)
 CLASSIFY=$(_hook "$_c_seam")
-# PROBE DEFAULTS TO ssh-probe, which it did not until 2026-10-05. The old
-# default was none, argued as "a probe costs a round trip before EVERY attempt
-# and only pays off when the host is down". Both halves turned out weaker than
-# they read:
+# PROBE DEFAULTS TO ssh-probe, because it bounds the one case no ssh option
+# can: a RESPONSIVE peer making no progress (measured on this fleet at 342s
+# and once at 5m42s with nothing on screen). ssh-probe traverses the same auth
+# path under timeout(1).
 #
-# IT ALSO PAYS OFF WHEN THE HOST IS UP. The case no ssh option can bound is a
-# RESPONSIVE peer making no progress: a box mid-boot that completes key
-# exchange and then blocks, measured on this fleet at 342s and once at 5m42s
-# with nothing on screen. ConnectTimeout is satisfied by the banner and
-# ServerAlive never fires because every probe is answered. ssh-probe traverses
-# the same auth path under timeout(1), so it is the only thing that bounds it.
-# That case was found AFTER the old comment was written.
+# THE COST IS ONCE PER ATTACH, not per second: 0.57s reachable, 5.03s
+# blackholed, 0.03s unresolvable, against delays already 2 to 60s in a retry
+# loop. With a ControlMaster the hook's first line (`ssh -O check`) makes it
+# milliseconds.
 #
-# AND THE COST IS ONCE PER ATTACH, not per second. Measured against a real
-# remote: 0.57s reachable, 5.03s blackholed, 0.03s unresolvable. On a healthy
-# link there is one attempt and then hours of being attached; in a retry loop
-# the delays are already 2 to 60s, so 0.57s is noise. With a ControlMaster the
-# first line of the hook (`ssh -O check`) makes it milliseconds.
-#
-# THE DECIDING EVIDENCE WAS DEPLOYMENT: both machines in this fleet carried
-# `latch-probe ssh-probe` by hand, in the same direction, which is the signal
-# this tree trusts over any argument.
-#
-# IT STILL KNOWS NOTHING ABOUT A TRANSPORT, which is the line that matters:
-# the probe is handed the TARGET's port, so on an Eternal Terminal latch this
-# default would test SSH on ET's port and park latch in a backoff about a host
-# that is fine. ET therefore needs `latch-probe et-probe` beside the transport
-# and classify lines it already sets, and the man page's ET section says so.
-# Gating the default on the transport would mean re-learning what a transport
-# is, which is exactly the `case $TRANSPORT in *ssh*)` built-in 0.31 deleted.
-# `latch-probe none` turns it off: see `_hook`.
+# IT STILL KNOWS NOTHING ABOUT A TRANSPORT, which is the line that matters,
+# and it leaves a footgun stated in three places: the probe is handed the
+# TARGET's port, so on an Eternal Terminal latch this default tests SSH on
+# ET's port and parks latch in a backoff about a host that is fine. ET needs
+# `latch-probe et-probe` beside the transport and classify lines it already
+# sets. Gating the default on the transport would mean mux re-learning what a
+# transport is. `latch-probe none` turns it off: see `_hook`.
 PROBE=$(_hook "$(_seam "${MUX_LATCH_PROBE:-}" latch-probe ssh-probe)")
 STATUS=$(_hook "$(_seam "${MUX_LATCH_STATUS:-}" latch-status '')")
 # RESTORE runs after every transport return, before anything is reported.
@@ -321,28 +301,24 @@ _usage() {
 # A TESTING AFFORDANCE, NOT A SETTING, and that distinction is the whole reason
 # it is a FLAG rather than an environment variable or a `latch-` config key.
 #
-# LATCH NEVER GIVES UP ON A RETRYABLE STATE (the user's call, 2026-10-03), and
-# that is the point of the thing: it holds an attachment across disruptions it
-# cannot resolve, so stopping by itself is the one behaviour it must not have.
-# `^C` is the escape hatch and it reaches latch during any wait, because no
-# transport is holding the terminal then. There was a `MUX_LATCH_MAX_TRIES`
-# here and it is gone: a knob implies a reason to set it, and on a real machine
-# there is none.
+# LATCH NEVER GIVES UP ON A RETRYABLE STATE: it holds an attachment across
+# disruptions it cannot resolve, so stopping by itself is the one behaviour it
+# must not have. `^C` is the escape hatch and reaches latch during any wait,
+# because no transport holds the terminal then. There is deliberately no
+# config key or environment variable, since a knob implies a reason to set it.
 #
-# THE SUITE STILL NEEDS A BOUND, for a reason this project has already paid
-# for: a test for a bound that stops working HANGS the runner rather than
-# failing it, and one hung for 151s before anybody noticed. So the cap survives
-# as something a test PASSES, where it cannot be mistaken for configuration.
+# THE SUITE STILL NEEDS A BOUND, because a test for a bound that stops working
+# HANGS the runner rather than failing it. So the cap is something a test
+# PASSES, where it cannot be mistaken for configuration.
 # The states that genuinely stop are unaffected: `ended`, `gone`, `refused`,
 # `denied`, and `untrusted` once its own bound is spent.
 MAX_TRIES=0
 
-# OPTIONS ARE OPTIONS. Without this, `mux latch --help` took `--help` as the
-# HOSTNAME: it tried to ssh there, wrote a lock called `--help.lock`, and
-# retried on a backoff. Found by seeing that lock sitting in a live runtime
-# directory. `mux latch -V` was worse: `ssh -V` SUCCEEDS, so the transport
-# exited cleanly, which latch reads as the human having detached, and it
-# reported success and exit 0 for a session that never existed.
+# OPTIONS ARE OPTIONS. Without this, `mux latch --help` takes `--help` as the
+# HOSTNAME: it ssh's there, writes a lock called `--help.lock` and retries on
+# a backoff. `-V` is worse, because `ssh -V` SUCCEEDS: the transport exits
+# cleanly, latch reads that as the human detaching, and reports success and
+# exit 0 for a session that never existed.
 #
 # That is the failure mode this codebase keeps meeting: not an error, but
 # something PLAUSIBLE. An unknown option is exit 2, the same code every other
@@ -392,21 +368,17 @@ done
 # `session:window` spelling. A WINDOW is refused rather than ignored here,
 # since latch attaches a SESSION.
 #
-# THE PORT IS IN THE TARGET BECAUSE EVERY SEAM NEEDS IT. Before 0.84 a
-# nonstandard port could only live in the transport template or in ssh_config,
-# so a PER-HOST port was inexpressible in one template line, and for ET the
-# probe had to be told separately, which was a documented footgun (get it wrong
-# and latch parks in a backoff about a service that is running). Now latch
-# parses it once and hands it to the template as `%p` and to the probe as its
-# second argument. `host:port` is the de facto spelling everywhere else (ET's
-# own usage is `[user@]host[:port]`), so it needs no explaining.
+# THE PORT IS IN THE TARGET BECAUSE EVERY SEAM NEEDS IT: parsed once, handed
+# to the template as `%p` and to the probe as its second argument. In a
+# transport template alone a PER-HOST port is inexpressible, and the probe has
+# to be told separately, which is a footgun (get it wrong and latch parks in a
+# backoff about a service that is running). `host:port` is the spelling
+# everything else uses, ET's own usage included.
 #
-# A BARE SECOND ARGUMENT IS A SESSION, not a partition, and that is the safe
-# direction rather than a toss-up. The rarer structural field takes the colon,
-# as before; making the bare word a PARTITION would silently change what
-# `mux latch box api` has always meant and would resurrect a bug this file has
-# already shipped once: a session sharing a partition's name resuming the
-# wrong set while looking like success.
+# A BARE SECOND ARGUMENT IS A SESSION, not a partition: the rarer structural
+# field takes the colon. Reading the bare word as a PARTITION would change
+# what `mux latch box api` means, and a session sharing a partition's name
+# would then resume the wrong set while looking like success.
 #
 # WHICH PARTITIONS EXIST IS THE FAR SIDE'S QUESTION, so latch does not validate
 # the name. It cannot: the answer lives on the other machine, and a local
@@ -648,9 +620,8 @@ _line() {
 #   probing -- Connection closed by 10.0.0.64 port 22^M, retrying in 60s
 #
 # which renders as `, retrying in 60s`d by 10.0.0.64 port 22` and reads as a
-# corrupt terminal. Found in a REAL incident (a reboot of the far side on
-# 2026-09-24) sitting in 17 log lines, where it is equally wrong: a log is not a
-# terminal and a control character in one is just damage.
+# corrupt terminal. Equally wrong in the LOG, where a control character is
+# simply damage.
 #
 # Sanitised HERE rather than in _errline because this is the single funnel every
 # detail passes through on its way to all three consumers (the terminal, the

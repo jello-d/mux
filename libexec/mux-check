@@ -305,10 +305,9 @@ fi
 
 # 4a. THE SESSION POINTERS. R7: a withheld value must be VISIBLE. mux resolves
 # these at session build and attach, and a value that resolved but FAILED its
-# own validator is deliberately not written, which is exactly the kind of
-# silent decision that made the original fault cost a long session to find:
-# every agent pane on a box was running with no `SSH_AUTH_SOCK`, and
-# everything reported healthy.
+# own validator is deliberately not written. That decision has to be VISIBLE,
+# or a box runs every agent pane with no `SSH_AUTH_SOCK` while reporting
+# healthy.
 #
 # A WARN, NEVER A FAIL, and the reasoning is the same as discovery's one arm
 # up: a dead pointer is usually a fact about the MACHINE rather than about the
@@ -422,10 +421,9 @@ fi
 # 6. Does the product actually WORK on the running server?
 #
 # Everything above this point is a PRESENCE check: files exist, commands
-# resolve, config parses. Asked the only question that matters (what would
-# this say about a box that is fully installed and fully broken?), the answer
-# was [OK] to every line. That is not hypothetical: a box ran for days with the
-# strip wrong about six of seven sessions while this check reported clean.
+# resolve, config parses. Ask the only question that matters (what would this
+# say about a box that is fully installed and fully BROKEN?) and a presence
+# check answers [OK] to every line.
 #
 # So these ask tmux what it is actually configured to do. They are READ-ONLY
 # queries (list-keys, show-options) and deliberately do NOT run the renderer:
@@ -433,21 +431,13 @@ fi
 # the wrong socket it deletes every agent's state, which has happened. A
 # check must never be able to damage what it inspects.
 # THE PROBE MUST NOT BE ABLE TO CREATE WHAT IT IS LOOKING FOR, and the obvious
-# one does. `tmux list-keys` STARTS A SERVER when none is running and then
-# answers out of tmux's DEFAULTS: measured, 93 lines from a socket that did not
-# exist a moment earlier. So keying the guard on its output meant three things
-# at once, all of them wrong:
-#
-#   `mux check` SPAWNED a tmux server as a side effect, three lines below this
-#       file's own comment that a check must never damage what it inspects;
-#   the no-server branch below could NEVER fire, so its honest "state unchecked"
-#       line had never once been printed on a serverless box;
-#   and the pristine server it had just started then failed five assertions,
-#       so a fresh install reported a wall of red about a server the user never
-#       started, and exited non-zero.
-#
-# Found on ubuntu-latest, which is a bare box and therefore the only place in
-# this project's history where the serverless path was ever taken.
+# one does: `tmux list-keys` STARTS A SERVER when none is running and answers
+# out of tmux's DEFAULTS (measured, 93 lines from a socket that did not exist
+# a moment earlier). Keying the guard on its output is wrong three ways at
+# once: the check spawns a server as a side effect, the no-server branch below
+# can never fire, and the pristine server it just started then fails five
+# assertions, so a fresh install reports a wall of red about a server the user
+# never started. `list-sessions` errors and spawns nothing.
 #
 # `list-sessions` IS THE PROBE: it errors instead of spawning (measured both
 # ways), and a server with no sessions does not exist, since tmux exits when the
@@ -469,12 +459,10 @@ else
         if (index($0, "mux ") > 0) found = 1 }
       END { exit !found }'
   }
-  # THE LIST IS READ OUT OF share/mux.tmux, NOT WRITTEN DOWN HERE, and
-  # that is the whole repair. A hand-kept list went stale exactly as you
-  # would expect: it said `( ) b r R` while the fragment had also bound
-  # `u` (0.43) and `E` (0.50), so a server missing both passed clean.
-  # Deriving it means the assertion grows with the fragment and cannot
-  # drift from it again.
+  # THE LIST IS READ OUT OF share/mux.tmux, NOT WRITTEN DOWN HERE, so the
+  # assertion grows with the fragment. A hand-kept list goes stale in the
+  # direction that passes: it named four keys while the fragment bound six,
+  # and a server missing both of the others read clean.
   # ANY bind whose command mentions mux, not just `run-shell` ones. The
   # narrower pattern missed `prefix ?` the day it was added, because that one
   # is a `display-popup`, which is the same silent-shrink this derivation
@@ -516,14 +504,12 @@ else
     fi
   fi
 
-  # AND THE HOOKS, which nothing checked at all until 2026-09-27. The
-  # bindings above are the visible half; the hooks are the half that
-  # carries `mux undo-pane`'s trackers and its recorder, the bottom-pane
-  # pin, and the status style. A server started before a feature landed
-  # keeps running without them and every other marker stays green,
-  # which is exactly what happened: `prefix u` and the whole
-  # window-layout-changed set were absent from a live server while this
-  # reported clean, for two releases.
+  # AND THE HOOKS. The bindings above are the visible half; the hooks carry
+  # `mux undo-pane`'s trackers and recorder, the bottom-pane pin and the
+  # status style. A server started before a feature landed keeps running
+  # without them while every other marker stays green, so `prefix u` and the
+  # whole window-layout-changed set can be absent from a live server and
+  # nothing says so.
   #
   # INSTALLING A FILE DOES NOT RELOAD A SERVER, and that gap is the whole
   # point. `tackup` updating mux.tmux on disk changes nothing about a

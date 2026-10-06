@@ -331,24 +331,19 @@ _retire_old_layout() {
   echo "$PKG: retired the old layout at $_oldlib"
 }
 
-# _adopt_runtime_state: move per-pane agent records from the pre-2026-10-01
-# `$XDG_RUNTIME_DIR/agent-state` to the namespaced `.../mux/agent-state`, once,
-# HERE, because the install is the only moment atomic with the switchover:
-# before it the old writers write the old path, after it the new ones write the
-# new path, so moving what exists at this instant leaves no second copy to go
-# stale. A hook firing mid-move costs one record one event, self-healing on the
-# next lifecycle event, which is the bound every record already carries.
+# _adopt_runtime_state: move per-pane agent records from the unnamespaced
+# `$XDG_RUNTIME_DIR/agent-state` to `.../mux/agent-state`, once, HERE, because
+# the install is the only moment atomic with the switchover: before it the old
+# writers write the old path, after it the new ones write the new one, so
+# moving what exists at this instant leaves no second copy to go stale. A hook
+# firing mid-move costs one record one event, self-healing on the next
+# lifecycle event. DO NOT move this into a reader: mux-agent-state_lib's
+# comment carries the measured failure that caused.
 #
-# IT USED TO LIVE IN `mux_agent_dir`, where it was a reader taking a snapshot;
-# that lib's comment carries the measured failure and the reason it must not
-# come back.
-#
-# A DESTINATION THAT ALREADY EXISTS IS KEPT, NOT COMPARED, and the remedy is
-# named rather than guessed at. The new path is what every reader uses from
-# here on, so the old file will never be read again and holding both is the
-# two-copies hazard; but whether the kept record is ACCURATE is a question no
-# timestamp can answer (a beat refreshes mtime without advancing the epoch), so
-# it belongs to the verb built for that verdict.
+# A DESTINATION THAT ALREADY EXISTS IS KEPT, NOT COMPARED, with the remedy
+# named. Whether the kept record is ACCURATE is a question no timestamp can
+# answer, since a beat refreshes mtime without advancing the epoch, so it
+# belongs to the verb built for that verdict.
 _adopt_runtime_state() {
   _rt=${XDG_RUNTIME_DIR:-}
   [ -n "$_rt" ] && [ -d "$_rt/agent-state" ] || return 0
@@ -414,12 +409,11 @@ _tmux_confs() {
       "$HOME/.tmux.conf"; do
     [ -r "$_c" ] && printf '%s\n' "$_c"; done
 }
-# A HERE-DOC, NOT A PIPELINE, and the first version got this wrong in the
-# direction that suppresses a warning: a `while` loop fed by a pipe runs in a
-# SUBSHELL, so a `return` inside it cannot answer for this function, and a
-# loop that runs ZERO times (no tmux.conf at all, which is every fresh box)
-# exits 0, i.e. "found". The notice then never fired for the one user who needs
-# it. Caught by test/setup.t on the first run.
+# A HERE-DOC, NOT A PIPELINE, and the error falls in the direction that
+# SUPPRESSES the warning: a `while` fed by a pipe runs in a SUBSHELL, so a
+# `return` inside it cannot answer for this function, and a loop that runs
+# ZERO times (no tmux.conf at all, which is every fresh box) exits 0, meaning
+# "found". The notice would then never fire for the one user who needs it.
 _conf_mentions() {   # PATTERN -> 0 if any tmux.conf contains it
   while IFS= read -r _c; do
     [ -n "$_c" ] || continue
@@ -433,16 +427,15 @@ EOF
 # INSTALLING A FILE DOES NOT RELOAD A RUNNING SERVER, which is this package's
 # most expensive recurring bug rather than a detail. A live tmux keeps the
 # bindings, hooks and status format it read at START, so every new binding is
-# inert on the machine that just received it: `mux undo-pane` was unreachable on
-# both boxes for two releases that way, and `prefix ?` repeated it in 0.77. The
-# only thing that fixes it is `mux reload`, so the install does it rather than
-# leaving a correct install that behaves like a broken one.
+# inert on the machine that just received it. Only `mux reload` fixes that, so
+# the install does it rather than leaving a correct install that behaves like a
+# broken one.
 #
 # IT ALSO CLOSES A PROVISIONER'S LOOP. A provisioner runs `apply` only when
-# `check` FAILS, and mux's check now correctly FAILS on a stale server, so
-# without this the drift is reported forever by a pin whose install already
-# ran ("APPLY DID NOT FIX", observed 2026-09-29). Prevention belongs here,
-# in the step that made the file new.
+# `check` FAILS, and mux's check correctly FAILS on a stale server, so without
+# this the drift is reported for ever by a pin whose install already ran
+# ("APPLY DID NOT FIX"). Prevention belongs in the step that made the file
+# new.
 #
 # NOT THE SAME CALL AS THE TWO NOTICES BELOW, and the line between them is
 # ownership rather than caution. A tmux.conf is the user's own FILE and an
@@ -539,10 +532,10 @@ _tmux_conf_notice() {
 # live. `mux go <name>` finds a project through the discovery map, and the map
 # has no roots until somebody names one.
 #
-# mux USED TO SHIP `scan ~/src 3` AND FAIL WITHOUT IT, which is the defect this
-# step replaces: a location nobody chose, and then `[FAIL] scan root missing` on
-# every machine that keeps work somewhere else, which is most machines. A
-# default is fine. A default nobody confirmed is not.
+# A SHIPPED ROOT IS NOT AN OPTION: a built-in `scan ~/src 3` is a location
+# nobody chose, and then `[FAIL] scan root missing` on every machine that keeps
+# work somewhere else, which is most machines. A default is fine; a default
+# nobody confirmed is not.
 #
 # IT ASKS ONLY WITH A TERMINAL, and the reason is the same one that keeps the
 # tmux.conf notice from editing your config: a provisioner runs this installer
@@ -559,17 +552,12 @@ _scan_root_step() {
   # re-install silent: `mux scan --init` is idempotent and says so itself, so
   # this only has to decide whether to ASK.
   "$_bin/$PKG" scan --roots >/dev/null 2>&1 && return 0
-  # THE DECISION BELONGS TO `scan --init`, NOT HERE, which is a correction.
-  # This used to test for a terminal itself and merely PRINT A NOTE without
-  # one, and that note is why discovery silently went off across a provisioned
-  # fleet: the provisioner has no terminal, so on every sweep it printed a
-  # line nobody was there to read and did nothing. A migration that cannot run
-  # on the only install path there is, is not a migration.
-  #
-  # `scan --init` now distinguishes the two cases properly ($HOME is invented,
-  # an existing ~/src is observed), so the installer can just call it and let
-  # it decide. Keeping a second copy of that judgement here is how the two
-  # would drift.
+  # THE DECISION BELONGS TO `scan --init`, NOT HERE. It distinguishes the two
+  # cases ($HOME is invented, an existing ~/src is observed), so the installer
+  # calls it and lets it decide; a second copy of that judgement here is how
+  # the two drift. Testing for a terminal HERE and merely printing a note
+  # without one is what turns discovery off across a provisioned fleet, since
+  # the provisioner has no terminal and nobody reads the line.
   #
   # `|| true` because discovery is OPTIONAL: a box with no obvious project
   # directory still gets a working mux, and `scan --init` has already said

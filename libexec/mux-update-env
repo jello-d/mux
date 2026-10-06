@@ -101,15 +101,11 @@ done
 
 # --- which sessions ---------------------------------------------------------
 # VALIDATED IN THE MAIN SHELL, EMITTED IN A SUBSHELL, and the split is not
-# stylistic. The first version did both in `_targets`, which the pane loop
-# reads through a here-doc: `exit 2` inside `$( )` leaves the SUBSHELL, so
-# every refusal here PRINTED ITS MESSAGE AND THEN EXITED 0, with the
-# substitution yielding nothing and the script running on to report "nothing
-# needed changing". A refusal that succeeds is this package's signature
-# failure, the same one `mux latch -V` shipped, and the test for the window
-# field caught it on its first run.
-#
-# So anything that can REFUSE happens here, where `exit` means what it says.
+# stylistic. The pane loop reads `_targets` through a here-doc, so an `exit`
+# inside `$( )` leaves only the SUBSHELL: a refusal there PRINTS ITS MESSAGE
+# AND THEN EXITS 0, the substitution yields nothing, and the script runs on to
+# report "nothing needed changing". So anything that can REFUSE happens here,
+# where `exit` means what it says.
 _tmode=cur
 _tpart=
 _tsess=
@@ -214,13 +210,11 @@ while IFS='	' read -r _p _s; do
   fi
   _saw=$((_saw + 1))
 
-  # THE DRY RUN GOES THROUGH THE SAME DECISION, which the first version got
-  # wrong: it printed mux_env_plan, and the plan says what RESOLVED while
-  # the decision to write also consults the SESSION's existing value. So the
-  # preview listed two names where the real run changed three. `-n` lives
-  # inside mux_env_apply for that reason: a preview computed by a different
-  # code path from the action is not a preview, and the comment that claimed
-  # otherwise was the giveaway.
+  # THE DRY RUN GOES THROUGH THE SAME DECISION. Printing mux_env_plan instead
+  # is not a preview: the plan says what RESOLVED, while the decision to write
+  # also consults the SESSION's existing value, so a preview built that way
+  # lists two names where the real run changes three. `-n` therefore lives
+  # inside mux_env_apply.
   _mode=-v
   [ "$_dry" -eq 0 ] || _mode=-n
   _out=$(mux_env_apply "$_s" "$_mode" 2>/dev/null || true)
@@ -229,10 +223,8 @@ while IFS='	' read -r _p _s; do
       [ -n "$_l" ] || continue
       # THE VERB IS PUT BACK INTO THE PRESENT, because mux_env_apply reports
       # what it DID and this is a preview. Prefixing "would " onto the past
-      # tense printed `would dropped WAYLAND_DISPLAY`, which is how it read
-      # on a live box. Only `set` happens to work in both tenses, which is
-      # exactly why the first version looked right: the common case is the
-      # one word that does not expose the bug.
+      # tense gives `would dropped WAYLAND_DISPLAY`; only `set` reads
+      # correctly in both tenses, so the common case hides the bug.
       _lv=${_l%% *}
       case $_lv in
       dropped)  _l="drop ${_l#* }" ;;
@@ -253,25 +245,22 @@ while IFS='	' read -r _p _s; do
   # environment lacks a name mux just set is running on the old one and always
   # will be, because exec already happened.
   # COLLECTED TO A FILE, NOT A VARIABLE, because the INNER loop is fed by a
-  # PIPE (`mux_env_names | while`) and therefore runs in a subshell: the
-  # first version assigned to `_stale` in there and read it after the loop,
-  # where it was always empty. The outer here-doc loop is not the reason, and
-  # an earlier version of this comment said it was: measured in dash, bash,
-  # ksh and macOS `/bin/sh`, a `while ... done <<EOF` keeps its assignments,
-  # which is also why `_did` and `_saw` can be plain variables. Reported once
-  # at the end rather than interleaved, since these are a different KIND of
-  # fact: what was fixed versus what cannot be.
+  # PIPE (`mux_env_names | while`) and so runs in a subshell, where an
+  # assignment is lost after the loop. The OUTER here-doc loop is not the
+  # reason: measured in dash, bash, ksh and macOS `/bin/sh`, a
+  # `while ... done <<EOF` keeps its assignments, which is why `_did` and
+  # `_saw` can be plain variables. Reported once at the end rather than
+  # interleaved, these being a different KIND of fact: what was fixed versus
+  # what cannot be.
   # WHICH NAMES THE SESSION NOW HOLDS, computed ONCE per session rather than
   # per pane. This is not an optimisation, it is the question: a pane is only
   # stale relative to something it could actually GAIN by restarting.
   #
-  # THE FIRST VERSION COMPARED AGAINST THE NAME LIST, and so reported every
-  # pane as stale for a name mux had DELIBERATELY WITHHELD. Found by running
-  # it on this box, where nothing listens on WAYLAND_DISPLAY: it named all 18
-  # panes for it, advising a restart that could never supply it, in the same
-  # breath as a real finding about SSH_AUTH_SOCK. A withheld name is already
-  # announced once by R7 and carried by `mux check`; repeating it here as a
-  # per-pane defect is the one reading that is actively wrong.
+  # COMPARE AGAINST WHAT THE SESSION HOLDS, never against the NAME LIST: on a
+  # box where nothing listens on WAYLAND_DISPLAY, the list names every pane as
+  # stale for a value mux DELIBERATELY WITHHELD, advising a restart that could
+  # never supply it. A withheld name is announced once by R7 and carried by
+  # `mux check`; repeating it as a per-pane defect is actively wrong.
   #
   # Space-delimited and matched with the padded `case` idiom, because an
   # unanchored substring test makes `AUTH_SOCK` match `SSH_AUTH_SOCK`.

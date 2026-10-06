@@ -104,27 +104,23 @@ fi
 # it is worse than the stale-idle direction because a busy-looking session is
 # one you deliberately leave alone.
 #
-# OBSERVED 2026-09-18 on the `vicus` session: the turn finished at 9:09 PM and
-# something emitted `working` at 9:12:25, three minutes later. Stop HAD fired;
-# the straggler overwrote it. Candidates were a trailing PostToolUse or the
-# post-turn recap; with no emit breadcrumb enabled, which one is unproven.
+# A straggler arrives MINUTES after the turn ends (three, in the case this was
+# built for), so no clock-based rule would catch it.
 #
 # Scoped deliberately to `idle` and nothing wider. A `blocked` -> `working`
 # promotion is LEGITIMATE (you approved a permission prompt and the tool ran),
 # and an absent record means the turn start was missed, where recording
 # something beats recording nothing.
-# A SINGLE trailing beat is a straggler; SUSTAINED beats are work. Refusing
-# every beat over `idle` was right about the straggler and wrong about the
-# other half, and the other half is live: an agent continuing in AUTO MODE
-# starts a turn with no UserPromptSubmit at all, so nothing is ever allowed to
-# create `working` again and the session reads DONE while it works. Seen on
-# northwood 2026-09-27: vigilance idle for 9 minutes of a 34-minute turn, and
-# unrecoverable until a human typed something.
+# A SINGLE trailing beat is a straggler; SUSTAINED beats are work, and both
+# halves matter. Refusing every beat over `idle` leaves an agent continuing in
+# AUTO MODE unable to ever create `working` again, because it starts a turn
+# with no UserPromptSubmit, so the session reads DONE for the whole run and
+# only a human typing recovers it.
 #
-# The two are distinguishable without guessing at clocks. A straggler is ONE
-# event arriving after the turn ended and then silence; an agent actually
-# working keeps calling tools. So a beat over `idle` does not promote on its
-# own: it leaves a mark, and a SECOND beat within the window corroborates it.
+# The two are distinguishable without guessing at clocks: a straggler is ONE
+# event after the turn ended and then silence, where an agent actually working
+# keeps calling tools. So a beat over `idle` does not promote on its own, it
+# leaves a mark, and a SECOND beat within the window corroborates it.
 #
 # The mark is a sidecar, not a new record field: the record's format is read by
 # a single `read -r` in several programs and widening it has already cost this
@@ -169,23 +165,17 @@ if [ -n "$_beat" ] && [ "$_pstate" = idle ]; then
   fi
 fi
 
-# A SESSION START MAY NOT CONTRADICT AN OBSERVED TURN, and the reason is
-# measured rather than theoretical. A CONTEXT COMPACTION fires SessionStart
-# MID-TURN: the agent's history is summarised and the session announces itself
-# again while it is still working. Correlated against this box's own logs on
-# 2026-09-29: FOUR of four compact boundaries produced a `working -> idle`
-# transition in the same second, in two different sessions, and one of them
-# names the mechanism outright: `bootique working -> idle via SessionStart`.
-# The other 97 idles in that window were genuine turn ends.
+# A SESSION START MAY NOT CONTRADICT AN OBSERVED TURN, because a CONTEXT
+# COMPACTION fires SessionStart MID-TURN: the history is summarised and the
+# session announces itself again while the same agent is still working.
+# Measured against this box's logs, four of four compact boundaries produced a
+# `working -> idle` in the same second, in two sessions.
 #
-# THE COST WAS THE WHOLE SIGNAL. A busy agent read `done` on the strip and in
-# the tray, `mux agent wait` would have reported the turn over to an
-# orchestrator mid-turn, and the block below raised a "Claude finished"
-# banner for a turn that had not. Recovery is not reliable either: the 0.49
-# straggler guard deliberately refuses to let ONE beat promote, and two beats
-# rarely land inside the window before the human gives up and types. Reported
-# by the user twice in a day, from two different boxes, which is exactly the
-# wrong way round: the human noticing is the failure.
+# THE COST IS THE WHOLE SIGNAL: a busy agent reads `done` on the strip and in
+# the tray, `mux agent wait` tells an orchestrator the turn is over mid-turn,
+# and a "Claude finished" banner fires for a turn that has not. The straggler
+# guard above cannot recover it either, since two beats rarely land inside the
+# window before the human gives up and types.
 #
 # WHY A FLAG AND NOT THE SOURCE. `--source` is a BREADCRUMB: mux never
 # requires it and an integrator that omits one is not broken, so a rule keyed
@@ -244,22 +234,17 @@ _sess=${loc#* }
 #
 # mux raises no banners: `mux-desktop-notifier` does, from the stream, and it
 # holds its own ids on the box the human is at. So there is nothing here to
-# carry across a re-emit, nothing to age out, and nothing to close. The whole
-# lifecycle this block used to run (carry the id, drop it past
-# MUX_NOTIF_TTL because a freedesktop id is small, sequential and REUSED after
-# a daemon restart, close it on a real change) went with it.
+# carry across a re-emit, nothing to age out and nothing to close.
 #
-# THE FIELD STAYS AS A PERMANENT `-`, deliberately, and this is the one piece
-# of the old design worth keeping: the record is six fields read by a single
-# `read -r` in several programs, and narrowing that format has cost this
-# package a day before. A dead field costs one byte; a format change costs
-# every reader.
+# THE FIELD STAYS AS A PERMANENT `-`: the record is six fields read by a
+# single `read -r` in several programs, so a dead field costs one byte where a
+# format change costs every reader.
 notif=-
 
-# RAISING MOVED TO THE DESKTOP NOTIFIER, and this is where it used to be.
-# The gate that lived here (a real transition out of `working`, not into the
-# pane you are looking at, `@mux-notify-always`, `@mux-attention`) now lives
-# in `mux agent stream`, which runs beside this tmux server and can ask tmux
+# RAISING IS THE DESKTOP NOTIFIER'S. The gate (a real transition out of
+# `working`, not into the pane you are looking at, `@mux-notify-always`,
+# `@mux-attention`) lives in `mux agent stream`, which runs beside this tmux
+# server and can ask tmux
 # exactly the same questions. Nothing was dropped: the rules moved, they did
 # not change.
 #

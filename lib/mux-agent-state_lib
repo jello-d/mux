@@ -117,21 +117,17 @@ mux_agent_state() {
 # anywhere. So the caller asks tmux, in a query it is already making, and
 # passes the answer down.
 #
-# AND IT MUST NOT BE THE DEFAULT, the 0.60 `--attached` call again: the HUMAN
-# surfaces filter (the strip, the notification path, `next-blocked`) and the
-# MACHINE surface does not, because a supervisor polling `mux agent peers`
-# wants to see its own workers. A filter in the shared enumerator would delete
-# that promise for every caller at once.
+# AND IT MUST NOT BE THE DEFAULT: the HUMAN surfaces filter (the strip, the
+# notification path, `next-blocked`) and the MACHINE surface does not, because
+# a supervisor polling `mux agent peers` wants to see its own workers. A
+# filter in the shared enumerator deletes that promise for every caller.
 #
 # TWO ENTRY POINTS, ONE WALK, ONE RANKING. `mux_agent_state` is a wrapper
-# rather than an optional third argument here, because the two linter versions
-# this tree meets (0.9.0 on ubuntu-latest, which CI runs, and 0.11 here)
-# disagree about a function referencing an argument some callers omit. Both
-# are always called with full arity, so neither rule set has anything to say.
-#
-# AND THAT PARAGRAPH COST A RED SUITE: a comment whose FIRST WORD is the
-# linter's name is read as a DIRECTIVE, so the sentence above failed to parse
-# (SC1073) and took the whole file's linting with it.
+# rather than an optional third argument, because the two linter versions this
+# tree meets disagree about a function referencing an argument some callers
+# omit. Both are always called with full arity, so neither has anything to
+# say. (A comment whose FIRST WORD is the linter's name is read as a
+# DIRECTIVE, so do not start one that way.)
 mux_agent_state_skip() {
   _mux_agent_walk "$1" "$2" "$3" ""
   printf '%s %s' "$_best" "$_bestep"
@@ -170,14 +166,11 @@ mux_agent_pane_win() {  # <dir> <session> <window>
 # STRUCTURAL: we walk DOWN from the pane rather than searching the box and
 # filtering.
 #
-# SELFPID IS AN ARGUMENT RATHER THAN `$$` because the PERSPECTIVE is half the
+# SELFPID IS AN ARGUMENT RATHER THAN `$$`, because the PERSPECTIVE is half the
 # question: "excluding the caller" only means anything relative to a position
-# in the tree, and reading `$$` made the answer silently depend on which pane
-# the shell happened to be in. Measured while probing: run from a DIFFERENT
-# pane, the function reported that pane's own agent AS WORK, because the agent
-# was not on the prober's chain. Both callers pass full arity, which also
-# keeps the two shellcheck versions this tree meets from disagreeing about an
-# optional parameter.
+# in the tree, so reading `$$` makes the answer depend on which pane the shell
+# happens to be in. Called from another pane that way, it reports THAT pane's
+# agent as work, the agent not being on the caller's chain.
 #
 # WORK THE AGENT STILL HOLDS is the whole rule, and it comes from the agent
 # rather than from mux. Claude Code reports a background task exactly while it
@@ -292,14 +285,12 @@ mux_agent_humming() {   # <record file>
 # non-empty, restricts the walk to one window index. Both empty is the plain
 # question.
 #
-# ONE WALK, FOUR ENTRY POINTS, and a correction rather than the original
-# design. This file used to carry the walk TWICE, once for the state and once
-# for the pane, with a comment calling the duplication forced: appending a
-# field to `mux_agent_state`'s answer would silently turn the epoch into
-# "EPOCH PANE" for the seven callers parsing it as `${_se%% *}` and
-# `${_se#* }`. Right about the ANSWER, wrong about the implementation: the
-# walk leaves its result in variables and each entry point prints only what it
-# owes. The published shapes are byte-identical; the second copy is gone.
+# ONE WALK, FOUR ENTRY POINTS. DO NOT widen `mux_agent_state`'s answer to
+# carry another field: seven callers parse it as `${_se%% *}` and `${_se#* }`,
+# so appending one silently turns the epoch into "EPOCH PANE" in every one of
+# them. The walk leaves its result in VARIABLES instead, and each entry point
+# prints only what it owes, which is what keeps one walk serving four
+# questions.
 #
 # A `_` NAME BECAUSE THIS ONE IS INTERNAL. The four entry points are the
 # surface, and a caller reaching past them would be choosing which fields to

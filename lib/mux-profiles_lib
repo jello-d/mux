@@ -187,11 +187,10 @@ mux_prof_drop() {       # <name>
 }
 
 # --- the OVERLAY half: a profile's file, its full name set, its partition ---
-# MOVED HERE FROM bin/mux (2026-10-05), because all three are used on BOTH
-# sides of the help extraction: `usage()` stayed in the entry point and
-# `help_profiles` went to libexec/mux-help, and they ask the same three
-# questions. Duplicating them would have been two answers about one profile
-# table, which is what this lib exists to prevent.
+# ALL THREE ARE USED ON BOTH SIDES OF THE HELP SPLIT: `usage()` is bin/mux's
+# and `help_profiles` is libexec/mux-help's, and they ask the same three
+# questions. Two copies would be two answers about one profile table, which is
+# what this lib exists to prevent.
 #
 # TWO OF THEM NEED A LIB THIS ONE DOES NOT SOURCE, and the caller supplies
 # it, as everywhere here:

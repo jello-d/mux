@@ -2,16 +2,9 @@
 # mux-resolve_lib: how mux turns a NAME into a project.
 #
 # THE SHARED SURFACE BETWEEN `go` AND `why`, which is the whole reason it is a
-# lib. `_typed_roots`'s comment already said so in bin/mux ("`go` and `why`
-# share this ON PURPOSE") and recorded what it cost when they did not: `why`
-# derived a typed name's root as the CURRENT DIRECTORY, consulting neither
-# source, so `mux why NAME` described a session `go` would have refused to
-# build. An explanation that contradicts the thing it explains is worse than
-# none.
-#
-# EXTRACTED FROM bin/mux (2026-10-05) as the precursor to moving `why` out,
-# not for size: `why` cannot leave until these are reachable from a second
-# file, and nothing else about `why` is hard.
+# lib. THEY MUST NOT HAVE TWO ANSWERS: if `why` derives a typed name's root
+# independently it describes a session `go` would refuse to build, and an
+# explanation that contradicts the thing it explains is worse than none.
 #
 # NEEDS THREE LIBS, which the CALLER sources, as everything here does:
 #
@@ -27,9 +20,9 @@
 # The PROJECT a bare invocation refers to: the git toplevel in a repo, else
 # the current directory. The ONE derivation, used for both the default session
 # NAME and the default root, so `mux new` writes a layout under exactly the
-# name `mux go` will look for. They used to disagree, new taking the cwd
-# basename and go the git toplevel basename, so a `mux new` anywhere but a
-# repo's top level wrote a layout go could never find.
+# name `mux go` will look for. Deriving them separately (a cwd basename here, a
+# git toplevel basename there) makes `mux new` outside a repo's top level write
+# a layout `go` can never find.
 mux_resolve_project_base() {   # [dir]
   if [ -n "${1:-}" ]; then
     ( cd "$1" 2>/dev/null \
@@ -82,12 +75,10 @@ mux_resolve_map_lookup() {   # <name> <partition>
 # source that knows where a profile-less `mux go` was rooted. No lines means
 # nothing knows the name; more than one means the name is ambiguous.
 #
-# `go` and `why` share this ON PURPOSE. `why` used to derive a typed name's root
-# as the CURRENT DIRECTORY, consulting neither source, so `mux why NAME` cheerly
-# described a session `go` would have flatly refused to build: reporting a
-# root for an ambiguous name, and for a name nothing knew at all. An explanation
-# that contradicts the thing it explains is worse than no explanation, and this
-# verb exists only to be trusted.
+# `go` and `why` share this ON PURPOSE. A `why` that derived a typed name's
+# root as the CURRENT DIRECTORY, consulting neither source, reports a root for
+# an ambiguous name and for a name nothing knows at all, describing a session
+# `go` would flatly refuse to build. This verb exists only to be trusted.
 #
 # Irrelevant when a profile DECLARES a root (`hasroot`): both callers skip the
 # map entirely then, because the declaration already answered.

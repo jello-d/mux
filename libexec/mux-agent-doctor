@@ -34,11 +34,10 @@
 #           best-evidenced verdict: the agent's own declared busy marker says
 #           no turn is running AND the process is below the idle threshold, and
 #           three separate paths refuse to guess rather than assert either.
-#   DRIFT   left alone. Recovery is a turn START (a new prompt) or sustained
-#           tool calls, NOT a single tool call, which is what this said
-#           until 2026-09-27: `--beat` discards one beat over `idle`. The
-#           repair would be to write `working`, the direction that makes a
-#           finished session look busy, which is the worse failure.
+#   DRIFT   left alone. Recovery is a turn START (a new prompt) or SUSTAINED
+#           tool calls, never a single one, because `--beat` discards one beat
+#           over `idle`. The repair would be to write `working`, the direction
+#           that makes a finished session look busy, which is worse.
 #   ORPHAN  left alone. There is no record, so a repair would have to INVENT a
 #           state. "Recording something beats nothing" is the emit path's call
 #           to make from a real event, not this one's to make from a sample.
@@ -164,10 +163,9 @@ _busy_pat() {   # <agent command name>
 # pane, i.e. no turn is in progress.
 #
 # This settles the one case CPU cannot. `working` with no CPU is ambiguous: an
-# agent waiting on the model or on a slow build is genuinely mid-turn, so the
-# doctor has always reported it as "quiet" rather than risk crying wolf. But a
-# record left saying `working` after a turn ENDED looks identical, and that is a
-# real bug seen twice in one day, on two machines.
+# agent waiting on the model or on a slow build is genuinely mid-turn, so it is
+# reported as "quiet" rather than risk crying wolf. A record left saying
+# `working` after a turn ENDED looks identical from CPU alone.
 #
 # The agent's own UI is the tiebreaker, and asking the AGENT DEFINITION for the
 # string keeps this neutral: mux does not learn what Claude Code's footer says,
@@ -251,9 +249,9 @@ _rows="$_rows$_orph"
 
 [ -n "$_rows" ] || { echo "mux: no agent state recorded in '$_ns'"; exit 0; }
 
-# How long to watch, and how busy counts as busy. Both measured rather than
-# guessed: sampled across six live agents, a genuinely idle one sits at 0.1% of
-# a core while agents mid-turn ran 3.7% to 9.8%. A short window is noisy (over
+# How long to watch, and how busy counts as busy. Measured across six live
+# agents: a genuinely idle one sits at 0.1% of a core, mid-turn ones at 3.7% to
+# 9.8%. A short window is noisy (over
 # two seconds an idle agent's timers can spend a jiffy or two and look like
 # work), so the window is seconds, not milliseconds, and the verdict is a
 # PERCENTAGE of it.

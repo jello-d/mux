@@ -2,11 +2,9 @@
 # mux-build_lib - the session BUILD machinery: attach, the profile reader, and
 # the pane/window vocabulary that `go`, `new` and `resume` all share.
 #
-# EXTRACTED FROM bin/mux (2026-10-05), 312 lines, the largest of the
-# breakup's slices. SOURCED for mux-why_lib's reason in its strongest form:
-# these functions do not report on resolved state, they ARE the build, so
-# they read ten values the parser and the resolution path above them have
-# already computed:
+# SOURCED for mux-why_lib's reason in its strongest form: these functions do
+# not report on resolved state, they ARE the build, so they read ten values
+# the parser and the resolution path above them have already computed:
 #
 #     name  root  part  sock       what to build, where, on which server
 #     bare  noattach  resume       the flags that change what a pane runs

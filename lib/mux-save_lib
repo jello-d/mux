@@ -1,11 +1,6 @@
 #!/bin/sh
 # mux-save_lib - `mux save`: snapshot the live session as a profile.
 #
-# EXTRACTED FROM bin/mux (2026-10-05), 132 lines, and SOURCED LAZILY inside
-# the save branch for the rule that file's other lazy sources already state:
-# the front end is parsed on every invocation, `mux agent-render` runs per
-# client every status-interval, and a verb nobody called must not cost a lib.
-#
 # A SOURCED LIB AND NOT AN EXECUTED HELPER, the same call mux-why_lib made
 # and for a sharper reason: what this needs is bin/mux's OWN `tm`, the tmux
 # wrapper that carries the partition's `-L` socket. A separate process would
