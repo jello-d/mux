@@ -3928,8 +3928,8 @@ m gave every name the same theme
 = help-usage-prints-nothing
 f libexec/mux-help
 t mux-exit
--   --usage)           shift; usage "${1:-2}" ;;
-+   --usage)           shift; exit "${1:-2}" ;;
+-   --usage)           shift; usage "${1:-$MUX_EC_USAGE}" ;;
++   --usage)           shift; exit "${1:-$MUX_EC_USAGE}" ;;
 m printed no usage summary
 
 = help-bare-drifts-from-dash-dash-help
@@ -3942,8 +3942,8 @@ m have drifted apart
 = help-usage-is-reachable-as-a-topic
 f libexec/mux-help
 t mux-verbs
--   --usage)           shift; usage "${1:-2}" ;;
-+   --usage|usage)     shift; usage "${1:-2}" ;;
+-   --usage)           shift; usage "${1:-$MUX_EC_USAGE}" ;;
++   --usage|usage)     shift; usage "${1:-$MUX_EC_USAGE}" ;;
 m answered instead of refused
 = why-lib-missing-is-silent
 f bin/mux
@@ -4085,3 +4085,59 @@ t mux-args
 -     echo "mux: not a partition name: $rs_want" >&2; usage; }
 +     : ; }
 m resume-badname
+
+# --- lib/mux-data_lib: the $MUX_DIR-over-$MUX_SHARE rule ------------------
+# FOURTEEN consumers, and the gap this closes is the shape mux-agent-state_lib
+# already paid for: a silent change here does not break ONE caller, it makes
+# every layout, theme, shape and agent lookup agree on the wrong answer.
+= data-overlay-loses-to-shipped
+f lib/mux-data_lib
+t mux-data
+-   if   [ -f "$MUX_DIR$_dk/$2$3" ];   then printf '%s' "$MUX_DIR$_dk/$2$3"
++   if   [ -f "$MUX_SHARE$_dk/$2$3" ];   then printf '%s' "$MUX_SHARE$_dk/$2$3"
+m overlay-wins
+
+# An override is the SAME name, not a second entry, so `mux theme` must not
+# offer a theme twice because the user has their own copy of it.
+= data-stems-lists-an-override-twice
+f lib/mux-data_lib
+t mux-data
+-   done | LC_ALL=C sort -u
++   done | LC_ALL=C sort
+m stems-union
+
+# The extension is what makes a NAME: themes/defaults has none and is not a
+# theme, so dropping the suffix from the glob offers it as one.
+= data-stems-ignores-the-extension
+f lib/mux-data_lib
+t mux-data
+-     for _df in "$_dd"/*"$2"; do
++     for _df in "$_dd"/*; do
+m listed as a theme
+
+# --- lib/mux-exit_lib: the codes mean what they say -----------------------
+# FORTY-TWO consumers, and the file is five assignments: the whole contract
+# with no logic to get wrong, which is exactly why a wrong VALUE here is
+# invisible. Every verb would exit a plausible number and `man mux` EXIT
+# STATUS, latch's classifier and `mux agent`'s status word would all describe
+# something else. One record per code that a caller distinguishes.
+= exit-ok-is-not-zero
+f lib/mux-exit_lib
+t mux-exit
+- MUX_EC_OK=0           # answered or succeeded. An empty answer is still one
++ MUX_EC_OK=1           # answered or succeeded. An empty answer is still one
+m mux --version
+
+= exit-usage-collides-with-refusal
+f lib/mux-exit_lib
+t mux-exit
+- MUX_EC_USAGE=2        # a usage error, or a verb this mux does not know
++ MUX_EC_USAGE=1        # a usage error, or a verb this mux does not know
+m unknown verb
+
+= exit-noname-collides-with-usage
+f lib/mux-exit_lib
+t mux-exit
+- MUX_EC_NONAME=3       # that name is not known here: session OR partition
++ MUX_EC_NONAME=2       # that name is not known here: session OR partition
+m nothing knows

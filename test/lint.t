@@ -573,10 +573,17 @@ _ec=$T/exitcodes
 # where `"$MUX_EC_FAIL"` would be a literal string evaluating to 0. That is
 # not a hypothetical: this sweep converted one and the mutation went silent.
 #
+# A DIGIT INSIDE A PARAMETER EXPANSION IS STILL A LITERAL EXIT CODE, and the
+# first version of this rule could not see one. `exit "${1:-2}"` in the usage
+# path carried a magic 2 through the whole sweep: the exit-code records then
+# reported MUX_EC_USAGE as UNKILLABLE, because the most-travelled error path
+# in mux never read it.
+#
 # AND THE BOOTSTRAP GUARD CANNOT USE THE LIB IT IS CHECKING FOR, so the line
 # that reports mux-exit_lib missing keeps a literal. It is written with the
 # exit ON that line precisely so this exemption is one grep and names itself.
-( cd "$HERE" && grep -rnE '\bexit [0-9]+' bin lib libexec setup.sh \
+( cd "$HERE" && grep -rnE '\bexit ([0-9]+|"?\$\{[A-Za-z_0-9]+:-[0-9]+\}"?)' \
+    bin lib libexec setup.sh \
   2>/dev/null \
   | grep -vE "^($_ecx):" \
   | grep -vE "^[^:]+:[0-9]+:[[:space:]]*#" \

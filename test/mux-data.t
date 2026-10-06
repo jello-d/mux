@@ -52,16 +52,22 @@ eq noext          "$(mux_data_find themes defaults '')" \
       "$MUX_SHARE/themes/defaults"
 
 # --- mux_data_stems: the union, sorted, with no name listed twice -----------
+# THE SPECIFIC ASSERTIONS COME FIRST, before the summarising equality, so each
+# mutation lands on the assertion that NAMES its rule. With stems-union first,
+# dropping `sort -u` and dropping the extension from the glob both reported
+# the same failure, which says a line is load-bearing and nothing about which
+# rule it carries: the corpus refused the second record for exactly that.
+#
+# defaults has no .theme extension, so it is not a theme NAME.
+case "$(mux_data_stems themes .theme)" in
+  *defaults*) fail "stems: the extensionless defaults file listed as a theme" ;;
+esac
 # purple exists in BOTH roots and must appear ONCE: an override is the same
 # name, not a second theme.
 eq stems-union "$(mux_data_stems themes .theme | tr '\n' ' ')" \
          "cyan neon purple "
 eq stems-agents "$(mux_data_stems agents .agent | tr '\n' ' ')" "claude "
 eq stems-layouts "$(mux_data_stems '' .layout | tr '\n' ' ')" "api default "
-# defaults has no .theme extension, so it is not a theme NAME.
-case "$(mux_data_stems themes .theme)" in
-  *defaults*) fail "stems: the extensionless defaults file listed as a theme" ;;
-esac
 
 # --- mux_data_files: every stem resolved to the file mux would read ---------
 eq files-resolved "$(mux_data_files themes .theme | tr '\n' ' ')" \

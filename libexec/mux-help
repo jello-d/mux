@@ -9,7 +9,7 @@
 # mux-profiles_lib, and they resolve nothing else.
 #
 # THE TOPICS CAME FIRST AND usage FOLLOWED THE SAME DAY, and what stayed in
-# bin/mux is a one-line shim: `usage() { exec ... --usage "${1:-2}"; }`. Its
+# bin/mux is a one-line shim: `usage() { exec ... --usage "$code"; }`. Its
 # twenty-two callers are the error paths of the argument parser, each with its
 # own exit code, and they are unchanged: an exec never returns, which is what
 # `usage; }` already relied on. The first attempt put the exec at all
@@ -437,7 +437,7 @@ EOF
     "$(mux_data_stems_line themes .theme)"
   _wrap_list "  agents  (agent NAME):      " \
     "$(mux_data_stems_line agents .agent)"
-  exit "${1:-2}"
+  exit "${1:-$MUX_EC_USAGE}"
 }
 
 # THE TOPIC VOCABULARY IS HERE, not in bin/mux, so adding a topic is one edit
@@ -447,7 +447,7 @@ case ${1:-} in
   # reaching the one copy of the usage text. NOT a topic: it is deliberately
   # spelled as a flag so `mux help usage` stays an unknown topic rather than
   # becoming a second spelling of `mux --help`.
-  --usage)           shift; usage "${1:-2}" ;;
+  --usage)           shift; usage "${1:-$MUX_EC_USAGE}" ;;
   # NO TOPIC IS USAGE, which is why bin/mux can now exec straight here for the
   # whole verb instead of branching first. `mux help` and `mux --help` are the
   # same question and there is one copy of the answer.

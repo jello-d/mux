@@ -327,7 +327,7 @@ _profile_root() {   # <name>
 # ends with `usage` and its own exit code. A function rather than 21 inline
 # execs, because a path repeated at every call site is the same duplication one
 # layer out.
-usage() { exec "$LIBEXEC/mux-help" --usage "${1:-2}"; }
+usage() { exec "$LIBEXEC/mux-help" --usage "${1:-$MUX_EC_USAGE}"; }
 
 # --- options and the verb in either order, then positionals ----------------
 # ONE loop takes both: an option is an option wherever it sits, and the first
