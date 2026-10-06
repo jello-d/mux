@@ -112,8 +112,8 @@ _rc=$(latch box proj)
 [ "$_rc" = 0 ] || fail "a deliberate quit should exit 0, got $_rc"
 [ "$(n_tries)" = 1 ] || fail "a quit was retried $(n_tries) times"
 case "$(seq_of)" in
-*ended*) ;;
-*) fail "the quit was not reported as ended: [$(seq_of)]" ;;
+  *ended*) ;;
+  *) fail "the quit was not reported as ended: [$(seq_of)]" ;;
 esac
 
 # --- the transport drops: that IS retried -------------------------------
@@ -124,8 +124,8 @@ _rc=$(latch box proj)
 [ "$(n_tries)" = 3 ] \
   || fail "expected 3 attempts across two drops, got $(n_tries)"
 case "$(seq_of)" in
-*probing*ended*) ;;
-*) fail "a drop should report probing then ended: [$(seq_of)]" ;;
+  *probing*ended*) ;;
+  *) fail "a drop should report probing then ended: [$(seq_of)]" ;;
 esac
 
 # --- A REJECTED CREDENTIAL IS TERMINAL, NOT RETRIED --------------------
@@ -142,8 +142,8 @@ _rc=$(MAXT=5 latch box proj)
   || fail "latch offered a rejected credential $(n_tries) times; that is the
 storm this design exists to prevent, and a backoff does not make it not one"
 case "$(seq_of)" in
-*denied*) ;;
-*) fail "a rejected credential was not reported as denied: [$(seq_of)]" ;;
+  *denied*) ;;
+  *) fail "a rejected credential was not reported as denied: [$(seq_of)]" ;;
 esac
 
 # --- PROGRESS RESETS THE BACKOFF --------------------------------------
@@ -182,8 +182,8 @@ _run_drops() {   # <progress> <max tries> <rung> -> stderr of a dropping run
 # mistaken for "the backoff stopped working".
 _o=$(_run_drops 9999 3 1)
 case $_o in
-*'retrying in 2s'*) ;;
-*) fail "with no attempt counting as progress the backoff must still double;
+  *'retrying in 2s'*) ;;
+  *) fail "with no attempt counting as progress the backoff must still double;
 never seeing 2s means the growth is gone:
 $_o" ;;
 esac
@@ -192,13 +192,14 @@ esac
 # BACKOFF each time and never reach 2s.
 _o=$(_run_drops 0 3 1)
 case $_o in
-*'retrying in 2s'*) fail "an attempt that counted as progress did not reset the
+  *'retrying in 2s'*) fail \
+    "an attempt that counted as progress did not reset the
 backoff: the delay kept growing, which is the ratchet this fixes:
 $_o" ;;
 esac
 case $_o in
-*'retrying in 1s'*) ;;
-*) fail "no retry was reported at all, so this asserts nothing:
+  *'retrying in 1s'*) ;;
+  *) fail "no retry was reported at all, so this asserts nothing:
 $_o" ;;
 esac
 
@@ -214,20 +215,20 @@ esac
 # never grows at all, which is the other failure and is worse.
 _o=$(_run_drops 9999 4 5)
 case $_o in
-*'retrying in 2s'*) fail "the delay doubled within 4 attempts at a rung of 5,
+  *'retrying in 2s'*) fail "the delay doubled within 4 attempts at a rung of 5,
 so the rung is not being held and the ladder is still the old one:
 $_o" ;;
 esac
 case $_o in
-*'retrying in 1s'*) ;;
-*) fail "no retry at the opening delay was reported, so the case above
+  *'retrying in 1s'*) ;;
+  *) fail "no retry at the opening delay was reported, so the case above
 asserts nothing: $_o" ;;
 esac
 
 _o=$(_run_drops 9999 6 5)
 case $_o in
-*'retrying in 2s'*) ;;
-*) fail "after a full rung of 5 the delay must still double; never reaching
+  *'retrying in 2s'*) ;;
+  *) fail "after a full rung of 5 the delay must still double; never reaching
 2s means the growth is gone and a long outage would hammer for ever:
 $_o" ;;
 esac
@@ -250,8 +251,8 @@ done
 _rc=$(MAXT=9 UT=2 latch box proj)
 [ "$_rc" = 1 ] || fail "an unresolved identity mismatch should exit 1, got $_rc"
 case "$(seq_of)" in
-*untrusted*) ;;
-*) fail "a host key refusal should report untrusted, not denied: it is not a
+  *untrusted*) ;;
+  *) fail "a host key refusal should report untrusted, not denied: it is not a
 rejected credential and it is not terminal on the first sighting:
 [$(seq_of)]" ;;
 esac
@@ -352,8 +353,8 @@ _rc=$(MAXT=8 latch box proj)
 [ "$_rc" = 0 ] || fail "latch never recovered after the credential appeared"
 [ "$(n_tries)" = 1 ] || fail "it attempted before the credential was live"
 case "$(seq_of)" in
-*blocked*probing*ended*) ;;
-*) fail "expected blocked then probing then ended: [$(seq_of)]" ;;
+  *blocked*probing*ended*) ;;
+  *) fail "expected blocked then probing then ended: [$(seq_of)]" ;;
 esac
 # restore the file-driven auth stub
 cat >"$T/bin/auth" <<'EOF'
@@ -383,8 +384,8 @@ MAXT=3 latch box proj >/dev/null; unset MAXT
 [ "$(n_tries)" = 0 ] \
   || fail "a probe that could not answer was treated as usable"
 case "$(seq_of)" in
-*unknown*) ;;
-*) fail "an unanswerable probe should report unknown: [$(seq_of)]" ;;
+  *unknown*) ;;
+  *) fail "an unanswerable probe should report unknown: [$(seq_of)]" ;;
 esac
 # ... and an unrecognised hook exit is also "cannot tell", not a verdict.
 printf '42\n' >"$T_PROBE"
@@ -473,8 +474,8 @@ printf '1\n' >"$T_PROBE"
 MAXT=3 latch box proj >/dev/null; unset MAXT
 [ "$(n_tries)" = 0 ] || fail "latch attempted against an unusable target"
 case "$(seq_of)" in
-*probing*) ;;
-*) fail "an unusable target should stay probing: [$(seq_of)]" ;;
+  *probing*) ;;
+  *) fail "an unusable target should stay probing: [$(seq_of)]" ;;
 esac
 printf '0\n' >"$T_PROBE"
 
@@ -486,8 +487,8 @@ _rc=$(latch box proj)
 [ "$_rc" = 1 ] || fail "a vanished session should exit non-zero, got $_rc"
 [ "$(n_tries)" = 1 ] || fail "a vanished session was retried"
 case "$(seq_of)" in
-*gone*) ;;
-*) fail "a vanished session was not reported as gone: [$(seq_of)]" ;;
+  *gone*) ;;
+  *) fail "a vanished session was not reported as gone: [$(seq_of)]" ;;
 esac
 
 # --- EXIT 3 IS THE UNKNOWN-NAME CODE, AND IT BEATS THE STRING --------
@@ -504,8 +505,8 @@ printf '3\n' >"$SCRIPT"
 _rc=$(latch box proj)
 [ "$_rc" = 1 ] || fail "an unknown name should exit non-zero, got $_rc"
 case "$(seq_of)" in
-*gone*) ;;
-*) fail "exit 3 from the far side is mux's unknown-name code and must be read
+  *gone*) ;;
+  *) fail "exit 3 from the far side is mux's unknown-name code and must be read
 as gone, with no reference to the message: [$(seq_of)]" ;;
 esac
 [ "$(n_tries)" = 1 ] || fail "an unknown name was retried $(n_tries) times"
@@ -516,14 +517,14 @@ esac
 printf '1 mux: no such session: proj\n' >"$SCRIPT"
 _rc=$(latch box proj)
 case "$(seq_of)" in
-*"latch: gone"*) fail "exit 1 with the old phrase must NOT be read as gone.
+  *"latch: gone"*) fail "exit 1 with the old phrase must NOT be read as gone.
 The code is the contract; re-adding the string match gives one fact two
 mechanisms, which is two things to test and two ways to drift:
 [$(seq_of)]" ;;
 esac
 case "$(seq_of)" in
-*refused*) ;;
-*) fail "a pre-0.35 remote should still report refused, and still print what
+  *refused*) ;;
+  *) fail "a pre-0.35 remote should still report refused, and still print what
 the far side said: [$(seq_of)]" ;;
 esac
 
@@ -582,28 +583,28 @@ amb() {   # -> stderr of a run with the given env
 # confident claim about a host with five healthy sessions.
 _o=$(A_ALIVE=1 A_MSG='open terminal failed: not a terminal' amb || true)
 case "$_o" in
-*"open terminal failed"*) ;;
-*) fail "the far side's own message must be reported, not replaced by a guess
+  *"open terminal failed"*) ;;
+  *) fail "the far side's own message must be reported, not replaced by a guess
 at the cause. Got:
 $_o" ;;
 esac
 case "$_o" in
-*"went away"*|*"not running any more"*) fail "latch named a cause it cannot
+  *"went away"*|*"not running any more"*) fail "latch named a cause it cannot
 see. 'the far side is up' is all the liveness query establishes; the session
 may be fine and the attach may have failed for its own reasons. Got:
 $_o" ;;
 esac
 # `gone` is reserved for exit 3, which is definitive. An exit 1 is a refusal.
 case "$_o" in
-*"latch: gone"*) fail "an exit 1 must not report gone: nothing here shows the
+  *"latch: gone"*) fail "an exit 1 must not report gone: nothing here shows the
 session is gone. Got:
 $_o" ;;
 esac
 # The query still earns its place, because "the far side is up" is ESTABLISHED
 # rather than inferred, and it rules out the network.
 case "$_o" in
-*"not the connection"*) ;;
-*) fail "when the far side answers, say so: it rules out the network, which is
+  *"not the connection"*) ;;
+  *) fail "when the far side answers, say so: it rules out the network, which is
 the one thing latch can actually establish here. Got:
 $_o" ;;
 esac
@@ -614,8 +615,9 @@ esac
 # ANSWER, and still proves the far side is up.
 _o=$(A_ALIVE=1 A_ALIVERC=2 amb || true)
 case "$_o" in
-*"not the connection"*) ;;
-*) fail "exit 2 from a remote too old for 'mux capabilities' still proves it is
+  *"not the connection"*) ;;
+  *) fail \
+    "exit 2 from a remote too old for 'mux capabilities' still proves it is
 alive, so the verdict must be the same. Got:
 $_o" ;;
 esac
@@ -624,13 +626,13 @@ esac
 # a session that cannot be seen at all.
 _o=$(amb || true)
 case "$_o" in
-*"latch: gone"*) fail "with the far side unreachable latch cannot know the
+  *"latch: gone"*) fail "with the far side unreachable latch cannot know the
 session is gone, and must not claim it. Got:
 $_o" ;;
 esac
 case "$_o" in
-*"not answering"*) ;;
-*) fail "when the follow-up query also fails, the report must say the
+  *"not answering"*) ;;
+  *) fail "when the follow-up query also fails, the report must say the
 connection went too. Got:
 $_o" ;;
 esac
@@ -641,13 +643,13 @@ esac
 # ordinary refusal.
 _o=$(A_ALIVE=1 A_MSG='mux: it went wrong somehow' amb || true)
 case "$_o" in
-*"latch: refused"*) ;;
-*) fail "an exit 1 with the far side's own explanation is a refusal, and the
+  *"latch: refused"*) ;;
+  *) fail "an exit 1 with the far side's own explanation is a refusal, and the
 explanation is what gets reported: [$_o]" ;;
 esac
 case "$_o" in
-*"went wrong somehow"*) ;;
-*) fail "the far side's own message must reach the operator: [$_o]" ;;
+  *"went wrong somehow"*) ;;
+  *) fail "the far side's own message must reach the operator: [$_o]" ;;
 esac
 [ "$(grep -c . "$ASKED")" = 0 ] \
   || fail "latch made a liveness query for an exit 1 that already carried a
@@ -657,8 +659,8 @@ mux message. The query exists for the case mux said nothing about."
 # conclusive, which is the whole reason it replaced the phrase.
 _o=$(A_ALIVE=1 A_XRC=3 A_MSG='mux: no such session: k' amb || true)
 case "$_o" in
-*"latch: gone"*) ;;
-*) fail "exit 3 is conclusive on its own: [$_o]" ;;
+  *"latch: gone"*) ;;
+  *) fail "exit 3 is conclusive on its own: [$_o]" ;;
 esac
 [ "$(grep -c . "$ASKED")" = 0 ] \
   || fail "latch queried after an exit 3, which is already the answer"
@@ -666,8 +668,8 @@ esac
 # Same for a remote too old for the VERB (exit 2 + usage): it explained itself.
 _o=$(A_ALIVE=1 A_XRC=2 A_MSG='mux: unknown verb: go' amb || true)
 case "$_o" in
-*"latch: refused"*) ;;
-*) fail "an exit 2 from the far side is a version answer: [$_o]" ;;
+  *"latch: refused"*) ;;
+  *) fail "an exit 2 from the far side is a version answer: [$_o]" ;;
 esac
 [ "$(grep -c . "$ASKED")" = 0 ] \
   || fail "latch queried after an exit 2, which already explained itself"
@@ -681,8 +683,8 @@ _rc=$(latch box proj)
 [ "$(n_tries)" = 1 ] \
   || fail "an unknown remote verb was retried $(n_tries) times"
 case "$(seq_of)" in
-*refused*) ;;
-*) fail "a too-old remote should report refused: [$(seq_of)]" ;;
+  *refused*) ;;
+  *) fail "a too-old remote should report refused: [$(seq_of)]" ;;
 esac
 
 # --- the target parses, and a missing one is a usage error -----------
@@ -789,8 +791,8 @@ chmod +x "$T/conf/latch/ssh-classify"
 printf '255 whatever\n' >"$SCRIPT"
 _rc=$(latch box proj)
 case "$(seq_of)" in
-*gone*) ;;
-*) fail "an overlay hook must win over the shipped one of the same name:
+  *gone*) ;;
+  *) fail "an overlay hook must win over the shipped one of the same name:
 [$(seq_of)]" ;;
 esac
 rm -rf "$T/conf/latch"
@@ -831,8 +833,8 @@ env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
 # The first thing after a drop must be the repair, and the report after it.
 _seq=$(tr '\n' ' ' <"$ORDER")
 case "$_seq" in
-"report:attaching restore "*) ;;
-*) fail "the terminal repair must come FIRST after the transport returns, and
+  "report:attaching restore "*) ;;
+  *) fail "the terminal repair must come FIRST after the transport returns, and
 before any report. Sequence was: [$_seq]" ;;
 esac
 # ... and specifically before the state report that follows the drop.
@@ -1212,7 +1214,7 @@ which makes two latches to one host:partition collide"
 _pid=$(sed -n 1p "$T/seen.lock")
 _tgt=$(sed -n 2p "$T/seen.lock")
 case $_pid in
-''|*[!0-9]*) fail "line 1 of the lock must be the pid, got [$_pid]" ;;
+  ''|*[!0-9]*) fail "line 1 of the lock must be the pid, got [$_pid]" ;;
 esac
 # SINCE 0.84 LINE 2 IS PURELY THE ADDRESS, `host[:port]`, because that is what a
 # reader needs in order to REACH the box: the partition moved to the second
@@ -1346,8 +1348,8 @@ cp "$T/conf/config" "$T/conf/config.keep" 2>/dev/null \
 printf 'latch-backoff-rung 1\n' >>"$T/conf/config"
 _o=$(_rung_run '')
 case $_o in
-*'retrying in 2s'*) ;;
-*) fail "a rung of 1 in \$MUX_DIR/config was not read, so the delay never
+  *'retrying in 2s'*) ;;
+  *) fail "a rung of 1 in \$MUX_DIR/config was not read, so the delay never
 doubled across 3 attempts: this bound is settable once per box or it is not
 a policy at all:
 $_o" ;;
@@ -1358,13 +1360,13 @@ esac
 # a one-off run) could not override it.
 _o=$(_rung_run 5)
 case $_o in
-*'retrying in 2s'*) fail "the environment did not win over the config key: a
+  *'retrying in 2s'*) fail "the environment did not win over the config key: a
 rung of 5 was asked for and the delay doubled within 3 attempts anyway:
 $_o" ;;
 esac
 case $_o in
-*'retrying in 1s'*) ;;
-*) fail "no retry was reported at all, so the case above asserts nothing:
+  *'retrying in 1s'*) ;;
+  *) fail "no retry was reported at all, so the case above asserts nothing:
 $_o" ;;
 esac
 mv -f "$T/conf/config.keep" "$T/conf/config"
@@ -1436,13 +1438,13 @@ saymsg() {   # <script line...> [MAXT] -> latch's stderr
 
 _e=$(saymsg "1 boom$(printf '\r')")   # a CRLF-terminated line
 case $_e in
-*"$(printf '\r')"*) fail "a carriage return from the transport reached a
+  *"$(printf '\r')"*) fail "a carriage return from the transport reached a
 message. It moves the cursor to column 0, so whatever follows overwrites the
 line, and it lands in the log as damage too." ;;
 esac
 case $_e in
-*boom*) ;;
-*) fail "the transport's message was lost; only CONTROL characters should be
+  *boom*) ;;
+  *) fail "the transport's message was lost; only CONTROL characters should be
 stripped, not the text: $_e" ;;
 esac
 
@@ -1451,8 +1453,8 @@ esac
 # considerably more than move a cursor.
 _e=$(saymsg "1 esc$(printf '\033')[31mRED$(printf '\007')")
 case $_e in
-*"$(printf '\033')"* | *"$(printf '\007')"*)
-  fail "an escape or a bell from the transport reached a message" ;;
+  *"$(printf '\033')"* | *"$(printf '\007')"*)
+    fail "an escape or a bell from the transport reached a message" ;;
 esac
 
 # --- the countdown is for a HUMAN, and stays off a pipe -------------------
@@ -1469,13 +1471,13 @@ esac
 # animation is skipped for when it is not worth drawing.
 _e=$(saymsg '255 dropped' 2 4)
 case $_e in
-*"$(printf '\033')"*) fail "the wait animation drew escape sequences into a
+  *"$(printf '\033')"*) fail "the wait animation drew escape sequences into a
 NON-tty. It is gated on [ -t 2 ] precisely so a pipe stays clean, and a log or
 a pipe would otherwise fill with cursor control." ;;
 esac
 case $_e in
-*'retrying in'*) ;;
-*) fail "the retry path was not reached, so this proves nothing: $_e" ;;
+  *'retrying in'*) ;;
+  *) fail "the retry path was not reached, so this proves nothing: $_e" ;;
 esac
 
 # --- the ANIMATION itself, which needs a real tty -----------------------
@@ -1508,8 +1510,8 @@ EOF
   _sp=$(cat "$T/spin.raw" 2>/dev/null || true)
 
   case $_sp in
-  *'retrying in'*) ;;
-  *) fail "the animated wait never ran under a pty, so nothing below
+    *'retrying in'*) ;;
+    *) fail "the animated wait never ran under a pty, so nothing below
 proves anything: [$_sp]" ;;
   esac
 
@@ -1523,7 +1525,7 @@ proves anything: [$_sp]" ;;
   # way would stop matching the bug.
   # shellcheck disable=SC1003
   case $_sp in
-  *'\\'*) fail "the spinner drew a DOUBLED backslash, which is the
+    *'\\'*) fail "the spinner drew a DOUBLED backslash, which is the
 SC1003 bug 0.45 shipped: '\\\\' inside single quotes is two characters" ;;
   esac
 
@@ -1535,8 +1537,8 @@ SC1003 bug 0.45 shipped: '\\\\' inside single quotes is two characters" ;;
   # shellcheck disable=SC1003
   for _g in '|' '/' '-' '\'; do
     case $_sp in
-    *"$_g"*) ;;
-    *) fail "the spinner never drew [$_g], so it is not cycling" ;;
+      *"$_g"*) ;;
+      *) fail "the spinner never drew [$_g], so it is not cycling" ;;
     esac
   done
 else
@@ -1572,8 +1574,8 @@ env XDG_RUNTIME_DIR="$T/run" MUX_DIR="$T/conf" MUX_SHARE="$HERE/share" \
   "$HERE/libexec/mux-latch" --max-tries 3 box proj >/dev/null 2>"$T/so" || true
 
 case "$(seq_of)" in
-*settling*) ;;
-*) fail "exit 4 must classify as its own state: probing would send a human to
+  *settling*) ;;
+  *) fail "exit 4 must classify as its own state: probing would send a human to
 look at a network that is fine, and refused would stop. [$(seq_of)]" ;;
 esac
 

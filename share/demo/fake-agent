@@ -53,48 +53,48 @@ printf '  [demo] nothing here touches your real sessions: its own\n'
 printf '  [demo] tmux server and its own agent-state namespace.\n\n'
 
 case $_mode in
-blocked)
-  say "worked for a moment, then hit something that needs a human"
-  hook UserPromptSubmit
-  sleep 1
-  hook Notification
-  say "BLOCKED: waiting for you to approve something."
-  say "press prefix b from any session and you land here."
-  ;;
-idle)
-  say "ran, finished, and has nothing to say"
-  hook UserPromptSubmit
-  sleep 1
-  hook Stop
-  say "IDLE: done."
-  ;;
+  blocked)
+    say "worked for a moment, then hit something that needs a human"
+    hook UserPromptSubmit
+    sleep 1
+    hook Notification
+    say "BLOCKED: waiting for you to approve something."
+    say "press prefix b from any session and you land here."
+    ;;
+  idle)
+    say "ran, finished, and has nothing to say"
+    hook UserPromptSubmit
+    sleep 1
+    hook Stop
+    say "IDLE: done."
+    ;;
 esac
 
 # The cycling ones keep going; the others just park. A parked pane still has to
 # hold the pane open, or tmux closes it and the session disappears mid-demo.
 while :; do
   case $_mode in
-  cycle)
-    hook UserPromptSubmit
-    say "working ..."
-    _n=0
-    while [ "$_n" -lt 3 ]; do
+    cycle)
+      hook UserPromptSubmit
+      say "working ..."
+      _n=0
+      while [ "$_n" -lt 3 ]; do
+        sleep "$_beat"
+        # A BEAT, not a transition: this is what an agent sends while a turn is
+        # in progress, and mux refuses to let one resurrect a finished turn.
+        hook PostToolUse
+        say "  ... still working"
+        _n=$((_n + 1))
+      done
+      hook Notification
+      say "BLOCKED: needs you."
+      sleep $((_beat * 2))
+      hook Stop
+      say "IDLE: done. starting again shortly."
       sleep "$_beat"
-      # A BEAT, not a transition: this is what an agent sends while a turn is
-      # in progress, and mux refuses to let one resurrect a finished turn.
-      hook PostToolUse
-      say "  ... still working"
-      _n=$((_n + 1))
-    done
-    hook Notification
-    say "BLOCKED: needs you."
-    sleep $((_beat * 2))
-    hook Stop
-    say "IDLE: done. starting again shortly."
-    sleep "$_beat"
-    ;;
-  *)
-    sleep 3600
-    ;;
+      ;;
+    *)
+      sleep 3600
+      ;;
   esac
 done

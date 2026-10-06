@@ -52,7 +52,7 @@ fails bare-gate    "--no-agent is only for go/new" ls --bare
 
 # --- the version is one constant, not a hardcoded string --------------------
 case "$(mux --version)" in
-mux\ [0-9]*) ;; *) fail "--version: got [$(mux --version)]" ;;
+  mux\ [0-9]*) ;; *) fail "--version: got [$(mux --version)]" ;;
 esac
 [ "$(mux --version)" = "$(mux -V)" ] || fail "-V and --version disagree"
 
@@ -84,8 +84,8 @@ printf 'theme red\nderive explicit\n' \
   >"$T/conf/partitions/global.partition"
 _t=$(mux help themes || true)
 case $_t in
-*'default theme'*red*) ;;
-*) fail "help themes does not name the partition's configured theme. That is
+  *'default theme'*red*) ;;
+  *) fail "help themes does not name the partition's configured theme. That is
 the MUX_CFG_* path, which dies if the context is resolved in a subshell, and
 no before/after comparison on a box with no theme configured can see it:
 $_t" ;;
@@ -95,10 +95,10 @@ rm -f "$T/conf/partitions/global.partition"
 # --- mux why explains each field, and names its source ----------------------
 _w=$(mux why alpha)
 case $_w in
-*"theme"*cyan*declared*) ;; *) fail "why: theme not declared: $_w" ;;
+  *"theme"*cyan*declared*) ;; *) fail "why: theme not declared: $_w" ;;
 esac
 case $_w in
-*"(row)"*) ;; *) fail "why: did not name the row as the source: $_w" ;;
+  *"(row)"*) ;; *) fail "why: did not name the row as the source: $_w" ;;
 esac
 # A fully derived session says so, and names the derivation for each field.
 # `|| true`: `undeclared` is a name nothing knows, so why exits 3, and an
@@ -118,19 +118,19 @@ mkdir -p "$T/proj/elsewhere"
 printf 'proj        root=%s/proj/elsewhere\n' "$T" >"$T/conf/profiles"
 _w=$(mux why)
 case $_w in
-*"where"*) ;; *) fail "why does not say where it is answering about" ;;
+  *"where"*) ;; *) fail "why does not say where it is answering about" ;;
 esac
 case $_w in
-*"NOT where you are"*) ;;
-*) fail "why did not flag a profile root that differs from the cwd: [$_w]" ;;
+  *"NOT where you are"*) ;;
+  *) fail "why did not flag a profile root that differs from the cwd: [$_w]" ;;
 esac
 # It also EXPLAINS the collision rather than only marking it: the name came
 # from the directory, the profile it landed on lives elsewhere, and `mux go`
 # here will refuse. Answering "why is it talking about a directory I did not
 # mention" is the whole job of this verb.
 case $_w in
-*"but it is also a"*) ;;
-*) fail "why flagged the mismatch without explaining it: [$_w]" ;;
+  *"but it is also a"*) ;;
+  *) fail "why flagged the mismatch without explaining it: [$_w]" ;;
 esac
 
 # --- and `mux go` refuses rather than building the wrong project ------------
@@ -138,7 +138,7 @@ esac
 # must not silently resolve somewhere you did not ask for.
 _o=$(mux go) && fail "a derived name colliding with a profile should refuse"
 case $_o in
-*"already means"*) ;; *) fail "unhelpful collision error: [$_o]" ;;
+  *"already means"*) ;; *) fail "unhelpful collision error: [$_o]" ;;
 esac
 # A TYPED name is still trusted: looking a profile up by name is the point.
 mux go proj >/dev/null || fail "a typed name should still resolve"
@@ -147,7 +147,7 @@ mux go proj >/dev/null || fail "a typed name should still resolve"
 printf 'proj        root=%s/proj\n' "$T" >"$T/conf/profiles"
 _w=$(mux why)
 case $_w in
-*"NOT where you are"*) fail "why flagged a root that is exactly here" ;;
+  *"NOT where you are"*) fail "why flagged a root that is exactly here" ;;
 esac
 
 # --- why does not print an alternative identical to the declared value ------
@@ -158,7 +158,7 @@ mkdir -p "$T/conf/partitions"
 printf 'theme purple\n' >"$T/conf/partitions/global.partition"
 _w=$(mux why)
 case $_w in
-*"would give purple"*) fail "why showed a redundant alternative: [$_w]" ;;
+  *"would give purple"*) fail "why showed a redundant alternative: [$_w]" ;;
 esac
 rm -f "$T/conf/partitions/global.partition"
 
@@ -184,14 +184,14 @@ mux go >/dev/null || fail "same-root attach should not be guarded"
 for _t in agents themes profiles; do
   _o=$(mux help "$_t" 2>&1 | head -1)
   case $_o in
-  "$_t"*) ;;
-  *) fail "mux help $_t did not reach the topic: [$_o]" ;;
+    "$_t"*) ;;
+    *) fail "mux help $_t did not reach the topic: [$_o]" ;;
   esac
 done
 # ... and a bare `mux help` is still the usage summary.
 case "$(mux help 2>&1 | head -1)" in
-usage:*) ;;
-*) fail "bare 'mux help' should print usage" ;;
+  usage:*) ;;
+  *) fail "bare 'mux help' should print usage" ;;
 esac
 # ONE COPY OF THE TEXT, ASSERTED. `mux --help` and `mux help` were the same
 # in-file function call until 2026-10-05; they are now two ARMS of
@@ -208,8 +208,8 @@ byte-identical; a reader who learns one has learned the other."
 # acquiring a fifth that is a second spelling of `mux --help`.
 _ut=$(mux help usage 2>&1 || true)
 case $_ut in
-*"unknown help topic"*) ;;
-*) fail "'mux help usage' was answered instead of refused, so the internal
+  *"unknown help topic"*) ;;
+  *) fail "'mux help usage' was answered instead of refused, so the internal
 --usage flag has become a documented-looking topic: [$_ut]" ;;
 esac
 
@@ -225,33 +225,33 @@ if [ -n "$T_PTY" ]; then
   _pal=$(t_pty /dev/null "env -u TMUX $HERE/bin/mux help palette" \
     </dev/null 2>&1 || true)
   case $_pal in
-  *"needs a terminal"*) fail "script(1) did not provide a pty" ;;
+    *"needs a terminal"*) fail "script(1) did not provide a pty" ;;
   esac
   # All three bands of the 256-colour space are labelled, so a truncated
   # grid is visible rather than merely shorter.
   for _band in "system 0-15" "cube 16-231" "grayscale 232-255"; do
     case $_pal in
-    *"$_band"*) ;;
-    *) fail "the palette is missing the $_band band" ;;
+      *"$_band"*) ;;
+      *) fail "the palette is missing the $_band band" ;;
     esac
   done
   # Every colour is present, and each cell carries a real SGR pair (fg AND
   # bg), since the whole point is that any colour works as either.
   for _n in 0 15 16 231 232 255; do
     case $_pal in
-    *"48;5;${_n}m"*) ;;
-    *) fail "colour $_n has no background SGR in the grid" ;;
+      *"48;5;${_n}m"*) ;;
+      *) fail "colour $_n has no background SGR in the grid" ;;
     esac
   done
   case $_pal in
-  *"38;5;"*) ;;
-  *) fail "the grid sets no foreground, so a dark cell is unreadable" ;;
+    *"38;5;"*) ;;
+    *) fail "the grid sets no foreground, so a dark cell is unreadable" ;;
   esac
   # And it resets: a grid that leaks its last background would tint the
   # rest of the terminal.
   case $_pal in
-  *"[0m"*) ;;
-  *) fail "the palette never resets its styling" ;;
+    *"[0m"*) ;;
+    *) fail "the palette never resets its styling" ;;
   esac
 
   # An explicit FG applies to every cell, rather than the per-cell black
@@ -259,12 +259,12 @@ if [ -n "$T_PTY" ]; then
   _pf=$(t_pty /dev/null "env -u TMUX $HERE/bin/mux help palette 226" \
     </dev/null 2>&1 || true)
   case $_pf in
-  *"fg 226 over every bg"*) ;;
-  *) fail "an explicit palette fg was not honoured: [$_pf]" ;;
+    *"fg 226 over every bg"*) ;;
+    *) fail "an explicit palette fg was not honoured: [$_pf]" ;;
   esac
   case $_pf in
-  *"38;5;226m"*) ;;
-  *) fail "the requested fg never reached a cell" ;;
+    *"38;5;226m"*) ;;
+    *) fail "the requested fg never reached a cell" ;;
   esac
 
   # The status-bar PREVIEW form, which renders four chosen colours as the
@@ -274,17 +274,17 @@ if [ -n "$T_PTY" ]; then
     "env -u TMUX $HERE/bin/mux help palette test 231 54 16 214" \
     </dev/null 2>&1 || true)
   case $_pt in
-  *"bar fg=231 bg=54"*) ;;
-  *) fail "the preview did not echo the bar colours: [$_pt]" ;;
+    *"bar fg=231 bg=54"*) ;;
+    *) fail "the preview did not echo the bar colours: [$_pt]" ;;
   esac
   case $_pt in
-  *"active fg=16 bg=214"*) ;;
-  *) fail "the preview did not echo the active colours" ;;
+    *"active fg=16 bg=214"*) ;;
+    *) fail "the preview did not echo the active colours" ;;
   esac
   # It draws a real chip, not just a description.
   case $_pt in
-  *"48;5;54m"*) ;;
-  *) fail "the preview rendered no bar background" ;;
+    *"48;5;54m"*) ;;
+    *) fail "the preview rendered no bar background" ;;
   esac
 fi
 
@@ -296,8 +296,8 @@ if [ -n "$T_PTY" ]; then
     "env -u TMUX $HERE/bin/mux help palette notacolour" \
     </dev/null 2>&1 || true)
   case $_bad in
-  *"0-255, colourN, #rrggbb"*) ;;
-  *) fail "a bad palette fg was not explained: [$_bad]" ;;
+    *"0-255, colourN, #rrggbb"*) ;;
+    *) fail "a bad palette fg was not explained: [$_bad]" ;;
   esac
 else
   printf 'note: %s palette grid unchecked (no script(1))\n' "$_name"
@@ -307,8 +307,8 @@ fi
 # pipe, which is what would happen if a caller redirected it.
 _o=$(env -u TMUX "$HERE/bin/mux" help palette 2>&1)
 case $_o in
-*"needs a terminal"*) ;;
-*) fail "help palette did not refuse without a tty: [$_o]" ;;
+  *"needs a terminal"*) ;;
+  *) fail "help palette did not refuse without a tty: [$_o]" ;;
 esac
 
 pass

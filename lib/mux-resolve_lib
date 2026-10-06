@@ -37,7 +37,7 @@ mux_resolve_project_base() {   # [dir]
 # a slash, a leading ~, or a bare . / .. is unambiguous.
 mux_resolve_is_path() {   # <arg>
   case $1 in
-  '~'|'~/'*|.|..|*/*) return 0 ;;
+    '~'|'~/'*|.|..|*/*) return 0 ;;
   esac
   return 1
 }

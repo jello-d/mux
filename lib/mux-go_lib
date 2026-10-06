@@ -279,115 +279,115 @@ _go_validate() {
   v_bottom=0
   while read -r verb rest; do
     case $verb in
-    root)
-      root=$(expand_tilde "$rest")
-      [ -d "$root" ] || {
-        echo "mux: root not a dir: $root" >&2
+      root)
+        root=$(expand_tilde "$rest")
+        [ -d "$root" ] || {
+          echo "mux: root not a dir: $root" >&2
+          exit "$MUX_EC_FAIL"
+        }
+        ;;
+      theme)
+        want_theme=$rest
+        ;;
+      agent)
+        want_agent=$rest
+        ;;
+      notify)
+        case $rest in
+          always|away) want_notify=$rest ;;
+          *)
+            echo "mux: 'notify' wants always|away: $rest" >&2
+            exit "$MUX_EC_FAIL" ;;
+        esac
+        ;;
+      window)
+        v_win=1
+        v_panes=0
+        v_bottom=0
+        ;;
+      pane)
+        [ "$v_win" -eq 1 ] || {
+          echo "mux: 'pane' before 'window' in $profile" >&2
+          exit "$MUX_EC_FAIL"
+        }
+        # even-horizontal at build would flatten a bottom pane back
+        # into the row, so refuse the order that would wreck it.
+        [ "$v_bottom" -eq 0 ] || {
+          echo "mux: 'pane' after 'bottom' in $profile" >&2
+          exit "$MUX_EC_FAIL"
+        }
+        v_panes=$((v_panes + 1))
+        ;;
+      control|attention)
+        # TWO MARKERS, ONE GRAMMAR, and the directive name IS the option suffix
+        # (`control` -> `@mux-control`), so a third pane class costs one word
+        # here. SHARING THE ARM IS NOT FUSING THE CONCEPTS: they answer
+        # different questions and are read by different consumers (`control` by
+        # the send gate, `attention` by the strip, the notification path and
+        # `next-blocked`), which is the whole point of their being two. They
+        # merely happen to take the same three words today. If one ever gains a
+        # value the other must not, split this arm; nothing else here couples
+        # them.
+        #
+        # QUALIFIES THE PANE JUST DECLARED, which is the shape `bottom` already
+        # uses, because `pane`'s argument is the COMMAND and a modifier cannot
+        # ride it without colliding with an arbitrary command line.
+        #
+        # WHY MUX WRITES THIS AT ALL, when `libexec/mux-agent` reads it and
+        # nothing wrote it before: the send policy's whole vocabulary is
+        # `control:agent`, and with no producer that grant was unreachable, so a
+        # root-owned line nobody could satisfy. A seam nobody can cross for you
+        # is not a seam, it is a gap, which is the argument `mux setup claude`
+        # already makes about another program's config.
+        #
+        # A DECLARATION, NEVER AN INVENTION. The creator of a pane says what the
+        # pane is for; mux records it and classifies nothing on its own. That is
+        # also the line that keeps this safe: there is deliberately no way here
+        # to reclassify a pane somebody else created.
+        [ "$v_panes" -gt 0 ] || {
+          echo "mux: '$verb' with no pane in $profile" >&2
+          exit "$MUX_EC_FAIL"
+        }
+        # REFUSED AFTER `bottom` for the same reason `pane` is: the builder
+        # qualifies the pane it last created, and after a bottom that is no
+        # longer the pane a reader of this file would expect. Silently marking
+        # the wrong pane is the failure this package keeps paying for.
+        [ "$v_bottom" -eq 0 ] || {
+          echo "mux: '$verb' after 'bottom' in $profile" >&2
+          exit "$MUX_EC_FAIL"
+        }
+        # THE VOCABULARY LIVES IN `mux-class_lib` NOW, with its ORDERING,
+        # because `mux agent class` needs the direction and three copies of a
+        # word list with a direction attached is how the three disagree.
+        # `mux-agent`'s `agent|hybrid` is still NOT a shorter spelling of it:
+        # that is the narrower set a POLICY may grant, since `human` is refused
+        # before the policy file is read at all.
+        mux_class_valid "$rest" || {
+          echo "mux: '$verb' wants human|agent|hybrid: $rest" >&2
+          exit "$MUX_EC_FAIL"; }
+        ;;
+      bottom)
+        [ "$v_panes" -gt 0 ] || {
+          echo "mux: 'bottom' with no pane in $profile" >&2
+          exit "$MUX_EC_FAIL"
+        }
+        [ "$v_bottom" -eq 0 ] || {
+          echo "mux: two 'bottom' in one window in $profile" >&2
+          exit "$MUX_EC_FAIL"
+        }
+        bottom_spec "$rest" || exit "$MUX_EC_FAIL"
+        v_bottom=1
+        ;;
+      include)
+        echo "mux: 'include' was replaced by 'layout <name>' in a" \
+          "profile: $profile" >&2
+        echo "mux: convert it:  mux-migrate-profiles" >&2
         exit "$MUX_EC_FAIL"
-      }
-      ;;
-    theme)
-      want_theme=$rest
-      ;;
-    agent)
-      want_agent=$rest
-      ;;
-    notify)
-      case $rest in
-      always|away) want_notify=$rest ;;
+        ;;
       *)
-        echo "mux: 'notify' wants always|away: $rest" >&2
-        exit "$MUX_EC_FAIL" ;;
-      esac
-      ;;
-    window)
-      v_win=1
-      v_panes=0
-      v_bottom=0
-      ;;
-    pane)
-      [ "$v_win" -eq 1 ] || {
-        echo "mux: 'pane' before 'window' in $profile" >&2
+        echo "mux: unknown directive: $verb in $profile" >&2
         exit "$MUX_EC_FAIL"
-      }
-      # even-horizontal at build would flatten a bottom pane back
-      # into the row, so refuse the order that would wreck it.
-      [ "$v_bottom" -eq 0 ] || {
-        echo "mux: 'pane' after 'bottom' in $profile" >&2
-        exit "$MUX_EC_FAIL"
-      }
-      v_panes=$((v_panes + 1))
-      ;;
-    control|attention)
-      # TWO MARKERS, ONE GRAMMAR, and the directive name IS the option suffix
-      # (`control` -> `@mux-control`), so a third pane class costs one word
-      # here. SHARING THE ARM IS NOT FUSING THE CONCEPTS: they answer different
-      # questions and are read by different consumers (`control` by the send
-      # gate, `attention` by the strip, the notification path and
-      # `next-blocked`), which is the whole point of their being two. They
-      # merely happen to take the same three words today. If one ever gains a
-      # value the other must not, split this arm; nothing else here couples
-      # them.
-      #
-      # QUALIFIES THE PANE JUST DECLARED, which is the shape `bottom` already
-      # uses, because `pane`'s argument is the COMMAND and a modifier cannot
-      # ride it without colliding with an arbitrary command line.
-      #
-      # WHY MUX WRITES THIS AT ALL, when `libexec/mux-agent` reads it and
-      # nothing wrote it before: the send policy's whole vocabulary is
-      # `control:agent`, and with no producer that grant was unreachable, so a
-      # root-owned line nobody could satisfy. A seam nobody can cross for you
-      # is not a seam, it is a gap, which is the argument `mux setup claude`
-      # already makes about another program's config.
-      #
-      # A DECLARATION, NEVER AN INVENTION. The creator of a pane says what the
-      # pane is for; mux records it and classifies nothing on its own. That is
-      # also the line that keeps this safe: there is deliberately no way here
-      # to reclassify a pane somebody else created.
-      [ "$v_panes" -gt 0 ] || {
-        echo "mux: '$verb' with no pane in $profile" >&2
-        exit "$MUX_EC_FAIL"
-      }
-      # REFUSED AFTER `bottom` for the same reason `pane` is: the builder
-      # qualifies the pane it last created, and after a bottom that is no
-      # longer the pane a reader of this file would expect. Silently marking
-      # the wrong pane is the failure this package keeps paying for.
-      [ "$v_bottom" -eq 0 ] || {
-        echo "mux: '$verb' after 'bottom' in $profile" >&2
-        exit "$MUX_EC_FAIL"
-      }
-      # THE VOCABULARY LIVES IN `mux-class_lib` NOW, with its ORDERING, because
-      # `mux agent class` needs the direction and three copies of a word list
-      # with a direction attached is how the three disagree. `mux-agent`'s
-      # `agent|hybrid` is still NOT a shorter spelling of it: that is the
-      # narrower set a POLICY may grant, since `human` is refused before the
-      # policy file is read at all.
-      mux_class_valid "$rest" || {
-        echo "mux: '$verb' wants human|agent|hybrid: $rest" >&2
-        exit "$MUX_EC_FAIL"; }
-      ;;
-    bottom)
-      [ "$v_panes" -gt 0 ] || {
-        echo "mux: 'bottom' with no pane in $profile" >&2
-        exit "$MUX_EC_FAIL"
-      }
-      [ "$v_bottom" -eq 0 ] || {
-        echo "mux: two 'bottom' in one window in $profile" >&2
-        exit "$MUX_EC_FAIL"
-      }
-      bottom_spec "$rest" || exit "$MUX_EC_FAIL"
-      v_bottom=1
-      ;;
-    include)
-      echo "mux: 'include' was replaced by 'layout <name>' in a" \
-        "profile: $profile" >&2
-      echo "mux: convert it:  mux-migrate-profiles" >&2
-      exit "$MUX_EC_FAIL"
-      ;;
-    *)
-      echo "mux: unknown directive: $verb in $profile" >&2
-      exit "$MUX_EC_FAIL"
-      ;;
+        ;;
     esac
   done <"$flat"
 
@@ -471,114 +471,114 @@ _go_build() {
   # shellcheck disable=SC2154
   while read -r verb rest; do
     case $verb in
-    window)
-      if [ "$have_session" -eq 0 ]; then
-        # shellcheck disable=SC2086
-        tm new-session -d $_geom -s "$name" -n "$rest" \
-          -c "$root"
-        have_session=1
-        # AFTER the create, not before: this is the call that brings the
-        # server into existence, and the wiring probe deliberately does
-        # not. Everything built below (the layout, the theme, the agent
-        # panes) then runs against a server that has mux's hooks.
-        mux_wire || true
-        # AND THE ENVIRONMENT, before anything is built in the session:
-        # the agent panes below inherit it, and a pane environment is
-        # fixed at exec, so after the build is too late for them.
-        mux_env_ensure "$name" || true
-        win=$(tm display-message -p -t "$name:" \
-          '#{window_index}')
-        firstwin=$win
-        firstpane=$(tm display-message -p -t "$name:" \
-          '#{pane_id}')
-      else
-        tm new-window -a -t "$name:" -n "$rest" -c "$root"
-        win=$(tm display-message -p -t "$name:" \
-          '#{window_index}')
-      fi
-      paneseen=0
-      ;;
-    pane)
-      # Run the command AS the pane's process, never typed in, so it
-      # cannot race shell startup. The first pane reuses the shell the
-      # window opened with (respawn); the rest are fresh splits.
-      proc=$(pane_process "$rest")
-      if [ "$paneseen" -gt 0 ]; then
-        tm split-window -h -t "$name:$win" -c "$root" "$proc"
-        tm select-layout -t "$name:$win" even-horizontal
-        thispane=$(tm display-message -p -t "$name:$win" \
-          '#{pane_id}')
-      else
-        tm respawn-pane -k -t "$name:$win" -c "$root" "$proc"
-        thispane=$(tm display-message -p -t "$name:$win" \
-          '#{pane_id}')
-      fi
-      # Remember the FIRST agent pane, so the session opens ON the
-      # agent: it is the pane you came to look at, and landing left of
-      # it cost a keystroke on every single launch. A `pane <name>`
-      # that names an agent counts too. Falls back to the first pane
-      # when a layout has no agent at all.
-      _isagent=0
-      case $rest in
-      agent) _isagent=1 ;;
-      *) [ -n "$(_find_agent "${rest%% *}")" ] && _isagent=1 ;;
-      esac
-      if [ "$_isagent" -eq 1 ]; then
-        # Marked on the PANE, the same way a bottom pane carries
-        # @mux-bottom. Without it `mux save` cannot tell the
-        # agent pane from any other: it reads the running
-        # command, and an agent that has exited (or was never
-        # installed) just looks like a shell, so a round trip
-        # would quietly turn `pane agent` into a bare `pane`.
-        tm set-option -p -t "$thispane" @mux-agent 1
-        [ -n "$agentpane" ] || { agentwin=$win
-          agentpane=$thispane; }
-      fi
-      paneseen=$((paneseen + 1))
-      ;;
-    control|attention)
-      # THE VALIDATOR ABOVE READS THE SAME `$flat` AND RUNS FIRST, so a pane
-      # precedes this and the value is one of the three. Re-checking here would
-      # be a second guard for one condition, which makes NEITHER killable: this
-      # package has measured that twice and deleted the redundant half both
-      # times.
-      tm set-option -p -t "$thispane" "@mux-$verb" "$rest"
-      ;;
-    bottom)
-      # N pins the height; MIN-MAX tracks the window between those
-      # bounds. Either way the size is recorded on the pane and
-      # re-applied by mux-pin, because tmux rescales panes
-      # proportionally on resize and would otherwise inflate this one
-      # well past its split height.
-      bottom_spec "$rest" || exit "$MUX_EC_FAIL"
-      # -f spans the full window width, so the new pane sits under
-      # every pane above rather than splitting only the active one. A
-      # command runs as the pane's process; with none it is a shell.
-      bproc=
-      [ -n "$b_cmd" ] && bproc=$(pane_process "$b_cmd")
-      # THE TWO ARMS WRAP DIFFERENTLY ON PURPOSE, and this is not a style
-      # choice to harmonise away: wrapped identically they were the SAME LINE
-      # TWICE, each ending in a continuation, so the height that reaches tmux
-      # could not be a mutation anchor at all (the corpus refuses a target
-      # that is ambiguous OR a line continuation, and this was both). The
-      # `else` arm is one line now, which is what `bottom-built-at-the-min`
-      # anchors on.
-      #
-      # THE COLLAPSE WAS THE OTHER OPTION AND WAS REFUSED. `set -- -v -f -l
-      # "$b_max" ...` then one call reads better and is MEASURABLY safe today
-      # (nothing after this loop reads the script's positionals), but it
-      # mutates the SCRIPT's `$@` from the middle of the build path to buy a
-      # local convenience, and "nothing reads them later" is a whole-file
-      # property that rots the first time somebody appends a line.
-      if [ -n "$bproc" ]; then
-        tm split-window -v -f -l "$b_max" -t "$name:$win" \
-          -c "$root" "$bproc"
-      else
-        tm split-window -v -f -l "$b_max" -t "$name:$win" -c "$root"
-      fi
-      bpane=$(tm display-message -p -t "$name:$win" '#{pane_id}')
-      tm set-option -p -t "$bpane" @mux-bottom "$b_min-$b_max"
-      ;;
+      window)
+        if [ "$have_session" -eq 0 ]; then
+          # shellcheck disable=SC2086
+          tm new-session -d $_geom -s "$name" -n "$rest" \
+            -c "$root"
+          have_session=1
+          # AFTER the create, not before: this is the call that brings the
+          # server into existence, and the wiring probe deliberately does
+          # not. Everything built below (the layout, the theme, the agent
+          # panes) then runs against a server that has mux's hooks.
+          mux_wire || true
+          # AND THE ENVIRONMENT, before anything is built in the session:
+          # the agent panes below inherit it, and a pane environment is
+          # fixed at exec, so after the build is too late for them.
+          mux_env_ensure "$name" || true
+          win=$(tm display-message -p -t "$name:" \
+            '#{window_index}')
+          firstwin=$win
+          firstpane=$(tm display-message -p -t "$name:" \
+            '#{pane_id}')
+        else
+          tm new-window -a -t "$name:" -n "$rest" -c "$root"
+          win=$(tm display-message -p -t "$name:" \
+            '#{window_index}')
+        fi
+        paneseen=0
+        ;;
+      pane)
+        # Run the command AS the pane's process, never typed in, so it
+        # cannot race shell startup. The first pane reuses the shell the
+        # window opened with (respawn); the rest are fresh splits.
+        proc=$(pane_process "$rest")
+        if [ "$paneseen" -gt 0 ]; then
+          tm split-window -h -t "$name:$win" -c "$root" "$proc"
+          tm select-layout -t "$name:$win" even-horizontal
+          thispane=$(tm display-message -p -t "$name:$win" \
+            '#{pane_id}')
+        else
+          tm respawn-pane -k -t "$name:$win" -c "$root" "$proc"
+          thispane=$(tm display-message -p -t "$name:$win" \
+            '#{pane_id}')
+        fi
+        # Remember the FIRST agent pane, so the session opens ON the
+        # agent: it is the pane you came to look at, and landing left of
+        # it cost a keystroke on every single launch. A `pane <name>`
+        # that names an agent counts too. Falls back to the first pane
+        # when a layout has no agent at all.
+        _isagent=0
+        case $rest in
+          agent) _isagent=1 ;;
+          *) [ -n "$(_find_agent "${rest%% *}")" ] && _isagent=1 ;;
+        esac
+        if [ "$_isagent" -eq 1 ]; then
+          # Marked on the PANE, the same way a bottom pane carries
+          # @mux-bottom. Without it `mux save` cannot tell the
+          # agent pane from any other: it reads the running
+          # command, and an agent that has exited (or was never
+          # installed) just looks like a shell, so a round trip
+          # would quietly turn `pane agent` into a bare `pane`.
+          tm set-option -p -t "$thispane" @mux-agent 1
+          [ -n "$agentpane" ] || { agentwin=$win
+            agentpane=$thispane; }
+        fi
+        paneseen=$((paneseen + 1))
+        ;;
+      control|attention)
+        # THE VALIDATOR ABOVE READS THE SAME `$flat` AND RUNS FIRST, so a pane
+        # precedes this and the value is one of the three. Re-checking here
+        # would be a second guard for one condition, which makes NEITHER
+        # killable: this package has measured that twice and deleted the
+        # redundant half both times.
+        tm set-option -p -t "$thispane" "@mux-$verb" "$rest"
+        ;;
+      bottom)
+        # N pins the height; MIN-MAX tracks the window between those
+        # bounds. Either way the size is recorded on the pane and
+        # re-applied by mux-pin, because tmux rescales panes
+        # proportionally on resize and would otherwise inflate this one
+        # well past its split height.
+        bottom_spec "$rest" || exit "$MUX_EC_FAIL"
+        # -f spans the full window width, so the new pane sits under
+        # every pane above rather than splitting only the active one. A
+        # command runs as the pane's process; with none it is a shell.
+        bproc=
+        [ -n "$b_cmd" ] && bproc=$(pane_process "$b_cmd")
+        # THE TWO ARMS WRAP DIFFERENTLY ON PURPOSE, and this is not a style
+        # choice to harmonise away: wrapped identically they were the SAME LINE
+        # TWICE, each ending in a continuation, so the height that reaches tmux
+        # could not be a mutation anchor at all (the corpus refuses a target
+        # that is ambiguous OR a line continuation, and this was both). The
+        # `else` arm is one line now, which is what `bottom-built-at-the-min`
+        # anchors on.
+        #
+        # THE COLLAPSE WAS THE OTHER OPTION AND WAS REFUSED. `set -- -v -f -l
+        # "$b_max" ...` then one call reads better and is MEASURABLY safe today
+        # (nothing after this loop reads the script's positionals), but it
+        # mutates the SCRIPT's `$@` from the middle of the build path to buy a
+        # local convenience, and "nothing reads them later" is a whole-file
+        # property that rots the first time somebody appends a line.
+        if [ -n "$bproc" ]; then
+          tm split-window -v -f -l "$b_max" -t "$name:$win" \
+            -c "$root" "$bproc"
+        else
+          tm split-window -v -f -l "$b_max" -t "$name:$win" -c "$root"
+        fi
+        bpane=$(tm display-message -p -t "$name:$win" '#{pane_id}')
+        tm set-option -p -t "$bpane" @mux-bottom "$b_min-$b_max"
+        ;;
     esac
   done <"$flat"
 

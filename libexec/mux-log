@@ -46,26 +46,26 @@ _lib=$_libexec/../lib
 _n=200 _follow=0 _sub= _pathonly=0
 while [ "$#" -gt 0 ]; do
   case $1 in
-  -n) shift; _n=${1:-200} ;;
-  -n*) _n=${1#-n} ;;
-  -f|--follow) _follow=1 ;;
-  -p|--path) _pathonly=1 ;;
-  -h|--help)
-    echo "usage: mux log [-n LINES] [-f] [--path] [SUBSYSTEM]"
-       exit "$MUX_EC_OK" ;;
-  --) shift; break ;;
-  -*) echo "mux: log: unknown option: $1" >&2
-      echo "usage: mux log [-n LINES] [-f] [--path] [SUBSYSTEM]" >&2
-      exit "$MUX_EC_USAGE" ;;
-  *)  break ;;
+    -n) shift; _n=${1:-200} ;;
+    -n*) _n=${1#-n} ;;
+    -f|--follow) _follow=1 ;;
+    -p|--path) _pathonly=1 ;;
+    -h|--help)
+      echo "usage: mux log [-n LINES] [-f] [--path] [SUBSYSTEM]"
+         exit "$MUX_EC_OK" ;;
+    --) shift; break ;;
+    -*) echo "mux: log: unknown option: $1" >&2
+        echo "usage: mux log [-n LINES] [-f] [--path] [SUBSYSTEM]" >&2
+        exit "$MUX_EC_USAGE" ;;
+    *)  break ;;
   esac
   shift
 done
 _sub=${1:-}
 
 case $_n in
-''|*[!0-9]*) echo "mux: log: -n wants a number, got '$_n'" >&2
-   exit "$MUX_EC_USAGE" ;;
+  ''|*[!0-9]*) echo "mux: log: -n wants a number, got '$_n'" >&2
+     exit "$MUX_EC_USAGE" ;;
 esac
 
 _f=$(mux_log_path)

@@ -149,31 +149,31 @@ _decl() {   # <key> -> the default the sample CLAIMS, from its `# Default:` line
 }
 _want() {   # <key> -> the default the SOURCE uses, or the empty string
   case $1 in
-  latch-transport)
-    sed -n 's/^_DEF_TRANSPORT="\(.*\)"$/\1/p' "$HERE/libexec/mux-latch" \
-      | sed "s|\$_DEF_ALIVE|$(sed -n '1p' "$T/alive")|" ;;
-  latch-restore) printf 'mux-sane' ;;
-  env-timeout)
-    grep -oE 'MUX_ENV_TIMEOUT_DEFAULT=[0-9]+' "$HERE/lib/mux-env_lib" \
-      | cut -d= -f2 ;;
-  latch-et-port)
-    # `''|*[!0-9]*) _port=2022 ;;` is a case ARM, so the value is followed by
-    # ` ;;` rather than ending the line. Anchoring on end-of-line found
-    # nothing and the vacuity guard above said so, which is that guard
-    # earning its place on its first run.
-    sed -n 's/.*) *_port=\([0-9]\{1,\}\) *;;.*/\1/p' \
-      "$HERE/share/latch/et-probe" | tail -1 ;;
-  desktop-notifier-transport)
-    awk '/^DEFAULT_TRANSPORT = \(/,/^\)/' \
-      "$HERE/desktop-notifier/mux_desktop_notifier/sources.py" \
-      | sed -n 's/^ *"\(.*\)"$/\1/p' | tr -d '\n' ;;
-  desktop-notifier-ignore)
-    sed -n 's/^DEFAULT_IGNORE = ("\([^"]*\)",).*/\1/p' \
-      "$HERE/desktop-notifier/mux_desktop_notifier/sources.py" ;;
-  latch-*)
-    grep -ohE "_seam \"[^\"]*\" $1 [^)]*" "$HERE/libexec/mux-latch" \
-      | sed "s/.*$1 //" | tr -d "'" ;;
-  *) printf '' ;;
+    latch-transport)
+      sed -n 's/^_DEF_TRANSPORT="\(.*\)"$/\1/p' "$HERE/libexec/mux-latch" \
+        | sed "s|\$_DEF_ALIVE|$(sed -n '1p' "$T/alive")|" ;;
+    latch-restore) printf 'mux-sane' ;;
+    env-timeout)
+      grep -oE 'MUX_ENV_TIMEOUT_DEFAULT=[0-9]+' "$HERE/lib/mux-env_lib" \
+        | cut -d= -f2 ;;
+    latch-et-port)
+      # `''|*[!0-9]*) _port=2022 ;;` is a case ARM, so the value is followed by
+      # ` ;;` rather than ending the line. Anchoring on end-of-line found
+      # nothing and the vacuity guard above said so, which is that guard
+      # earning its place on its first run.
+      sed -n 's/.*) *_port=\([0-9]\{1,\}\) *;;.*/\1/p' \
+        "$HERE/share/latch/et-probe" | tail -1 ;;
+    desktop-notifier-transport)
+      awk '/^DEFAULT_TRANSPORT = \(/,/^\)/' \
+        "$HERE/desktop-notifier/mux_desktop_notifier/sources.py" \
+        | sed -n 's/^ *"\(.*\)"$/\1/p' | tr -d '\n' ;;
+    desktop-notifier-ignore)
+      sed -n 's/^DEFAULT_IGNORE = ("\([^"]*\)",).*/\1/p' \
+        "$HERE/desktop-notifier/mux_desktop_notifier/sources.py" ;;
+    latch-*)
+      grep -ohE "_seam \"[^\"]*\" $1 [^)]*" "$HERE/libexec/mux-latch" \
+        | sed "s/.*$1 //" | tr -d "'" ;;
+    *) printf '' ;;
   esac
 }
 # _DEF_ALIVE is built over two lines, so it is assembled once here rather than
@@ -193,8 +193,8 @@ for _k in latch-transport latch-auth latch-classify latch-probe \
 source, so the assertion below would pass vacuously. The reader here has to
 learn whatever new shape the source grew."
   case $_g in
-  *"$_w"*) ;;
-  *) fail "share/config.sample says the default for $_k is
+    *"$_w"*) ;;
+    *) fail "share/config.sample says the default for $_k is
   [$_g]
 and the source says
   [$_w]
@@ -209,8 +209,8 @@ done
 for _k in latch-status context-command env-ready desktop-notifier-activate; do
   _g=$(_decl "$_k")
   case $_g in
-  *unset*|*empty*) ;;
-  *) fail "share/config.sample claims a default of [$_g] for $_k, which has
+    *unset*|*empty*) ;;
+    *) fail "share/config.sample claims a default of [$_g] for $_k, which has
 none. For env-ready in particular a default would be WRONG on every box whose
 pointers differ from whoever wrote it, which is why it is declared and never
 detected." ;;
@@ -218,8 +218,8 @@ detected." ;;
 done
 _ss=$(grep -ohE "_seam \"[^\"]*\" latch-status [^)]*" "$HERE/libexec/mux-latch")
 case $_ss in
-*"latch-status ''"*) ;;
-*) fail "latch-status has gained a default in the source: [$_ss].
+  *"latch-status ''"*) ;;
+  *) fail "latch-status has gained a default in the source: [$_ss].
 share/config.sample still documents it as unset." ;;
 esac
 

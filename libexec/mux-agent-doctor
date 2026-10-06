@@ -79,12 +79,12 @@ MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
 _repair=0
 while [ "$#" -gt 0 ]; do
   case $1 in
-  --repair) _repair=1; shift ;;
-  --) shift; break ;;
-  -*) echo "mux: agent-doctor: unknown option: $1" >&2
-      echo "usage: mux agent-doctor [--repair] [NS]" >&2
-         exit "$MUX_EC_USAGE" ;;
-  *)  break ;;
+    --repair) _repair=1; shift ;;
+    --) shift; break ;;
+    -*) echo "mux: agent-doctor: unknown option: $1" >&2
+        echo "usage: mux agent-doctor [--repair] [NS]" >&2
+           exit "$MUX_EC_USAGE" ;;
+    *)  break ;;
   esac
 done
 _ns=${1:-}
@@ -183,7 +183,7 @@ _at_prompt() {  # <pane id> <agent command name>
   _pc=$(_dt capture-pane -p -t "$1" 2>/dev/null) || return 1
   [ -n "$_pc" ] || return 1
   case $_pc in
-  *"$_bp"*) return 1 ;;   # marker present: a turn IS running
+    *"$_bp"*) return 1 ;;   # marker present: a turn IS running
   esac
   return 0
 }
@@ -334,45 +334,45 @@ printf '%s' "$_rows" \
   #           drift: an agent waiting on the model or on a slow tool is
   #           genuinely mid-turn and idle on the CPU at the same time.
   case "$_st:$_busy" in
-  -:1) _v="*** ORPHAN: no state recorded, agent is WORKING ***" ;;
-  -:*) _v="*** ORPHAN: no state recorded, agent is present ***" ;;
-  idle:1|blocked:1) _v="*** DRIFT: reports $_st, agent is working ***" ;;
-  idle:2|blocked:2) _v="suspect: some CPU, below the working threshold" ;;
-  working:0)
-    if [ -z "$_apid" ]; then
-      _v="gone: recorded working, no agent"
-    elif _at_prompt "$_pane" "${_acomm:-}"; then
-      # The agent's own busy marker is absent, so no turn is
-      # running and this record outlived the turn it described.
-      # Reported as DRIFT because a session that looks BUSY is
-      # one you deliberately leave alone, so the wait is
-      # unbounded: worse than the reverse.
-      _v="*** STALE: reports working, agent is at a prompt ***"
-      if [ "$_repair" -eq 1 ]; then
-        # A refused swap is NOT a repair failure: the
-        # usual reason is that the record healed during
-        # the window, so it reports what it found
-        # rather than an error.
-        if _fix "$_pane" "$_ep"; then
-          _v="REPAIRED: was working, now idle"
-          mux_log doctor "repaired $_sess" \
-            "($_pane): working -> idle"
-        else
-          _v="moved during the window, left alone"
+    -:1) _v="*** ORPHAN: no state recorded, agent is WORKING ***" ;;
+    -:*) _v="*** ORPHAN: no state recorded, agent is present ***" ;;
+    idle:1|blocked:1) _v="*** DRIFT: reports $_st, agent is working ***" ;;
+    idle:2|blocked:2) _v="suspect: some CPU, below the working threshold" ;;
+    working:0)
+      if [ -z "$_apid" ]; then
+        _v="gone: recorded working, no agent"
+      elif _at_prompt "$_pane" "${_acomm:-}"; then
+        # The agent's own busy marker is absent, so no turn is
+        # running and this record outlived the turn it described.
+        # Reported as DRIFT because a session that looks BUSY is
+        # one you deliberately leave alone, so the wait is
+        # unbounded: worse than the reverse.
+        _v="*** STALE: reports working, agent is at a prompt ***"
+        if [ "$_repair" -eq 1 ]; then
+          # A refused swap is NOT a repair failure: the
+          # usual reason is that the record healed during
+          # the window, so it reports what it found
+          # rather than an error.
+          if _fix "$_pane" "$_ep"; then
+            _v="REPAIRED: was working, now idle"
+            mux_log doctor "repaired $_sess" \
+              "($_pane): working -> idle"
+          else
+            _v="moved during the window, left alone"
+          fi
         fi
-      fi
-    else
-      _v="quiet (mid-turn, waiting)"
-    fi ;;
-  *) _v="agrees" ;;
+      else
+        _v="quiet (mid-turn, waiting)"
+      fi ;;
+    *) _v="agrees" ;;
   esac
   printf '%-14s %-9s %-6s %-9s %-6s %s\n' \
     "$_sess" "$_st" "$_pane" "${_apid:--}" "$_used" "$_v"
   case $_v in
-  '*** DRIFT'*)  echo drift  >>"$_dir/.doctor.$$" ;;
-  '*** STALE'*)  echo stale  >>"$_dir/.doctor.$$" ;;
-  '*** ORPHAN'*) echo orphan >>"$_dir/.doctor.$$" ;;
-  REPAIRED*)     echo fixed  >>"$_dir/.doctor.$$" ;;
+    '*** DRIFT'*)  echo drift  >>"$_dir/.doctor.$$" ;;
+    '*** STALE'*)  echo stale  >>"$_dir/.doctor.$$" ;;
+    '*** ORPHAN'*) echo orphan >>"$_dir/.doctor.$$" ;;
+    REPAIRED*)     echo fixed  >>"$_dir/.doctor.$$" ;;
   esac
 done
 

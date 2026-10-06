@@ -37,15 +37,15 @@ _keys=$MUX_SHARE/keys
 # ask, so the label stays generic rather than guessing.
 _prefix=$(tmux show-options -gv prefix 2>/dev/null || true)
 case ${_prefix:-} in
-'') _prefix=prefix ;;
-C-*|M-*) ;;
-*) _prefix=prefix ;;
+  '') _prefix=prefix ;;
+  C-*|M-*) ;;
+  *) _prefix=prefix ;;
 esac
 
 printf '\n  mux keys  (press %s then the key)\n\n' "$_prefix"
 while IFS='	' read -r _k _d; do
   case ${_k:-} in
-  ''|'#'*) continue ;;
+    ''|'#'*) continue ;;
   esac
   [ -n "${_d:-}" ] || continue
   printf '    %-3s %s\n' "$_k" "$_d"

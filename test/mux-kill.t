@@ -77,8 +77,8 @@ for _no in "" "n" "no" "NO" "nope" "yes please" "Y E S" "1" "q"; do
   _o=$(mux "$_no" kill --all) || fail "answer [$_no]: kill --all exited
 non-zero, which the abort path must not do. mux said: $_o"
   case $_o in
-  *aborted*|*"no sessions"*) ;;
-  *) fail "answer [$_no]: expected an abort, got: $_o" ;;
+    *aborted*|*"no sessions"*) ;;
+    *) fail "answer [$_no]: expected an abort, got: $_o" ;;
   esac
   [ -z "$(killed)" ] \
     || fail "answer [$_no] DESTROYED sessions: $(killed)"
@@ -98,12 +98,12 @@ for _s in alpha bravo charlie; do
     || fail "the prompt did not name session $_s: $_o"
 done
 case $_o in
-*"cannot be undone"*) ;;
-*) fail "the prompt did not say it is irreversible: $_o" ;;
+  *"cannot be undone"*) ;;
+  *) fail "the prompt did not say it is irreversible: $_o" ;;
 esac
 case $_o in
-*"3 session"*) ;;
-*) fail "the prompt did not count the sessions: $_o" ;;
+  *"3 session"*) ;;
+  *) fail "the prompt did not count the sessions: $_o" ;;
 esac
 
 # --- a confirmed kill --all tears down AND forgets ------------------------
@@ -137,8 +137,8 @@ done
 _o=$(mux yes kill --all) || fail "an empty context is not an error, so this
 must exit 0. mux said: $_o"
 case $_o in
-*"no sessions"*) ;;
-*) fail "an empty context should say so: $_o" ;;
+  *"no sessions"*) ;;
+  *) fail "an empty context should say so: $_o" ;;
 esac
 [ -z "$(killed)" ] || fail "kill --all ran kill-server on an empty context"
 
@@ -160,8 +160,8 @@ reset
 _rc=0; _o=$(mux "" kill nosuchthing) || _rc=$?
 [ "$_rc" -ne 0 ] || fail "killing an unknown name exited 0"
 case $_o in
-*"no such session"*) ;;
-*) fail "unhelpful refusal for an unknown name: $_o" ;;
+  *"no such session"*) ;;
+  *) fail "unhelpful refusal for an unknown name: $_o" ;;
 esac
 [ -z "$(killed)" ] || fail "an unknown name still killed something"
 

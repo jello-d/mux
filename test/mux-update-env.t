@@ -57,8 +57,8 @@ _rc=0; _o=$(mux update-env 'a::b:2' 2>&1) || _rc=$?
 environment per session and per server, so accepting it would be a field that
 parses and does nothing. rc=$_rc [$_o]"
 case $_o in
-*'a::b'*) ;;
-*) fail "the window refusal must print the address WITHOUT the window field,
+  *'a::b'*) ;;
+  *) fail "the window refusal must print the address WITHOUT the window field,
 so the remedy is in the refusal rather than left as an exercise: [$_o]" ;;
 esac
 
@@ -67,8 +67,8 @@ _rc=0; _o=$(env -u TMUX mux update-env 2>&1) || _rc=$?
 subject at all, and that must say so rather than SILENTLY WIDENING to every
 session, which would act on sessions the caller never named: rc=$_rc [$_o]"
 case $_o in
-*--all*) ;;
-*) fail "the no-subject refusal must name --all, since that is the thing the
+  *--all*) ;;
+  *) fail "the no-subject refusal must name --all, since that is the thing the
 caller probably wanted: [$_o]" ;;
 esac
 
@@ -96,20 +96,20 @@ MUX_T_DEAD=/a/dead/value; export MUX_T_DEAD
 tm set-environment -t '=one' MUX_T_DEAD /a/dead/value
 _o=$(mux update-env "$SOCK::one" -n 2>&1 || true)
 case $_o in
-*'would set MUX_T_LIVE'*) ;;
-*) fail "a dry run must say what it WOULD do: [$_o]" ;;
+  *'would set MUX_T_LIVE'*) ;;
+  *) fail "a dry run must say what it WOULD do: [$_o]" ;;
 esac
 case $_o in
-*'would drop MUX_T_DEAD'*) ;;
-*'would dropped'*) fail "the preview prefixes 'would ' onto the PAST tense
+  *'would drop MUX_T_DEAD'*) ;;
+  *'would dropped'*) fail "the preview prefixes 'would ' onto the PAST tense
 mux_env_apply reports, so it reads 'would dropped X'. Seen on a live box.
 Only 'set' works in both tenses, which is why this looked right: [$_o]" ;;
-*) fail "a dead value already in the session must appear in the preview as a
+  *) fail "a dead value already in the session must appear in the preview as a
 DROP, or the preview is not showing the whole decision: [$_o]" ;;
 esac
 case $(tm show-environment -t '=one' MUX_T_LIVE 2>&1) in
-*'unknown variable'*) ;;
-*) fail "a DRY RUN WROTE TO THE SESSION, which makes -n worse than useless:
+  *'unknown variable'*) ;;
+  *) fail "a DRY RUN WROTE TO THE SESSION, which makes -n worse than useless:
 a preview the caller trusted has already acted" ;;
 esac
 
@@ -138,15 +138,15 @@ if [ -r /proc/$$/environ ]; then
 pane predates MUX_T_LIVE and the run is about to set it, so there is a pane a
 restart cannot be avoided for and -n is the mode that must say so: [$_o]"
   case $_dstale in
-  *MUX_T_LIVE*) ;;
-  *) fail "the dry run's stale report does not name MUX_T_LIVE, so it was
+    *MUX_T_LIVE*) ;;
+    *) fail "the dry run's stale report does not name MUX_T_LIVE, so it was
 computed against the session's CURRENT environment rather than the one the
 run would leave: it answers a different question from the real run and is
 therefore not a preview. [$_dstale]" ;;
   esac
   case $_dstale in
-  *MUX_T_DEAD*)
-    fail "the preview named a pane stale for a value the run is about to
+    *MUX_T_DEAD*)
+      fail "the preview named a pane stale for a value the run is about to
 DROP. Nothing will hold it afterwards, so no restart could supply it, which
 is advice that cannot come true. [$_dstale]" ;;
   esac
@@ -160,8 +160,8 @@ verb exists: without it the remedy for a poisoned box is killing the server.
 [$(tm show-environment -t '=one' MUX_T_LIVE 2>&1)]"
 
 case $(tm show-environment -t '=one' MUX_T_DEAD 2>&1) in
-*'unknown variable'*) ;;
-*) fail "a value whose own validator says it is dead was written into the
+  *'unknown variable'*) ;;
+  *) fail "a value whose own validator says it is dead was written into the
 session anyway, so this verb propagates the fault it exists to repair" ;;
 esac
 
@@ -183,15 +183,15 @@ if [ -r /proc/$$/environ ]; then
   [ -n "$_stale" ] || fail "no stale-pane section at all, so the two
 assertions below would both pass against a verb that said nothing: [$_o]"
   case $_stale in
-  *MUX_T_LIVE*) ;;
-  *) fail "the pane predates the value and can never gain it, so it must be
+    *MUX_T_LIVE*) ;;
+    *) fail "the pane predates the value and can never gain it, so it must be
 NAMED: a process environment is fixed at exec, and reporting only what was
 set invites the reader to think their running agent was repaired.
 [$_stale]" ;;
   esac
   case $_stale in
-  *MUX_T_DEAD*)
-    fail "a pane was reported stale for a name mux DELIBERATELY WITHHELD. The
+    *MUX_T_DEAD*)
+      fail "a pane was reported stale for a name mux DELIBERATELY WITHHELD. The
 session does not hold it and never will, so there is nothing a restart could
 supply; printing it beside a real finding is advice that cannot come true,
 which is this package's oldest defect class. [$_stale]" ;;
@@ -206,8 +206,8 @@ fi
 # thing it keeps re-asserting.
 _o2=$(mux update-env "$SOCK::one" 2>&1 || true)
 case $_o2 in
-*'nothing needed changing'*) ;;
-*) fail "a second run changed something, so this verb is not idempotent and
+  *'nothing needed changing'*) ;;
+  *) fail "a second run changed something, so this verb is not idempotent and
 cannot be run from a provisioner or a hook: [$_o2]" ;;
 esac
 
@@ -218,16 +218,16 @@ esac
 # misread, once as "scoped wrongly" and once as "a scoping bug".
 _o3=$(mux update-env "$SOCK::one" -n 2>&1 || true)
 case $_o3 in
-*'nothing would change'*) ;;
-*) fail "a dry run with nothing to do said [$_o3]. Zero bytes cannot be told
+  *'nothing would change'*) ;;
+  *) fail "a dry run with nothing to do said [$_o3]. Zero bytes cannot be told
 from a run that walked no session at all, and both are reachable." ;;
 esac
 
 # --- a session that is not there ------------------------------------------
 _o=$(mux update-env "$SOCK::nosuch" 2>&1 || true)
 case $_o in
-*'no such session'*) ;;
-*) fail "naming a session that does not exist must say so: [$_o]" ;;
+  *'no such session'*) ;;
+  *) fail "naming a session that does not exist must say so: [$_o]" ;;
 esac
 
 # --- AND WALKING NOTHING IS ITS OWN ANSWER --------------------------------
@@ -240,8 +240,8 @@ for _m in '' '-n'; do
   # shellcheck disable=SC2086  # an EMPTY word must disappear, not be passed.
   _o4=$(mux update-env "nosuchpart::" $_m 2>&1 || true)
   case $_o4 in
-  *'no sessions to examine'*) ;;
-  *) fail "a partition with no sessions (mode [${_m:-real}]) answered
+    *'no sessions to examine'*) ;;
+    *) fail "a partition with no sessions (mode [${_m:-real}]) answered
 [$_o4]. Nothing was examined, so neither silence nor a claim that nothing
 needed changing is true: both read as a clean bill of health for a question
 that was never asked." ;;

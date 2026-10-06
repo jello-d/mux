@@ -59,13 +59,13 @@ build
 tm resize-pane -t t.0 -x 81
 _drift=$(geom)
 case $_drift in
-"81x"*) ;;
-*) fail "setup: expected a drifted row, got [$_drift]" ;;
+  "81x"*) ;;
+  *) fail "setup: expected a drifted row, got [$_drift]" ;;
 esac
 tm run-shell "mux even" >/dev/null 2>&1 || true
 case $(geom) in
-"80x"*"80x"*) ;;
-*) fail "the drifted row was not evened: [$(geom)]" ;;
+  "80x"*"80x"*) ;;
+  *) fail "the drifted row was not evened: [$(geom)]" ;;
 esac
 
 # --- A MISSING @mux-bottom IS ADOPTED BACK FROM A SIBLING -----------------
@@ -105,10 +105,10 @@ tm set-option -pu -t "$_bot" @mux-bottom
 _sp=$(tm display-message -p '#{socket_path}')
 _o=$(env TMUX="$_sp,0,0" "$HERE/libexec/mux-even" --all 2>&1 || true)
 case $_o in
-*"no @mux-bottom"*) ;;
-*"restored"*) fail "with no sibling to copy, it claimed to restore a spec
+  *"no @mux-bottom"*) ;;
+  *"restored"*) fail "with no sibling to copy, it claimed to restore a spec
 it could not have known: [$_o]" ;;
-*) fail "with no sibling to copy, it said nothing about the frozen
+  *) fail "with no sibling to copy, it said nothing about the frozen
 window: [$_o]" ;;
 esac
 
@@ -122,8 +122,8 @@ tm split-window -h -t far -c /tmp
 tm select-layout -t far even-horizontal
 tm resize-pane -t far.0 -x 100
 case $(tm list-panes -t far -F '#{pane_width}' | tr '\n' ' ') in
-"100 "*) ;;
-*) fail "setup: the far session did not drift" ;;
+  "100 "*) ;;
+  *) fail "setup: the far session did not drift" ;;
 esac
 # A DECOY SESSION, CREATED AFTER `far`, AND IT IS THE WHOLE ASSERTION. Until it
 # existed this case said what it meant and proved none of it: `far` was the
@@ -146,8 +146,8 @@ esac
 tm new-session -d -s decoy -x 161 -y 63 -c /tmp
 tm run-shell "mux even --all" >/dev/null 2>&1 || true
 case $(tm list-panes -t far -F '#{pane_width}' | tr '\n' ' ') in
-"80 80 ") ;;
-*) fail "--all did not reach a session the client is not on: [$(tm \
+  "80 80 ") ;;
+  *) fail "--all did not reach a session the client is not on: [$(tm \
 list-panes -t far -F '#{pane_width}' | tr '\n' ' ')]" ;;
 esac
 
@@ -161,14 +161,14 @@ esac
 build
 tm resize-pane -t t.0 -x 81
 case $(geom) in
-"81x"*) ;;
-*) fail "setup: expected a drifted row, got [$(geom)]" ;;
+  "81x"*) ;;
+  *) fail "setup: expected a drifted row, got [$(geom)]" ;;
 esac
 env -u TMUX MUX_CTX_PARTITION="$SOCK" "$HERE/libexec/mux-even" --all \
   >/dev/null 2>&1 || true
 case $(geom) in
-"80x"*"80x"*) ;;
-*) fail "headless did not reach the partition's server: [$(geom)]. It
+  "80x"*"80x"*) ;;
+  *) fail "headless did not reach the partition's server: [$(geom)]. It
 went to the default socket, found nothing, and exited 0" ;;
 esac
 

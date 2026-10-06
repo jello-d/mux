@@ -150,9 +150,9 @@ mux_attach() {
 # Expand a leading tilde without eval.
 expand_tilde() {
   case $1 in
-    "~") printf '%s' "$HOME" ;;
-    "~/"*) printf '%s' "$HOME/${1#\~/}" ;;
-    *) printf '%s' "$1" ;;
+      "~") printf '%s' "$HOME" ;;
+      "~/"*) printf '%s' "$HOME/${1#\~/}" ;;
+      *) printf '%s' "$1" ;;
   esac
 }
 
@@ -198,9 +198,9 @@ agent_launch() {
 shape_cmd() {
   # shellcheck disable=SC2154  # a caller input; see the header
   case $1 in
-  agent) agent_launch "$active_agent" ;;
-  *)     if [ -n "$(_find_agent "$1")" ]; then agent_launch "$1"
-         else printf '%s' "$1"; fi ;;
+    agent) agent_launch "$active_agent" ;;
+    *)     if [ -n "$(_find_agent "$1")" ]; then agent_launch "$1"
+           else printf '%s' "$1"; fi ;;
   esac
 }
 
@@ -240,14 +240,14 @@ expand_profile() {      # PROFILE_PATH [LABEL]
   _want_layout=
   while read -r _verb _rest; do
     case $_verb in
-    layout) _want_layout=$_rest ;;
-    window|pane|bottom)
-      echo "mux: '$_verb' belongs in a layout, not a" \
-        "profile: ${2:-$1}" >&2
-      echo "mux: put the arrangement in a .layout and" \
-        "name it with 'layout <name>'" >&2
-      rm -f "$_cl"; exit "$MUX_EC_FAIL" ;;
-    *)      printf '%s\n' "$_verb${_rest:+ $_rest}" ;;
+      layout) _want_layout=$_rest ;;
+      window|pane|bottom)
+        echo "mux: '$_verb' belongs in a layout, not a" \
+          "profile: ${2:-$1}" >&2
+        echo "mux: put the arrangement in a .layout and" \
+          "name it with 'layout <name>'" >&2
+        rm -f "$_cl"; exit "$MUX_EC_FAIL" ;;
+      *)      printf '%s\n' "$_verb${_rest:+ $_rest}" ;;
     esac
   done <"$_cl"
   # No `layout` line: the context's default arrangement, then mux's own.
@@ -264,11 +264,11 @@ expand_profile() {      # PROFILE_PATH [LABEL]
   mux_conf_clean < "$_lf" > "$_cl"
   while read -r _verb _rest; do
     case $_verb in
-    root|theme|agent|notify|layout)
-      echo "mux: '$_verb' belongs in a profile, not a" \
-        "layout: $_lf" >&2
-      rm -f "$_cl"; exit "$MUX_EC_FAIL" ;;
-    *)      printf '%s\n' "$_verb${_rest:+ $_rest}" ;;
+      root|theme|agent|notify|layout)
+        echo "mux: '$_verb' belongs in a profile, not a" \
+          "layout: $_lf" >&2
+        rm -f "$_cl"; exit "$MUX_EC_FAIL" ;;
+      *)      printf '%s\n' "$_verb${_rest:+ $_rest}" ;;
     esac
   done <"$_cl"
   rm -f "$_cl"
@@ -281,18 +281,18 @@ bottom_spec() {         # ARG
   b_min=; b_max=; b_cmd=
   _spec=${1%% *}
   case $_spec in
-  *-*)
-    b_min=${_spec%%-*}
-    b_max=${_spec##*-}
-    [ "$_spec" = "$b_min-$b_max" ] || {
-      echo "mux: 'bottom' wants N or MIN-MAX: $1" >&2
-      return 1
-    }
-    ;;
-  *)
-    b_min=$_spec
-    b_max=$_spec
-    ;;
+    *-*)
+      b_min=${_spec%%-*}
+      b_max=${_spec##*-}
+      [ "$_spec" = "$b_min-$b_max" ] || {
+        echo "mux: 'bottom' wants N or MIN-MAX: $1" >&2
+        return 1
+      }
+      ;;
+    *)
+      b_min=$_spec
+      b_max=$_spec
+      ;;
   esac
   case $b_min in ''|*[!0-9]*)
     echo "mux: 'bottom' wants N or MIN-MAX: $1" >&2; return 1 ;;
@@ -331,8 +331,8 @@ _session_geometry() {
       -p '#{window_width} #{window_height}' \
       2>/dev/null || true)
     case $_wh in
-    [0-9]*' '[0-9]*) printf -- '-x %s -y %s' "${_wh%% *}" \
-      "${_wh##* }" ;;
+      [0-9]*' '[0-9]*) printf -- '-x %s -y %s' "${_wh%% *}" \
+        "${_wh##* }" ;;
     esac
     return 0
   fi
@@ -348,8 +348,8 @@ _session_geometry() {
   # got a spurious error on a path that is designed to fall through.
   _sz=$(stty size 2>/dev/null </dev/tty || true)
   case $_sz in
-  [0-9]*' '[0-9]*) ;;
-  *) return 0 ;;
+    [0-9]*' '[0-9]*) ;;
+    *) return 0 ;;
   esac
   _rows=${_sz%% *}; _cols=${_sz##* }
   # A status line costs the window a row; tmux subtracts it on attach, so
@@ -357,10 +357,10 @@ _session_geometry() {
   # rescales by that row. `status` is on/off or a count.
   _st=$(tm show-options -gv status 2>/dev/null || echo on)
   case $_st in
-  off) _st=0 ;;
-  on)  _st=1 ;;
-  [0-9]) ;;
-  *)   _st=1 ;;
+    off) _st=0 ;;
+    on)  _st=1 ;;
+    [0-9]) ;;
+    *)   _st=1 ;;
   esac
   _rows=$((_rows - _st))
   [ "$_rows" -ge 4 ] || return 0        # implausible; let tmux decide

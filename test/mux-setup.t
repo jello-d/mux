@@ -33,8 +33,8 @@ _rc=0; _o=$(mux setup 2>&1) || _rc=$?
 _rc=0; _o=$(mux setup nosuchagent 2>&1) || _rc=$?
 [ "$_rc" = 1 ] || fail "an unknown agent should exit 1, got $_rc"
 case $_o in
-*"have: claude"*) ;;
-*) fail "the refusal did not name what mux ships, so a typo looks like a
+  *"have: claude"*) ;;
+  *) fail "the refusal did not name what mux ships, so a typo looks like a
 missing feature: [$_o]" ;;
 esac
 # A NAME BECOMES A PATH, the same rule `mux skill` follows.
@@ -49,15 +49,16 @@ done
 # event mux would reject (exit 2, logged) nor miss one it understands, and so
 # that adding an event to the table wires it without anyone remembering to.
 _hookf=$HERE/libexec/mux-agent-hook
-_events=$(sed -n 's/^\([A-Za-z]*\))  *set -- .*/\1/p' "$_hookf")
+# Shape, not column: an arm's indentation is not part of the contract.
+_events=$(sed -n 's/^[[:space:]]*\([A-Za-z]*\))  *set -- .*/\1/p' "$_hookf")
 [ -n "$_events" ] || fail "no events scraped; this file proves nothing"
 
 # --- a dry run changes nothing -------------------------------------------
 _o=$(mux setup claude --dry-run 2>&1) || fail "dry-run failed: $_o"
 for _e in $_events; do
   case $_o in
-  *"$_e"*) ;;
-  *) fail "the plan does not mention $_e: [$_o]" ;;
+    *"$_e"*) ;;
+    *) fail "the plan does not mention $_e: [$_o]" ;;
   esac
 done
 [ -e "$SET" ] && fail "--dry-run wrote $SET"
@@ -82,8 +83,8 @@ cat >"$SET" <<'EOF'
 EOF
 _o=$(mux setup claude --yes 2>&1) || fail "apply failed: $_o"
 case $_o in
-*"backed up"*) ;;
-*) fail "no backup was reported, so the change is not reversible by copy:
+  *"backed up"*) ;;
+  *) fail "no backup was reported, so the change is not reversible by copy:
 [$_o]" ;;
 esac
 [ "$(ls "$CDIR"/settings.json.mux-* 2>/dev/null | wc -l)" -eq 1 ] \
@@ -115,8 +116,8 @@ the only outcome here that cannot be undone by --remove"
 # exactly the straggler this project spent two releases learning to discard.
 _o=$(mux setup claude --yes 2>&1) || fail "second run failed: $_o"
 case $_o in
-*"nothing to change"*) ;;
-*) fail "a second run was not a no-op: [$_o]" ;;
+  *"nothing to change"*) ;;
+  *) fail "a second run was not a no-op: [$_o]" ;;
 esac
 [ "$(ls "$CDIR"/settings.json.mux-* 2>/dev/null | wc -l)" -eq 1 ] \
   || fail "a no-op run took another backup"
@@ -145,8 +146,8 @@ _o=$(mux setup claude --remove --yes 2>&1) || fail "remove failed: $_o"
 [ -e "$_sk" ] && fail "--remove left the skill installed"
 _o=$(mux setup claude --remove --yes 2>&1) || fail "second remove failed"
 case $_o in
-*"nothing to change"*) ;;
-*) fail "removing twice was not a no-op: [$_o]" ;;
+  *"nothing to change"*) ;;
+  *) fail "removing twice was not a no-op: [$_o]" ;;
 esac
 
 # --- A FILE THAT DOES NOT PARSE IS LEFT ALONE ---------------------------
@@ -159,8 +160,8 @@ _rc=0; _o=$(mux setup claude --yes 2>&1) || _rc=$?
 [ "$(cat "$SET")" = '{ this is not json' ] \
   || fail "an unparseable settings file was MODIFIED: [$(cat "$SET")]"
 case $_o in
-*"does not parse"*) ;;
-*) fail "the refusal did not say the file does not parse: [$_o]" ;;
+  *"does not parse"*) ;;
+  *) fail "the refusal did not say the file does not parse: [$_o]" ;;
 esac
 
 pass

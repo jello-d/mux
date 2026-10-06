@@ -11,36 +11,36 @@ set -eu
 state= _beat= _src= _unless_working=
 while [ $# -gt 0 ]; do
   case $1 in
-  --beat) _beat=1 ;;
-  # --unless-working: this state is an ASSERTION OF IGNORANCE, not an
-  # observation. It means "an agent has just appeared here and knows of no
-  # turn in progress", which is true at a startup, a resume or a clear,
-  # and FALSE at a context COMPACTION, where the agent that just announced
-  # itself is the same one, still mid-turn. See the table in
-  # mux-agent-hook for which event carries it.
-  --unless-working) _unless_working=1 ;;
-  # --source NAME: which hook is speaking. OPTIONAL, and mux never
-  # requires it: an integrator that does not pass one is not broken,
-  # it is just quieter. THE CONTRACT IS MUX'S TO OWN: this defines the
-  # shape of the answer now, so wiring it later is a plugin edit and not
-  # a negotiation.
-  #
-  # WHY IT IS NEEDED. `Stop` and `SessionStart` BOTH send plain `idle`,
-  # so a record that went idle mid-turn cannot be blamed on either. That
-  # exact ambiguity is live: on 2026-09-27 a vigilance session on
-  # northwood went idle 9 minutes into a 34-minute auto-mode turn and the
-  # two candidates were indistinguishable from the record alone.
-  --source) shift
-    [ $# -gt 0 ] || {
-      echo "mux-agent-state-emit: --source wants a name" >&2
-      exit "$MUX_EC_USAGE"; }
-    _src=$1 ;;
-  -*) echo "mux-agent-state-emit: unknown option: $1" >&2
-     exit "$MUX_EC_USAGE" ;;
-  *)
-    [ -z "$state" ] || {
-      echo "mux-agent-state-emit: one STATE only" >&2; exit "$MUX_EC_USAGE"; }
-    state=$1 ;;
+    --beat) _beat=1 ;;
+    # --unless-working: this state is an ASSERTION OF IGNORANCE, not an
+    # observation. It means "an agent has just appeared here and knows of no
+    # turn in progress", which is true at a startup, a resume or a clear,
+    # and FALSE at a context COMPACTION, where the agent that just announced
+    # itself is the same one, still mid-turn. See the table in
+    # mux-agent-hook for which event carries it.
+    --unless-working) _unless_working=1 ;;
+    # --source NAME: which hook is speaking. OPTIONAL, and mux never
+    # requires it: an integrator that does not pass one is not broken,
+    # it is just quieter. THE CONTRACT IS MUX'S TO OWN: this defines the
+    # shape of the answer now, so wiring it later is a plugin edit and not
+    # a negotiation.
+    #
+    # WHY IT IS NEEDED. `Stop` and `SessionStart` BOTH send plain `idle`,
+    # so a record that went idle mid-turn cannot be blamed on either. That
+    # exact ambiguity is live: on 2026-09-27 a vigilance session on
+    # northwood went idle 9 minutes into a 34-minute auto-mode turn and the
+    # two candidates were indistinguishable from the record alone.
+    --source) shift
+      [ $# -gt 0 ] || {
+        echo "mux-agent-state-emit: --source wants a name" >&2
+        exit "$MUX_EC_USAGE"; }
+      _src=$1 ;;
+    -*) echo "mux-agent-state-emit: unknown option: $1" >&2
+       exit "$MUX_EC_USAGE" ;;
+    *)
+      [ -z "$state" ] || {
+        echo "mux-agent-state-emit: one STATE only" >&2; exit "$MUX_EC_USAGE"; }
+      state=$1 ;;
   esac
   shift
 done
@@ -143,7 +143,7 @@ if [ -n "$_beat" ] && [ "$_pstate" = idle ]; then
   _bfirst=
   [ -f "$_beatf" ] && read -r _bfirst 2>/dev/null <"$_beatf"
   case ${_bfirst:-} in
-  ''|*[!0-9]*) _bfirst= ;;
+    ''|*[!0-9]*) _bfirst= ;;
   esac
   # The no-mark case is handled FIRST and on its own, rather than folded
   # into the window test below. Folded, it was redundant: an absent mark

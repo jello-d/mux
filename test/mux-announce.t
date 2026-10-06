@@ -96,8 +96,8 @@ case $(kinds "$_o") in 'finished '*) ;;
 # for every such turn; announcing on both rings twice for one event. The turn
 # ends on the first edge; the second is the JOB finishing, which is not news.
 case $(kinds "$(ann 'global working api' 'global humming api')") in
-'finished '*) ;;
-*) fail "working -> humming announced nothing: every turn that left
+  'finished '*) ;;
+  *) fail "working -> humming announced nothing: every turn that left
 background work would lose its banner, which is precisely the case the
 humming state was added to make visible" ;;
 esac

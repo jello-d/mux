@@ -122,8 +122,8 @@ TMUX_CONF=${XDG_CONFIG_HOME:-$HOME/.config}/tmux/tmux.conf
 # libexec/ and share/ are siblings under one prefix, as in a package install.
 _self=$0
 case $_self in
-*/*) ;;
-*) _self=$(command -v -- "$_self" 2>/dev/null || echo "$_self") ;;
+  */*) ;;
+  *) _self=$(command -v -- "$_self" 2>/dev/null || echo "$_self") ;;
 esac
 # `readlink -f` IN ONE PROCESS WHERE IT EXISTS, a POSIX loop where it does not
 # (macOS has none before 12.3). $0 MUST end up fully resolved: through the
@@ -148,8 +148,8 @@ else
     _t=$(readlink -- "$_self" 2>/dev/null) || break
     [ -n "$_t" ] || break
     case $_t in
-    /*) _self=$_t ;;
-    *)  _self=${_self%/*}/$_t ;;
+      /*) _self=$_t ;;
+      *)  _self=${_self%/*}/$_t ;;
     esac
     _n=$((_n + 1))
   done
@@ -205,55 +205,55 @@ export MUX_DIR MUX_SHARE   # the helper verbs (mux themes ...) inherit both
 # process would have to re-derive it, and two answers about one partition is
 # the wrong-socket bug. Each lib's own header names what it needs.
 case ${1:-} in
-cycle)         shift; exec "$LIBEXEC/mux-cycle" "$@" ;;
-click)         shift; exec "$LIBEXEC/mux-click" "$@" ;;
-refresh)       shift; exec "$LIBEXEC/mux-refresh" "$@" ;;
-pin)           shift; exec "$LIBEXEC/mux-pin" "$@" ;;
-landing)       shift; exec "$LIBEXEC/mux-landing" "$@" ;;
-style)         shift; exec "$LIBEXEC/mux-style" "$@" ;;
-status-banner) shift; exec "$LIBEXEC/mux-status-banner" "$@" ;;
-agent-render)  shift; exec "$LIBEXEC/mux-agent-state-render" "$@" ;;
-agent-emit)    shift; exec "$LIBEXEC/mux-agent-state-emit" "$@" ;;
-agent-summary) shift; exec "$LIBEXEC/mux-agent-state-summary" "$@" ;;
-agent-list) shift; exec "$LIBEXEC/mux-agent-state-list" "$@" ;;
-themes)        shift; exec "$LIBEXEC/mux-themes" "$@" ;;
-check)         shift; exec "$LIBEXEC/mux-check" "$@" ;;
-next-blocked)  shift; exec "$LIBEXEC/mux-next-blocked" "$@" ;;
-migrate-profiles) shift; exec "$LIBEXEC/mux-migrate-profiles" "$@" ;;
-scan)          shift; exec "$LIBEXEC/mux-scan" "$@" ;;
-views)         shift; exec "$LIBEXEC/mux-views" "$@" ;;
-agent-doctor)  shift; exec "$LIBEXEC/mux-agent-doctor" "$@" ;;
-latch)         shift; exec "$LIBEXEC/mux-latch" "$@" ;;
-sane)          shift; exec "$LIBEXEC/mux-sane" "$@" ;;
-agent-hook)    shift; exec "$LIBEXEC/mux-agent-hook" "$@" ;;
-# Called only from the client-detached hook in share/mux.tmux, with the tty
-# that hook recorded at attach time. Silent when there is nothing queued,
-# which is most detaches.
-notice-flush)  shift; exec "$LIBEXEC/mux-notice-flush" "$@" ;;
-update-env)    shift; exec "$LIBEXEC/mux-update-env" "$@" ;;
-# THE MACHINE CONTRACT, and a MODE SWITCH rather than a verb: everything under
-# `mux agent` answers JSON on stdout, always, including on failure. The
-# hyphenated `agent-*` verbs above are mux's own plumbing (called by tmux
-# hooks, the status bar and the tray), and mean "about agent state", which is
-# a different thing from "for an agent to call".
-agent)         shift; exec "$LIBEXEC/mux-agent" "$@" ;;
-# NOT `mux agent skill`: that surface promises one JSON object on stdout, and
-# a verb printing markdown would make the promise a convention with an
-# exception. This one is for a human or a provisioner, run once.
-skill)         shift; exec "$LIBEXEC/mux-skill" "$@" ;;
-# THE ONE VERB THAT WRITES SOMEBODY ELSE'S CONFIG, which every other part of
-# mux refuses to do. Confined here because the step it performs is the one a
-# seam cannot cover: an agent that is never told to report is a strip full of
-# "no agent" glyphs and a user who concludes mux does not work.
-setup)         shift; exec "$LIBEXEC/mux-setup" "$@" ;;
-demo)          shift; exec "$LIBEXEC/mux-demo" "$@" ;;
-keys)          shift; exec "$LIBEXEC/mux-keys" "$@" ;;
-capabilities)  shift; exec "$LIBEXEC/mux-capabilities" "$@" ;;
-even)          shift; exec "$LIBEXEC/mux-even" "$@" ;;
-window)        shift; exec "$LIBEXEC/mux-window" "$@" ;;
-undo-pane)     shift; exec "$LIBEXEC/mux-undo-pane" "$@" ;;
-host-color)    shift; exec "$LIBEXEC/mux-host-color" "$@" ;;
-log)           shift; exec "$LIBEXEC/mux-log" "$@" ;;
+  cycle)         shift; exec "$LIBEXEC/mux-cycle" "$@" ;;
+  click)         shift; exec "$LIBEXEC/mux-click" "$@" ;;
+  refresh)       shift; exec "$LIBEXEC/mux-refresh" "$@" ;;
+  pin)           shift; exec "$LIBEXEC/mux-pin" "$@" ;;
+  landing)       shift; exec "$LIBEXEC/mux-landing" "$@" ;;
+  style)         shift; exec "$LIBEXEC/mux-style" "$@" ;;
+  status-banner) shift; exec "$LIBEXEC/mux-status-banner" "$@" ;;
+  agent-render)  shift; exec "$LIBEXEC/mux-agent-state-render" "$@" ;;
+  agent-emit)    shift; exec "$LIBEXEC/mux-agent-state-emit" "$@" ;;
+  agent-summary) shift; exec "$LIBEXEC/mux-agent-state-summary" "$@" ;;
+  agent-list) shift; exec "$LIBEXEC/mux-agent-state-list" "$@" ;;
+  themes)        shift; exec "$LIBEXEC/mux-themes" "$@" ;;
+  check)         shift; exec "$LIBEXEC/mux-check" "$@" ;;
+  next-blocked)  shift; exec "$LIBEXEC/mux-next-blocked" "$@" ;;
+  migrate-profiles) shift; exec "$LIBEXEC/mux-migrate-profiles" "$@" ;;
+  scan)          shift; exec "$LIBEXEC/mux-scan" "$@" ;;
+  views)         shift; exec "$LIBEXEC/mux-views" "$@" ;;
+  agent-doctor)  shift; exec "$LIBEXEC/mux-agent-doctor" "$@" ;;
+  latch)         shift; exec "$LIBEXEC/mux-latch" "$@" ;;
+  sane)          shift; exec "$LIBEXEC/mux-sane" "$@" ;;
+  agent-hook)    shift; exec "$LIBEXEC/mux-agent-hook" "$@" ;;
+  # Called only from the client-detached hook in share/mux.tmux, with the tty
+  # that hook recorded at attach time. Silent when there is nothing queued,
+  # which is most detaches.
+  notice-flush)  shift; exec "$LIBEXEC/mux-notice-flush" "$@" ;;
+  update-env)    shift; exec "$LIBEXEC/mux-update-env" "$@" ;;
+  # THE MACHINE CONTRACT, and a MODE SWITCH rather than a verb: everything under
+  # `mux agent` answers JSON on stdout, always, including on failure. The
+  # hyphenated `agent-*` verbs above are mux's own plumbing (called by tmux
+  # hooks, the status bar and the tray), and mean "about agent state", which is
+  # a different thing from "for an agent to call".
+  agent)         shift; exec "$LIBEXEC/mux-agent" "$@" ;;
+  # NOT `mux agent skill`: that surface promises one JSON object on stdout, and
+  # a verb printing markdown would make the promise a convention with an
+  # exception. This one is for a human or a provisioner, run once.
+  skill)         shift; exec "$LIBEXEC/mux-skill" "$@" ;;
+  # THE ONE VERB THAT WRITES SOMEBODY ELSE'S CONFIG, which every other part of
+  # mux refuses to do. Confined here because the step it performs is the one a
+  # seam cannot cover: an agent that is never told to report is a strip full of
+  # "no agent" glyphs and a user who concludes mux does not work.
+  setup)         shift; exec "$LIBEXEC/mux-setup" "$@" ;;
+  demo)          shift; exec "$LIBEXEC/mux-demo" "$@" ;;
+  keys)          shift; exec "$LIBEXEC/mux-keys" "$@" ;;
+  capabilities)  shift; exec "$LIBEXEC/mux-capabilities" "$@" ;;
+  even)          shift; exec "$LIBEXEC/mux-even" "$@" ;;
+  window)        shift; exec "$LIBEXEC/mux-window" "$@" ;;
+  undo-pane)     shift; exec "$LIBEXEC/mux-undo-pane" "$@" ;;
+  host-color)    shift; exec "$LIBEXEC/mux-host-color" "$@" ;;
+  log)           shift; exec "$LIBEXEC/mux-log" "$@" ;;
 esac
 
 # The ONE comment/normalize rule (mux_conf_clean) for every config parse below:
@@ -350,27 +350,27 @@ persist=0
 cmd=
 while [ "$#" -gt 0 ]; do
   case $1 in
-    # --bare said nothing about what it did. --no-agent does.
-    --no-agent|--bare|-b) bare=1; shift ;;
-    --attach|-a)  attach=1; shift ;;
-    --attach-only) attachonly=1; shift ;;
-    --no-attach)  noattach=1; shift ;;
-    --all)        all=1; shift ;;
-    --list)       listing=1; shift ;;
-    # THE HUMAN OVERRIDE for the readiness gate below. Needed because a
-    # person typing `mux resume` at a terminal meets the same refusal a
-    # latch does, and the refusal names this flag rather than leaving it
-    # to be discovered.
-    --no-wait-env) nowaitenv=1; shift ;;
-    --resume)     resume=1; shift ;;
-    --force)      force=1; shift ;;
-    --persist|-p) persist=1; shift ;;   # retired: now the default
-    -h|--help)    usage 0 ;;
-    --version|-V) printf 'mux %s\n' "$MUX_VERSION"; exit "$MUX_EC_OK" ;;
-    --) shift; break ;;
-    -*) echo "mux: unknown option: $1" >&2; usage ;;
-    *)  if [ -n "$cmd" ]; then break; fi
-        cmd=$1; shift ;;
+      # --bare said nothing about what it did. --no-agent does.
+      --no-agent|--bare|-b) bare=1; shift ;;
+      --attach|-a)  attach=1; shift ;;
+      --attach-only) attachonly=1; shift ;;
+      --no-attach)  noattach=1; shift ;;
+      --all)        all=1; shift ;;
+      --list)       listing=1; shift ;;
+      # THE HUMAN OVERRIDE for the readiness gate below. Needed because a
+      # person typing `mux resume` at a terminal meets the same refusal a
+      # latch does, and the refusal names this flag rather than leaving it
+      # to be discovered.
+      --no-wait-env) nowaitenv=1; shift ;;
+      --resume)     resume=1; shift ;;
+      --force)      force=1; shift ;;
+      --persist|-p) persist=1; shift ;;   # retired: now the default
+      -h|--help)    usage 0 ;;
+      --version|-V) printf 'mux %s\n' "$MUX_VERSION"; exit "$MUX_EC_OK" ;;
+      --) shift; break ;;
+      -*) echo "mux: unknown option: $1" >&2; usage ;;
+      *)  if [ -n "$cmd" ]; then break; fi
+          cmd=$1; shift ;;
   esac
 done
 
@@ -534,10 +534,10 @@ if [ "$cmd" = resume ] && [ -n "$rs_want" ]; then
   # EMPTY set and report "no sessions recorded", which reads as data
   # loss rather than as a misspelling.
   case " $(mux_ctx_partitions | tr '\n' ' ') " in
-  *" $rs_want "*) part=$rs_want ;;
-  *) echo "mux: no such partition: $rs_want" >&2
-     echo "mux: known: $(mux_ctx_partitions | tr '\n' ' ')" >&2
-     exit "$MUX_EC_NONAME" ;;
+    *" $rs_want "*) part=$rs_want ;;
+    *) echo "mux: no such partition: $rs_want" >&2
+       echo "mux: known: $(mux_ctx_partitions | tr '\n' ' ')" >&2
+       exit "$MUX_EC_NONAME" ;;
   esac
 elif [ "$cmd" = resume ] && [ "${MUX_CTX_SRC:-baseline}" = failed ]; then
   # THE THIRD OUTCOME, and the one that must not be silent. `baseline`
@@ -734,7 +734,7 @@ if [ "$pick" = 1 ]; then
       printf 'mux: session #? ' >&2
       read -r _n || exit "$MUX_EC_OK"
       case $_n in
-      ''|*[!0-9]*) echo "mux: not a number" >&2; exit "$MUX_EC_FAIL" ;;
+        ''|*[!0-9]*) echo "mux: not a number" >&2; exit "$MUX_EC_FAIL" ;;
       esac
       _sel=$(printf '%s\n' "$_menu" | sed -n "${_n}p")
       name=${_sel##* }
@@ -931,40 +931,40 @@ fi
 # client's status strip and ( / ) cycling; show restores it; show-all clears
 # the set. Persists until shown or reboot. hide/show need SESSION to exist.
 case $cmd in
-hide|show)
-  [ -n "${TMUX:-}" ] || {
-    echo "mux: $cmd must run inside a session" >&2; exit "$MUX_EC_FAIL"; }
-  [ -r "$MUX_LIB/mux-exclude_lib" ] || {
-    echo "mux: mux-exclude_lib missing (incomplete install)" >&2
-    exit "$MUX_EC_FAIL"; }
-  _client=$(tm display-message -p '#{client_name}' 2>/dev/null || true)
-  [ -n "$_client" ] || {
-    echo "mux: could not identify the client" >&2; exit "$MUX_EC_FAIL"; }
-  . "$MUX_LIB/mux-exclude_lib"
-  _f=$(mux_exclude_file "$_client")
-  mkdir -p "$(dirname "$_f")"
-  if [ "$cmd" = show ] && [ "$all" -eq 1 ]; then
-    rm -f "$_f"
-    echo "mux: cleared this client's hidden sessions"
-  else
-    tm has-session -t "=$name" 2>/dev/null || {
-      echo "mux: no such session: $name" >&2
-      exit "$MUX_EC_NONAME"; }
-    if [ "$cmd" = hide ]; then
-      grep -qxF -- "$name" "$_f" 2>/dev/null \
-        || printf '%s\n' "$name" >> "$_f"
-      echo "mux: hid $name for this client"
+  hide|show)
+    [ -n "${TMUX:-}" ] || {
+      echo "mux: $cmd must run inside a session" >&2; exit "$MUX_EC_FAIL"; }
+    [ -r "$MUX_LIB/mux-exclude_lib" ] || {
+      echo "mux: mux-exclude_lib missing (incomplete install)" >&2
+      exit "$MUX_EC_FAIL"; }
+    _client=$(tm display-message -p '#{client_name}' 2>/dev/null || true)
+    [ -n "$_client" ] || {
+      echo "mux: could not identify the client" >&2; exit "$MUX_EC_FAIL"; }
+    . "$MUX_LIB/mux-exclude_lib"
+    _f=$(mux_exclude_file "$_client")
+    mkdir -p "$(dirname "$_f")"
+    if [ "$cmd" = show ] && [ "$all" -eq 1 ]; then
+      rm -f "$_f"
+      echo "mux: cleared this client's hidden sessions"
     else
-      if [ -f "$_f" ]; then
-        grep -vxF -- "$name" "$_f" > "$_f.new" || true
-        mv -f "$_f.new" "$_f"
+      tm has-session -t "=$name" 2>/dev/null || {
+        echo "mux: no such session: $name" >&2
+        exit "$MUX_EC_NONAME"; }
+      if [ "$cmd" = hide ]; then
+        grep -qxF -- "$name" "$_f" 2>/dev/null \
+          || printf '%s\n' "$name" >> "$_f"
+        echo "mux: hid $name for this client"
+      else
+        if [ -f "$_f" ]; then
+          grep -vxF -- "$name" "$_f" > "$_f.new" || true
+          mv -f "$_f.new" "$_f"
+        fi
+        echo "mux: showing $name for this client"
       fi
-      echo "mux: showing $name for this client"
     fi
-  fi
-  tm refresh-client 2>/dev/null || true
-  exit "$MUX_EC_OK"
-  ;;
+    tm refresh-client 2>/dev/null || true
+    exit "$MUX_EC_OK"
+    ;;
 esac
 
 # --- the session BUILD machinery -------------------------------------------
@@ -998,8 +998,8 @@ cmd_kill_all() {
   printf 'This cannot be undone. Type yes to confirm: '
   read -r _ans || _ans=
   case $_ans in
-    yes|YES|y|Y) ;;
-    *) echo "mux: aborted"; exit "$MUX_EC_OK" ;;
+      yes|YES|y|Y) ;;
+      *) echo "mux: aborted"; exit "$MUX_EC_OK" ;;
   esac
   tm kill-server 2>/dev/null || true
   mux_sess_clear "$part"

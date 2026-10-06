@@ -58,12 +58,12 @@ logged() { cat "$LOG"; }
 win build
 [ "$RC" = 0 ] || fail "a bare name failed: rc=$RC $OUT"
 case "$(logged)" in
-*'new-window -t =here'*) ;;
-*) fail "a bare name did not open in the current session: $(logged)" ;;
+  *'new-window -t =here'*) ;;
+  *) fail "a bare name did not open in the current session: $(logged)" ;;
 esac
 case "$(logged)" in
-*'-n build'*) ;;
-*) fail "the bare word was not used as the WINDOW name: $(logged)" ;;
+  *'-n build'*) ;;
+  *) fail "the bare word was not used as the WINDOW name: $(logged)" ;;
 esac
 
 # AND IT SWITCHES, which is this verb's whole difference from `agent open`.
@@ -72,24 +72,24 @@ esac
 # is moved (which is what matters when the target session is not the one being
 # looked at). Either alone leaves the human somewhere they did not ask for.
 case "$(logged)" in
-*'new-window'*' -d '*) fail "the human verb detached, so it created a window
+  *'new-window'*' -d '*) fail "the human verb detached, so it created a window
 and left the human where they were: $(logged)" ;;
 esac
 case "$(logged)" in
-*'switch-client -t =here:4'*) ;;
-*) fail "the client was not moved to the new window: $(logged)" ;;
+  *'switch-client -t =here:4'*) ;;
+  *) fail "the client was not moved to the new window: $(logged)" ;;
 esac
 case $OUT in
-*'opened here:4'*) ;;
-*) fail "it did not say what it opened: [$OUT]" ;;
+  *'opened here:4'*) ;;
+  *) fail "it did not say what it opened: [$OUT]" ;;
 esac
 
 # --- A QUALIFIED ADDRESS NAMES THE SESSION, WHEREVER YOU ARE --------------
 win 'other:build'
 [ "$RC" = 0 ] || fail "a qualified address failed: rc=$RC $OUT"
 case "$(logged)" in
-*'new-window -t =other'*) ;;
-*) fail "SESSION:NAME did not target that session: $(logged)" ;;
+  *'new-window -t =other'*) ;;
+  *) fail "SESSION:NAME did not target that session: $(logged)" ;;
 esac
 
 # --- AND A PARTITION REACHES ITS OWN SOCKET ------------------------------
@@ -105,8 +105,8 @@ win 'work::proj:build'
 [ "$RC" = 0 ] || fail "naming one's OWN partition was refused as a crossing,
 which would break the fully-qualified spelling peers hands back: $OUT"
 case "$(logged)" in
-*'-L work'*) ;;
-*) fail "a partition-qualified address did not ask that partition's SERVER.
+  *'-L work'*) ;;
+  *) fail "a partition-qualified address did not ask that partition's SERVER.
 Asking the default socket gives a plausible answer from the wrong place,
 which is the bug this package has shipped three times: $(logged)" ;;
 esac
@@ -118,11 +118,11 @@ esac
 win 'global::proj:build'
 [ "$RC" = 2 ] || fail "a cross-partition open must be refused, got $RC: $OUT"
 case $OUT in
-*'refusing to open a window'*) ;;
-*) fail "the refusal did not say what it would not do: [$OUT]" ;;
+  *'refusing to open a window'*) ;;
+  *) fail "the refusal did not say what it would not do: [$OUT]" ;;
 esac
 case "$(logged)" in
-*new-window*) fail "it opened the window anyway: $(logged)" ;;
+  *new-window*) fail "it opened the window anyway: $(logged)" ;;
 esac
 rm -f "$T/conf/config" "$T/conf/ctx"
 
@@ -133,12 +133,12 @@ rm -f "$T/conf/config" "$T/conf/ctx"
 win 'work::build'
 [ "$RC" = 2 ] || fail "a partition with no session must exit 2, got $RC: $OUT"
 case $OUT in
-*'needs the session too'*) ;;
-*) fail "the refusal did not say what was missing: [$OUT]" ;;
+  *'needs the session too'*) ;;
+  *) fail "the refusal did not say what was missing: [$OUT]" ;;
 esac
 case $OUT in
-*'mux window work::SESSION:build'*) ;;
-*) fail "the refusal did not print the working spelling, which is what
+  *'mux window work::SESSION:build'*) ;;
+  *) fail "the refusal did not print the working spelling, which is what
 _common.md asks of a refusal that costs somebody their muscle memory:
 [$OUT]" ;;
 esac
@@ -161,12 +161,12 @@ win build
 # (a window opened in a session nobody chose) where an exit code only says
 # the call was allowed.
 case "$(logged)" in
-*new-window*) fail "it opened a window with no session named. tmux would
+  *new-window*) fail "it opened a window with no session named. tmux would
 have picked the newest session: plausible, wrong and silent." ;;
 esac
 case $OUT in
-*'mux window SESSION:build'*) ;;
-*) fail "the refusal did not name the remedy: [$OUT]" ;;
+  *'mux window SESSION:build'*) ;;
+  *) fail "the refusal did not name the remedy: [$OUT]" ;;
 esac
 unset FAKE_TMUX
 
@@ -177,7 +177,7 @@ unset FAKE_TMUX
 NOSESSION=1 win 'nope:build'; unset NOSESSION
 [ "$RC" = 3 ] || fail "a missing session must exit 3, got $RC: $OUT"
 case "$(logged)" in
-*new-window*) fail "it tried to open a window in a session that is not
+  *new-window*) fail "it tried to open a window in a session that is not
 there: $(logged)" ;;
 esac
 
@@ -185,12 +185,12 @@ esac
 win build --control agent --attention agent
 [ "$RC" = 0 ] || fail "declaring classes failed: $OUT"
 case "$(logged)" in
-*'@mux-control agent'*) ;;
-*) fail "--control did not reach the new pane: $(logged)" ;;
+  *'@mux-control agent'*) ;;
+  *) fail "--control did not reach the new pane: $(logged)" ;;
 esac
 case "$(logged)" in
-*'@mux-attention agent'*) ;;
-*) fail "--attention did not reach the new pane: $(logged)" ;;
+  *'@mux-attention agent'*) ;;
+  *) fail "--attention did not reach the new pane: $(logged)" ;;
 esac
 win build --control supervisor
 [ "$RC" = 2 ] || fail "an unknown class must exit 2, got $RC: $OUT"

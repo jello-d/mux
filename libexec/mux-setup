@@ -71,16 +71,16 @@ _known() {
 _agent= _yes=0 _remove=0 _dry=0
 while [ $# -gt 0 ]; do
   case $1 in
-  -h|--help) _usage; exit "$MUX_EC_OK" ;;
-  --yes|-y)  _yes=1; shift ;;
-  --remove)  _remove=1; shift ;;
-  --dry-run) _dry=1; shift ;;
-  -*) echo "mux: setup: unknown option: $1" >&2; _usage >&2
-     exit "$MUX_EC_USAGE" ;;
-  *)
-    [ -z "$_agent" ] || {
-      echo "mux: setup: one agent at a time" >&2; exit "$MUX_EC_USAGE"; }
-    _agent=$1; shift ;;
+    -h|--help) _usage; exit "$MUX_EC_OK" ;;
+    --yes|-y)  _yes=1; shift ;;
+    --remove)  _remove=1; shift ;;
+    --dry-run) _dry=1; shift ;;
+    -*) echo "mux: setup: unknown option: $1" >&2; _usage >&2
+       exit "$MUX_EC_USAGE" ;;
+    *)
+      [ -z "$_agent" ] || {
+        echo "mux: setup: one agent at a time" >&2; exit "$MUX_EC_USAGE"; }
+      _agent=$1; shift ;;
   esac
 done
 
@@ -90,8 +90,8 @@ done
 # ENUMERATED RATHER THAN `[a-z]`, for the reason mux_ctx_valid records: a range
 # is a collation range, and macOS let `UPPER` through one.
 case $_agent in
-''|*[!abcdefghijklmnopqrstuvwxyz0123456789-]*|-*|*-)
-  echo "mux: setup: not an agent name: $_agent" >&2; exit "$MUX_EC_USAGE" ;;
+  ''|*[!abcdefghijklmnopqrstuvwxyz0123456789-]*|-*|*-)
+    echo "mux: setup: not an agent name: $_agent" >&2; exit "$MUX_EC_USAGE" ;;
 esac
 if ! _known | grep -qxF -- "$_agent"; then
   echo "mux: setup: mux ships no descriptor for $_agent" >&2
@@ -103,13 +103,17 @@ fi
 # THE EVENTS COME FROM MUX, not from a list typed here. `mux agent-hook`'s
 # table IS the contract, so scraping it means this can never wire an event mux
 # does not understand (which exits 2 and logs) or miss one it does.
-_events=$(sed -n 's/^\([A-Za-z]*\))  *set -- .*/\1/p' \
+# MATCHED BY SHAPE, NOT BY COLUMN: this reads another file's `case` arms, so
+# an indentation change there must not silently empty the table. It cannot be
+# silent anyway (the guard below refuses), but a product that breaks on a
+# whitespace sweep is a product keyed on the wrong thing.
+_events=$(sed -n 's/^[[:space:]]*\([A-Za-z]*\))  *set -- .*/\1/p' \
            "$_libexec/mux-agent-hook")
 [ -n "$_events" ] || _die "cannot read the event table from mux-agent-hook"
 
 case $_agent in
-claude) ;;
-*) _die "mux knows $_agent's states but not how to wire it up yet" ;;
+  claude) ;;
+  *) _die "mux knows $_agent's states but not how to wire it up yet" ;;
 esac
 
 # --- claude ---------------------------------------------------------------
@@ -148,7 +152,7 @@ _plan=$(MUX_SETUP_EVENTS="$_events" "$_impl" plan "$_settings" \
     "$_mode" 2>&1) || _die "$_plan"
 printf '%s\n' "$_plan"
 case $_plan in
-*'nothing to change'*) exit "$MUX_EC_OK" ;;
+  *'nothing to change'*) exit "$MUX_EC_OK" ;;
 esac
 [ "$_dry" -eq 0 ] || exit "$MUX_EC_OK"
 
@@ -161,8 +165,8 @@ if [ "$_yes" -eq 0 ]; then
   printf 'apply this to %s? [y/N] ' "$_settings" >&2
   read -r _ans || _ans=
   case ${_ans:-} in
-  y|Y|yes|YES) ;;
-  *) echo "mux: setup: nothing changed" >&2; exit "$MUX_EC_FAIL" ;;
+    y|Y|yes|YES) ;;
+    *) echo "mux: setup: nothing changed" >&2; exit "$MUX_EC_FAIL" ;;
   esac
 fi
 

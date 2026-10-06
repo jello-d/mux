@@ -21,7 +21,7 @@
 # mux_class_valid CLASS -> 0 when it is one of the three.
 mux_class_valid() {
   case ${1:-} in
-  human|agent|hybrid) return 0 ;;
+    human|agent|hybrid) return 0 ;;
   esac
   return 1
 }
@@ -43,8 +43,8 @@ mux_class_valid() {
 # an error path would have two answers for one question.
 mux_class_rank() {
   case ${1:-} in
-  human)  echo 2 ;;
-  hybrid) echo 1 ;;
-  *)      echo 0 ;;
+    human)  echo 2 ;;
+    hybrid) echo 1 ;;
+    *)      echo 0 ;;
   esac
 }

@@ -91,7 +91,7 @@ run check
 [ "$RC" = 1 ] || fail "check on an empty prefix must exit non-zero, got $RC"
 has '[FAIL]' "check must use the [FAIL] marker contract"
 case $OUT in
-*'[OK]'*) fail "nothing is installed, so nothing should read [OK]:
+  *'[OK]'*) fail "nothing is installed, so nothing should read [OK]:
 $OUT" ;;
 esac
 # It must not FIX anything: an audit that installs is not an audit.
@@ -103,7 +103,7 @@ esac
 # check emitted colour when not on a terminal, the styler would be painting
 # over escape codes and the output would be mangled in the place a human reads.
 case $OUT in
-*"$(printf '\033')"*) fail "check emitted ANSI colour into a pipe:
+  *"$(printf '\033')"*) fail "check emitted ANSI colour into a pipe:
 $(printf '%s' "$OUT" | cat -v)" ;;
 esac
 
@@ -127,7 +127,7 @@ has "$UNIT current" "a unit file matching the package's must read current"
 printf '# drifted\n' >>"$UNITF"
 run check
 case $OUT in
-*"$UNIT current"*) fail "a DRIFTED unit file read as current. cmp exists here
+  *"$UNIT current"*) fail "a DRIFTED unit file read as current. cmp exists here
 precisely so an edited-then-forgotten unit cannot look installed." ;;
 esac
 cp "$HERE/desktop-notifier/$UNIT" "$UNITF"
@@ -158,7 +158,7 @@ run service; unset SCTL_FAIL
 [ "$RC" = 0 ] || fail "no user manager is not an error, got $RC"
 has "next login" "a headless install did not say when it would start"
 case $OUT in
-*RESTARTED*) fail "it claimed a RESTART that could not have happened" ;;
+  *RESTARTED*) fail "it claimed a RESTART that could not have happened" ;;
 esac
 
 # ... and anything else is loud and non-zero, because a service that will not
@@ -229,7 +229,7 @@ has "installed code matches" "identical copies were not reported current"
 printf '\n# a local edit\n' >>"$SITE/render.py"
 run check
 case $OUT in
-*"installed code matches"*) fail "a DRIFTED file read as current. The whole
+  *"installed code matches"*) fail "a DRIFTED file read as current. The whole
 point is that content is compared; presence was already covered above." ;;
 esac
 has "STALE" "drifted code was not called stale"
@@ -288,7 +288,7 @@ if [ -d "/proc/$$" ]; then
   SCTL_PID=0 run check; unset SCTL_PID
   has "not running" "a stopped unit was not reported as such"
   case $OUT in
-  *"RUNNING daemon started BEFORE"*) fail "a unit that is not running was
+    *"RUNNING daemon started BEFORE"*) fail "a unit that is not running was
 called stale; there is no process there to be stale" ;;
   esac
 
@@ -336,12 +336,12 @@ _vrun() {   # <verb...>: the installer with HOME and XDG pinned
 # than hardcoded, so a box that moves its data home takes the venv with it.
 _vo=$(_vrun check)
 case $_vo in
-*"$_vh/.local/share/mux/venv"*) ;;
-*) fail "the default venv is not inside mux's payload, so the package is
+  *"$_vh/.local/share/mux/venv"*) ;;
+  *) fail "the default venv is not inside mux's payload, so the package is
 still spread over two roots: [$_vo]" ;;
 esac
 case $_vo in
-*'.venvs'*) fail "the old \$HOME/.venvs path is still the default: [$_vo]" ;;
+  *'.venvs'*) fail "the old \$HOME/.venvs path is still the default: [$_vo]" ;;
 esac
 
 # A SURVIVING OLD VENV IS REPORTED, because install only removes it after a
@@ -349,8 +349,8 @@ esac
 mkdir -p "$_vh/.venvs/mux-desktop-notifier"
 _vo=$(_vrun check)
 case $_vo in
-*'retired venv survives'*) ;;
-*) fail "a leftover $_vh/.venvs/mux-desktop-notifier was not reported,
+  *'retired venv survives'*) ;;
+  *) fail "a leftover $_vh/.venvs/mux-desktop-notifier was not reported,
 so it sits
 there unnoticed as a second copy nothing resolves through: [$_vo]" ;;
 esac
@@ -423,7 +423,7 @@ the gate refuses everything and the assertion above proves nothing"
 rm -rf "$_vh/.venvs"
 _vo=$(_vrun check)
 case $_vo in
-*'retired venv'*) fail "with no leftover, the check still talks about one:
+  *'retired venv'*) fail "with no leftover, the check still talks about one:
 [$_vo]" ;;
 esac
 

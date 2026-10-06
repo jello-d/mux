@@ -168,7 +168,7 @@ _notours=$(printf '%s\n' "$_panes" \
 # _has_agent_pane SESSION -> did mux build an agent pane in it?
 _has_agent_pane() {
   case $_agented in
-  *"
+    *"
 $1
 "*) return 0 ;;
   esac
@@ -343,23 +343,23 @@ _sep() {
 # how long it waited). Shared by every builder so the look cannot drift.
 _style() {
   case $1 in
-  blocked)
-    if   [ "$2" -ge "$BLOCK_HOT_S" ]; then
-      sty=$STY_BLOCK_HOT;   acc=$ACC_BLOCK_HOT
-    elif [ "$2" -ge "$BLOCK_WARM_S" ]; then
-      sty=$STY_BLOCK_WARM;  acc=$ACC_BLOCK_WARM
-    else    sty=$STY_BLOCK_FRESH; acc=$ACC_BLOCK_FRESH
-    fi ;;
-  working) sty=$STY_WORKING; acc=$ACC_WORKING ;;
-  humming) sty=$STY_HUMMING; acc=$ACC_HUMMING ;;
-  idle)    sty=$STY_IDLE;    acc=$ACC_IDLE ;;
-  none|'') sty=$STY_NONE;    acc=$ACC_NONE ;;
-  # UNWIRED borrows the unknown STYLE on purpose: both mean "mux cannot
-  # say", and inventing a colour for it would spend one of the few this
-  # tile has left. The GLYPH is what separates them, and each property is
-  # asserted on its own.
-  unwired) sty=$STY_UNKNOWN; acc=$ACC_UNKNOWN ;;
-  *)       sty=$STY_UNKNOWN; acc=$ACC_UNKNOWN ;;
+    blocked)
+      if   [ "$2" -ge "$BLOCK_HOT_S" ]; then
+        sty=$STY_BLOCK_HOT;   acc=$ACC_BLOCK_HOT
+      elif [ "$2" -ge "$BLOCK_WARM_S" ]; then
+        sty=$STY_BLOCK_WARM;  acc=$ACC_BLOCK_WARM
+      else    sty=$STY_BLOCK_FRESH; acc=$ACC_BLOCK_FRESH
+      fi ;;
+    working) sty=$STY_WORKING; acc=$ACC_WORKING ;;
+    humming) sty=$STY_HUMMING; acc=$ACC_HUMMING ;;
+    idle)    sty=$STY_IDLE;    acc=$ACC_IDLE ;;
+    none|'') sty=$STY_NONE;    acc=$ACC_NONE ;;
+    # UNWIRED borrows the unknown STYLE on purpose: both mean "mux cannot
+    # say", and inventing a colour for it would spend one of the few this
+    # tile has left. The GLYPH is what separates them, and each property is
+    # asserted on its own.
+    unwired) sty=$STY_UNKNOWN; acc=$ACC_UNKNOWN ;;
+    *)       sty=$STY_UNKNOWN; acc=$ACC_UNKNOWN ;;
   esac
 }
 
@@ -381,7 +381,7 @@ _emit_session() {
     # This list is hardcoded, so it is one of the things a new state has to be
     # added to by hand: the derived-list lesson, met in a `case` pattern.
     case $_s in
-    blocked|working|idle|humming) _d=$(fmt_age "$_a") ;;
+      blocked|working|idle|humming) _d=$(fmt_age "$_a") ;;
     esac
     _af=" $_d"
   fi

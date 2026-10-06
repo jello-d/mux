@@ -71,11 +71,11 @@ proc 930 910 ; proc 931 930 ; proc 940 1
 # as the work it is holding, and every agent pane in the fleet reads humming
 # for ever, which is the loudest possible version of this bug.
 case $(scan 900 930) in
-*910*) fail "the AGENT is reported as work it is holding, so every pane with
+  *910*) fail "the AGENT is reported as work it is holding, so every pane with
 an agent in it would hum for ever" ;;
 esac
 case $(scan 900 930) in
-*900*) fail "the pane's own shell is reported as work" ;;
+  *900*) fail "the pane's own shell is reported as work" ;;
 esac
 
 # --- NOR THE SCAN'S OWN MACHINERY ------------------------------------------
@@ -87,7 +87,7 @@ esac
 # AS WORK. Reproducible: three phantom pids per run against a real /proc.
 # Every question is asked of the one snapshot now, which cannot race itself.
 case $(scan 900 930) in
-*931*) fail "a process the scan itself forked is reported as work: the
+  *931*) fail "a process the scan itself forked is reported as work: the
 self-match trap, which here makes a session hum about the check that was
 asking whether it hums" ;;
 esac
@@ -102,7 +102,7 @@ esac
 # report that was factually true about the processes and wrong about the
 # question.
 case $(scan 900 930) in
-*940*) fail "a process that re-parented to init is reported as work. Nothing
+  *940*) fail "a process that re-parented to init is reported as work. Nothing
 holds it: the agent has no handle on it, cannot wait for it and reports
 nothing, so mux claiming the session is still busy is unbounded in time,
 because nothing will ever clear it." ;;

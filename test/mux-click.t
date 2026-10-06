@@ -60,15 +60,15 @@ opt() { awk -F'\t' -v k="$1" '$1==k{print $2; exit}' "$OPTS" 2>/dev/null; }
 # different session that merely shares a prefix.
 _o=$(click 's:alpha' '/dev/pts/3')
 case $_o in
-*"switch-client -c /dev/pts/3 -t =alpha"*) ;;
-*) fail "a session click did not switch exactly: [$_o]" ;;
+  *"switch-client -c /dev/pts/3 -t =alpha"*) ;;
+  *) fail "a session click did not switch exactly: [$_o]" ;;
 esac
 
 # Without a client, it still switches (the binding may not pass one).
 _o=$(click 's:alpha')
 case $_o in
-*"switch-client -t =alpha"*) ;;
-*) fail "a clientless click did not switch: [$_o]" ;;
+  *"switch-client -t =alpha"*) ;;
+  *) fail "a clientless click did not switch: [$_o]" ;;
 esac
 
 # --- everything it must DECLINE -----------------------------------------
@@ -114,12 +114,12 @@ banner || fail "the banner script failed"
   || fail "the pristine default was not stashed: [$(opt @mux-sf0-default)]"
 _first=$(opt 'status-format[0]')
 case $_first in
-PRISTINE*) ;;
-*) fail "the rebuild lost the pristine default: [$_first]" ;;
+  PRISTINE*) ;;
+  *) fail "the rebuild lost the pristine default: [$_first]" ;;
 esac
 case $_first in
-*PREFIX*) ;;
-*) fail "the prefix banner is missing: [$_first]" ;;
+  *PREFIX*) ;;
+  *) fail "the prefix banner is missing: [$_first]" ;;
 esac
 
 # Re-run twice more: the value must be IDENTICAL, not accumulated.

@@ -69,16 +69,16 @@ go_headless() {
 # one row instead of twenty.
 _o=$(go TMUX=/tmp/fake/global,1,0 FAKE_WH="200 49")
 case $_o in
-*"-x 200 -y 49"*) ;;
-*) fail "in-tmux build did not carry the window size: [$_o]" ;;
+  *"-x 200 -y 49"*) ;;
+  *) fail "in-tmux build did not carry the window size: [$_o]" ;;
 esac
 
 # A different client size must produce a different build size: i.e. it is
 # really being read, not hardcoded.
 _o=$(go TMUX=/tmp/fake/global,1,0 FAKE_WH="100 30")
 case $_o in
-*"-x 100 -y 30"*) ;;
-*) fail "in-tmux build ignored the client size: [$_o]" ;;
+  *"-x 100 -y 30"*) ;;
+  *) fail "in-tmux build ignored the client size: [$_o]" ;;
 esac
 
 # --- no terminal to ask: build with tmux's default, not a guess -----------
@@ -87,11 +87,11 @@ esac
 if command -v setsid >/dev/null 2>&1; then
   _o=$(go_headless)
   case $_o in
-  *-x*|*-y*) fail "headless build invented a geometry: [$_o]" ;;
+    *-x*|*-y*) fail "headless build invented a geometry: [$_o]" ;;
   esac
   case $_o in
-  *new-session*) ;;
-  *) fail "headless build created no session at all: [$_o]" ;;
+    *new-session*) ;;
+    *) fail "headless build created no session at all: [$_o]" ;;
   esac
 fi
 
@@ -99,16 +99,16 @@ fi
 # The geometry flags must not have displaced the arguments after them.
 _o=$(go TMUX=/tmp/fake/global,1,0 FAKE_WH="200 49")
 case $_o in
-*"-s mux-geometry-proj"*|*"-s proj"*) ;;
-*) fail "the session name was lost: [$_o]" ;;
+  *"-s mux-geometry-proj"*|*"-s proj"*) ;;
+  *) fail "the session name was lost: [$_o]" ;;
 esac
 case $_o in
-*"-c $T/proj"*) ;;
-*) fail "the root was lost: [$_o]" ;;
+  *"-c $T/proj"*) ;;
+  *) fail "the root was lost: [$_o]" ;;
 esac
 case $_o in
-*-d*) ;;
-*) fail "the session is no longer built detached: [$_o]" ;;
+  *-d*) ;;
+  *) fail "the session is no longer built detached: [$_o]" ;;
 esac
 
 pass

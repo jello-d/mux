@@ -39,8 +39,8 @@ no() {
   _l=$1 _w=$2; shift 2
   _o=$(mux "$@") && fail "$_l: \`mux $*\` should have failed"
   case $_o in
-  *"$_w"*) ;;
-  *) fail "$_l: want [$_w] in output, got [$_o]" ;;
+    *"$_w"*) ;;
+    *) fail "$_l: want [$_w] in output, got [$_o]" ;;
   esac
 }
 
@@ -131,9 +131,13 @@ ok go-resume-before --resume go lay4
 # BOTH LISTS COME OUT OF THE SOURCE. A second copy here would drift in
 # exactly the direction this is checking for, which is what `mux check`
 # learned about its own key list.
-_flags=$(awk '/^while \[ "\$#" -gt 0 \]; do/{p=1} p && /^  esac$/{p=0}
- p && /^    -/ && /=1; shift ;;/ {
-   match($0, /^    [^)]*\)/); a=substr($0, 5, RLENGTH-5)
+# INDENTATION-AGNOSTIC ON PURPOSE. This used to require exactly four leading
+# spaces, and the case-indent sweep made it six: the scrape found NOTHING and
+# the audit below would have passed about the empty set, which is why that
+# vacuity guard exists. Match the shape, never the column.
+_flags=$(awk '/while \[ "\$#" -gt 0 \]; do/{p=1} p && /^[[:space:]]*esac$/{p=0}
+ p && /^[[:space:]]*-/ && /=1; shift ;;/ {
+   match($0, /[^[:space:]][^)]*\)/); a=substr($0, RSTART, RLENGTH-1)
    split(a, f, "|"); print f[1] }' "$HERE/bin/mux" | sort -u)
 # THE TWO SCRAPES READ TWO FILES NOW, and that is the split the parser took
 # on 2026-10-05 rather than an accident: the option LOOP stayed in bin/mux,

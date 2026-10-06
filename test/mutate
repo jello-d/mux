@@ -43,8 +43,8 @@ T=$(mktemp -d) || T=
   echo "mutate: refusing to use [$T] as a scratch dir: the trap removes it" >&2
   exit 2; }
 case $T in
-*\'*) echo "mutate: refusing a scratch dir containing a quote: [$T]" >&2
-  exit 2 ;;
+  *\'*) echo "mutate: refusing a scratch dir containing a quote: [$T]" >&2
+    exit 2 ;;
 esac
 # shellcheck disable=SC2064  # EXPANDING NOW IS THE POINT: shellcheck's
 # advice here is to defer the expansion to signal time, and deferring is
@@ -71,42 +71,42 @@ _parses() {   # <file>
   # file. The suffix arm stays for the package's `*.py`, which are IMPORTED
   # and so carry no shebang at all.
   case "$(head -1 "$1")" in
-  *python*) _pl=py ;;
-  *bash)    _pl=bash ;;
-  *)        _pl=sh ;;
+    *python*) _pl=py ;;
+    *bash)    _pl=bash ;;
+    *)        _pl=sh ;;
   esac
   case "$1" in
-  *.py) _pl=py ;;
-  # THE HOMEBREW FORMULA IS RUBY, and this repo is its own tap, so the
-  # formula ships here and its guards belong in the corpus like anything
-  # else. Without this arm a mutated `.rb` goes to `dash -n`, which rejects
-  # every Ruby file, and the driver reports a corpus error about a record
-  # that is perfectly good: the same false accusation the suffix-keyed
-  # Python selector made before the shebang arm was added.
-  *.rb) _pl=rb ;;
+    *.py) _pl=py ;;
+    # THE HOMEBREW FORMULA IS RUBY, and this repo is its own tap, so the
+    # formula ships here and its guards belong in the corpus like anything
+    # else. Without this arm a mutated `.rb` goes to `dash -n`, which rejects
+    # every Ruby file, and the driver reports a corpus error about a record
+    # that is perfectly good: the same false accusation the suffix-keyed
+    # Python selector made before the shebang arm was added.
+    *.rb) _pl=rb ;;
   esac
   case "$_pl" in
-  py)
-    # compile(), not py_compile: it checks the syntax and writes
-    # NOTHING. py_compile always wants an output file, refuses
-    # /dev/null outright ("will be changed into a regular one"), and
-    # left to itself would drop a .pyc beside the source that a later
-    # import would pick up.
-    python3 -c 'import sys
+    py)
+      # compile(), not py_compile: it checks the syntax and writes
+      # NOTHING. py_compile always wants an output file, refuses
+      # /dev/null outright ("will be changed into a regular one"), and
+      # left to itself would drop a .pyc beside the source that a later
+      # import would pick up.
+      python3 -c 'import sys
 src = open(sys.argv[1]).read()
 compile(src, sys.argv[1], "exec")' "$1" 2>/dev/null
-    return $? ;;
-  bash) bash -n "$1" 2>/dev/null ;;
-  rb)
-    # SKIPPED RATHER THAN FAILED with no ruby on the box, and the record
-    # still has to produce its named failure for the kill to count, so
-    # the worst an absent ruby can do is let a non-parsing mutant through
-    # to a test that will reject it anyway. Failing here instead would make
-    # a machine without ruby report corpus errors about good records, which
-    # is the direction that wastes the most time.
-    command -v ruby >/dev/null 2>&1 || return 0
-    ruby -c "$1" >/dev/null 2>&1 ;;
-  *)    dash -n "$1" 2>/dev/null ;;
+      return $? ;;
+    bash) bash -n "$1" 2>/dev/null ;;
+    rb)
+      # SKIPPED RATHER THAN FAILED with no ruby on the box, and the record
+      # still has to produce its named failure for the kill to count, so
+      # the worst an absent ruby can do is let a non-parsing mutant through
+      # to a test that will reject it anyway. Failing here instead would make
+      # a machine without ruby report corpus errors about good records, which
+      # is the direction that wastes the most time.
+      command -v ruby >/dev/null 2>&1 || return 0
+      ruby -c "$1" >/dev/null 2>&1 ;;
+    *)    dash -n "$1" 2>/dev/null ;;
   esac
 }
 
@@ -288,13 +288,13 @@ _run_one() {   # name file tests old new msg
     # mutation that breaks an unrelated assertion counts as cover.
     if [ -n "$_msg" ]; then
       case $_out in
-      *"$_msg"*) _killed=1 ;;
-      *) _err "$_n: '$_t' died for the WRONG reason" \
-           "wanted a failure mentioning: [$_msg]" \
-           "got: $(printf '%s' "$_out" | head -1)" \
-           "So the mutation broke something other than the" \
-           "assertion this record claims to exercise."
-         return ;;
+        *"$_msg"*) _killed=1 ;;
+        *) _err "$_n: '$_t' died for the WRONG reason" \
+             "wanted a failure mentioning: [$_msg]" \
+             "got: $(printf '%s' "$_out" | head -1)" \
+             "So the mutation broke something other than the" \
+             "assertion this record claims to exercise."
+           return ;;
       esac
     else
       _killed=1
@@ -331,12 +331,12 @@ _flush() {
 }
 while IFS= read -r _line; do
   case "$_line" in
-  '= '*) _flush; M_N=${_line#??} ;;
-  'f '*) M_F=${_line#??} ;;
-  't '*) M_T=${_line#??} ;;
-  '- '*) M_O=${_line#??} ;;
-  '+ '*) M_P=${_line#??} ;;
-  'm '*) M_M=${_line#??} ;;
+    '= '*) _flush; M_N=${_line#??} ;;
+    'f '*) M_F=${_line#??} ;;
+    't '*) M_T=${_line#??} ;;
+    '- '*) M_O=${_line#??} ;;
+    '+ '*) M_P=${_line#??} ;;
+    'm '*) M_M=${_line#??} ;;
   esac
 done <"$CORPUS"
 _flush

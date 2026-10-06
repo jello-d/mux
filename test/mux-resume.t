@@ -156,7 +156,7 @@ mux_recorded alpha && fail "the dead entry survived kill"
 : >"$LIVE"
 _o=$(mux "$T/elsewhere" resume) || fail "resume after forgetting failed"
 case $_o in
-*"could NOT build"*) fail "resume still reports the forgotten entry: [$_o]" ;;
+  *"could NOT build"*) fail "resume still reports the forgotten entry: [$_o]" ;;
 esac
 
 # Neither live nor recorded is still an ERROR. Forgetting is for something mux
@@ -214,8 +214,8 @@ mux "$T/tree/logged" go >/dev/null || fail "go logged failed"
 _o=$(mux "$T/elsewhere" resume 2>&1 || true)
 _lg=$(cat "$MUX_LOG" 2>/dev/null || true)
 case $_lg in
-*' resume['*) ;;
-*) fail "a rebuild wrote nothing to the log:
+  *' resume['*) ;;
+  *) fail "a rebuild wrote nothing to the log:
   said: $_o
   log:  $_lg" ;;
 esac
@@ -223,8 +223,8 @@ esac
 # NAMES, NOT JUST COUNTS. "rebuilt 5" cannot say WHICH five, and the useful
 # post-mortem is always about the one that is missing.
 case $_lg in
-*logged*) ;;
-*) fail "the rebuild was logged without naming the sessions: $_lg" ;;
+  *logged*) ;;
+  *) fail "the rebuild was logged without naming the sessions: $_lg" ;;
 esac
 
 # --- and what it could NOT do ---------------------------------------------
@@ -241,8 +241,8 @@ rm -rf "$T/tree/ghost"           # the root goes away under it
 _o=$(mux "$T/elsewhere" resume 2>&1 || true)
 _lg=$(cat "$MUX_LOG" 2>/dev/null || true)
 case $_lg in
-*"could NOT build"*ghost*) ;;
-*) fail "a session that failed to rebuild was not logged BY NAME:
+  *"could NOT build"*ghost*) ;;
+  *) fail "a session that failed to rebuild was not logged BY NAME:
   said: $_o
   log:  $_lg" ;;
 esac
@@ -256,8 +256,8 @@ rm -f "$T"/state/sessions.*
 _o=$(mux "$T/elsewhere" resume 2>&1 || true)
 _lg=$(cat "$MUX_LOG" 2>/dev/null || true)
 case $_lg in
-*"nothing recorded"*) ;;
-*) fail "an empty set logged nothing:
+  *"nothing recorded"*) ;;
+  *) fail "an empty set logged nothing:
   said: $_o
   log:  $_lg" ;;
 esac

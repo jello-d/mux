@@ -127,8 +127,8 @@ r() {
   _rw=$1
   _ro=$(build "$2") && fail "[$2] was accepted and should be refused"
   case $_ro in
-  *"$_rw"*) ;;
-  *) fail "refused without saying why: want [$_rw], got [$_ro]" ;;
+    *"$_rw"*) ;;
+    *) fail "refused without saying why: want [$_rw], got [$_ro]" ;;
   esac
 }
 

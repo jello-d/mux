@@ -50,9 +50,9 @@ done
 
 APPLY=0
 case "${1:-}" in
---apply) APPLY=1 ;;
-''|--dry-run) ;;
-*) echo "usage: mux migrate-profiles [--apply]" >&2; exit "$MUX_EC_USAGE" ;;
+  --apply) APPLY=1 ;;
+  ''|--dry-run) ;;
+  *) echo "usage: mux migrate-profiles [--apply]" >&2; exit "$MUX_EC_USAGE" ;;
 esac
 
 [ -d "$MUX_DIR" ] || { echo "mux: no $MUX_DIR to migrate"; exit "$MUX_EC_OK"; }

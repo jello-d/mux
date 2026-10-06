@@ -84,8 +84,8 @@ reset() { : >"$OPT"; rm -f "$T/conf/profiles" "$T/conf/profiles.d"/*.profile; }
 reset
 _o=$(mux theme)
 case $_o in
-*aaa*bbb*ccc*) ;;
-*) fail "theme with no argument did not list what is available: $_o" ;;
+  *aaa*bbb*ccc*) ;;
+  *) fail "theme with no argument did not list what is available: $_o" ;;
 esac
 [ -z "$(applied)" ] || fail "a bare 'mux theme' applied something: $(applied)"
 
@@ -103,8 +103,8 @@ reset
 _rc=0; _o=$(mux_out theme aaa) || _rc=$?
 [ "$_rc" -ne 0 ] || fail "setting a theme outside a session exited 0"
 case $_o in
-*"must run in a session"*) ;;
-*) fail "the refusal did not say why: $_o" ;;
+  *"must run in a session"*) ;;
+  *) fail "the refusal did not say why: $_o" ;;
 esac
 
 # --- a named theme is applied AND remembered ----------------------------

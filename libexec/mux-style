@@ -84,8 +84,8 @@ if [ -r "$_proc/$pane_pid/stat" ]; then
   # shellcheck disable=SC2046
   set -- $(sed 's/.*)//' "$_proc/$pane_pid/stat")
   case ${6:-} in
-    ''|*[!0-9]*) ;;         # no foreground group: keep the shell
-    *) fg=$6 ;;
+      ''|*[!0-9]*) ;;         # no foreground group: keep the shell
+      *) fg=$6 ;;
   esac
 fi
 

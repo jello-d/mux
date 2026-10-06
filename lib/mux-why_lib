@@ -96,10 +96,10 @@ _why_header() {
   # credited one that had failed, or declined to answer, for a token that
   # came from the baseline: the one lie this verb must never tell.
   case ${MUX_CTX_SRC:-baseline} in
-  command)  w_csrc='from context-command' ;;
-  declined) w_csrc='context-command named none; the baseline' ;;
-  failed)   w_csrc='context-command FAILED; the baseline' ;;
-  *)        w_csrc='no context-command; the baseline' ;;
+    command)  w_csrc='from context-command' ;;
+    declined) w_csrc='context-command named none; the baseline' ;;
+    failed)   w_csrc='context-command FAILED; the baseline' ;;
+    *)        w_csrc='no context-command; the baseline' ;;
   esac
   printf '%-9s %-26s %s\n' context "$MUX_CTX_TOKEN" "$w_csrc"
   printf '%-9s %-26s %s\n' partition "$MUX_CTX_PARTITION" \

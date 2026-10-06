@@ -67,7 +67,7 @@ done
 cc 'echo ../../etc'
 mux_ctx_resolve && fail "an invalid token should fail resolution"
 case ${MUX_CTX_ERR:-} in
-*"invalid context token"*) ;; *) fail "no useful error: [${MUX_CTX_ERR:-}]" ;;
+  *"invalid context token"*) ;; *) fail "no useful error: [${MUX_CTX_ERR:-}]" ;;
 esac
 
 # --- a FAILING context-command has not answered ----------------------------
@@ -81,7 +81,7 @@ eq failed-token "$MUX_CTX_TOKEN" global
 
 # ...and it must not be mistaken for an INVALID token either: it said nothing.
 case ${MUX_CTX_ERR:-} in
-'') ;; *) fail "a failing command set an error: [${MUX_CTX_ERR:-}]" ;;
+  '') ;; *) fail "a failing command set an error: [${MUX_CTX_ERR:-}]" ;;
 esac
 
 # A command that fails while printing something INVALID is still just global,
@@ -168,10 +168,10 @@ eq socket-named "$(mux_ctx_socket manifest)" manifest
 # --- every partition is discoverable, for reload and palette sync ----------
 _p=$(mux_ctx_partitions | tr '\n' ' ')
 case $_p in
-*global*) ;; *) fail "partitions omitted global: [$_p]" ;;
+  *global*) ;; *) fail "partitions omitted global: [$_p]" ;;
 esac
 case $_p in
-*manifest*) ;; *) fail "partitions omitted manifest: [$_p]" ;;
+  *manifest*) ;; *) fail "partitions omitted manifest: [$_p]" ;;
 esac
 
 # --- A COMMENT IN THE CONFIG IS A COMMENT HERE TOO -------------------------

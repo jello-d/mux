@@ -133,7 +133,7 @@ _o=$(env PREFIX="$T" XDG_BIN_HOME="$T/bin" XDG_DATA_HOME="$T/share" NO_COLOR=1 \
   HOME="$T" XDG_CONFIG_HOME="$T/conf-tmux-parent" \
   sh "$HERE/setup.sh" install 2>&1) || fail "install errored"
 case $_o in
-*source-file*) fail "the notice fired with the fragment already sourced:
+  *source-file*) fail "the notice fired with the fragment already sourced:
 $_o" ;;
 esac
 
@@ -178,8 +178,8 @@ _rem=$(sed -n 's/.*Refresh it with: \.\/setup\.sh \([a-z-]*\).*/\1/p' \
 gap named without a remedy invites two different fixes: $(cat "$T/out")"
 _ro=$(run "$_rem" check 2>&1) || true
 case $_ro in
-*"unknown command"*|*"unexpected argument"*)
-  fail "the notice names a verb this setup.sh does not accept: [$_rem]. That
+  *"unknown command"*|*"unexpected argument"*)
+    fail "the notice names a verb this setup.sh does not accept: [$_rem]. That
 is advice that cannot come true, which is worse than no advice: a provisioner
 acting on it loops for ever applying a line that does nothing." ;;
 esac
@@ -275,7 +275,7 @@ if command -v tmux >/dev/null 2>&1; then
 does not source THIS install's fragment, so it pushed an unrelated config:
 status-right is now [$(_sr)]"
     case $_o in
-    *reloaded*) fail "install claimed a reload it must not have done: $_o" ;;
+      *reloaded*) fail "install claimed a reload it must not have done: $_o" ;;
     esac
 
     # ... and one that DOES name it is brought current, which is the whole
@@ -285,14 +285,14 @@ status-right is now [$(_sr)]"
       >"$T/conf-tmux-parent/tmux/tmux.conf"
     _o=$(_inst) || fail "install errored reloading a live server"
     case $(_sr) in
-    *'mux agent-render'*) ;;
-    *) fail "a live server running THIS install was not brought current by the
+      *'mux agent-render'*) ;;
+      *) fail "a live server running THIS install was not brought current by the
 install: status-right is [$(_sr)]. A binding or hook added by this release is
 inert on this machine, and mux check reports drift that apply cannot fix." ;;
     esac
     case $_o in
-    *reloaded*) ;;
-    *) fail "the install reloaded a server and did not say so: $_o" ;;
+      *reloaded*) ;;
+      *) fail "the install reloaded a server and did not say so: $_o" ;;
     esac
 
     # ... AND THE TILDE FORM, which is the one people actually write and the
@@ -312,8 +312,8 @@ inert on this machine, and mux check reports drift that apply cannot fix." ;;
         >"$T/conf-tmux-parent/tmux/tmux.conf"
       _o=$(_inst) || fail "install errored on the tilde form [$_tf]"
       case $(_sr) in
-      *'mux agent-render'*) ;;
-      *) fail "a config written with a TILDE [$_tf] was not recognised, so
+        *'mux agent-render'*) ;;
+        *) fail "a config written with a TILDE [$_tf] was not recognised, so
 the reload never fires on a real machine: status-right is [$(_sr)]" ;;
       esac
     done
@@ -518,12 +518,12 @@ contract has to guess again"
 printf '%s\n' "$_po" | while IFS= read -r _l; do
   [ -n "$_l" ] || continue
   case $_l in
-  *"	"*) ;;
-  *) echo "NOTAB $_l" ;;
+    *"	"*) ;;
+    *) echo "NOTAB $_l" ;;
   esac
   case ${_l#*	} in
-  /*) ;;
-  *) echo "NOTABS $_l" ;;
+    /*) ;;
+    *) echo "NOTABS $_l" ;;
   esac
 done >"$T/pbad"
 [ ! -s "$T/pbad" ] || fail "malformed paths line(s), so a consumer parsing
@@ -560,8 +560,8 @@ _pstate=$(printf '%s\n' "$_po" | awk -F'\t' '$1 == "state" { print $2 }')
 _mlog=$(env -u MUX_SHARE MUX_STATE="$T/st" "$HERE/bin/mux" log --path \
   2>/dev/null) || fail "mux log --path failed"
 case $_mlog in
-"$_pstate"/*) ;;
-*) fail "paths says state is [$_pstate] but mux writes its log to [$_mlog],
+  "$_pstate"/*) ;;
+  *) fail "paths says state is [$_pstate] but mux writes its log to [$_mlog],
 so the contract and the program disagree about where state lives" ;;
 esac
 
@@ -592,13 +592,14 @@ not the point."
 # the caller guessing which form is wanted, and prescribing the remedy is this
 # fleet's rule for any refusal a human will hit.
 case $_o in
-*"is a SETTING"*) ;;
-*) fail "the refusal did not say that a VAR=value argument is a setting, so
+  *"is a SETTING"*) ;;
+  *) fail "the refusal did not say that a VAR=value argument is a setting, so
 the caller is left to guess: [$_o]" ;;
 esac
 case $_o in
-*"sh setup.sh install"*) ;;
-*) fail "the refusal did not PRESCRIBE the environment form it wants: [$_o]" ;;
+  *"sh setup.sh install"*) ;;
+  *) fail \
+    "the refusal did not PRESCRIBE the environment form it wants: [$_o]" ;;
 esac
 
 # A PLAIN EXTRA ARGUMENT IS REFUSED TOO, and names both the argument and the
@@ -607,8 +608,8 @@ _o=$(run check extra 2>&1) && _rc=0 || _rc=$?
 [ "$_rc" -eq 2 ] || fail "an extra argument after a known verb must exit 2,
 got $_rc: [$_o]"
 case $_o in
-*"unexpected argument 'extra'"*) ;;
-*) fail "the refusal did not name the offending argument: [$_o]" ;;
+  *"unexpected argument 'extra'"*) ;;
+  *) fail "the refusal did not name the offending argument: [$_o]" ;;
 esac
 
 # AND THE ONE VERB THAT TAKES MORE STILL DOES. `desktop-notifier` passes a
@@ -617,8 +618,8 @@ esac
 # path a provisioner uses rather than one a human types.
 _o=$(run desktop-notifier check 2>&1) && _rc=0 || _rc=$?
 case $_o in
-*"unexpected argument"*|*"is a SETTING"*)
-  fail "the arity guard swallowed the notifier passthrough, which is the one
+  *"unexpected argument"*|*"is a SETTING"*)
+    fail "the arity guard swallowed the notifier passthrough, which is the one
 verb that legitimately takes another: [$_o]" ;;
 esac
 

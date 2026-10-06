@@ -47,19 +47,19 @@ printf 'api         theme=cyan root=/tmp/api\nweb         theme=red\n' \
 # --- the draft is the row, in breakout syntax -------------------------------
 _seen=$(edit show api)
 case $_seen in
-*"theme cyan"*) ;; *) fail "draft did not carry the row: [$_seen]" ;;
+  *"theme cyan"*) ;; *) fail "draft did not carry the row: [$_seen]" ;;
 esac
 case $_seen in
-*"root /tmp/api"*) ;; *) fail "draft lost a key: [$_seen]" ;;
+  *"root /tmp/api"*) ;; *) fail "draft lost a key: [$_seen]" ;;
 esac
 
 # --- a saved draft REPLACES the row: a deleted key must not survive ---------
 edit green api >/dev/null || fail "saving a draft failed"
 case "$(row api)" in
-*theme=green*) ;; *) fail "edit did not apply: [$(row api)]" ;;
+  *theme=green*) ;; *) fail "edit did not apply: [$(row api)]" ;;
 esac
 case "$(row api)" in
-*root=*) fail "a key deleted in the draft survived: [$(row api)]" ;;
+  *root=*) fail "a key deleted in the draft survived: [$(row api)]" ;;
 esac
 [ ! -f "$(draft api)" ] || fail "a successful save left its draft behind"
 # The row keeps its POSITION, so an edit does not churn the file.

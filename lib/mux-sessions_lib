@@ -86,7 +86,7 @@ mux_sess_sanitise() {   # <name> -> a name tmux will store unchanged
 # mux being difficult about a name nobody chose.
 mux_sess_name_clean() {   # <name>
   case ${1:-} in
-  *:*) return 1 ;;
+    *:*) return 1 ;;
   esac
   return 0
 }

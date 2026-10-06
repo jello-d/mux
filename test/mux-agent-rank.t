@@ -95,8 +95,8 @@ set -- $(mux_agent_state "$D" sess)
 rm -f "$D"/*
 agent_rec "$D/1" blocked %1 100 other
 case "$(mux_agent_state "$D" sess)" in
-' ') ;;
-*) fail "an untracked session should read as a lone space, got
+  ' ') ;;
+  *) fail "an untracked session should read as a lone space, got
 [$(mux_agent_state "$D" sess)]" ;;
 esac
 
@@ -109,8 +109,8 @@ for _s in blocked working idle '' frobnicating; do
   _this=$(mux_agent_glyph "$_s")
   [ -n "$_this" ] || fail "state [$_s] has no glyph"
   case "$MUX_AGENT_NL$_g$MUX_AGENT_NL" in
-  *"$MUX_AGENT_NL$_this$MUX_AGENT_NL"*)
-    fail "state [$_s] reuses the glyph [$_this]" ;;
+    *"$MUX_AGENT_NL$_this$MUX_AGENT_NL"*)
+      fail "state [$_s] reuses the glyph [$_this]" ;;
   esac
   _g="$_g$MUX_AGENT_NL$_this"
 done

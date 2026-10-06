@@ -54,8 +54,8 @@ mux() {
 _rc=0; _o=$(mux ls) || _rc=$?
 [ "$_rc" -eq 0 ] || fail "ls on an empty context exited $_rc"
 case $_o in
-*"no sessions"*) ;;
-*) fail "ls did not report an empty context: [$_o]" ;;
+  *"no sessions"*) ;;
+  *) fail "ls did not report an empty context: [$_o]" ;;
 esac
 
 # --- the glyph per state, from the single shared source -----------------
@@ -84,8 +84,8 @@ printf 'my project\n' >"$LIVE"
 agent_rec "$T/run/mux/agent-state/global/4" working %4 100 'my project'
 _o=$(mux ls)
 case $_o in
-*"my project:"*) ;;
-*) fail "a spaced session name did not survive ls: [$_o]" ;;
+  *"my project:"*) ;;
+  *) fail "a spaced session name did not survive ls: [$_o]" ;;
 esac
 printf '%s\n' "$_o" | grep -q '🧠' \
   || fail "the spaced session lost its glyph: [$_o]"
@@ -109,8 +109,8 @@ grep -qx 'source my' "$SRC" \
 grep -qx 'source other' "$SRC" \
   || fail "reload skipped a plain partition: [$(cat "$SRC")]"
 case $_o in
-*reloaded*) ;;
-*) fail "reload did not report what it did: [$_o]" ;;
+  *reloaded*) ;;
+  *) fail "reload did not report what it did: [$_o]" ;;
 esac
 
 # --- reload NO LONGER needs a tmux.conf, and still does the work -------
@@ -132,10 +132,10 @@ grep -qx 'source other' "$SRC" || fail "reload exited 0 having sourced
 NOTHING, which passes an exit-code check while leaving every server unwired:
 [$(cat "$SRC")]"
 case $_o in
-*"no tmux.conf"*)
-  fail "reload still names a missing tmux.conf as a refusal" ;;
-*reloaded*) ;;
-*) fail "reload did not report what it did: [$_o]" ;;
+  *"no tmux.conf"*)
+    fail "reload still names a missing tmux.conf as a refusal" ;;
+  *reloaded*) ;;
+  *) fail "reload did not report what it did: [$_o]" ;;
 esac
 
 pass

@@ -86,16 +86,16 @@ _dry=0
 _addr=
 while [ $# -gt 0 ]; do
   case $1 in
-  --all) _all=1; shift ;;
-  -n|--dry-run) _dry=1; shift ;;
-  -h|--help)
-    echo "usage: mux update-env [[PARTITION::]SESSION] [--all] [-n]"
-    exit "$MUX_EC_OK" ;;
-  --) shift; break ;;
-  -*) echo "mux: update-env: unknown option: $1" >&2; exit "$MUX_EC_USAGE" ;;
-  *)  [ -z "$_addr" ] || {
-        echo "mux: update-env takes one address" >&2; exit "$MUX_EC_USAGE"; }
-      _addr=$1; shift ;;
+    --all) _all=1; shift ;;
+    -n|--dry-run) _dry=1; shift ;;
+    -h|--help)
+      echo "usage: mux update-env [[PARTITION::]SESSION] [--all] [-n]"
+      exit "$MUX_EC_OK" ;;
+    --) shift; break ;;
+    -*) echo "mux: update-env: unknown option: $1" >&2; exit "$MUX_EC_USAGE" ;;
+    *)  [ -z "$_addr" ] || {
+          echo "mux: update-env takes one address" >&2; exit "$MUX_EC_USAGE"; }
+        _addr=$1; shift ;;
   esac
 done
 
@@ -232,8 +232,8 @@ while IFS='	' read -r _p _s; do
       # correctly in both tenses, so the common case hides the bug.
       _lv=${_l%% *}
       case $_lv in
-      dropped)  _l="drop ${_l#* }" ;;
-      stripped) _l="strip ${_l#* }" ;;
+        dropped)  _l="drop ${_l#* }" ;;
+        stripped) _l="strip ${_l#* }" ;;
       esac
       printf '%s:%s  would %s\n' "$_p" "$_s" "$_l"
     done
@@ -305,8 +305,8 @@ while IFS='	' read -r _p _s; do
       [ -n "$_n" ] || continue
       # Not held by the session, so there is nothing to be stale ABOUT.
       case " $_held " in
-      *" $_n "*) ;;
-      *) continue ;;
+        *" $_n "*) ;;
+        *) continue ;;
       esac
       # `2>/dev/null` BEFORE the redirect: a pane can die while this sweep
       # is walking, so a vanished /proc entry is the NORMAL case, and with

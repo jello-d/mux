@@ -107,8 +107,8 @@ tool failing in a way it did not anticipate has not answered"
 OCHECK=1 ADDRC=1 ask "$AUTH" box >/dev/null; unset OCHECK ADDRC
 while IFS= read -r _l; do
   case $_l in
-  *"-O check"*|"ssh-add "*) ;;
-  *) fail "ssh-auth ran something that can open a connection: [$_l].
+    *"-O check"*|"ssh-add "*) ;;
+    *) fail "ssh-auth ran something that can open a connection: [$_l].
 Polling this while blocked would then raise a prompt per poll, which is the
 storm it exists to prevent." ;;
   esac

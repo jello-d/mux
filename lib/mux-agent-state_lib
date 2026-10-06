@@ -86,16 +86,16 @@ mux_agent_dir() {
 # Numeric urgency of a state, so the worst live agent in a session wins.
 mux_agent_rank() {
   case $1 in
-  blocked) echo 4 ;;
-  working) echo 3 ;;
-  # BETWEEN working AND idle, the whole claim the word makes: more going on
-  # than `idle`, less than a turn in progress. The numbers are deliberately
-  # not a contract (mux-agent-rank.t asserts the ORDER, and says why pinning
-  # `blocked = 3` would be wrong), which is what made inserting a rank here a
-  # one-line change rather than a renumbering everyone must agree on.
-  humming) echo 2 ;;
-  idle)    echo 1 ;;
-  *)       echo 0 ;;
+    blocked) echo 4 ;;
+    working) echo 3 ;;
+    # BETWEEN working AND idle, the whole claim the word makes: more going on
+    # than `idle`, less than a turn in progress. The numbers are deliberately
+    # not a contract (mux-agent-rank.t asserts the ORDER, and says why pinning
+    # `blocked = 3` would be wrong), which is what made inserting a rank here a
+    # one-line change rather than a renumbering everyone must agree on.
+    humming) echo 2 ;;
+    idle)    echo 1 ;;
+    *)       echo 0 ;;
   esac
 }
 
@@ -365,7 +365,7 @@ mux_agent_sessions() {  # DIR
     read -r _st _w _p _e _nid _ss 2>/dev/null <"$_f" || continue
     [ -n "${_ss:-}" ] || continue
     case "$MUX_AGENT_NL$_seen$MUX_AGENT_NL" in
-    *"$MUX_AGENT_NL$_ss$MUX_AGENT_NL"*) continue ;;
+      *"$MUX_AGENT_NL$_ss$MUX_AGENT_NL"*) continue ;;
     esac
     _seen="$_seen$MUX_AGENT_NL$_ss"
     printf '%s\n' "$_ss"
@@ -375,13 +375,13 @@ mux_agent_sessions() {  # DIR
 # mux_agent_glyph STATE -> the width-2 glyph for a state word ('' -> none).
 mux_agent_glyph() {
   case $1 in
-  blocked) printf '%s' "$MUX_GLYPH_BLOCKED" ;;
-  working) printf '%s' "$MUX_GLYPH_WORKING" ;;
-  idle)    printf '%s' "$MUX_GLYPH_IDLE" ;;
-  humming) printf '%s' "$MUX_GLYPH_HUMMING" ;;
-  '')      printf '%s' "$MUX_GLYPH_NONE" ;;
-  unwired) printf '%s' "$MUX_GLYPH_UNWIRED" ;;
-  *)       printf '%s' "$MUX_GLYPH_UNKNOWN" ;;
+    blocked) printf '%s' "$MUX_GLYPH_BLOCKED" ;;
+    working) printf '%s' "$MUX_GLYPH_WORKING" ;;
+    idle)    printf '%s' "$MUX_GLYPH_IDLE" ;;
+    humming) printf '%s' "$MUX_GLYPH_HUMMING" ;;
+    '')      printf '%s' "$MUX_GLYPH_NONE" ;;
+    unwired) printf '%s' "$MUX_GLYPH_UNWIRED" ;;
+    *)       printf '%s' "$MUX_GLYPH_UNKNOWN" ;;
   esac
 }
 

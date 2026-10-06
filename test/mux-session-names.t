@@ -155,8 +155,8 @@ _found=$(env XDG_RUNTIME_DIR="$T/run" sh -c '
   . "$1/lib/mux-agent-state_lib"
   mux_agent_state "$(mux_agent_dir global)" "my project"' _ "$HERE")
 case ${_found%% *} in
-working) ;;
-*) fail "the emitted record lost the spaced name: [$_rec] -> [$_found]" ;;
+  working) ;;
+  *) fail "the emitted record lost the spaced name: [$_rec] -> [$_found]" ;;
 esac
 # ... and a session named after its FIRST WORD must not inherit that state.
 _stolen=$(env XDG_RUNTIME_DIR="$T/run" sh -c '
@@ -200,17 +200,17 @@ render() {
     alpha client0 2>/dev/null | sed 's/#\[[^]]*\]//g'
 }
 case "$(render)" in
-*"my project"*) ;;
-*) fail "the strip lost the spaced name: [$(render)]" ;;
+  *"my project"*) ;;
+  *) fail "the strip lost the spaced name: [$(render)]" ;;
 esac
 hide 'my project'
 case "$(render)" in
-*"my project"*) fail "a hidden session is still on the strip" ;;
+  *"my project"*) fail "a hidden session is still on the strip" ;;
 esac
 # alpha and zulu survive: hiding one name must not take out its neighbours.
 case "$(render)" in
-*alpha*zulu*) ;;
-*) fail "hiding took out other sessions: [$(render)]" ;;
+  *alpha*zulu*) ;;
+  *) fail "hiding took out other sessions: [$(render)]" ;;
 esac
 
 # --- a late straggler must not resurrect `working` out of `idle` -----------

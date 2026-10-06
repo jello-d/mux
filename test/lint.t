@@ -50,19 +50,19 @@ find "$HERE/bin" "$HERE/lib" "$HERE/libexec" "$HERE/test" "$HERE/share" \
   "$HERE/desktop-notifier" \
   -type f 2>/dev/null | LC_ALL=C sort | while IFS= read -r _f; do
   case $_f in
-  # NOT SELECTED BY `.sh`, deliberately. A suffix-keyed selector SILENTLY
-  # SHRINKS the moment something is renamed: the corpus gets smaller, the
-  # test still passes, and nothing says so. Measured before removing it:
-  # every sourced lib in this tree carries `#!/bin/sh`, and so does every
-  # `.t`, so the shebang arm below already covers them and the suffix was
-  # never what made them visible. Now the selector cannot go stale when a
-  # name changes, which is the property the count assertion below wants.
-  *.py|*.tmux|*.md|*.toml|*.json|*.yaml|*/.git/*) ;;
-  *)  # A shebang naming sh/dash/bash, and nothing else.
-    case "$(head -c 64 -- "$_f" 2>/dev/null | head -1)" in
-    '#!'*/sh|'#!'*/dash|'#!'*/bash|'#!'*env\ sh|'#!'*env\ dash)
-      printf '%s\n' "$_f" ;;
-    esac ;;
+    # NOT SELECTED BY `.sh`, deliberately. A suffix-keyed selector SILENTLY
+    # SHRINKS the moment something is renamed: the corpus gets smaller, the
+    # test still passes, and nothing says so. Measured before removing it:
+    # every sourced lib in this tree carries `#!/bin/sh`, and so does every
+    # `.t`, so the shebang arm below already covers them and the suffix was
+    # never what made them visible. Now the selector cannot go stale when a
+    # name changes, which is the property the count assertion below wants.
+    *.py|*.tmux|*.md|*.toml|*.json|*.yaml|*/.git/*) ;;
+    *)  # A shebang naming sh/dash/bash, and nothing else.
+      case "$(head -c 64 -- "$_f" 2>/dev/null | head -1)" in
+        '#!'*/sh|'#!'*/dash|'#!'*/bash|'#!'*env\ sh|'#!'*env\ dash)
+          printf '%s\n' "$_f" ;;
+      esac ;;
   esac
 done >>"$_list"
 printf '%s\n' "$HERE/setup.sh" "$HERE/desktop-notifier/setup.sh" >>"$_list"
@@ -669,15 +669,16 @@ done
 for _f in "$HERE"/libexec/*; do
   [ -f "$_f" ] || continue
   case $_f in
-  *_lib)
-    fail "$(basename "$_f") is named as a sourced library but sits in libexec/,
+    *_lib)
+      fail \
+        "$(basename "$_f") is named as a sourced library but sits in libexec/,
 which mux EXECUTES. Sourced libraries live in lib/."
-    ;;
-  *)
-    [ -x "$_f" ] || fail "$(basename "$_f") is a command and is NOT
+      ;;
+    *)
+      [ -x "$_f" ] || fail "$(basename "$_f") is a command and is NOT
 executable. It resolves by name through the dispatcher and then fails to run,
 which reads as a missing feature rather than a broken install."
-    ;;
+      ;;
   esac
 done
 

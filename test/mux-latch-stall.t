@@ -40,15 +40,15 @@ OPTS=$(sed -n "s/^_DEF_ALIVE=['\"]*\(-o [^'\"]*\)['\"]*$/\1/p" \
 OPTS="$OPTS$(sed -n 's/^_DEF_ALIVE="\$_DEF_ALIVE \(.*\)"$/\1/p' \
   "$HERE/libexec/mux-latch")"
 case $OPTS in
-*ServerAliveInterval*) ;;
-*) fail "could not read ServerAliveInterval out of libexec/mux-latch.
+  *ServerAliveInterval*) ;;
+  *) fail "could not read ServerAliveInterval out of libexec/mux-latch.
 This test reads the defaults from the source on purpose; if the shape of
 _DEF_ALIVE changed, update the extraction rather than pinning a copy.
   got: [$OPTS]" ;;
 esac
 case $OPTS in
-*ConnectTimeout*) ;;
-*) fail "could not read ConnectTimeout out of libexec/mux-latch: [$OPTS]" ;;
+  *ConnectTimeout*) ;;
+  *) fail "could not read ConnectTimeout out of libexec/mux-latch: [$OPTS]" ;;
 esac
 
 # A peer that stalls at a CHOSEN point. Nothing here speaks ssh: it accepts,

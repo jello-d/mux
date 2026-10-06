@@ -61,17 +61,17 @@ _o=$(lst global)
 # another box compute durations across two clocks.
 _a=$(field "$_o" alpha)
 case $_a in
-"working 6"[0-9]) ;;
-*) fail "alpha should read working with an age near 60s, got [$_a]" ;;
+  "working 6"[0-9]) ;;
+  *) fail "alpha should read working with an age near 60s, got [$_a]" ;;
 esac
 # ... and the raw epoch must NOT appear anywhere in the output.
 case $_o in
-*"$((NOW - 60))"*) fail "the raw epoch leaked into the output: [$_o]" ;;
+  *"$((NOW - 60))"*) fail "the raw epoch leaked into the output: [$_o]" ;;
 esac
 _b=$(field "$_o" bravo)
 case $_b in
-"idle 36"[0-9][0-9]) ;;
-*) fail "bravo should read idle with an age near 3600s, got [$_b]" ;;
+  "idle 36"[0-9][0-9]) ;;
+  *) fail "bravo should read idle with an age near 3600s, got [$_b]" ;;
 esac
 
 # --- a session name containing a SPACE survives ---------------------------
@@ -93,8 +93,8 @@ _o=$(lst global)
 [ "$(printf '%s\n' "$_o" | awk '$3 == "multi"' | grep -c .)" -eq 1 ] \
   || fail "a multi-pane session was emitted more than once: [$_o]"
 case $(field "$_o" multi) in
-blocked*) ;;
-*) fail "the worst pane state did not win: [$(field "$_o" multi)]" ;;
+  blocked*) ;;
+  *) fail "the worst pane state did not win: [$(field "$_o" multi)]" ;;
 esac
 rm -f "$G/4" \
       "$G/5"
@@ -105,8 +105,8 @@ rm -f "$G/4" \
 printf 'working 0 %%9 - - oddball\n' >"$G/9"
 _o=$(lst global)
 case $(field "$_o" oddball) in
-"working -") ;;
-*) fail "no-epoch record: want [working -], got [$(field "$_o" oddball)]" ;;
+  "working -") ;;
+  *) fail "no-epoch record: want [working -], got [$(field "$_o" oddball)]" ;;
 esac
 rm -f "$G/9"
 
@@ -146,7 +146,7 @@ _after=$(ls "$G" | LC_ALL=C sort | tr '\n' ' ')
 # PATH above has no tmux at all, so any attempt would surface as an error in
 # the output. Proven by a run that still produces the right answer.
 case $(lst global) in
-*"not found"*|*tmux*) fail "agent-list reached for tmux: [$(lst global)]" ;;
+  *"not found"*|*tmux*) fail "agent-list reached for tmux: [$(lst global)]" ;;
 esac
 printf '%s\n' "$(lst global)" | grep -q ' alpha$' \
   || fail "headless run lost a session"

@@ -64,11 +64,11 @@ mux_view_mode() {   # [client-name]
 # handing tmux a value it will refuse less legibly.
 mux_view_mode_set() {   # <auto|floor|ceil>
   case $1 in
-  auto)  _wz=latest ;;
-  floor) _wz=smallest ;;
-  ceil)  _wz=largest ;;
-  *) echo "mux: unknown view mode: $1 (want: $MUX_VIEW_MODES)" >&2
-     return 2 ;;
+    auto)  _wz=latest ;;
+    floor) _wz=smallest ;;
+    ceil)  _wz=largest ;;
+    *) echo "mux: unknown view mode: $1 (want: $MUX_VIEW_MODES)" >&2
+       return 2 ;;
   esac
   _vt set-option -g window-size "$_wz" 2>/dev/null || {
     echo "mux: could not set window-size" >&2; return 1; }
@@ -93,8 +93,8 @@ mux_view_clients() {
   | while read -r _n _d _s _a; do
     [ -n "${_n:-}" ] || continue
     case ${_a:-} in
-    ''|*[!0-9]*) _idle=0 ;;
-    *) _idle=$((_now - _a)) ;;
+      ''|*[!0-9]*) _idle=0 ;;
+      *) _idle=$((_now - _a)) ;;
     esac
     printf '%s %s %s %s\n' "$_n" "$_d" "$_s" "$_idle"
   done
@@ -163,8 +163,8 @@ mux_view_probe() {      # [client-name]
   MUX_VIEW_SESS=
   MUX_VIEW_MODE=auto
   case $_pr in
-  *x*' '*x*' '*' '*) ;;
-  *) return 0 ;;
+    *x*' '*x*' '*' '*) ;;
+    *) return 0 ;;
   esac
   _a=${_pr%% *}; _rest=${_pr#* }
   _b=${_rest%% *}; _rest=${_rest#* }
@@ -172,23 +172,23 @@ mux_view_probe() {      # [client-name]
   # The session is LAST so it may contain spaces (tmux allows it, even if
   # mux-derived names never do) and still be taken whole.
   case $_rest in
-  *' '*) _st=${_rest%% *}; MUX_VIEW_SESS=${_rest#* } ;;
-  *)     _st=$_rest ;;
+    *' '*) _st=${_rest%% *}; MUX_VIEW_SESS=${_rest#* } ;;
+    *)     _st=$_rest ;;
   esac
   MUX_VIEW_CW=${_a%%x*}; MUX_VIEW_CH=${_a##*x}
   MUX_VIEW_WW=${_b%%x*}; MUX_VIEW_WH=${_b##*x}
   case $_wz in
-  smallest) MUX_VIEW_MODE=floor ;;
-  largest)  MUX_VIEW_MODE=ceil ;;
-  *)        MUX_VIEW_MODE=auto ;;
+    smallest) MUX_VIEW_MODE=floor ;;
+    largest)  MUX_VIEW_MODE=ceil ;;
+    *)        MUX_VIEW_MODE=auto ;;
   esac
   # Status lines, so the comparison below can take them off the client's
   # height. `status` is on/off or a count.
   case $_st in
-  off)   MUX_VIEW_ST=0 ;;
-  on)    MUX_VIEW_ST=1 ;;
-  [0-9]) MUX_VIEW_ST=$_st ;;
-  *)     MUX_VIEW_ST=1 ;;
+    off)   MUX_VIEW_ST=0 ;;
+    on)    MUX_VIEW_ST=1 ;;
+    [0-9]) MUX_VIEW_ST=$_st ;;
+    *)     MUX_VIEW_ST=1 ;;
   esac
 }
 
@@ -206,7 +206,7 @@ mux_view_probe() {      # [client-name]
 mux_view_side() {   # <client-name>
   mux_view_probe "$1"
   case ${MUX_VIEW_CW:-}${MUX_VIEW_CH:-}${MUX_VIEW_WW:-}${MUX_VIEW_WH:-} in
-  ''|*[!0-9]*) return 0 ;;
+    ''|*[!0-9]*) return 0 ;;
   esac
   # A client's HEIGHT includes its status line(s); the window gets what is
   # left. So a perfectly fitted client is client_height - status, and
@@ -270,9 +270,9 @@ mux_view_glyph() {
   # terminal may give them a width-2 presentation and break the strip's
   # width budget, not a trade worth ten font units.
   case $MUX_VIEW_MODE in
-  floor) printf '\342\224\273' ;;   # U+253B  heavy bar below, stem up
-  ceil)  printf '\342\224\263' ;;   # U+2533  heavy bar above, stem down
-  *)     printf '\342\234\261' ;;   # U+2731  heavy asterisk: unpinned
+    floor) printf '\342\224\273' ;;   # U+253B  heavy bar below, stem up
+    ceil)  printf '\342\224\263' ;;   # U+2533  heavy bar above, stem down
+    *)     printf '\342\234\261' ;;   # U+2731  heavy asterisk: unpinned
   esac
 }
 
@@ -294,10 +294,10 @@ mux_view_chip() {   # <client-name>
   # but that threshold is for body text; this is one bold glyph, and the
   # job is to be unmistakably an ALARM rather than merely legible.
   case $(mux_view_state "${1:-}") in
-  clipped) _vs='#[fg=colour226,bg=colour202,bold]' ;;
-  slack)   _vs='#[fg=colour214]' ;;
-  fit)     _vs='#[fg=colour255,bold]' ;;
-  *)       _vs='#[fg=colour240]' ;;
+    clipped) _vs='#[fg=colour226,bg=colour202,bold]' ;;
+    slack)   _vs='#[fg=colour214]' ;;
+    fit)     _vs='#[fg=colour255,bold]' ;;
+    *)       _vs='#[fg=colour240]' ;;
   esac
   printf '#[range=user|v:mode]%s%s#[default]#[norange]' \
     "$_vs" "$(mux_view_glyph "${1:-}")"

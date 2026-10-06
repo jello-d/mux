@@ -40,8 +40,8 @@
 # is pane_current_command: a single word.
 is_shell() {
   case $1 in
-  sh|-sh|bash|-bash|ksh|-ksh|zsh|-zsh|dash|fish|login) return 0 ;;
-  *) return 1 ;;
+    sh|-sh|bash|-bash|ksh|-ksh|zsh|-zsh|dash|fish|login) return 0 ;;
+    *) return 1 ;;
   esac
 }
 
@@ -71,7 +71,7 @@ emit_window() {
     # absence of the line, so emitting it would be noise that reads as a
     # decision.
     case $_pk in
-    agent|hybrid) printf 'control %s\n' "$_pk" ;;
+      agent|hybrid) printf 'control %s\n' "$_pk" ;;
     esac
     # AND THE SAME FOR ATTENTION, separately rather than in one arm with the
     # line above: the two markers answer different questions and a session
@@ -79,7 +79,7 @@ emit_window() {
     # the human still wants to SEE is `control agent` with attention left
     # alone). Folding them would make that unsayable.
     case $_pn in
-    agent|hybrid) printf 'attention %s\n' "$_pn" ;;
+      agent|hybrid) printf 'attention %s\n' "$_pn" ;;
     esac
   done
   tm list-panes -t "$1" -F '#{@mux-bottom}|#{pane_current_command}' \

@@ -40,7 +40,7 @@ mux_excluded() {
 # tests every session against it: the status strip does this on every redraw.
 mux_excluded_has() {
   case "$MUX_EXCL_NL$1$MUX_EXCL_NL" in
-  *"$MUX_EXCL_NL$2$MUX_EXCL_NL"*) return 0 ;;
+    *"$MUX_EXCL_NL$2$MUX_EXCL_NL"*) return 0 ;;
   esac
   return 1
 }

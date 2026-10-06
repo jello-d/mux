@@ -116,7 +116,7 @@ _lookup() {   # <pane id> <tab-separated list> -> the value for that id
 _unquote() {   # <display form> -> the command as it was given
   _uq=$1
   case $_uq in
-  '"'*'"') _uq=${_uq#\"}; _uq=${_uq%\"} ;;
+    '"'*'"') _uq=${_uq#\"}; _uq=${_uq%\"} ;;
   esac
   _uqn=0
   while [ "$_uqn" -lt 3 ]; do
@@ -228,14 +228,14 @@ _restore() {
   _idx= _cwd= _lay= _cmd= _n= _ob= _oa= _srv=
   while IFS="$_tab" read -r _k _v; do
     case ${_k:-} in
-    server)  _srv=$_v ;;
-    slot)    _idx=$_v ;;
-    panes)   _n=$_v ;;
-    cwd)     _cwd=$_v ;;
-    optbottom) _ob=$_v ;;
-    optagent)  _oa=$_v ;;
-    layout)  _lay=$_v ;;
-    command) _cmd=$_v ;;
+      server)  _srv=$_v ;;
+      slot)    _idx=$_v ;;
+      panes)   _n=$_v ;;
+      cwd)     _cwd=$_v ;;
+      optbottom) _ob=$_v ;;
+      optagent)  _oa=$_v ;;
+      layout)  _lay=$_v ;;
+      command) _cmd=$_v ;;
     esac
   done 2>/dev/null <"$_f"
   [ -n "$_lay" ] || _die "the undo record is unusable (no layout)"
@@ -269,7 +269,7 @@ _restore() {
       "not this window's). Discarded."
   fi
   case ${_idx:-} in
-  ''|*[!0-9]*) _die "the undo record is unusable (bad slot)" ;;
+    ''|*[!0-9]*) _die "the undo record is unusable (bad slot)" ;;
   esac
 
   # ALREADY WHOLE? The record existing does not mean something is still
@@ -365,12 +365,12 @@ _restore() {
 }
 
 case "${1:-}" in
---record) shift; _record "${1:-}" ;;
--h|--help)
-  echo "usage: mux undo-pane           put back the pane you just closed"
-  echo "       mux undo-pane --record WINID   (internal, from the hook)"
-  ;;
-'') _restore ;;
-*)  echo "mux: undo-pane: unknown option: $1" >&2
-    echo "usage: mux undo-pane" >&2; exit "$MUX_EC_USAGE" ;;
+  --record) shift; _record "${1:-}" ;;
+  -h|--help)
+    echo "usage: mux undo-pane           put back the pane you just closed"
+    echo "       mux undo-pane --record WINID   (internal, from the hook)"
+    ;;
+  '') _restore ;;
+  *)  echo "mux: undo-pane: unknown option: $1" >&2
+      echo "usage: mux undo-pane" >&2; exit "$MUX_EC_USAGE" ;;
 esac

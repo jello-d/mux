@@ -59,31 +59,31 @@ _rc=${1:-}
 [ -n "$_rc" ] || { printf 'unknown'; exit 0; }
 
 case $_rc in
-0)
-  # et finished and said nothing it is willing to put in stderr. In the
-  # overwhelmingly common case that is a detach: MEASURED end to end, a human
-  # detaching on the far side ends the transport at 0 and leaves the remote
-  # session alive, which is exactly what `ended` promises. A remote refusal
-  # also lands here, per the limitation above.
-  printf 'ended' ;;
-1)
-  # et'S OWN FAILURE TO CONNECT, and the reason it is `probing` rather than
-  # `refused` is a measurement rather than a guess: with etserver stopped, et
-  # exits 1 ("Could not reach the ET server", on stdout). That heals by itself
-  # the moment the service comes up, so retrying on a backoff is right and
-  # terminal would mean a human restarting latch after a fix it could have
-  # waited through. The same call `blocked` makes about a credential.
-  #
-  # A malformed transport line also exits 1 here, and would be retried
-  # forever. That is tolerable because the shipped line is the tested one
-  # (test/mux-latch-et.t scrapes it out of this header and runs it), and
-  # because the alternative (calling a booting box terminal) is worse.
-  printf 'probing' ;;
-*)
-  # Anything else, including whatever et exits with when it stops
-  # reconnecting, which no message in its source names. `unknown` retries with
-  # more patience, the safe direction for a transport whose entire premise is
-  # that a drop is temporary.
-  printf 'unknown' ;;
+  0)
+    # et finished and said nothing it is willing to put in stderr. In the
+    # overwhelmingly common case that is a detach: MEASURED end to end, a human
+    # detaching on the far side ends the transport at 0 and leaves the remote
+    # session alive, which is exactly what `ended` promises. A remote refusal
+    # also lands here, per the limitation above.
+    printf 'ended' ;;
+  1)
+    # et'S OWN FAILURE TO CONNECT, and the reason it is `probing` rather than
+    # `refused` is a measurement rather than a guess: with etserver stopped, et
+    # exits 1 ("Could not reach the ET server", on stdout). That heals by itself
+    # the moment the service comes up, so retrying on a backoff is right and
+    # terminal would mean a human restarting latch after a fix it could have
+    # waited through. The same call `blocked` makes about a credential.
+    #
+    # A malformed transport line also exits 1 here, and would be retried
+    # forever. That is tolerable because the shipped line is the tested one
+    # (test/mux-latch-et.t scrapes it out of this header and runs it), and
+    # because the alternative (calling a booting box terminal) is worse.
+    printf 'probing' ;;
+  *)
+    # Anything else, including whatever et exits with when it stops
+    # reconnecting, which no message in its source names. `unknown` retries with
+    # more patience, the safe direction for a transport whose entire premise is
+    # that a drop is temporary.
+    printf 'unknown' ;;
 esac
 exit 0

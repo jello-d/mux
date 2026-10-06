@@ -66,8 +66,8 @@ printf 'send-blocked *\n' >"$POL"
 chmod 0644 "$POL"; chmod 0555 "$T/etc"
 no writable-file blocked global api reviewer
 case "$(mux_send_policy_why)" in
-*writable*) ;;
-*) fail "a writable policy was ignored without saying so: it must be LOUD,
+  *writable*) ;;
+  *) fail "a writable policy was ignored without saying so: it must be LOUD,
 because the human who wrote it believes it applies: [$(mux_send_policy_why)]" ;;
 esac
 
@@ -77,8 +77,8 @@ esac
 chmod 0755 "$T/etc"; chmod 0444 "$POL"
 no writable-dir blocked global api reviewer
 case "$(mux_send_policy_why)" in
-*directory*) ;;
-*) fail "a policy in a user-writable directory was accepted or the reason was
+  *directory*) ;;
+  *) fail "a policy in a user-writable directory was accepted or the reason was
 wrong: [$(mux_send_policy_why)]" ;;
 esac
 

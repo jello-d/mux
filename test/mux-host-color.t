@@ -66,8 +66,8 @@ eq padded-value  "$(hc padbox)" "#ffffff #005f87"
 # property: the same name must give the same colour on every machine, forever.
 _u=$(hc some-unlisted-host)
 case $_u in
-'#'??????' #'??????) ;;
-*) fail "an unlisted host must still resolve to a hex pair, got [$_u]" ;;
+  '#'??????' #'??????) ;;
+  *) fail "an unlisted host must still resolve to a hex pair, got [$_u]" ;;
 esac
 eq stable "$(hc some-unlisted-host)" "$_u"
 [ "$(hc other-unlisted-host)" != "$_u" ] \
@@ -99,13 +99,13 @@ eq refuses-quietly "$(hc ansibox)" ""
 _err=$(env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" MUX_CACHE="$T/cache" \
   "$HERE/bin/mux" host-color ansibox 2>&1 >/dev/null || true)
 case $_err in
-*"0-15"*) ;;
-*) fail "the refusal must explain that 0-15 has no fixed value, got:
+  *"0-15"*) ;;
+  *) fail "the refusal must explain that 0-15 has no fixed value, got:
 $_err" ;;
 esac
 case $_err in
-*hosts*) ;;
-*) fail "the refusal must name the file to fix, got:
+  *hosts*) ;;
+  *) fail "the refusal must name the file to fix, got:
 $_err" ;;
 esac
 

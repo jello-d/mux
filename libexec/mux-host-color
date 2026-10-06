@@ -40,12 +40,12 @@ for _l in mux-conf_lib mux-hosts_lib; do
 done
 
 case ${1:-} in
--h|--help)
-  echo "usage: mux host-color [HOST]" >&2
-  exit "$MUX_EC_OK" ;;
--*)
-  echo "mux: host-color: unknown option: $1" >&2
-  exit "$MUX_EC_USAGE" ;;
+  -h|--help)
+    echo "usage: mux host-color [HOST]" >&2
+    exit "$MUX_EC_OK" ;;
+  -*)
+    echo "mux: host-color: unknown option: $1" >&2
+    exit "$MUX_EC_USAGE" ;;
 esac
 
 _h=${1:-$(mux_host_name)}

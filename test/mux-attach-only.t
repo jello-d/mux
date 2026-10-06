@@ -61,8 +61,8 @@ rm -f "$LIVEFLAG"
 : >"$TMUXLOG"
 _out=$(mux go --attach-only proj || true)
 case $_out in
-*"no such session"*) ;;
-*) fail "--attach-only on a dead session must say 'no such session', got:
+  *"no such session"*) ;;
+  *) fail "--attach-only on a dead session must say 'no such session', got:
 $_out" ;;
 esac
 # Exit 3 is mux's standard "the name is not known here", which is what lets
@@ -120,8 +120,8 @@ than typed. The guard must not depend on how the name was arrived at."
 _caps=$(env -u MUX_SHARE -u TMUX MUX_DIR="$T/conf" MUX_CACHE="$T/cache" \
   "$HERE/bin/mux" capabilities 2>&1)
 case $_caps in
-*"attach-only 1"*) ;;
-*) fail "attach-only is implemented but not advertised as a contract, so
+  *"attach-only 1"*) ;;
+  *) fail "attach-only is implemented but not advertised as a contract, so
 latch would still have to discover it by failure. Got:
 $_caps" ;;
 esac

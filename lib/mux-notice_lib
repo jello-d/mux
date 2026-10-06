@@ -92,8 +92,8 @@ mux_notice_file() {   # [tty] -> the queue for that terminal
   if [ -z "$_nft" ]; then
     _nft=$(tty 2>/dev/null) || _nft=
     case ${_nft:-} in
-    /dev/*) ;;
-    *) _nft=unknown ;;
+      /dev/*) ;;
+      *) _nft=unknown ;;
     esac
   fi
   # The undo-pane record's sanitiser. Only `/` is replaced, so two distinct
@@ -145,14 +145,14 @@ mux_notice_flush() {   # <tty>
       [ -n "$_ntext" ] || continue
       _nage=
       case ${_nwhen:-0} in
-      ''|*[!0-9]*) ;;
-      *) if [ "$_nnow" -gt "$_nwhen" ] 2>/dev/null; then
-           _nage=$(( _nnow - _nwhen ))
-           if   [ "$_nage" -lt 90 ];   then _nage="${_nage}s ago"
-           elif [ "$_nage" -lt 5400 ]; then _nage="$(( _nage / 60 ))m ago"
-           else _nage="$(( _nage / 3600 ))h ago"
-           fi
-         fi ;;
+        ''|*[!0-9]*) ;;
+        *) if [ "$_nnow" -gt "$_nwhen" ] 2>/dev/null; then
+             _nage=$(( _nnow - _nwhen ))
+             if   [ "$_nage" -lt 90 ];   then _nage="${_nage}s ago"
+             elif [ "$_nage" -lt 5400 ]; then _nage="$(( _nage / 60 ))m ago"
+             else _nage="$(( _nage / 3600 ))h ago"
+             fi
+           fi ;;
       esac
       printf '  %s%s: %s\n' "$_nphase" "${_nage:+, $_nage}" "$_ntext"
     done <"$_nqf"
@@ -172,6 +172,6 @@ mux_notice_flush() {   # <tty>
   # ~/src/CLAUDE.md: expand first, check what it is, then remove that. An
   # absolute path under the state dir, or nothing happens.
   case $_nqf in
-  /*) rm -f "$_nqf" 2>/dev/null || true ;;
+    /*) rm -f "$_nqf" 2>/dev/null || true ;;
   esac
 }

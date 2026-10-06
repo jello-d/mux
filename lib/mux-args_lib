@@ -51,9 +51,9 @@
 mux_args_check() {   # <the caller's remaining $#>
   _an=$1
   case $cmd in
-    go|resume|kill|kill-all|reload|ls|hide|show|show-all) ;;
-    save|new|help|theme|rename|edit|why) ;;
-    *) echo "mux: unknown verb: $cmd" >&2; usage ;;
+      go|resume|kill|kill-all|reload|ls|hide|show|show-all) ;;
+      save|new|help|theme|rename|edit|why) ;;
+      *) echo "mux: unknown verb: $cmd" >&2; usage ;;
   esac
   # The retired verbs are the flag forms spelled out. Kept as aliases
   # rather than removed: they are in muscle memory and in whatever scripts
@@ -67,55 +67,55 @@ mux_args_check() {   # <the caller's remaining $#>
   # that), since under the rename the two meanings are the same string, and a
   # leftover test would silently give one of them the other's behaviour.
   case $cmd in
-    kill-all)  cmd=kill; all=1 ;;
-    show-all)  cmd=show; all=1 ;;
+      kill-all)  cmd=kill; all=1 ;;
+      show-all)  cmd=show; all=1 ;;
   esac
 
   # Arity per verb. --bare is meaningful only where claude is launched. kill
   # requires an explicit NAME: it is too destructive to run against an inferred
   # session; kill-all takes none (it hits the whole socket, behind a prompt).
   case $cmd in
-    reload|ls) [ "$_an" -eq 0 ] || {
-      echo "mux: $cmd takes no arguments" >&2; usage; } ;;
-    resume) [ "$_an" -le 2 ] || {
-      echo "mux: resume [PARTITION [SESSION]]" >&2; usage; } ;;
-    kill|show) if [ "$all" -eq 1 ]; then
-      [ "$_an" -eq 0 ] || { echo "mux: $cmd --all takes no NAME" >&2
-        usage; }
-       else
-      [ "$_an" -eq 1 ] || {
-        echo "mux: $cmd needs a NAME, or --all" >&2; usage; }
-       fi ;;
-    hide) [ "$_an" -eq 1 ] || {
-      echo "mux: hide needs a session NAME (see: mux ls)" >&2
-      usage; } ;;
-    go) [ "$_an" -le 2 ] || {
-      echo "mux: too many arguments" >&2; usage; } ;;
-    save|theme|edit|why) [ "$_an" -le 1 ] || {
-      echo "mux: $cmd takes at most a NAME" >&2; usage; } ;;
-    rename) { [ "$_an" -ge 1 ] && [ "$_an" -le 2 ]; } || {
-      echo "mux: rename [OLD] NEW" >&2; usage; } ;;
-    new) [ "$_an" -eq 1 ] || {
-      echo "mux: new NAME (the session to create here)" >&2
-      usage; } ;;
-    help) [ "$_an" -le 6 ] || {
-      echo "mux: help [agents|themes|profiles|palette]" >&2
-      usage; } ;;
+      reload|ls) [ "$_an" -eq 0 ] || {
+        echo "mux: $cmd takes no arguments" >&2; usage; } ;;
+      resume) [ "$_an" -le 2 ] || {
+        echo "mux: resume [PARTITION [SESSION]]" >&2; usage; } ;;
+      kill|show) if [ "$all" -eq 1 ]; then
+        [ "$_an" -eq 0 ] || { echo "mux: $cmd --all takes no NAME" >&2
+          usage; }
+         else
+        [ "$_an" -eq 1 ] || {
+          echo "mux: $cmd needs a NAME, or --all" >&2; usage; }
+         fi ;;
+      hide) [ "$_an" -eq 1 ] || {
+        echo "mux: hide needs a session NAME (see: mux ls)" >&2
+        usage; } ;;
+      go) [ "$_an" -le 2 ] || {
+        echo "mux: too many arguments" >&2; usage; } ;;
+      save|theme|edit|why) [ "$_an" -le 1 ] || {
+        echo "mux: $cmd takes at most a NAME" >&2; usage; } ;;
+      rename) { [ "$_an" -ge 1 ] && [ "$_an" -le 2 ]; } || {
+        echo "mux: rename [OLD] NEW" >&2; usage; } ;;
+      new) [ "$_an" -eq 1 ] || {
+        echo "mux: new NAME (the session to create here)" >&2
+        usage; } ;;
+      help) [ "$_an" -le 6 ] || {
+        echo "mux: help [agents|themes|profiles|palette]" >&2
+        usage; } ;;
   esac
   case $cmd in
-    go|new) ;;
-    *) [ "$bare" -eq 0 ] || {
-      echo "mux: --no-agent is only for go/new" >&2; usage; } ;;
+      go|new) ;;
+      *) [ "$bare" -eq 0 ] || {
+        echo "mux: --no-agent is only for go/new" >&2; usage; } ;;
   esac
   case $cmd in
-    go) ;;
-    *) [ "$attach" -eq 0 ] || {
-      echo "mux: --attach is only for go" >&2; usage; } ;;
+      go) ;;
+      *) [ "$attach" -eq 0 ] || {
+        echo "mux: --attach is only for go" >&2; usage; } ;;
   esac
   case $cmd in
-    go) ;;
-    *) [ "$resume" -eq 0 ] || {
-      echo "mux: --resume is only for go" >&2; usage; } ;;
+      go) ;;
+      *) [ "$resume" -eq 0 ] || {
+        echo "mux: --resume is only for go" >&2; usage; } ;;
   esac
   # THESE TWO WERE UNGATED, and parsed-but-ignored on every other verb. Found by
   # asking the question as a CLASS rather than per flag: scrape the flags the
@@ -133,41 +133,41 @@ mux_args_check() {   # <the caller's remaining $#>
   # test/mux-args.t now audits the class, so a flag added without a gate fails
   # rather than shipping quiet.
   case $cmd in
-    go) ;;
-    *) [ "$attachonly" -eq 0 ] || {
-      echo "mux: --attach-only is only for go" >&2; usage; } ;;
+      go) ;;
+      *) [ "$attachonly" -eq 0 ] || {
+        echo "mux: --attach-only is only for go" >&2; usage; } ;;
   esac
   case $cmd in
-    resume) ;;
-    *) [ "$nowaitenv" -eq 0 ] || {
-      echo "mux: --no-wait-env is only for resume" >&2; usage; } ;;
+      resume) ;;
+      *) [ "$nowaitenv" -eq 0 ] || {
+        echo "mux: --no-wait-env is only for resume" >&2; usage; } ;;
   esac
   case $cmd in
-    kill|show) ;;
-    *) [ "$all" -eq 0 ] || {
-      echo "mux: --all is only for kill/show" >&2; usage; } ;;
+      kill|show) ;;
+      *) [ "$all" -eq 0 ] || {
+        echo "mux: --all is only for kill/show" >&2; usage; } ;;
   esac
   case $cmd in
-    resume) ;;
-    *) [ "$listing" -eq 0 ] || {
-      echo "mux: --list is only for resume" >&2; usage; } ;;
+      resume) ;;
+      *) [ "$listing" -eq 0 ] || {
+        echo "mux: --list is only for resume" >&2; usage; } ;;
   esac
   case $cmd in
-    go|new) ;;
-    *) [ "$noattach" -eq 0 ] || {
-      echo "mux: --no-attach is only for go/new" >&2
-      usage; } ;;
+      go|new) ;;
+      *) [ "$noattach" -eq 0 ] || {
+        echo "mux: --no-attach is only for go/new" >&2
+        usage; } ;;
   esac
   case $cmd in
-    save|new) ;;
-    *) [ "$force" -eq 0 ] || {
-      echo "mux: --force is only for save/new" >&2
-      usage; } ;;
+      save|new) ;;
+      *) [ "$force" -eq 0 ] || {
+        echo "mux: --force is only for save/new" >&2
+        usage; } ;;
   esac
   case $cmd in
-    theme) ;;
-    *) [ "$persist" -eq 0 ] || {
-      echo "mux: --persist is only for theme" >&2; usage; } ;;
+      theme) ;;
+      *) [ "$persist" -eq 0 ] || {
+        echo "mux: --persist is only for theme" >&2; usage; } ;;
   esac
   # -p used to be how a theme was made to stick. It always sticks now, so
   # the flag is accepted and ignored rather than breaking a habit or a

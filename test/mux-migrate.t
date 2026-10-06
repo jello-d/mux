@@ -50,17 +50,17 @@ _out=$(mig --apply) || fail "apply failed"
 # proj: theme carried, root dropped: it is the repo's own basename, so the
 # name derives from it and config never restates what mux works out.
 case "$(row proj)" in
-*theme=purple*) ;; *) fail "proj lost its theme: [$(row proj)]" ;;
+  *theme=purple*) ;; *) fail "proj lost its theme: [$(row proj)]" ;;
 esac
 case "$(row proj)" in
-*root=*) fail "proj kept a root mux would derive: [$(row proj)]" ;;
+  *root=*) fail "proj kept a root mux would derive: [$(row proj)]" ;;
 esac
 
 # sub: the root MUST survive. Dropping it would repoint the session from the
 # subdirectory at the whole enclosing repo.
 case "$(row sub)" in
-*"root=$T/src/proj/sub"*) ;;
-*) fail "sub lost its subdirectory root: [$(row sub)]" ;;
+  *"root=$T/src/proj/sub"*) ;;
+  *) fail "sub lost its subdirectory root: [$(row sub)]" ;;
 esac
 
 # other: wholly derivable, so it gets no row at all.
@@ -71,7 +71,7 @@ esac
 [ -f "$T/conf/layouts/composed.layout" ] \
   || fail "no layout for the composed one"
 case "$(row composed)" in
-*layout=composed*) ;; *) fail "composed row does not name its layout" ;;
+  *layout=composed*) ;; *) fail "composed row does not name its layout" ;;
 esac
 # The included arrangement is spliced in, so it builds what the original did
 # rather than leaving the reader a note.
@@ -82,14 +82,14 @@ grep -qE '^window[[:space:]]+logs' "$T/conf/layouts/composed.layout" \
 
 # Comments cannot live in a row, so the ones that had them are reported.
 case $_out in
-*"carried COMMENTS"*) ;; *) fail "dropped prose was not reported" ;;
+  *"carried COMMENTS"*) ;; *) fail "dropped prose was not reported" ;;
 esac
 case $_out in *proj*) ;; *) fail "proj not listed as commented" ;; esac
 
 # Idempotent: a second apply finds nothing to do.
 _again=$(mig --apply) || fail "second apply failed"
 case $_again in
-*"nothing to migrate"*) ;; *) fail "not idempotent: [$_again]" ;;
+  *"nothing to migrate"*) ;; *) fail "not idempotent: [$_again]" ;;
 esac
 
 pass

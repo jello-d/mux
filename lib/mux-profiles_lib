@@ -27,18 +27,18 @@
 # every root comparison below needs it, and two copies would drift.
 mux_expand_tilde() {    # <path>
   case $1 in
-  "~")   printf '%s' "$HOME" ;;
-  "~/"*) printf '%s' "$HOME/${1#\~/}" ;;
-  *)     printf '%s' "$1" ;;
+    "~")   printf '%s' "$HOME" ;;
+    "~/"*) printf '%s' "$HOME/${1#\~/}" ;;
+    *)     printf '%s' "$1" ;;
   esac
 }
 
 # Fold $HOME back to ~, so a row written today travels to another machine.
 mux_fold_tilde() {      # <path>
   case $1 in
-  "$HOME")   printf '~' ;;
-  "$HOME"/*) printf '~/%s' "${1#"$HOME"/}" ;;
-  *)         printf '%s' "$1" ;;
+    "$HOME")   printf '~' ;;
+    "$HOME"/*) printf '~/%s' "${1#"$HOME"/}" ;;
+    *)         printf '%s' "$1" ;;
   esac
 }
 
@@ -104,9 +104,9 @@ mux_prof_by_root() {    # <dir>
 mux_prof_directives() { # <name>
   for _p in $(mux_prof_pairs "$1"); do
     case $_p in
-    *=*) printf '%s %s\n' "${_p%%=*}" "${_p#*=}" ;;
-    *)   printf 'mux: bad pair in profiles row %s: %s\n' "$1" "$_p" >&2
-         return 1 ;;
+      *=*) printf '%s %s\n' "${_p%%=*}" "${_p#*=}" ;;
+      *)   printf 'mux: bad pair in profiles row %s: %s\n' "$1" "$_p" >&2
+           return 1 ;;
     esac
   done
   return 0

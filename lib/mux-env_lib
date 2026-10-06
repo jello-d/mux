@@ -259,8 +259,8 @@ mux_env_timeout() {
       | awk '$1 == "env-timeout" { print $2; exit }')
   fi
   case ${_ett:-} in
-  ''|*[!0-9]*) printf '%s' "$MUX_ENV_TIMEOUT_DEFAULT" ;;
-  *) printf '%s' "$_ett" ;;
+    ''|*[!0-9]*) printf '%s' "$MUX_ENV_TIMEOUT_DEFAULT" ;;
+    *) printf '%s' "$_ett" ;;
   esac
 }
 
@@ -283,9 +283,9 @@ mux_env_validate() {   # <VARNAME> <value> -> 0 valid, 1 invalid, 2 undetermined
   # `timeout` reports 124 for a hook that ran out of time, which is
   # "made no finding" and must not read as invalid.
   case $_evr in
-  0) return 0 ;;
-  1) return 1 ;;
-  *) return 2 ;;
+    0) return 0 ;;
+    1) return 1 ;;
+    *) return 2 ;;
   esac
 }
 
@@ -349,9 +349,9 @@ EOF
     _epvr=0
     mux_env_validate "$_epn" "$_epv" || _epvr=$?
     case $_epvr in
-    0) printf 'set %s %s\n'  "$_epn" "$_epv" ;;
-    1) printf 'drop %s\n'    "$_epn" ;;
-    *) printf 'keep %s %s\n' "$_epn" "$_epv" ;;
+      0) printf 'set %s %s\n'  "$_epn" "$_epv" ;;
+      1) printf 'drop %s\n'    "$_epn" ;;
+      *) printf 'keep %s %s\n' "$_epn" "$_epv" ;;
     esac
   done
 }
@@ -406,8 +406,8 @@ mux_env_apply() {   # <session-or-empty> [-v|-n] -> what it changed/would
       _eacur=$(tm show-environment -g "$_eaname" 2>/dev/null || true)
     fi
     case $_eacur in
-    "$_eaname="*) _eahave=${_eacur#"$_eaname="} ;;
-    *)            _eahave= ;;
+      "$_eaname="*) _eahave=${_eacur#"$_eaname="} ;;
+      *)            _eahave= ;;
     esac
 
     # A DECLARED STRIP IS ANSWERED BEFORE VALIDITY, being a different kind
@@ -440,37 +440,37 @@ mux_env_apply() {   # <session-or-empty> [-v|-n] -> what it changed/would
       _eavr=0
       mux_env_validate "$_eaname" "$_eahave" || _eavr=$?
       case $_eavr in
-      0) continue ;;            # works: leave it exactly alone
-      2) continue ;;            # cannot tell: no finding, so no action
+        0) continue ;;            # works: leave it exactly alone
+        2) continue ;;            # cannot tell: no finding, so no action
       esac
     fi
 
     # Either nothing is here (absent or the `-NAME` removal marker), or what
     # is here has been shown to be dead.
     case $_eaverd in
-    set|keep)
-      if [ "$_ean" -eq 0 ]; then
-        if [ -n "$_eas" ]; then
-          tm set-environment -t "$_eas" \
-            "$_eaname" "$_eaval" 2>/dev/null || true
-        else
-          tm set-environment -g "$_eaname" "$_eaval" 2>/dev/null || true
-        fi
-      fi
-      [ -z "$_eav" ] || printf 'set %s\n' "$_eaname" ;;
-    drop|none)
-      # Only worth clearing, and worth saying, when something dead is
-      # actually here: an absent variable needs no announcement.
-      if [ -n "$_eahave" ]; then
+      set|keep)
         if [ "$_ean" -eq 0 ]; then
           if [ -n "$_eas" ]; then
-            tm set-environment -t "$_eas" -u "$_eaname" 2>/dev/null || true
+            tm set-environment -t "$_eas" \
+              "$_eaname" "$_eaval" 2>/dev/null || true
           else
-            tm set-environment -g -u "$_eaname" 2>/dev/null || true
+            tm set-environment -g "$_eaname" "$_eaval" 2>/dev/null || true
           fi
         fi
-        [ -z "$_eav" ] || printf 'dropped %s\n' "$_eaname"
-      fi ;;
+        [ -z "$_eav" ] || printf 'set %s\n' "$_eaname" ;;
+      drop|none)
+        # Only worth clearing, and worth saying, when something dead is
+        # actually here: an absent variable needs no announcement.
+        if [ -n "$_eahave" ]; then
+          if [ "$_ean" -eq 0 ]; then
+            if [ -n "$_eas" ]; then
+              tm set-environment -t "$_eas" -u "$_eaname" 2>/dev/null || true
+            else
+              tm set-environment -g -u "$_eaname" 2>/dev/null || true
+            fi
+          fi
+          [ -z "$_eav" ] || printf 'dropped %s\n' "$_eaname"
+        fi ;;
     esac
   done
 }
@@ -529,8 +529,8 @@ mux_env_ready() {       # <declared name>... -> 0 ready, 1 not, 2 unmanaged
   for _erdn in "$@"; do
     [ -n "$_erdn" ] || continue
     case " $_erdm " in
-    *" $_erdn "*) ;;
-    *) MUX_ENV_UNMANAGED="$MUX_ENV_UNMANAGED $_erdn" ;;
+      *" $_erdn "*) ;;
+      *) MUX_ENV_UNMANAGED="$MUX_ENV_UNMANAGED $_erdn" ;;
     esac
   done
   [ -z "$MUX_ENV_UNMANAGED" ] || return 2
@@ -543,8 +543,8 @@ mux_env_ready() {       # <declared name>... -> 0 ready, 1 not, 2 unmanaged
     _erdv=$(printf '%s\n' "$_erdp" \
       | awk -v n="$_erdn" '$2==n{print $1; exit}')
     case $_erdv in
-    set|keep) ;;
-    *) MUX_ENV_UNREADY="$MUX_ENV_UNREADY $_erdn" ;;
+      set|keep) ;;
+      *) MUX_ENV_UNREADY="$MUX_ENV_UNREADY $_erdn" ;;
     esac
   done
   [ -z "$MUX_ENV_UNREADY" ] || return 1

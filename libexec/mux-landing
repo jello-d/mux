@@ -55,14 +55,14 @@ done
 _rec=0
 while [ $# -gt 0 ]; do
   case $1 in
-  --record) _rec=1 ;;
-  -h|--help)
-    echo "usage: mux landing [--record]"
-    exit "$MUX_EC_OK" ;;
-  *)
-    echo "mux: unknown argument: $1" >&2
-    echo "usage: mux landing [--record]" >&2
-    exit "$MUX_EC_USAGE" ;;
+    --record) _rec=1 ;;
+    -h|--help)
+      echo "usage: mux landing [--record]"
+      exit "$MUX_EC_OK" ;;
+    *)
+      echo "mux: unknown argument: $1" >&2
+      echo "usage: mux landing [--record]" >&2
+      exit "$MUX_EC_USAGE" ;;
   esac
   shift
 done

@@ -65,9 +65,9 @@ _tx() {
 
 _all=0
 case "${1:-}" in
---all|-a) _all=1 ;;
-'') ;;
-*) echo "usage: mux even [--all]" >&2; exit "$MUX_EC_USAGE" ;;
+  --all|-a) _all=1 ;;
+  '') ;;
+  *) echo "usage: mux even [--all]" >&2; exit "$MUX_EC_USAGE" ;;
 esac
 
 # Even out the widths of one window's TOP ROW: every pane that is not the

@@ -260,17 +260,17 @@ if [ -d "$MUX_DIR" ]; then
       [ -n "${_ck:-}" ] || continue
       : "${_crest:-}"
       case " $_known " in
-      *" $_ck "*) ;;
-      *) _unk="$_unk $_ck" ;;
+        *" $_ck "*) ;;
+        *) _unk="$_unk $_ck" ;;
       esac
     done <<EOF
 $(mux_conf_clean <"$_cfgf")
 EOF
     case ${_unk# } in
-    '') ok "config directives are all ones mux reads" ;;
-    *)  warn "config directive(s) mux does not read:${_unk}"
-        warn "  they are INERT: no error, and no effect. Spelling, or a key"
-        warn "  from a newer mux. Every key is in $_samp" ;;
+      '') ok "config directives are all ones mux reads" ;;
+      *)  warn "config directive(s) mux does not read:${_unk}"
+          warn "  they are INERT: no error, and no effect. Spelling, or a key"
+          warn "  from a newer mux. Every key is in $_samp" ;;
     esac
   elif [ -f "$_cfgf" ]; then
     ok "config present; cannot audit its keys (no $_samp)"
@@ -340,15 +340,15 @@ if [ -r "$(dirname "$0")/../lib/mux-env_lib" ]; then
     while IFS=' ' read -r _ev _en _ex; do
       [ -n "$_en" ] || continue
       case $_ev in
-      drop) _envbad="$_envbad $_en" ;;
-      # RESOLVED TO NOTHING AT ALL, which this marker used to pass over in
-      # silence: it collected `drop` only, so a managed pointer that does
-      # not EXIST was listed among the healthy ones and the whole line read
-      # `[OK]`. That is the state a box is in between booting and its
-      # graphical session starting, so the check called the environment
-      # healthy during exactly the window where it was not. Fully installed
-      # and fully broken, in the file that defines the rule.
-      none) _envnone="$_envnone $_en" ;;
+        drop) _envbad="$_envbad $_en" ;;
+        # RESOLVED TO NOTHING AT ALL, which this marker used to pass over in
+        # silence: it collected `drop` only, so a managed pointer that does
+        # not EXIST was listed among the healthy ones and the whole line read
+        # `[OK]`. That is the state a box is in between booting and its
+        # graphical session starting, so the check called the environment
+        # healthy during exactly the window where it was not. Fully installed
+        # and fully broken, in the file that defines the rule.
+        none) _envnone="$_envnone $_en" ;;
       esac
     done <<ENVEOF
 $(mux_env_plan 2>/dev/null)
@@ -544,14 +544,14 @@ else
   # is why this fails silently and looks like "no agents are running".
   _sr=$(_vt show-options -gv status-right 2>/dev/null || true)
   case $_sr in
-  *"mux agent-render"*) ok "status-right draws the agent strip" ;;
-  "") bad "status-right is empty: the agent strip cannot appear" ;;
-  *)  bad "status-right is not mux's renderer: no agent strip" ;;
+    *"mux agent-render"*) ok "status-right draws the agent strip" ;;
+    "") bad "status-right is empty: the agent strip cannot appear" ;;
+    *)  bad "status-right is not mux's renderer: no agent strip" ;;
   esac
   _sl=$(_vt show-options -gv status-left 2>/dev/null || true)
   case $_sl in
-  *"mux style"*) ok "status-left draws the session chip" ;;
-  *) warn "status-left is not mux's: session chip styling is off" ;;
+    *"mux style"*) ok "status-left draws the session chip" ;;
+    *) warn "status-left is not mux's: session chip styling is off" ;;
   esac
 
   # AN AGENT MUX STARTED AND HAS NEVER HEARD FROM. This is the first-run
@@ -589,9 +589,9 @@ else
         printf '%s\n' "$_s"
       done | sort -u | tr '\n' ' ')
     case ${_unwired% } in
-    '') ok "every agent session has reported its state" ;;
-    *)  warn "no agent state from: ${_unwired% }; the agent's hooks" \
-      "are not wired. Fix with: mux setup <agent>" ;;
+      '') ok "every agent session has reported its state" ;;
+      *)  warn "no agent state from: ${_unwired% }; the agent's hooks" \
+        "are not wired. Fix with: mux setup <agent>" ;;
     esac
   fi
 
@@ -618,10 +618,10 @@ else
 $_live
 EOF
   case ${_unaddr% } in
-  '') ;;
-  *)  warn "session(s) mux cannot address: ${_unaddr% }" \
-      "-- a colon is reserved for PARTITION::SESSION and SESSION:WINDOW," \
-      "and tmux uses it the same way. Rename: mux rename OLD NEW" ;;
+    '') ;;
+    *)  warn "session(s) mux cannot address: ${_unaddr% }" \
+        "-- a colon is reserved for PARTITION::SESSION and SESSION:WINDOW," \
+        "and tmux uses it the same way. Rename: mux rename OLD NEW" ;;
   esac
 
   # --- ASSERTED VERSUS ACTUAL: THE RECORDED SET AND THE SERVER ----------
@@ -681,9 +681,10 @@ EOF
   _nliv=$(printf '%s\n' "$_live" | grep -c . || true)
   if [ -z "$_unrec" ]; then
     case $_unlive in
-    '') ok "session set agrees with the server ($_nliv live, all recorded)" ;;
-    *)  ok "session set: $_nrec recorded, $_nliv live; resume would also" \
-        "rebuild$_unlive" ;;
+      '') ok "session set agrees with the server ($_nliv live, all recorded)"
+          ;;
+      *)  ok "session set: $_nrec recorded, $_nliv live; resume would also" \
+          "rebuild$_unlive" ;;
     esac
   fi
 fi

@@ -69,11 +69,11 @@ row() { grep '^proj ' "$T/conf/profiles" 2>/dev/null || true; }
 # root derives the name, and no theme is set, so NOTHING is recorded ---------
 _o=$(save) || fail "save failed: $_o"
 case $_o in
-*"matches the 'default' layout"*) ;;
-*) fail "an identical arrangement minted a copy: [$_o]" ;;
+  *"matches the 'default' layout"*) ;;
+  *) fail "an identical arrangement minted a copy: [$_o]" ;;
 esac
 case $_o in
-*"entirely derivable"*) ;; *) fail "a derivable session wrote a row: [$_o]" ;;
+  *"entirely derivable"*) ;; *) fail "a derivable session wrote a row: [$_o]" ;;
 esac
 [ ! -e "$T/conf/layouts/proj.layout" ] || fail "a redundant layout was written"
 [ -z "$(row)" ] || fail "a redundant row was written: [$(row)]"
@@ -103,8 +103,8 @@ grep -qE '^bottom[[:space:]]+5-10' "$T/conf/layouts/proj.layout" \
 # recognised rather than rewritten.
 _o=$(save) || fail "re-saving failed: $_o"
 case $_o in
-*"matches the 'proj' layout"*) ;;
-*) fail "re-saving an unchanged session rewrote it: [$_o]" ;;
+  *"matches the 'proj' layout"*) ;;
+  *) fail "re-saving an unchanged session rewrote it: [$_o]" ;;
 esac
 
 # --- but a further change will not clobber the file without --force --------

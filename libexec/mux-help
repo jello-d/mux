@@ -79,14 +79,14 @@ if [ -t 1 ]; then _RST=$(printf '\033[0m'); else _RST=; fi
 # colourN). <role> is 38 (fg) or 48 (bg). Empty on an unrecognised spec.
 _sgr_frag() {           # <spec> <38|48>
   case $1 in
-  '#'*|0x*)
-    _h=${1#\#}; _h=${_h#0x}
-    case $_h in ??????) ;; *) return 0 ;; esac   # need 6 hex digits
-    _r=${_h%????}; _gb=${_h#??}; _g=${_gb%??}; _b=${_h#????}
-    printf '%s;2;%d;%d;%d' "$2" \
-      "$((0x$_r))" "$((0x$_g))" "$((0x$_b))" ;;
-  colour[0-9]*) printf '%s;5;%s' "$2" "${1#colour}" ;;
-  [0-9]*)       printf '%s;5;%s' "$2" "$1" ;;
+    '#'*|0x*)
+      _h=${1#\#}; _h=${_h#0x}
+      case $_h in ??????) ;; *) return 0 ;; esac   # need 6 hex digits
+      _r=${_h%????}; _gb=${_h#??}; _g=${_gb%??}; _b=${_h#????}
+      printf '%s;2;%d;%d;%d' "$2" \
+        "$((0x$_r))" "$((0x$_g))" "$((0x$_b))" ;;
+    colour[0-9]*) printf '%s;5;%s' "$2" "${1#colour}" ;;
+    [0-9]*)       printf '%s;5;%s' "$2" "$1" ;;
   esac
 }
 # Full SGR escape for a colour spec (empty when not a tty or spec unrecognised).
@@ -99,9 +99,9 @@ _sgr_style() {          # <style>
   [ -n "$_RST" ] || return 0
   for _t in $1; do
     case $_t in
-    fg=*) _sgr_color "${_t#fg=}" 38 ;;
-    bg=*) _sgr_color "${_t#bg=}" 48 ;;
-    bold) printf '\033[1m' ;;
+      fg=*) _sgr_color "${_t#fg=}" 38 ;;
+      bg=*) _sgr_color "${_t#bg=}" 48 ;;
+      bold) printf '\033[1m' ;;
     esac
   done
 }
@@ -443,21 +443,21 @@ EOF
 # THE TOPIC VOCABULARY IS HERE, not in bin/mux, so adding a topic is one edit
 # in one file. bin/mux only answers the EMPTY case, which is usage.
 case ${1:-} in
-# --usage [RC] is bin/mux's eight parser error paths and its -h/--help flag,
-# reaching the one copy of the usage text. NOT a topic: it is deliberately
-# spelled as a flag so `mux help usage` stays an unknown topic rather than
-# becoming a second spelling of `mux --help`.
---usage)           shift; usage "${1:-2}" ;;
-# NO TOPIC IS USAGE, which is why bin/mux can now exec straight here for the
-# whole verb instead of branching first. `mux help` and `mux --help` are the
-# same question and there is one copy of the answer.
-'')                usage 0 ;;
-agents)            help_agents ;;
-themes|colors)     help_colors ;;
-profiles|layouts)  help_profiles ;;
-palette)           shift; help_palette "$@" ;;
-*) echo "mux: unknown help topic: ${1:-}" \
-  "(agents, themes, profiles, palette)" >&2
-   exit "$MUX_EC_USAGE" ;;
+  # --usage [RC] is bin/mux's eight parser error paths and its -h/--help flag,
+  # reaching the one copy of the usage text. NOT a topic: it is deliberately
+  # spelled as a flag so `mux help usage` stays an unknown topic rather than
+  # becoming a second spelling of `mux --help`.
+  --usage)           shift; usage "${1:-2}" ;;
+  # NO TOPIC IS USAGE, which is why bin/mux can now exec straight here for the
+  # whole verb instead of branching first. `mux help` and `mux --help` are the
+  # same question and there is one copy of the answer.
+  '')                usage 0 ;;
+  agents)            help_agents ;;
+  themes|colors)     help_colors ;;
+  profiles|layouts)  help_profiles ;;
+  palette)           shift; help_palette "$@" ;;
+  *) echo "mux: unknown help topic: ${1:-}" \
+    "(agents, themes, profiles, palette)" >&2
+     exit "$MUX_EC_USAGE" ;;
 esac
 exit "$MUX_EC_OK"

@@ -121,8 +121,8 @@ agent_rec "$T/rt/mux/agent-state/default/p9" blocked %9 100 charlie x
 env -u MUX_SHARE -u TMUX MUX_CTX_PARTITION=default \
   "$HERE/libexec/mux-next-blocked" >/dev/null 2>&1 || true
 case "$(cat "$TMUXLOG")" in
-*"/dev/pts/9"*) ;;
-*) fail "headless did not pick the most recently active client: got
+  *"/dev/pts/9"*) ;;
+  *) fail "headless did not pick the most recently active client: got
 [$(cat "$TMUXLOG")]; wanted the one with the highest client_activity" ;;
 esac
 
@@ -146,13 +146,13 @@ agent_rec "$T/rt/mux/agent-state/work/p1" blocked %1 50 worksess x
 env -u MUX_SHARE -u TMUX MUX_CTX_PARTITION=default \
   "$HERE/libexec/mux-next-blocked" --partition work >/dev/null 2>&1 || true
 case "$(cat "$TMUXLOG")" in
-*"=worksess"*) ;;
-*) fail "--partition did not reach the partition's STATE: got
+  *"=worksess"*) ;;
+  *) fail "--partition did not reach the partition's STATE: got
 [$(cat "$TMUXLOG")]; it read another partition's records" ;;
 esac
 case "$(cat "$TMUXLOG")" in
-*"-L work"*) ;;
-*) fail "--partition did not reach the partition's SERVER: got
+  *"-L work"*) ;;
+  *) fail "--partition did not reach the partition's SERVER: got
 [$(cat "$TMUXLOG")]; the switch went to whichever socket was default" ;;
 esac
 
@@ -183,8 +183,8 @@ agent_rec "$T/rt/mux/agent-state/default/p9" blocked %9 100 charlie x
 # merely agreeing with its author.
 _got=$(run '/dev/pts/7')
 case $_got in
-*'=charlie'*) ;;
-*) fail "control: with no attention declared the oldest blocked session
+  *'=charlie'*) ;;
+  *) fail "control: with no attention declared the oldest blocked session
 should win, got [$_got]" ;;
 esac
 
@@ -194,8 +194,8 @@ MUX_NB_PANES=$(printf '%%1\t\n%%9\tagent\n')
 export MUX_NB_PANES
 _got=$(run '/dev/pts/7')
 case $_got in
-*'=bravo'*) ;;
-*) fail "a worker owed to its supervisor was offered to the human: [$_got].
+  *'=bravo'*) ;;
+  *) fail "a worker owed to its supervisor was offered to the human: [$_got].
 That is the inversion R2 exists to prevent, and this surface is the one it
 names first." ;;
 esac

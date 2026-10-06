@@ -68,8 +68,8 @@ done
 _o=$(mux keys) || fail "mux keys failed: $_o"
 for _k in $(described); do
   case $_o in
-  *"$_k"*) ;;
-  *) fail "mux keys does not mention $_k: [$_o]" ;;
+    *"$_k"*) ;;
+    *) fail "mux keys does not mention $_k: [$_o]" ;;
   esac
 done
 _n_desc=$(described | grep -c .)
@@ -80,8 +80,8 @@ $_n_desc descriptions: the sheet and the data have come apart"
 # --- it says how to reach it ----------------------------------------------
 # A cheat sheet that does not say which prefix to press is a list of letters.
 case $_o in
-*prefix*|*C-*|*M-*) ;;
-*) fail "mux keys does not say what to press before the key: [$_o]" ;;
+  *prefix*|*C-*|*M-*) ;;
+  *) fail "mux keys does not say what to press before the key: [$_o]" ;;
 esac
 
 # --- and the popup binding exists -----------------------------------------

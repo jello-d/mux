@@ -106,8 +106,8 @@ mux_wire || fail "mux_wire failed on a bare server"
 
 wired || fail "mux_wire did not install mux's key bindings"
 case $(tmux -L "$SOCK" show-options -gv status-right) in
-*mux*) ;;
-*) fail "mux_wire did not take over status-right, so the agent strip would
+  *mux*) ;;
+  *) fail "mux_wire did not take over status-right, so the agent strip would
 never draw: [$(tmux -L "$SOCK" show-options -gv status-right)]" ;;
 esac
 _lh=$(tmux -L "$SOCK" show-hooks -g window-layout-changed 2>/dev/null | wc -l)
@@ -182,8 +182,8 @@ could not source, so this server has no mux wiring and nothing said so"
 MUX_SHARE=$_saved
 chmod 644 "$T/badshare/mux.tmux"
 case $_werr in
-mux:*) ;;
-*) fail "mux_wire failed SILENTLY, which leaves mux installed and inert with
+  mux:*) ;;
+  *) fail "mux_wire failed SILENTLY, which leaves mux installed and inert with
 no explanation: [$_werr]" ;;
 esac
 
@@ -264,8 +264,8 @@ MUX_T_POINTER=/a/resolvable/value; export MUX_T_POINTER
 # that masks the global.
 tmux -L "$SOCK" set-environment -t bare -r MUX_T_POINTER
 case $(tmux -L "$SOCK" show-environment -t bare MUX_T_POINTER) in
--MUX_T_POINTER) ;;
-*) fail "the fixture did not poison the session, so the assertion below would
+  -MUX_T_POINTER) ;;
+  *) fail "the fixture did not poison the session, so the assertion below would
 pass against a session that was never broken" ;;
 esac
 

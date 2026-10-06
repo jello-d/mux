@@ -61,8 +61,8 @@ afterwards assumes a private directory it is allowed to delete.
 output: $_o"
 
   case $_o in
-  *refusing*|*"mktemp -d failed"*) ;;
-  *) fail "mktemp shape [$_shape]: the refusal did not say why, so the next
+    *refusing*|*"mktemp -d failed"*) ;;
+    *) fail "mktemp shape [$_shape]: the refusal did not say why, so the next
 person meets a test that simply will not run: $_o" ;;
   esac
 done
@@ -126,8 +126,8 @@ TMUX_TMPDIR must stay short and must not derive from \$TMPDIR."
 
 # ... and it is still PRIVATE, which is the property the length must not cost.
 case $(ls -ld "$TMUX_TMPDIR" | cut -c1-10) in
-drwx------) ;;
-*) fail "the tmux socket dir is not private: $(ls -ld "$TMUX_TMPDIR")" ;;
+  drwx------) ;;
+  *) fail "the tmux socket dir is not private: $(ls -ld "$TMUX_TMPDIR")" ;;
 esac
 
 # --- EVERY NAME MUX EXPORTS IS ACCOUNTED FOR HERE ------------------------

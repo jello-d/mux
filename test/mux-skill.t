@@ -27,8 +27,8 @@ mux() { env -u MUX_SHARE "$HERE/bin/mux" "$@"; }
 # --- it prints the shipped skill ------------------------------------------
 _o=$(mux skill) || fail "mux skill failed: $_o"
 case $_o in
-'---'*) ;;
-*) fail "the skill must open with YAML frontmatter, got: $(printf '%s' "$_o" \
+  '---'*) ;;
+  *) fail "the skill must open with YAML frontmatter, got: $(printf '%s' "$_o" \
   | head -1)" ;;
 esac
 printf '%s\n' "$_o" | grep -q '^name: mux-agent$' \
@@ -52,7 +52,7 @@ fi
 # --- THE TWO FORMS ARE ONE DOCUMENT ---------------------------------------
 _plain=$(mux skill --agents-md) || fail "mux skill --agents-md failed"
 case $_plain in
-'---'*) fail "the AGENTS.md form carries YAML frontmatter, which a generic
+  '---'*) fail "the AGENTS.md form carries YAML frontmatter, which a generic
 harness reads as content. The frontmatter belongs only in the composed form" ;;
 esac
 
@@ -122,8 +122,8 @@ _o=$(bare skill --agents-md bare) || fail "--agents-md should still work"
 _rc=0; _o=$(mux skill nosuchskill 2>&1) || _rc=$?
 [ "$_rc" = 1 ] || fail "an unknown skill should exit 1, got $_rc"
 case $_o in
-*"have: mux-agent"*) ;;
-*) fail "the refusal did not name what there IS, so a typo looks like a
+  *"have: mux-agent"*) ;;
+  *) fail "the refusal did not name what there IS, so a typo looks like a
 missing feature: [$_o]" ;;
 esac
 
@@ -133,7 +133,7 @@ for _bad in ../../etc/passwd /etc/passwd 'mux agent' UPPER -dash; do
   _rc=0; _o=$(mux skill "$_bad" 2>&1) || _rc=$?
   [ "$_rc" = 2 ] || fail "[$_bad] should be a usage error (2), got $_rc"
   case $_o in
-  *root:*|*bin/sh*) fail "a traversal READ A FILE: [$_o]" ;;
+    *root:*|*bin/sh*) fail "a traversal READ A FILE: [$_o]" ;;
   esac
 done
 
@@ -146,8 +146,8 @@ _rc=0; mux skill --help >/dev/null 2>&1 || _rc=$?
 # exception, which is not a contract.
 _rc=0; _o=$(mux agent skill 2>&1) || _rc=$?
 case $_o in
-*'"status"'*) ;;
-*) fail "\`mux agent skill\` answered something other than JSON, so the agent
+  *'"status"'*) ;;
+  *) fail "\`mux agent skill\` answered something other than JSON, so the agent
 surface no longer answers JSON to everything: [$_o]" ;;
 esac
 
@@ -156,8 +156,11 @@ esac
 # than listed here: a copy would drift in exactly the way this is checking
 # for.
 _skill=$(mux skill)
-_sub=$(awk '/^case \$_verb in$/,/^esac$/' "$HERE/libexec/mux-agent" \
-  | grep -oE '^[a-z][a-z|-]*\)' | tr -d ')' | tr '|' '\n' | grep .)
+# Shape, not column: an arm's indentation is not part of the contract.
+_sub=$(awk '/^[[:space:]]*case \$_verb in$/,/^[[:space:]]*esac$/' \
+    "$HERE/libexec/mux-agent" \
+  | grep -oE '^[[:space:]]*[a-z][a-z|-]*\)' | tr -d ' \t)' \
+  | tr '|' '\n' | grep .)
 [ -n "$_sub" ] || fail "no sub-verbs discovered; the scrape is broken and this
 guard proves nothing"
 for _v in $_sub; do
@@ -171,8 +174,8 @@ done
 for _v in $(printf '%s\n' "$_skill" | grep -oE 'mux agent [a-z-]+' \
     | awk '{print $3}' | sort -u); do
   case " $(printf '%s\n' "$_sub" | tr '\n' ' ') " in
-  *" $_v "*) ;;
-  *) fail "the skill teaches \`mux agent $_v\`, which this mux does not
+    *" $_v "*) ;;
+    *) fail "the skill teaches \`mux agent $_v\`, which this mux does not
 have. An agent following it would make a call that fails." ;;
   esac
 done
@@ -199,7 +202,7 @@ for _v in status peers; do
     # shellcheck disable=SC2086   # a flag and its value, split
     _o=$(mux agent $_v $_f 2>&1) || true
     case $_o in
-    *'"status":"usage"'*) fail "the skill says \`mux agent $_v\` takes
+      *'"status":"usage"'*) fail "the skill says \`mux agent $_v\` takes
 $_f, and the verb answers a usage error: [$_o]" ;;
     esac
   done

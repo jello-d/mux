@@ -94,11 +94,11 @@ bsd() { env PATH="$T/stub:$PREFIX/bin:$PATH" "$@"; }
 _o=$(bsd "$PREFIX/bin/mux" -V 2>&1) || fail "mux -V failed under a BSD
 readlink: [$_o]"
 case $_o in
-mux\ *) ;;
-*) fail "mux -V did not print a version under a BSD readlink: [$_o]" ;;
+  mux\ *) ;;
+  *) fail "mux -V did not print a version under a BSD readlink: [$_o]" ;;
 esac
 case $_o in
-*"incomplete install"*|*missing*) fail "mux could not find its own libexec
+  *"incomplete install"*|*missing*) fail "mux could not find its own libexec
 under a BSD readlink, which is the macOS bug this exists to catch: [$_o]" ;;
 esac
 
@@ -106,8 +106,8 @@ esac
 _o=$(bsd "$PREFIX/bin/mux" skill --agents-md 2>&1) \
   || fail "a lib-sourcing verb failed under a BSD readlink: [$_o]"
 case $_o in
-'# Working with peer agents through mux'*) ;;
-*) fail "mux skill printed something else under a BSD readlink: [$_o]" ;;
+  '# Working with peer agents through mux'*) ;;
+  *) fail "mux skill printed something else under a BSD readlink: [$_o]" ;;
 esac
 
 # --- a CHAIN of symlinks, and a RELATIVE target --------------------------
@@ -166,13 +166,13 @@ so this case models nothing"
   _stamp=$(cat "$T/thcache"/* 2>/dev/null | head -1)
   tmux_drop_socket "$_sock"
   case ${_stamp:-} in
-  ?*) ;;
-  *) fail "the palette stamp is EMPTY with no sha256sum on PATH, so every tmux
+    ?*) ;;
+    *) fail "the palette stamp is EMPTY with no sha256sum on PATH, so every tmux
 server start on macOS would re-push the palette and compare against nothing.
 themes load said: [$(head -2 "$T/thout")]" ;;
   esac
   case $(cat "$T/thout") in
-  *'not found'*|*'illegal option'*) fail "themes load hit a missing or
+    *'not found'*|*'illegal option'*) fail "themes load hit a missing or
 BSD-incompatible tool: [$(cat "$T/thout")]" ;;
   esac
 fi
@@ -194,11 +194,11 @@ _shipped=$T/shipped
 find "$HERE/bin" "$HERE/libexec" "$HERE/share" -type f 2>/dev/null \
   | while IFS= read -r _f; do
     case $_f in
-    *.md|*.py|*.theme|*.layout|*.partition|*.agent|*.yaml)
-      continue ;;
+      *.md|*.py|*.theme|*.layout|*.partition|*.agent|*.yaml)
+        continue ;;
     esac
     case "$(head -1 -- "$_f" 2>/dev/null)" in
-    '#!'*/sh|'#!'*/dash|'#!'*/bash|'#!'*env\ sh) printf '%s\n' "$_f" ;;
+      '#!'*/sh|'#!'*/dash|'#!'*/bash|'#!'*env\ sh) printf '%s\n' "$_f" ;;
     esac
   done >>"$_shipped"
 printf '%s\n' "$HERE/setup.sh" >>"$_shipped"
@@ -279,9 +279,9 @@ with no -c, so every pty test would run the GNU form and fail\n' "$T_PTY" >&2
     exit 1; }
   _o=$(t_pty /dev/null 'printf hello' 2>/dev/null || true)
   case $_o in
-  *hello*) ;;
-  *) printf 'the bsd form did not pass the child output through: [%s]\n' \
-       "$_o" >&2; exit 1 ;;
+    *hello*) ;;
+    *) printf 'the bsd form did not pass the child output through: [%s]\n' \
+         "$_o" >&2; exit 1 ;;
   esac
 ) || fail "the bsd arm of t_pty is broken, so the pty tests would all fail on
 macOS while looking like product failures"
@@ -291,8 +291,8 @@ macOS while looking like product failures"
 # comes FIRST and the command is wrapped in a shell.
 _argv=$(cat "$ARGV")
 case $_argv in
-"-q /dev/null /bin/sh -c printf hello") ;;
-*) fail "t_pty composed the wrong BSD argv: [$_argv]
+  "-q /dev/null /bin/sh -c printf hello") ;;
+  *) fail "t_pty composed the wrong BSD argv: [$_argv]
 wanted the typescript FIRST, then a shell to run the command string" ;;
 esac
 

@@ -243,8 +243,8 @@ _payload_stage() {
   # rule: this package's own harness once deleted this repository because an
   # empty value reached `rm -rf` at trap fire time.
   case $_pay in
-  /*/*) ;;
-  *) bad "refusing to stage a payload at '$_pay'"; return 1 ;;
+    /*/*) ;;
+    *) bad "refusing to stage a payload at '$_pay'"; return 1 ;;
   esac
   rm -rf -- "$_ps_new" "$_ps_old"
   mkdir -p "$_ps_new" || { bad "could not create $_ps_new"; return 1; }
@@ -329,8 +329,8 @@ _payload_stage() {
 _retire_old_layout() {
   [ -e "$_oldlib" ] || [ -L "$_oldlib" ] || return 0
   case $_oldlib in
-  /*/libexec/?*) ;;
-  *) warn "not retiring '$_oldlib': unexpected shape"; return 0 ;;
+    /*/libexec/?*) ;;
+    *) warn "not retiring '$_oldlib': unexpected shape"; return 0 ;;
   esac
   rm -rf -- "$_oldlib"
   rmdir "$PREFIX/libexec" 2>/dev/null || :
@@ -492,8 +492,8 @@ _reload_live() {
     echo "$PKG:      at start, so run \`mux reload\` once that is fixed." >&2
     return 0; }
   case $_out in
-  *'no running servers'*) return 0 ;;
-  *) echo "$PKG: ${_out#mux: }" ;;
+    *'no running servers'*) return 0 ;;
+    *) echo "$PKG: ${_out#mux: }" ;;
   esac
 }
 
@@ -618,8 +618,8 @@ do_uninstall() {
   _retire_old_layout
   if [ -d "$_pay" ] && [ ! -L "$_pay" ]; then
     case $_pay in
-    /*/*) rm -rf -- "$_pay" ;;
-    *) bad "refusing to remove a payload at '$_pay'" ;;
+      /*/*) rm -rf -- "$_pay" ;;
+      *) bad "refusing to remove a payload at '$_pay'" ;;
     esac
   fi
   echo "$PKG: removed $_pay and its links from $PREFIX"
@@ -640,7 +640,7 @@ do_uninstall() {
   echo "$PKG: KEPT your own files, delete them by hand if you mean to:"
   do_paths | while IFS="$(printf '\t')" read -r _k _v; do
     case $_k in
-    config|state|cache) [ -e "$_v" ] && echo "$PKG:   $_k  $_v" ;;
+      config|state|cache) [ -e "$_v" ] && echo "$PKG:   $_k  $_v" ;;
     esac
   done
 }
@@ -731,12 +731,12 @@ desktop-notifier]"
 # the right one.
 _badarg() {   # <verb> <offending argument>
   case $2 in
-  *=*)
-    printf 'setup.sh: %s is a SETTING, not an argument.\n' "$2" >&2
-    printf '  Settings come from the environment, so:  %s sh setup.sh %s\n' \
-      "$2" "$1" >&2 ;;
-  *)
-    printf "setup.sh: unexpected argument '%s' after '%s'\n" "$2" "$1" >&2 ;;
+    *=*)
+      printf 'setup.sh: %s is a SETTING, not an argument.\n' "$2" >&2
+      printf '  Settings come from the environment, so:  %s sh setup.sh %s\n' \
+        "$2" "$1" >&2 ;;
+    *)
+      printf "setup.sh: unexpected argument '%s' after '%s'\n" "$2" "$1" >&2 ;;
   esac
   printf '%s\n' "$_U" >&2
   exit "$MUX_EC_USAGE"
@@ -749,22 +749,23 @@ _badarg() {   # <verb> <offending argument>
 # flag day. Both repos have been renamed and deployed, so the overlap has done
 # its job and gone: an alias nobody uses is a second spelling to keep working.
 case "${1:-help}" in
-desktop-notifier) ;;
-*) [ "$#" -le 1 ] || _badarg "${1:-help}" "$2" ;;
+  desktop-notifier) ;;
+  *) [ "$#" -le 1 ] || _badarg "${1:-help}" "$2" ;;
 esac
 
 case "${1:-help}" in
-  install)   do_install ;;
-  uninstall) do_uninstall ;;
-  check)     do_check; exit "$RC" ;;
-  paths)     do_paths ;;
-  test)      exec sh "$_root/test/run" ;;
-  version)   _v=$(git -C "$_root" describe --tags --always 2>/dev/null || true)
-             echo "${_v:-$PKG (unversioned)}" ;;
-  all)       do_install; sh "$_root/desktop-notifier/setup.sh" install ;;
-  desktop-notifier)                                        # passthrough
-             shift; exec sh "$_root/desktop-notifier/setup.sh" "$@" ;;
-  -h|--help|help) echo "$_U" ;;
-  *) echo "setup.sh: unknown command '${1:-}'" >&2; echo "$_U" >&2
-     exit "$MUX_EC_USAGE" ;;
+    install)   do_install ;;
+    uninstall) do_uninstall ;;
+    check)     do_check; exit "$RC" ;;
+    paths)     do_paths ;;
+    test)      exec sh "$_root/test/run" ;;
+    version)   _v=$(git -C "$_root" describe --tags --always 2>/dev/null \
+                 || true)
+               echo "${_v:-$PKG (unversioned)}" ;;
+    all)       do_install; sh "$_root/desktop-notifier/setup.sh" install ;;
+    desktop-notifier)                                        # passthrough
+               shift; exec sh "$_root/desktop-notifier/setup.sh" "$@" ;;
+    -h|--help|help) echo "$_U" ;;
+    *) echo "setup.sh: unknown command '${1:-}'" >&2; echo "$_U" >&2
+       exit "$MUX_EC_USAGE" ;;
 esac

@@ -66,10 +66,10 @@ test covers. Target a unique line instead."
 
 while IFS= read -r _line; do
   case "$_line" in
-  '= '*) _check; M_N=${_line#??} ;;
-  'f '*) M_F=${_line#??} ;;
-  't '*) M_T=${_line#??} ;;
-  '- '*) M_O=${_line#??} ;;
+    '= '*) _check; M_N=${_line#??} ;;
+    'f '*) M_F=${_line#??} ;;
+    't '*) M_T=${_line#??} ;;
+    '- '*) M_O=${_line#??} ;;
   esac
 done <"$CORPUS"
 _check
@@ -83,20 +83,21 @@ guards when written, so this has lost coverage rather than gained it"
 # fixture or a scratch path would validate forever and protect nothing.
 while IFS= read -r _line; do
   case "$_line" in
-  'f '*)
-    case "${_line#??}" in
-    # HomebrewFormula/ IS ON THIS LIST ON PURPOSE, and the line it sits on the
-    # right side of is "does a defect here reach a user", not "does setup.sh
-    # copy it". The formula is the entire install path for one platform: this
-    # repo is its own tap, brew reads that file, and a mistake in it reaches a
-    # stranger on a Mac. That makes it product, unlike the fixture this rule was
-    # written to reject (a record aimed at test/lib.sh, which would have
-    # validated forever and protected nothing).
-    bin/*|lib/*|libexec/*|share/*|setup.sh|desktop-notifier/*) ;;
-    HomebrewFormula/*) ;;
-    *) fail "a record targets '${_line#??}', which is not shipped
+    'f '*)
+      case "${_line#??}" in
+        # HomebrewFormula/ IS ON THIS LIST ON PURPOSE, and the line it sits on
+        # the right side of is "does a defect here reach a user", not "does
+        # setup.sh copy it". The formula is the entire install path for one
+        # platform: this repo is its own tap, brew reads that file, and a
+        # mistake in it reaches a stranger on a Mac. That makes it product,
+        # unlike the fixture this rule was written to reject (a record aimed at
+        # test/lib.sh, which would have validated forever and protected
+        # nothing).
+        bin/*|lib/*|libexec/*|share/*|setup.sh|desktop-notifier/*) ;;
+        HomebrewFormula/*) ;;
+        *) fail "a record targets '${_line#??}', which is not shipped
 code. The corpus must guard what the package installs, not a test fixture" ;;
-    esac ;;
+      esac ;;
   esac
 done <"$CORPUS"
 

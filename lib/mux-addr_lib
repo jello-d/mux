@@ -60,9 +60,9 @@ mux_addr_parse() {   # <address>
   MUX_ADDR_PART=; MUX_ADDR_SESS=; MUX_ADDR_WIN=
   _apa=${1:-}
   case $_apa in
-  '')
-    echo "mux: empty address" >&2
-    return 2 ;;
+    '')
+      echo "mux: empty address" >&2
+      return 2 ;;
   esac
 
   # THE DOUBLE COLON COMES OFF FIRST, which fixes the precedence rather than
@@ -77,50 +77,50 @@ mux_addr_parse() {   # <address>
   # than an untested guard, so it is stated instead of defended by a record
   # that could only ever survive.
   case $_apa in
-  *::*)
-    MUX_ADDR_PART=${_apa%%::*}
-    _aprest=${_apa#*::}
-    # A `::` WITH NOTHING BEFORE IT NAMES NO PARTITION, and is refused rather
-    # than quietly accepted as a second spelling of the bare form. One
-    # spelling per meaning is why no placeholder is needed at all.
-    [ -n "$MUX_ADDR_PART" ] || {
-      echo "mux: '$_apa' has a '::' with no partition before it" >&2
-      echo "mux: a bare name is already a session: ${_aprest:-SESSION}" >&2
-      return 2; }
-    case $_aprest in
     *::*)
-      echo "mux: too many '::' in '$_apa'" >&2
-      echo "mux: an address is [PARTITION::]SESSION[:WINDOW], and a tmux" >&2
-      echo "mux: session name cannot contain a colon at all, so there is" >&2
-      echo "mux: no second partition field it could belong to." >&2
-      return 2 ;;
-    esac ;;
-  *) _aprest=$_apa ;;
+      MUX_ADDR_PART=${_apa%%::*}
+      _aprest=${_apa#*::}
+      # A `::` WITH NOTHING BEFORE IT NAMES NO PARTITION, and is refused rather
+      # than quietly accepted as a second spelling of the bare form. One
+      # spelling per meaning is why no placeholder is needed at all.
+      [ -n "$MUX_ADDR_PART" ] || {
+        echo "mux: '$_apa' has a '::' with no partition before it" >&2
+        echo "mux: a bare name is already a session: ${_aprest:-SESSION}" >&2
+        return 2; }
+      case $_aprest in
+        *::*)
+          echo "mux: too many '::' in '$_apa'" >&2
+          echo "mux: an address is [PARTITION::]SESSION[:WINDOW], and a" >&2
+          echo "mux: tmux session name cannot contain a colon, so there is" >&2
+          echo "mux: no second partition field it could belong to." >&2
+          return 2 ;;
+      esac ;;
+    *) _aprest=$_apa ;;
   esac
 
   # Then the window, on a SINGLE colon, over what the partition left behind.
   case $_aprest in
-  *:*)
-    MUX_ADDR_SESS=${_aprest%%:*}
-    MUX_ADDR_WIN=${_aprest#*:}
-    case $MUX_ADDR_WIN in
     *:*)
-      echo "mux: too many colons in '$_apa'" >&2
-      echo "mux: an address is [PARTITION::]SESSION[:WINDOW], and a tmux" >&2
-      echo "mux: session name cannot contain a colon, so there is no" >&2
-      echo "mux: fourth field it could belong to." >&2
-      return 2 ;;
-    esac
-    # A WINDOW WITH NO SESSION NAMES NOTHING. `work:::api` splits to a
-    # partition and then `:api`, which would otherwise read as an empty
-    # session with a window called `api`: a shape no caller can act on, so
-    # it is refused rather than passed along half-formed.
-    [ -z "$MUX_ADDR_WIN" ] || [ -n "$MUX_ADDR_SESS" ] || {
-      echo "mux: '$_apa' names a window with no session" >&2
-      echo "mux: an address is [PARTITION::]SESSION[:WINDOW]" >&2
-      return 2; }
-    ;;
-  *) MUX_ADDR_SESS=$_aprest ;;
+      MUX_ADDR_SESS=${_aprest%%:*}
+      MUX_ADDR_WIN=${_aprest#*:}
+      case $MUX_ADDR_WIN in
+        *:*)
+          echo "mux: too many colons in '$_apa'" >&2
+          echo "mux: an address is [PARTITION::]SESSION[:WINDOW], and a" >&2
+          echo "mux: session name cannot contain a colon, so there is no" >&2
+          echo "mux: fourth field it could belong to." >&2
+          return 2 ;;
+      esac
+      # A WINDOW WITH NO SESSION NAMES NOTHING. `work:::api` splits to a
+      # partition and then `:api`, which would otherwise read as an empty
+      # session with a window called `api`: a shape no caller can act on, so
+      # it is refused rather than passed along half-formed.
+      [ -z "$MUX_ADDR_WIN" ] || [ -n "$MUX_ADDR_SESS" ] || {
+        echo "mux: '$_apa' names a window with no session" >&2
+        echo "mux: an address is [PARTITION::]SESSION[:WINDOW]" >&2
+        return 2; }
+      ;;
+    *) MUX_ADDR_SESS=$_aprest ;;
   esac
   return 0
 }

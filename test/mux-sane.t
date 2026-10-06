@@ -65,8 +65,8 @@ for _m in \
 do
   _code=${_m%%:*}; _why=${_m#*:}
   case $_seen in
-  *"^[[?$_code"*) ;;
-  *) fail "mux sane never reset ?$_code: $_why
+    *"^[[?$_code"*) ;;
+    *) fail "mux sane never reset ?$_code: $_why
 What it emitted:
 $_seen" ;;
   esac
@@ -86,7 +86,7 @@ discipline (echo, canonical mode, signal characters) is left as tmux set it"
 # work in the name of fixing it. It is also redundant, since leaving the
 # alternate screen discards its contents anyway.
 case $_seen in
-*'^[[H^[[J'*|*'^[[2J'*) fail "mux sane clears the screen. If the terminal
+  *'^[[H^[[J'*|*'^[[2J'*) fail "mux sane clears the screen. If the terminal
 is NOT on the alternate screen this wipes real content, and leaving the
 alternate screen already discards its buffer, so the clear can only ever do
 harm here. Emitted:
@@ -97,7 +97,7 @@ esac
 # `tput reset` drop the scrollback the user is trying to get back to, along
 # with the palette and the window title.
 case $_seen in
-*'^[c'*) fail "mux sane sends RIS (ESC c), a full terminal reset. That
+  *'^[c'*) fail "mux sane sends RIS (ESC c), a full terminal reset. That
 discards the scrollback this whole exercise exists to return the user to." ;;
 esac
 
@@ -109,8 +109,8 @@ t_pty "$_raw2" "sh $HOOK; sh $HOOK" >/dev/null 2>&1 || true
 _n1=$(grep -c . "$_raw" 2>/dev/null || echo 0)
 [ -s "$_raw2" ] || fail "the second run captured nothing"
 case $(cat -v "$_raw2") in
-*'^[[?1049l'*) ;;
-*) fail "running mux sane twice stopped emitting the resets" ;;
+  *'^[[?1049l'*) ;;
+  *) fail "running mux sane twice stopped emitting the resets" ;;
 esac
 [ "$_n1" -ge 1 ] || fail "the first capture was empty"
 

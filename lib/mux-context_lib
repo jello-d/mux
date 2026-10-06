@@ -69,7 +69,7 @@ MUX_THEME_FALLBACK=purple
 # `work` are two partitions to mux and one directory to the OS.
 mux_ctx_valid() {       # <token>
   case $1 in
-  ''|*[!abcdefghijklmnopqrstuvwxyz0123456789-]*|-*|*-) return 1 ;;
+    ''|*[!abcdefghijklmnopqrstuvwxyz0123456789-]*|-*|*-) return 1 ;;
   esac
   [ "${#1}" -le 63 ]
 }
@@ -115,40 +115,40 @@ _mux_ctx_merge() {      # <file>
   _first_ignore=1
   while read -r _k _v; do
     case $_k in
-    ''|'#'*) continue ;;
-    partition) MUX_CFG_partition=$_v ;;
-    label)     MUX_CFG_label=$_v ;;
-    theme)     MUX_CFG_theme=$_v ;;
-    derive)    MUX_CFG_derive=$_v ;;
-    agent)     MUX_CFG_agent=$_v ;;
-    layout)    MUX_CFG_layout=$_v ;;
-    host-chip) MUX_CFG_host_chip=$_v ;;
-    scan)
-      # Repeatable WITHIN a file, but a file REPLACES the list
-      # from earlier levels: last wins per key, where the
-      # key's value is the whole list. So a context can drop
-      # its partition's roots rather than only add to them.
-      if [ "$_first_scan" = 1 ]; then
-        MUX_CFG_scan=$_v; _first_scan=0
-      else
-        MUX_CFG_scan="$MUX_CFG_scan
+      ''|'#'*) continue ;;
+      partition) MUX_CFG_partition=$_v ;;
+      label)     MUX_CFG_label=$_v ;;
+      theme)     MUX_CFG_theme=$_v ;;
+      derive)    MUX_CFG_derive=$_v ;;
+      agent)     MUX_CFG_agent=$_v ;;
+      layout)    MUX_CFG_layout=$_v ;;
+      host-chip) MUX_CFG_host_chip=$_v ;;
+      scan)
+        # Repeatable WITHIN a file, but a file REPLACES the list
+        # from earlier levels: last wins per key, where the
+        # key's value is the whole list. So a context can drop
+        # its partition's roots rather than only add to them.
+        if [ "$_first_scan" = 1 ]; then
+          MUX_CFG_scan=$_v; _first_scan=0
+        else
+          MUX_CFG_scan="$MUX_CFG_scan
 $_v"
-      fi ;;
-    ignore)
-      # Same multiplicity rule as `scan`, deliberately: this
-      # file format already had ONE answer for "a key that is
-      # a list", and a second convention (CSV, say) would be
-      # a second thing to remember, and would break on a
-      # path containing a comma. Repeatable within a file;
-      # a file that sets it REPLACES the inherited list, so a
-      # context can drop its partition's ignores rather than
-      # only add to them.
-      if [ "$_first_ignore" = 1 ]; then
-        MUX_CFG_ignore=$_v; _first_ignore=0
-      else
-        MUX_CFG_ignore="$MUX_CFG_ignore
+        fi ;;
+      ignore)
+        # Same multiplicity rule as `scan`, deliberately: this
+        # file format already had ONE answer for "a key that is
+        # a list", and a second convention (CSV, say) would be
+        # a second thing to remember, and would break on a
+        # path containing a comma. Repeatable within a file;
+        # a file that sets it REPLACES the inherited list, so a
+        # context can drop its partition's ignores rather than
+        # only add to them.
+        if [ "$_first_ignore" = 1 ]; then
+          MUX_CFG_ignore=$_v; _first_ignore=0
+        else
+          MUX_CFG_ignore="$MUX_CFG_ignore
 $_v"
-      fi ;;
+        fi ;;
     esac
   done <<EOF
 $(sed -e 's/\r$//' -e 's/[[:space:]]*$//' "$1")
@@ -188,8 +188,8 @@ mux_ctx_resolve() {     # [PID]
   # commonly shared between machines through a dotfiles repo, so it must
   # not have to carry an absolute path that is only right on one of them.
   case $_cc in
-  '' | */*) ;;
-  *) [ -x "$MUX_DIR/$_cc" ] && _cc=$MUX_DIR/$_cc ;;
+    '' | */*) ;;
+    *) [ -x "$MUX_DIR/$_cc" ] && _cc=$MUX_DIR/$_cc ;;
   esac
   if [ -n "$_cc" ]; then
     # Capture RAW, then trim. A pipeline's status is its LAST

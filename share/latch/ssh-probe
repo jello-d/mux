@@ -41,9 +41,10 @@ command -v ssh >/dev/null 2>&1 || exit 78
 _port=${2:-}
 set --
 case ${_port:-} in
-'') ;;
-*[!0-9]*) ;;                 # not a port; let ssh decide rather than pass junk
-*) set -- -p "$_port" ;;
+  '') ;;
+  # not a port: let ssh decide rather than pass junk through
+  *[!0-9]*) ;;
+  *) set -- -p "$_port" ;;
 esac
 
 # An established control master IS the answer, and costs nothing: the connection
@@ -110,10 +111,10 @@ rm -f "$_e"
 # will not talk within the bound, an attach will not fare better.
 [ "$_rc" = 124 ] && exit 1
 case $_out in
-*"Connection refused"*|*"No route to host"*) exit 1 ;;
-*"Network is unreachable"*)                  exit 1 ;;
-*"Could not resolve hostname"*)              exit 1 ;;
-*"Name or service not known"*)               exit 1 ;;
-*"Operation timed out"*|*"Connection timed out"*) exit 1 ;;
+  *"Connection refused"*|*"No route to host"*) exit 1 ;;
+  *"Network is unreachable"*)                  exit 1 ;;
+  *"Could not resolve hostname"*)              exit 1 ;;
+  *"Name or service not known"*)               exit 1 ;;
+  *"Operation timed out"*|*"Connection timed out"*) exit 1 ;;
 esac
 exit 78

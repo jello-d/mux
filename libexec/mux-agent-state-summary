@@ -66,10 +66,10 @@ _att=0
 _sess_mode=0
 while :; do
   case "${1:-}" in
-  --all|-a)    _all=1; shift ;;
-  --attached)  _att=1; shift ;;
-  --sessions)  _sess_mode=1; shift ;;
-  *) break ;;
+    --all|-a)    _all=1; shift ;;
+    --attached)  _att=1; shift ;;
+    --sessions)  _sess_mode=1; shift ;;
+    *) break ;;
   esac
 done
 _ns=${1:-}
@@ -103,8 +103,8 @@ _summarise() {   # <dir> <prefix>
       read -r _st _win _pane _ep _nid _ss <"$_f" || continue
       [ -n "${_ss:-}" ] || continue
       case "$_NL$_sessions$_NL" in
-      *"$_NL$_ss$_NL"*) ;;
-      *) _sessions="$_sessions$_NL$_ss" ;;
+        *"$_NL$_ss$_NL"*) ;;
+        *) _sessions="$_sessions$_NL$_ss" ;;
       esac
     done
   fi
@@ -207,6 +207,6 @@ done
 # has no session lines to give.
 [ "$_sess_mode" -eq 0 ] || exit "$MUX_EC_OK"
 case " $_seen " in
-*" ${_ns:-global} "*) ;;
-*) printf '%s %s\n' "${_ns:-global}" "none 0" ;;
+  *" ${_ns:-global} "*) ;;
+  *) printf '%s %s\n' "${_ns:-global}" "none 0" ;;
 esac

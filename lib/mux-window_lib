@@ -135,7 +135,7 @@ mux_window_open() {
   # somebody else made.
   for _mwp in control:"$_mwctl" attention:"$_mwattn"; do
     case $_mwp in
-    *:) continue ;;
+      *:) continue ;;
     esac
     # TARGETED BY ID, never index: an index can renumber between the create
     # and this write (`renumber-windows`, or a concurrent kill), and the

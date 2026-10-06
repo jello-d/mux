@@ -74,19 +74,19 @@ _edit_parse() {
   _bad=
   while IFS= read -r _line; do
     case $_line in
-    '') continue ;;
-    [[:space:]]*'#'*|'#'*)
-      # A comment cannot live in a one-line row. That is the
-      # signal the entry has outgrown the table, so it is
-      # what triggers promotion to a breakout file.
-      _promote=1; continue ;;
+      '') continue ;;
+      [[:space:]]*'#'*|'#'*)
+        # A comment cannot live in a one-line row. That is the
+        # signal the entry has outgrown the table, so it is
+        # what triggers promotion to a breakout file.
+        _promote=1; continue ;;
     esac
     _k=${_line%%[[:space:]]*}
     _v=${_line#"$_k"}
     _v=${_v#"${_v%%[![:space:]]*}"}
     case $_k in
-    root|theme|agent|notify|layout|context) ;;
-    *) _bad="unknown key '$_k'"; break ;;
+      root|theme|agent|notify|layout|context) ;;
+      *) _bad="unknown key '$_k'"; break ;;
     esac
     [ -n "$_v" ] || { _bad="'$_k' has no value"; break; }
     # A value with whitespace cannot be a pair on a shared line:

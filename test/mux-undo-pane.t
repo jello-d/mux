@@ -174,7 +174,7 @@ _records() {   # the complete records, one per line, temp files excluded
   for _rr in "$T"/run/mux-undo/*; do
     [ -f "$_rr" ] || continue
     case ${_rr##*/} in
-    (*.tmp.*) continue ;;
+      (*.tmp.*) continue ;;
     esac
     grep -q '^layout	' "$_rr" 2>/dev/null || continue
     printf '%s\n' "$_rr"
@@ -270,7 +270,7 @@ _cr=$(sed -n 's/^command	//p' "$(_records | head -1)")
 # adds is ESCAPES: it wraps the whole thing and backslash-escapes the inner
 # `"` and `$`. Checking for a quote fails on correct code, which it did here.
 case $_cr in
-*[\\]*) fail "the recorded command is still tmux's DISPLAY form, quoted
+  *[\\]*) fail "the recorded command is still tmux's DISPLAY form, quoted
 and escaped: [$_cr]
 what tmux ($(tmux -V)) handed the recorder, via @mux-up:
 [$_raw_up]
@@ -278,8 +278,8 @@ Replaying that does not fail loudly: the pane comes
 back running the wrong thing, which is how it survived a first live check." ;;
 esac
 case $_cr in
-*MARK_A*) ;;
-*) fail "the recorded command lost the command itself: [$_cr]" ;;
+  *MARK_A*) ;;
+  *) fail "the recorded command lost the command itself: [$_cr]" ;;
 esac
 
 # --- the layout comes back exactly, wherever the hole was -----------------
@@ -349,8 +349,8 @@ feature exists for."
 stage "the directory is remembered"
 _until 10 _cwds_ready || true
 case "$(state)" in
-*":$D1 "*) ;;
-*) fail "the restored pane did not come back in its old directory [$D1]:
+  *":$D1 "*) ;;
+  *) fail "the restored pane did not come back in its old directory [$D1]:
 $(state)" ;;
 esac
 
@@ -445,8 +445,8 @@ grep -v '^cwd	' "$_rec" >"$_rec.x" && mv -f "$_rec.x" "$_rec"
 _sp=$(tm display-message -p '#{socket_path}')
 _o=$(env TMUX="$_sp,0,0" "$HERE/libexec/mux-undo-pane" 2>&1 || true)
 case $_o in
-*"directory was not recorded"*) ;;
-*) fail "a record with no cwd restored SILENTLY into the neighbour's
+  *"directory was not recorded"*) ;;
+  *) fail "a record with no cwd restored SILENTLY into the neighbour's
 directory: [$_o]" ;;
 esac
 _until 10 _npanes 3 || fail "nocwd: the pane should still come back. The
@@ -515,8 +515,8 @@ the record:
 $(sed 's/^/    /' "$_rec" 2>/dev/null || echo '    <gone>')
 the window this ran against: $(tm display-message -p '#{window_id}' 2>&1)"
 case $_o in
-*"server that is gone"*) ;;
-*) fail "the refusal did not say the record belongs to another server, so a
+  *"server that is gone"*) ;;
+  *) fail "the refusal did not say the record belongs to another server, so a
 phantom restore is indistinguishable from a real one: [$_o]" ;;
 esac
 _npanes 2 || fail "a record from another server RESTORED A PANE: $(state)"
@@ -546,8 +546,8 @@ _npanes 2 || fail "an unattributable record RESTORED A PANE: $(state)"
 # "this cannot be attributed at all" want different reactions, and sharing a
 # message would make the second a lie about the first.
 case $_o in
-*"does not say which server"*) ;;
-*) fail "an unattributable record was refused with the foreign-server
+  *"does not say which server"*) ;;
+  *) fail "an unattributable record was refused with the foreign-server
 sentence, which is not what happened: [$_o]" ;;
 esac
 
@@ -586,8 +586,8 @@ _rc=0
 _o=$(env TMUX="$_sp,0,0" "$HERE/libexec/mux-undo-pane" 2>&1) || _rc=$?
 [ "$_rc" != 0 ] || fail "a half-written record was accepted (exit 0): [$_o]"
 case $_o in
-*unusable*) ;;
-*) fail "a half-written record was not refused by name: [$_o]" ;;
+  *unusable*) ;;
+  *) fail "a half-written record was not refused by name: [$_o]" ;;
 esac
 [ "$(tm list-panes -t t 2>/dev/null | wc -l)" -eq 2 ] \
   || fail "a half-written record still changed the window: it must refuse
@@ -600,8 +600,8 @@ _o=$(env XDG_RUNTIME_DIR="$T/run" "$HERE/libexec/mux-undo-pane" --nope 2>&1) \
   || _rc=$?
 [ "$_rc" = 2 ] || fail "an unknown option must exit 2, got $_rc"
 case $_o in
-*"unknown option"*) ;;
-*) fail "an unknown option did not say so: $_o" ;;
+  *"unknown option"*) ;;
+  *) fail "an unknown option did not say so: $_o" ;;
 esac
 
 pass

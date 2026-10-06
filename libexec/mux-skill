@@ -63,17 +63,17 @@ _lib=$_libexec/../lib
 
 _form=skill
 case ${1:-} in
---agents-md) _form=agents; shift ;;
+  --agents-md) _form=agents; shift ;;
 esac
 
 _name=${1:-mux-agent}
 case ${_name:-} in
--h|--help)
-  echo "usage: mux skill [--agents-md] [NAME]"
-  echo "  print the agent instructions that match this mux, on stdout"
-  echo "  --agents-md   the body alone, with no YAML frontmatter"
-  exit "$MUX_EC_OK" ;;
--*) echo "mux: skill: unknown option: $_name" >&2; exit "$MUX_EC_USAGE" ;;
+  -h|--help)
+    echo "usage: mux skill [--agents-md] [NAME]"
+    echo "  print the agent instructions that match this mux, on stdout"
+    echo "  --agents-md   the body alone, with no YAML frontmatter"
+    exit "$MUX_EC_OK" ;;
+  -*) echo "mux: skill: unknown option: $_name" >&2; exit "$MUX_EC_USAGE" ;;
 esac
 
 # A NAME THAT IS NOT A NAME IS A USAGE ERROR, checked before it becomes a
@@ -82,9 +82,9 @@ esac
 # ENUMERATED RATHER THAN `[a-z]`, because a range is a COLLATION range and
 # macOS accepted `UPPER` through one: see mux_ctx_valid for the measurement.
 case $_name in
-''|*[!abcdefghijklmnopqrstuvwxyz0123456789-]*|-*|*-)
-  echo "mux: skill: not a skill name: $_name" >&2
-  exit "$MUX_EC_USAGE" ;;
+  ''|*[!abcdefghijklmnopqrstuvwxyz0123456789-]*|-*|*-)
+    echo "mux: skill: not a skill name: $_name" >&2
+    exit "$MUX_EC_USAGE" ;;
 esac
 
 _dir=$MUX_SHARE/skills/$_name

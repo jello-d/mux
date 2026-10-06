@@ -71,8 +71,8 @@ if [ -d "$T/repo/.git" ]; then
   # be the toplevel, not the cwd.
   _b=$(mux_resolve_project_base "$T/repo/sub")
   case $_b in
-  */repo) ;;
-  *) fail "project_base from a repo SUBDIRECTORY answered [$_b]; it must
+    */repo) ;;
+    *) fail "project_base from a repo SUBDIRECTORY answered [$_b]; it must
 climb to the toplevel, or a session built from a subdirectory takes its name
 and root from the wrong place" ;;
   esac
@@ -98,8 +98,9 @@ eq hash-stable "$_h1" "$_h2"
 # `case " $list " in *" $x "*` idiom this tree uses elsewhere has the LIST in
 # the variable, which is the opposite situation.
 case $_h1 in
-red|blue|green) ;;
-*) fail "hash_theme chose [$_h1], which is not one of the themes that exist" ;;
+  red|blue|green) ;;
+  *) fail \
+    "hash_theme chose [$_h1], which is not one of the themes that exist" ;;
 esac
 # AND IT IS NOT CONSTANT, which is the half that proves it hashes the name
 # rather than answering the first row: with three themes and a handful of
@@ -126,23 +127,23 @@ mux_sess_add beta "$T/plain/below" other
 
 _r=$(mux_resolve_typed_roots alpha work)
 case $_r in
-*"a session you had"*"$T/plain"*) ;;
-*) fail "typed_roots did not find a recorded session in its OWN partition:
+  *"a session you had"*"$T/plain"*) ;;
+  *) fail "typed_roots did not find a recorded session in its OWN partition:
 [$_r]" ;;
 esac
 # THE OTHER PARTITION MUST NOT ANSWER, which is the whole point of the
 # argument: `alpha` is recorded in `work` and nowhere else.
 _r=$(mux_resolve_typed_roots alpha other)
 case $_r in
-*"a session you had"*) fail "typed_roots answered about partition 'work'
+  *"a session you had"*) fail "typed_roots answered about partition 'work'
 while asked about 'other'. A partition is an isolation boundary and the set
 is keyed by it, so this is the wrong partition's sessions: [$_r]" ;;
 esac
 # and the reverse, so neither direction is passing by coincidence
 _r=$(mux_resolve_typed_roots beta other)
 case $_r in
-*"a session you had"*"$T/plain/below"*) ;;
-*) fail "typed_roots found nothing for beta in 'other', where it IS
+  *"a session you had"*"$T/plain/below"*) ;;
+  *) fail "typed_roots found nothing for beta in 'other', where it IS
 recorded: [$_r]" ;;
 esac
 

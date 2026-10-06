@@ -13,13 +13,13 @@
 # three-answer contract exists to prevent.
 set -eu
 case ${1:-} in
-unix:path=*)
-  _p=${1#unix:path=}
-  _p=${_p%%,*}
-  [ -S "$_p" ] ;;
-unix:abstract=*)
-  # An abstract socket has no filesystem entry to test at all.
-  exit 2 ;;
-'') exit 1 ;;
-*)  exit 2 ;;
+  unix:path=*)
+    _p=${1#unix:path=}
+    _p=${_p%%,*}
+    [ -S "$_p" ] ;;
+  unix:abstract=*)
+    # An abstract socket has no filesystem entry to test at all.
+    exit 2 ;;
+  '') exit 1 ;;
+  *)  exit 2 ;;
 esac

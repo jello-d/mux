@@ -49,15 +49,15 @@ _usage() {
 _addr= _dir= _cmd= _ctl= _attn=
 while [ "$#" -gt 0 ]; do
   case $1 in
-  --dir)       _dir=${2:-}; shift 2 || _usage ;;
-  --cmd)       _cmd=${2:-}; shift 2 || _usage ;;
-  --control)   _ctl=${2:-}; shift 2 || _usage ;;
-  --attention) _attn=${2:-}; shift 2 || _usage ;;
-  -h|--help)   _usage ;;
-  -*)          echo "mux: unknown option: $1" >&2; exit "$MUX_EC_USAGE" ;;
-  *) [ -z "$_addr" ] || { echo "mux: one address, not two: $1" >&2
-    exit "$MUX_EC_USAGE"; }
-     _addr=$1; shift ;;
+    --dir)       _dir=${2:-}; shift 2 || _usage ;;
+    --cmd)       _cmd=${2:-}; shift 2 || _usage ;;
+    --control)   _ctl=${2:-}; shift 2 || _usage ;;
+    --attention) _attn=${2:-}; shift 2 || _usage ;;
+    -h|--help)   _usage ;;
+    -*)          echo "mux: unknown option: $1" >&2; exit "$MUX_EC_USAGE" ;;
+    *) [ -z "$_addr" ] || { echo "mux: one address, not two: $1" >&2
+      exit "$MUX_EC_USAGE"; }
+       _addr=$1; shift ;;
   esac
 done
 [ -n "$_addr" ] || _usage
@@ -115,9 +115,9 @@ _wrc=0
 mux_window_open "${_wpart:-global}" "$_wsess" "$_wname" "$_dir" \
   "$_cmd" "$_ctl" "$_attn" 1 || _wrc=$?
 case $_wrc in
-0) ;;
-3) echo "mux: $MUX_WIN_ERR" >&2; exit "$MUX_EC_NONAME" ;;
-*) echo "mux: $MUX_WIN_ERR" >&2; exit "$MUX_EC_USAGE" ;;
+  0) ;;
+  3) echo "mux: $MUX_WIN_ERR" >&2; exit "$MUX_EC_NONAME" ;;
+  *) echo "mux: $MUX_WIN_ERR" >&2; exit "$MUX_EC_USAGE" ;;
 esac
 
 # AND GO THERE, which is the whole difference from the machine verb. The

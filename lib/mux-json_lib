@@ -80,8 +80,8 @@ mux_json_str() {
 # age or an epoch.
 mux_json_num() {
   case "${1-}" in
-  ''|-|*[!0-9-]*|?*-*) printf 'null' ;;
-  *) printf '%s' "$1" ;;
+    ''|-|*[!0-9-]*|?*-*) printf 'null' ;;
+    *) printf '%s' "$1" ;;
   esac
 }
 

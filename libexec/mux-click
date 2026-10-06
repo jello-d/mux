@@ -22,8 +22,8 @@ client=${2:-}
 # is resolved (auto -> floor -> ceil), so the condition is both noticed and
 # settled on the bar without looking up a verb.
 case "$range" in
-v:*)
-  exec "$(dirname "$0")/mux-views" next ;;
+  v:*)
+    exec "$(dirname "$0")/mux-views" next ;;
 esac
 
 case "$range" in s:?*) ;; *) exit "$MUX_EC_OK" ;; esac

@@ -140,25 +140,25 @@ CAPS
 # consumer would skip a capability that works.
 _cap_usable() {   # <name>
   case $1 in
-  latch)
-    # Implemented, but useless without a transport. The default is
-    # ssh; an override may name anything. Only the first WORD is
-    # checked, since the rest is that transport's own arguments.
-    _lt=${MUX_LATCH_TRANSPORT:-}
-    if [ -z "$_lt" ] && [ -r "$MUX_DIR/config" ]; then
-      _lt=$(mux_conf_clean 2>/dev/null <"$MUX_DIR/config" \
-        | awk '$1 == "latch-transport" { print $2
+    latch)
+      # Implemented, but useless without a transport. The default is
+      # ssh; an override may name anything. Only the first WORD is
+      # checked, since the rest is that transport's own arguments.
+      _lt=${MUX_LATCH_TRANSPORT:-}
+      if [ -z "$_lt" ] && [ -r "$MUX_DIR/config" ]; then
+        _lt=$(mux_conf_clean 2>/dev/null <"$MUX_DIR/config" \
+          | awk '$1 == "latch-transport" { print $2
           exit }')
-    fi
-    [ -n "$_lt" ] || _lt=ssh
-    command -v "${_lt%% *}" >/dev/null 2>&1 ;;
-  context)
-    # A context-command must be CONFIGURED and resolvable. Without one
-    # the baseline stands, which is a working mux but not this seam.
-    [ -r "$MUX_DIR/config" ] || return 1
-    grep -qE '^[[:space:]]*context-command[[:space:]]' \
-      "$MUX_DIR/config" 2>/dev/null ;;
-  *) return 0 ;;
+      fi
+      [ -n "$_lt" ] || _lt=ssh
+      command -v "${_lt%% *}" >/dev/null 2>&1 ;;
+    context)
+      # A context-command must be CONFIGURED and resolvable. Without one
+      # the baseline stands, which is a working mux but not this seam.
+      [ -r "$MUX_DIR/config" ] || return 1
+      grep -qE '^[[:space:]]*context-command[[:space:]]' \
+        "$MUX_DIR/config" 2>/dev/null ;;
+    *) return 0 ;;
   esac
 }
 
@@ -176,22 +176,22 @@ _cmd_capabilities() {
 ' "$MUX_VERSION"
   _cap_manifest | while read -r _cn _cc _cv; do
     case $_cc in
-    none)     printf '%s no\n' "$_cn" ;;
-    internal)
-      # An `if`, not `[ ... ] && printf`: as the last command of
-      # the loop body a false test makes the whole pipeline
-      # non-zero, and under set -e that aborts the function before
-      # its `exit 0` ever runs. The verb then reported FAILURE
-      # while printing a perfectly correct answer.
-      if [ "$_all" = 1 ]; then
-        printf '%s internal\n' "$_cn"
-      fi ;;
-    contract)
-      if _cap_usable "$_cn"; then
-        printf '%s %s\n' "$_cn" "$_cv"
-      else
-        printf '%s %s unavailable\n' "$_cn" "$_cv"
-      fi ;;
+      none)     printf '%s no\n' "$_cn" ;;
+      internal)
+        # An `if`, not `[ ... ] && printf`: as the last command of
+        # the loop body a false test makes the whole pipeline
+        # non-zero, and under set -e that aborts the function before
+        # its `exit 0` ever runs. The verb then reported FAILURE
+        # while printing a perfectly correct answer.
+        if [ "$_all" = 1 ]; then
+          printf '%s internal\n' "$_cn"
+        fi ;;
+      contract)
+        if _cap_usable "$_cn"; then
+          printf '%s %s\n' "$_cn" "$_cv"
+        else
+          printf '%s %s unavailable\n' "$_cn" "$_cv"
+        fi ;;
     esac
   done
   exit "$MUX_EC_OK"

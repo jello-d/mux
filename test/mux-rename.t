@@ -103,8 +103,8 @@ _o=$(mux rename alpha zulu) || fail "rename failed: $_o"
 grep -qx 'old settings' "$T/conf/zulu.profile" \
   || fail "the profile contents changed in the move"
 case $_o in
-*"renamed profile"*) ;;
-*) fail "the profile move was silent" ;;
+  *"renamed profile"*) ;;
+  *) fail "the profile move was silent" ;;
 esac
 
 # --- A DOT IS FOLDED, A COLON IS REFUSED, and they are two rules ---------
@@ -133,12 +133,12 @@ reset
 _rc=0; _o=$(mux rename alpha 'a:b') || _rc=$?
 [ "$_rc" = 2 ] || fail "a typed colon must be refused with 2, got $_rc: $_o"
 case $_o in
-*'cannot contain a colon'*) ;;
-*) fail "the refusal did not say what the rule is: $_o" ;;
+  *'cannot contain a colon'*) ;;
+  *) fail "the refusal did not say what the rule is: $_o" ;;
 esac
 case $_o in
-*'mux rename alpha a-b'*) ;;
-*) fail "the refusal did not PRESCRIBE the name that would work, so someone
+  *'mux rename alpha a-b'*) ;;
+  *) fail "the refusal did not PRESCRIBE the name that would work, so someone
 hits a rule with no way out of it: $_o" ;;
 esac
 [ "$(live)" = "alpha " ] \
@@ -170,8 +170,8 @@ reset
 _rc=0; _o=$(mux rename zulu) || _rc=$?
 [ "$_rc" -ne 0 ] || fail "a bare rename outside tmux exited 0"
 case $_o in
-*"needs a session"*) ;;
-*) fail "the refusal did not explain the two forms: $_o" ;;
+  *"needs a session"*) ;;
+  *) fail "the refusal did not explain the two forms: $_o" ;;
 esac
 [ "$(live)" = "alpha " ] || fail "a refused rename still renamed something"
 

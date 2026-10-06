@@ -178,15 +178,15 @@ _check() {
   _r=$(vis "$(render delta "$1")")
   [ -n "$_r" ] || fail "width $1: empty strip"
   case $_r in
-  *"$MUX_GLYPH_BLOCKED"*|*alpha*) ;;
-  *) fail "width $1: the blocked session vanished: [$_r]" ;;
+    *"$MUX_GLYPH_BLOCKED"*|*alpha*) ;;
+    *) fail "width $1: the blocked session vanished: [$_r]" ;;
   esac
   case $_r in
-  *"·2·"*)   _saw_fold=1 ;;
-  *"‹"*|*"›"*) _saw_edge=1 ;;
-  *99h*)                 _saw_age=1 ;;
-  *alpha*)               _saw_noage=1 ;;
-  *)                     _saw_sum=1 ;;
+    *"·2·"*)   _saw_fold=1 ;;
+    *"‹"*|*"›"*) _saw_edge=1 ;;
+    *99h*)                 _saw_age=1 ;;
+    *alpha*)               _saw_noage=1 ;;
+    *)                     _saw_sum=1 ;;
   esac
 }
 _w=1
@@ -229,16 +229,16 @@ _w=400
 while [ "$_w" -ge 10 ]; do
   _r=$(vis "$(render delta "$_w")")
   case $_r in
-  *"✱"*) ;;
-  *) fail "width $_w: the view indicator was dropped: [$_r]" ;;
+    *"✱"*) ;;
+    *) fail "width $_w: the view indicator was dropped: [$_r]" ;;
   esac
   _w=$((_w - 1))
 done
 # ... and it is the LAST thing on the strip, after a separator.
 _edge=$(vis "$(render delta 400)")
 case $_edge in
-*"│✱") ;;
-*) fail "the indicator is not at the right edge: [$_edge]" ;;
+  *"│✱") ;;
+  *) fail "the indicator is not at the right edge: [$_edge]" ;;
 esac
 
 # --- the current session is the one marked ---------------------------------
@@ -438,8 +438,8 @@ _sty() { printf '%s' "$1" | sed -n \
 _bg() { printf '%s' "$1" | sed -n 's/.*\(bg=[^],]*\).*/\1/p'; }
 _hsty=$(_sty "$(render alpha 400)" "$MUX_GLYPH_HUMMING")
 case ${_hsty:-} in
-*bg=*) ;;
-*) fail "the humming chip carries no background: [$_hsty]. It fell through
+  *bg=*) ;;
+  *) fail "the humming chip carries no background: [$_hsty]. It fell through
 _style's \`*)\` arm to the dim UNKNOWN look, so a session that is ready with
 work still running draws as one mux knows nothing about." ;;
 esac

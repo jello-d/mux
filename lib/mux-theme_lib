@@ -93,13 +93,13 @@ _theme_remember() {     # reads $_s and $_t
   # takes it in place; everything else becomes a row.
   _bo=$(mux_prof_find "$_s")
   case $_bo in
-  *.profile)
-    _persist_theme "$_bo" "$_t"
-    echo "mux: remembered in $_bo" ;;
-  *)
-    mux_prof_set "$_s" theme "$_t" \
-      && echo "mux: remembered in $(mux_prof_file)" \
-      || echo "mux: could not write $(mux_prof_file)" >&2 ;;
+    *.profile)
+      _persist_theme "$_bo" "$_t"
+      echo "mux: remembered in $_bo" ;;
+    *)
+      mux_prof_set "$_s" theme "$_t" \
+        && echo "mux: remembered in $(mux_prof_file)" \
+        || echo "mux: could not write $(mux_prof_file)" >&2 ;;
   esac
   exit "$MUX_EC_OK"
 }
@@ -113,8 +113,8 @@ mux_theme() {
   _pp=$(tm display-message -p '#{pane_pid}')
   _c=$(tm show-options -t "$_s" -qv @mux-theme || true)
   case $name_arg in
-    next|prev) _t=$(_theme_cycle "$name_arg" "$_c" "$_themes") ;;
-    *)         _t=$name_arg ;;
+      next|prev) _t=$(_theme_cycle "$name_arg" "$_c" "$_themes") ;;
+      *)         _t=$name_arg ;;
   esac
   { [ -n "$_t" ] && [ -n "$(mux_data_find themes "$_t" .theme)" ]; } || {
     echo "mux: unknown theme: ${_t:-$name_arg}" >&2; exit "$MUX_EC_FAIL"; }

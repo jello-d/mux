@@ -90,8 +90,8 @@ printf 'label WORK\n' >"$T/conf/contexts/work.context"
 reset
 _o=$(CTX_TOKEN=work style proj $$)
 case $_o in
-*"[[WORK]]"*) ;;
-*) fail "no banner for a labelled context: [$_o]" ;;
+  *"[[WORK]]"*) ;;
+  *) fail "no banner for a labelled context: [$_o]" ;;
 esac
 [ "$(opt @mux-prefix)" = "[WORK] " ] \
   || fail "the title prefix was not set: [$(opt @mux-prefix)]"
@@ -100,13 +100,13 @@ esac
 # The regression this guards: the style came from the integrator, so omitting
 # colours silently removed the safety reminder entirely.
 case $_o in
-*'#['*'][[WORK]]'*) ;;
-*) fail "the banner carried no style of its own: [$_o]" ;;
+  *'#['*'][[WORK]]'*) ;;
+  *) fail "the banner carried no style of its own: [$_o]" ;;
 esac
 # ... and it is loud and theme-neutral rather than inherited from the bar.
 case $_o in
-*colour196*) ;;
-*) fail "the banner style is not mux's fixed loud one: [$_o]" ;;
+  *colour196*) ;;
+  *) fail "the banner style is not mux's fixed loud one: [$_o]" ;;
 esac
 
 # --- -q applies the side effects and prints NOTHING ----------------------
@@ -126,7 +126,7 @@ reset
 printf '@mux-prefix\t[STALE] \n' >"$OPTS"
 _o=$(CTX_TOKEN=work style proj $$)
 case $_o in
-*'[['*) fail "a banner appeared for a context with no label: [$_o]" ;;
+  *'[['*) fail "a banner appeared for a context with no label: [$_o]" ;;
 esac
 [ -z "$(opt @mux-prefix)" ] \
   || fail "a stale title prefix survived: [$(opt @mux-prefix)]"
@@ -150,8 +150,8 @@ reset
 _o=$(CTX_TOKEN=work style proj $$)
 _h=$(hostname -s 2>/dev/null || hostname)
 case $_o in
-*"$_h"*) ;;
-*) fail "the host chip is missing: [$_o]" ;;
+  *"$_h"*) ;;
+  *) fail "the host chip is missing: [$_o]" ;;
 esac
 _o2=$(CTX_TOKEN=work style proj $$)
 [ "$_o" = "$_o2" ] || fail "the chip is not stable across runs"
@@ -161,8 +161,8 @@ printf '%s fg=colour1,bg=colour2\n' "$_h" >"$T/conf/hosts"
 reset
 _o=$(CTX_TOKEN=work style proj $$)
 case $_o in
-*"fg=colour1,bg=colour2"*) ;;
-*) fail "an explicit hosts style was ignored: [$_o]" ;;
+  *"fg=colour1,bg=colour2"*) ;;
+  *) fail "an explicit hosts style was ignored: [$_o]" ;;
 esac
 rm -f "$T/conf/hosts"
 
@@ -171,7 +171,7 @@ printf 'label WORK\nhost-chip off\n' >"$T/conf/contexts/work.context"
 reset
 _o=$(CTX_TOKEN=work style proj $$)
 case $_o in
-*"$_h"*) fail "host-chip off still printed the chip: [$_o]" ;;
+  *"$_h"*) fail "host-chip off still printed the chip: [$_o]" ;;
 esac
 printf 'label WORK\n' >"$T/conf/contexts/work.context"
 
@@ -188,13 +188,13 @@ CTX_TOKEN=work style -q proj $$ >/dev/null; unset CTX_TOKEN
 _asked=$(head -1 "$PIDLOG")
 _tp=$(ps -o tpgid= -p $$ 2>/dev/null | tr -d ' ')
 case ${_tp:-} in
-''|-*|0) # no controlling terminal, so there is no foreground group to find:
-   # the documented fallback is the pane pid itself.
-   [ "$_asked" = "$$" ] \
-    || fail "with no tpgid it should fall back to the pane pid,
+  ''|-*|0) # no controlling terminal, so there is no foreground group to find:
+     # the documented fallback is the pane pid itself.
+     [ "$_asked" = "$$" ] \
+      || fail "with no tpgid it should fall back to the pane pid,
 asked [$_asked] want [$$]" ;;
-*)  [ "$_asked" = "$_tp" ] \
-    || fail "asked [$_asked], want the foreground group [$_tp]" ;;
+  *)  [ "$_asked" = "$_tp" ] \
+      || fail "asked [$_asked], want the foreground group [$_tp]" ;;
 esac
 
 # With a KNOWN foreground group, the right field is read. MUX_STYLE_PROC exists
@@ -230,8 +230,8 @@ reset
 rm -f "$T/conf/config"
 _o=$(style proj $$) || fail "mux-style failed with no context configured"
 case $_o in
-*"$_h"*) ;;
-*) fail "the chip vanished when no context was configured: [$_o]" ;;
+  *"$_h"*) ;;
+  *) fail "the chip vanished when no context was configured: [$_o]" ;;
 esac
 [ -n "$(opt status-style)" ] || fail "no theme applied without a context"
 

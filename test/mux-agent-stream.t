@@ -61,12 +61,12 @@ to open with the CURRENT state or a consumer is blank until something changes,
 which on a quiet machine is indefinitely"
 _first=$(head -1 "$T/out")
 case $_first in
-*'"status":"ok"'*'"partitions"'*) ;;
-*) fail "the opening line is not the status document: [$_first]" ;;
+  *'"status":"ok"'*'"partitions"'*) ;;
+  *) fail "the opening line is not the status document: [$_first]" ;;
 esac
 case $_first in
-*'"state":"idle"'*) ;;
-*) fail "the opening line does not carry the state that is actually set:
+  *'"state":"idle"'*) ;;
+  *) fail "the opening line does not carry the state that is actually set:
 [$_first]" ;;
 esac
 
@@ -84,16 +84,16 @@ sleep 2
 [ "$(lines)" -gt "$_before" ] || fail "the record changed to blocked and the
 stream said nothing"
 case $(tail -1 "$T/out") in
-*'"state":"blocked"'*) ;;
-*) fail "the change was emitted but does not carry the new state:
+  *'"state":"blocked"'*) ;;
+  *) fail "the change was emitted but does not carry the new state:
 [$(tail -1 "$T/out")]" ;;
 esac
 
 # AND IT IS FULL STATE, NOT A DELTA, which is what lets a consumer attach late
 # or reconnect without a resync protocol: every line is the whole answer.
 case $(tail -1 "$T/out") in
-*'"partitions":['*) ;;
-*) fail "a change line is not the whole document, so a late subscriber cannot
+  *'"partitions":['*) ;;
+  *) fail "a change line is not the whole document, so a late subscriber cannot
 be correct from one line: [$(tail -1 "$T/out")]" ;;
 esac
 stop
@@ -111,7 +111,7 @@ a two-second interval: a consumer cannot tell this stream from a dead one, and
 that distinction is the only reason UNKNOWN is trustworthy"
 # AND A HEARTBEAT IS NOT A CHANGE: a consumer must not redraw on it.
 case $(grep '"heartbeat":true' "$T/out" | head -1) in
-*'"partitions"'*) fail "the heartbeat carries a partitions document, so a
+  *'"partitions"'*) fail "the heartbeat carries a partitions document, so a
 consumer cannot tell a keepalive from an event" ;;
 esac
 stop
@@ -169,8 +169,8 @@ for _bad in 0 x -1; do
     PATH="$T/bin:$PATH" \
     "$HERE/bin/mux" agent stream --any -i "$_bad" 2>&1 | head -1) || true
   case $_o in
-  *'"status":"usage"'*) ;;
-  *) fail "an interval of [$_bad] was accepted: [$_o]" ;;
+    *'"status":"usage"'*) ;;
+    *) fail "an interval of [$_bad] was accepted: [$_o]" ;;
   esac
 done
 

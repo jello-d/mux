@@ -164,8 +164,8 @@ do
   _msg=$(err "$@")
   [ -n "$_msg" ] || fail "mux $_case exited 1 SILENTLY, with no reason"
   case $_msg in
-  mux:*) ;;
-  *) fail "mux $_case did not prefix its refusal: [$_msg]" ;;
+    mux:*) ;;
+    *) fail "mux $_case did not prefix its refusal: [$_msg]" ;;
   esac
 done
 
@@ -184,7 +184,7 @@ done
 [ ! -f "$T/conf/tmux/tmux.conf" ] || fail "setup: tmux.conf should be absent"
 is 0 "$(rc reload)" "mux reload with no tmux.conf"
 case "$(err reload)" in
-*"no tmux.conf"*) fail "reload still refuses over a missing tmux.conf, which
+  *"no tmux.conf"*) fail "reload still refuses over a missing tmux.conf, which
 R10 removed: a mux install must be complete without a file another project
 ships" ;;
 esac
@@ -197,8 +197,8 @@ is 2 "$(rc nosuchverb)"       "an unknown verb"
 is 2 "$(rc --nosuchflag)"     "an unknown option"
 is 2 "$(rc agent-emit)"       "agent-emit with no state argument"
 case "$(err nosuchverb)" in
-*"unknown verb"*) ;;
-*) fail "an unknown verb did not say so" ;;
+  *"unknown verb"*) ;;
+  *) fail "an unknown verb did not say so" ;;
 esac
 
 # AND THE TEXT HAS TO ARRIVE, which is a DIFFERENT fact from the code since
@@ -213,8 +213,8 @@ esac
 # the arm died on that line instead. Belt and braces reads as safety and
 # measures as untestable; the arity ARMS themselves are mux-args.t's job.
 case "$(err ls extra)" in
-*"usage: mux"*) ;;
-*) fail "an arity error printed no usage summary. The nineteen arity paths
+  *"usage: mux"*) ;;
+  *) fail "an arity error printed no usage summary. The nineteen arity paths
 reach it by exec'ing libexec/mux-help, so this is what says the helper was
 found and ran rather than merely that the shell answered 2." ;;
 esac
@@ -230,8 +230,8 @@ for _v in go resume kill reload ls hide show show-all save new help theme \
 do
   _got=$(rc "$_v")
   case $_got in
-  0|1|2|3) ;;
-  *) fail "mux $_v returned $_got. Only 0, 1, 2 and 3 are the contract,
+    0|1|2|3) ;;
+    *) fail "mux $_v returned $_got. Only 0, 1, 2 and 3 are the contract,
 and 255/126/127 must stay attributable to the transport or the shell" ;;
   esac
 done
@@ -240,8 +240,8 @@ done
 for _v in go kill theme rename edit why hide show; do
   _got=$(rc "$_v" 'a name nothing knows')
   case $_got in
-  0|1|2|3) ;;
-  *) fail "mux $_v <junk> returned $_got, outside the 0/1/2/3 contract" ;;
+    0|1|2|3) ;;
+    *) fail "mux $_v <junk> returned $_got, outside the 0/1/2/3 contract" ;;
   esac
 done
 

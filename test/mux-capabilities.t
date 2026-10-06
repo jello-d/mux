@@ -50,8 +50,8 @@ printf '%s\n' "$_o" | tail -n +2 | while IFS= read -r _l; do
   [ -n "$_l" ] || continue
   _nf=$(printf '%s\n' "$_l" | awk '{print NF}')
   case $_nf in
-  2|3) ;;
-  *) fail "capability line has $_nf fields, want 2 or 3: [$_l]" ;;
+    2|3) ;;
+    *) fail "capability line has $_nf fields, want 2 or 3: [$_l]" ;;
   esac
 done
 
@@ -90,8 +90,8 @@ must read 'no': got [$(val "$_o" latch-fallback)]"
 # other contextual one. `1 unavailable` and `no` must not collapse together:
 # one says try again elsewhere, the other says never on this build.
 case $(val "$_o" latch) in
-*"1 unavailable"*) ;;
-*) fail "latch is implemented but has no transport here, so it should read
+  *"1 unavailable"*) ;;
+  *) fail "latch is implemented but has no transport here, so it should read
 '1 unavailable': got [$(val "$_o" latch)]" ;;
 esac
 
@@ -99,8 +99,8 @@ esac
 printf '#!/bin/sh\nexit 0\n' >"$T/bin/notify-send"
 chmod +x "$T/bin/notify-send"
 case $(val "$(caps)" notify) in
-"1 ") ;;
-*) fail "with notify-send present, notify should be usable: got
+  "1 ") ;;
+  *) fail "with notify-send present, notify should be usable: got
 [$(val "$(caps)" notify)]" ;;
 esac
 rm -f "$T/bin/notify-send"
@@ -118,13 +118,13 @@ esac
 # The context seam is the other contextual one: unavailable with no
 # context-command configured, usable once there is one.
 case $(val "$_o" context) in
-*unavailable*) ;;
-*) fail "with no context-command, context should read unavailable" ;;
+  *unavailable*) ;;
+  *) fail "with no context-command, context should read unavailable" ;;
 esac
 printf 'context-command cc\n' >"$T/conf/config"
 case $(val "$(caps)" context) in
-"1 ") ;;
-*) fail "with a context-command configured, context should be usable" ;;
+  "1 ") ;;
+  *) fail "with a context-command configured, context should be usable" ;;
 esac
 rm -f "$T/conf/config"
 
@@ -136,13 +136,16 @@ _declared=$(caps --all | tail -n +2 | awk '{print $1}' | LC_ALL=C sort -u)
 
 # The two dispatch mechanisms, read from the source rather than from a list kept
 # here: an early exec table for the helper verbs, and the main whitelist.
-_early=$(awk '/^case \$\{1:-\} in$/,/^esac$/' "$HERE/bin/mux" \
-  | grep -oE '^[a-z][a-z-]*\)' | tr -d ')')
-# The main block is SPACE indented and the early one is not, so the pattern
-# allows either. Getting this wrong found only 18 of 33 verbs, and the count
-# floor below is what caught it rather than a silent pass.
-_main=$(awk '/^case \$cmd in$/,/^esac$/' "$HERE/bin/mux" \
-  | grep -oE '^[[:space:]]+[a-z|-]+\)' \
+# BOTH MATCHED BY SHAPE, NOT BY COLUMN. These used to differ (the early table
+# at column 0, the main one indented) and the pattern encoded that, so the
+# case-indent sweep found 2 verbs of 33. The count floor below is what caught
+# it rather than a silent pass, and it is the reason the floor exists.
+_early=$(awk '/^[[:space:]]*case \$\{1:-\} in$/,/^[[:space:]]*esac$/' \
+    "$HERE/bin/mux" \
+  | grep -oE '^[[:space:]]*[a-z][a-z-]*\)' | tr -d ' \t)')
+_main=$(awk '/^[[:space:]]*case \$cmd in$/,/^[[:space:]]*esac$/' \
+    "$HERE/bin/mux" \
+  | grep -oE '^[[:space:]]*[a-z|-]+\)' \
   | tr -d ' \t)' | tr '|' '\n')
 _dispatched=$(printf '%s\n%s\n' "$_early" "$_main" | grep . | LC_ALL=C sort -u)
 
@@ -161,8 +164,12 @@ The scrape has stopped matching and would pass no matter what is missing"
 # writes `status|peers)` on one line, and a pattern anchored on a single word
 # silently matches NOTHING there, which reads as "no sub-verbs" rather than
 # as a broken scrape, so the floor below is what catches it.
-_sub=$(awk '/^case \$_verb in$/,/^esac$/' "$HERE/libexec/mux-agent" \
-  | grep -oE '^[a-z][a-z|-]*\)' | tr -d ')' | tr '|' '\n' | grep .)
+# MATCHED BY SHAPE, NOT BY COLUMN: the case-indent sweep moved every arm two
+# spaces right, and a column-anchored scrape silently matched nothing.
+_sub=$(awk '/^[[:space:]]*case \$_verb in$/,/^[[:space:]]*esac$/' \
+    "$HERE/libexec/mux-agent" \
+  | grep -oE '^[[:space:]]*[a-z][a-z|-]*\)' | tr -d ' )' \
+  | tr '|' '\n' | grep .)
 [ -n "$_sub" ] || fail "no sub-verbs discovered in libexec/mux-agent; the
 scrape has stopped matching and this guard is proving nothing"
 for _v in $_sub; do
@@ -180,7 +187,7 @@ for _v in $_sub; do
   # answer for all the others.
   _o=$("$HERE/bin/mux" agent "$_v" 2>&1 | head -1 || true)
   case $_o in
-  *"unknown agent verb"*) fail "capabilities declares the agent contract
+    *"unknown agent verb"*) fail "capabilities declares the agent contract
 and \`mux agent $_v\` is scraped from its dispatch, but invoking it says
 unknown, which is the gap a nested dispatch hides from the guard below:
 [$_o]" ;;
@@ -207,18 +214,18 @@ manifest moved."
 printf '%s\n' "$_o" | tail -n +2 | while IFS= read -r _l; do
   _cn=${_l%% *}
   case $_cn in
-  notify|context) continue ;;            # seams, not verbs
-  unknown-name)   continue ;;            # an exit CODE, not a verb
-  attach-only)    continue ;;            # a FLAG on go, not a verb
+    notify|context) continue ;;            # seams, not verbs
+    unknown-name)   continue ;;            # an exit CODE, not a verb
+    attach-only)    continue ;;            # a FLAG on go, not a verb
   esac
   # A forward declaration has no verb by definition, and skipping it by
   # VALUE rather than by name means the next one needs no edit here.
   case $_l in
-  *' no') continue ;;
+    *' no') continue ;;
   esac
   case " $(printf '%s\n' "$_dispatched" | tr '\n' ' ') " in
-  *" $_cn "*) ;;
-  *) fail "capabilities advertises '$_cn', which no verb dispatches" ;;
+    *" $_cn "*) ;;
+    *) fail "capabilities advertises '$_cn', which no verb dispatches" ;;
   esac
 done
 

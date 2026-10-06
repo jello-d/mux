@@ -45,8 +45,8 @@
 # mux_log_path -> the log file, or empty when logging is off.
 mux_log_path() {
   case ${MUX_LOG:-} in
-  none) return 0 ;;
-  ?*)   printf '%s' "$MUX_LOG"; return 0 ;;
+    none) return 0 ;;
+    ?*)   printf '%s' "$MUX_LOG"; return 0 ;;
   esac
   printf '%s/mux.log' \
     "${MUX_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/mux}"

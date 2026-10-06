@@ -83,13 +83,13 @@ while IFS= read -r _s; do
   # 0. Dropping it would hide a live agent; a 0 would assert it just
   # changed, which is a claim this has no evidence for.
   case ${_ep:-} in
-  ''|*[!0-9]*) _age=- ;;
-  *)
-    _age=$((_now - _ep))
-    # Clamp rather than print a negative: a record stamped in the
-    # future means this host's clock moved, and "0s" is the honest
-    # floor for "it began no earlier than now".
-    [ "$_age" -lt 0 ] && _age=0 ;;
+    ''|*[!0-9]*) _age=- ;;
+    *)
+      _age=$((_now - _ep))
+      # Clamp rather than print a negative: a record stamped in the
+      # future means this host's clock moved, and "0s" is the honest
+      # floor for "it began no earlier than now".
+      [ "$_age" -lt 0 ] && _age=0 ;;
   esac
   printf '%s %s %s\n' "$_st" "$_age" "$_s"
 done <<EOF

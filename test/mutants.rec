@@ -71,8 +71,8 @@ t mux-strip
 = agent-list-negative-age
 f libexec/mux-agent-state-list
 t mux-agent-list
--     [ "$_age" -lt 0 ] && _age=0 ;;
-+     ;;
+-       [ "$_age" -lt 0 ] && _age=0 ;;
++       ;;
 m clamp to 0
 
 = doctor-orphan-pass-removed
@@ -85,22 +85,22 @@ m no state record was not surfaced
 = doctor-stale-check-removed
 f libexec/mux-agent-doctor
 t mux-agent-doctor
--     elif _at_prompt "$_pane" "${_acomm:-}"; then
-+     elif false; then
+-       elif _at_prompt "$_pane" "${_acomm:-}"; then
++       elif false; then
 m stale 'working' record was not surfaced
 
 = doctor-stale-not-counted
 f libexec/mux-agent-doctor
 t mux-agent-doctor
--   '*** STALE'*)  echo stale  >>"$_dir/.doctor.$$" ;;
-+   '*** STALE'*)  echo drift  >>"$_dir/.doctor.$$" ;;
+-     '*** STALE'*)  echo stale  >>"$_dir/.doctor.$$" ;;
++     '*** STALE'*)  echo drift  >>"$_dir/.doctor.$$" ;;
 m did not name its cause
 
 = kill-all-confirm-accepts-anything
 f bin/mux
 t mux-kill
--     *) echo "mux: aborted"; exit "$MUX_EC_OK" ;;
-+     *) ;;
+-       *) echo "mux: aborted"; exit "$MUX_EC_OK" ;;
++       *) ;;
 m expected an abort
 
 = rename-forgets-the-set
@@ -132,8 +132,8 @@ t mux-wire
 # that prompted this are box-wide pointers, so nothing breaks today, but the
 # set is extensible ON PURPOSE and the first genuinely per-session variable
 # would. The job is to stop a pane starting BROKEN, not to enforce uniformity.
--       0) continue ;;            # works: leave it exactly alone
-+       0) : ;;
+-         0) continue ;;            # works: leave it exactly alone
++         0) : ;;
 m passes its own validator was REPLACED
 
 = env-does-not-repair-a-poisoned-session
@@ -148,8 +148,8 @@ t mux-wire
 # THE WRITE ITSELF IS THE ANCHOR, not the dry-run guard above it: that guard
 # appears in both the write and the clear branches, so the corpus correctly
 # refused it as ambiguous.
--           tm set-environment -t "$_eas" \
-+           true \
+-             tm set-environment -t "$_eas" \
++             true \
 m poisoned session was not repaired
 
 = wire-sources-the-fragment
@@ -211,8 +211,8 @@ m broken bindings
 = exit-unknown-verb-not-2
 f lib/mux-args_lib
 t mux-exit
--     *) echo "mux: unknown verb: $cmd" >&2; usage ;;
-+     *) echo "mux: unknown verb: $cmd" >&2; exit "$MUX_EC_OK" ;;
+-       *) echo "mux: unknown verb: $cmd" >&2; usage ;;
++       *) echo "mux: unknown verb: $cmd" >&2; exit "$MUX_EC_OK" ;;
 m an unknown verb
 
 = wire-failure-is-loud
@@ -231,15 +231,15 @@ m NOT in the capability
 = caps-usable-always-false
 f libexec/mux-capabilities
 t mux-capabilities
--       if _cap_usable "$_cn"; then
-+       if false; then
+-         if _cap_usable "$_cn"; then
++         if false; then
 m agent-list should be usable
 
 = latch-denied-becomes-retryable
 f share/latch/ssh-classify
 t mux-latch
--     printf 'denied'
-+     printf 'probing'
+-       printf 'denied'
++       printf 'probing'
 m offered a rejected credential
 
 = latch-preflight-block-still-attempts
@@ -252,36 +252,36 @@ m expected blocked then probing then ended
 = latch-quit-is-retried
 f share/latch/ssh-classify
 t mux-latch
--   printf 'ended' ;;
-+   printf 'probing' ;;
+-     printf 'ended' ;;
++     printf 'probing' ;;
 m a deliberate quit should exit 0
 
 = latch-cannot-tell-read-as-usable
 f libexec/mux-latch
 t mux-latch
--   *)  return 2 ;;
-+   *)  return 0 ;;
+-     *)  return 2 ;;
++     *)  return 0 ;;
 m unexpected probe exit was treated as usable
 
 = latch-gone-silently-recreated
 f share/latch/ssh-classify
 t mux-latch
--   printf 'gone' ;;
-+   printf 'probing' ;;
+-     printf 'gone' ;;
++     printf 'probing' ;;
 m a vanished session was retried
 
 = latch-single-flight-off
 f libexec/mux-latch
 t mux-latch
--   *) if kill -0 "$_other" 2>/dev/null; then
-+   *) if false; then
+-     *) if kill -0 "$_other" 2>/dev/null; then
++     *) if false; then
 m a concurrent latch should refuse
 
 = latch-hostkey-treated-as-retryable
 f share/latch/ssh-classify
 t mux-latch
--   if _saw 'host key verification'; then
-+   if false; then
+-     if _saw 'host key verification'; then
++     if false; then
 m should report untrusted
 
 = latch-say-detail-truncated
@@ -364,22 +364,22 @@ m bytes with no
 = latch-liveness-context-dropped
 f libexec/mux-latch
 t mux-latch
--     if [ "$_rc" = 1 ] && ! _errsaw 'mux:' && ! _errsaw 'usage:'; then
-+     if false; then
+-       if [ "$_rc" = 1 ] && ! _errsaw 'mux:' && ! _errsaw 'usage:'; then
++       if false; then
 m it rules out the network
 
 = latch-alive-query-always
 f libexec/mux-latch
 t mux-latch
--     if [ "$_rc" = 1 ] && ! _errsaw 'mux:' && ! _errsaw 'usage:'; then
-+     if true; then
+-       if [ "$_rc" = 1 ] && ! _errsaw 'mux:' && ! _errsaw 'usage:'; then
++       if true; then
 m made a liveness query for an exit 1
 
 = latch-unreachable-read-as-gone
 f libexec/mux-latch
 t mux-latch
--   0|1|2) return 0 ;;   # mux answered something: the far side is up
-+   0|1|2|255) return 0 ;;   # mux answered something: the far side is up
+-     0|1|2) return 0 ;;   # mux answered something: the far side is up
++     0|1|2|255) return 0 ;;   # mux answered something: the far side is up
 m report must say the
 
 = why-unknown-answers-success
@@ -392,15 +392,15 @@ m must exit 3
 = classify-ignores-exit-3
 f share/latch/ssh-classify
 t mux-latch
-- 3)
-+ 39)
+-   3)
++   39)
 m a vanished session was retried
 
 = latch-discards-far-side-message
 f libexec/mux-latch
 t mux-latch
--     _say refused "$(_errline)"
-+     _say refused "something went wrong"
+-       _say refused "$(_errline)"
++       _say refused "something went wrong"
 m must be reported, not replaced
 
 = sessions-back-in-the-cache
@@ -441,15 +441,15 @@ m even with an EMPTY agent
 = auth-no-agent-read-as-blocked
 f share/latch/ssh-auth
 t mux-latch-hooks
-- *) exit 78 ;;
-+ *) exit 1 ;;
+-   *) exit 78 ;;
++   *) exit 1 ;;
 m must answer 78, not 1
 
 = auth-empty-agent-read-as-fine
 f share/latch/ssh-auth
 t mux-latch-hooks
-- 1) exit 1 ;;
-+ 1) exit 0 ;;
+-   1) exit 1 ;;
++   1) exit 0 ;;
 m must answer 1
 
 = probe-refusal-read-as-unreachable
@@ -476,22 +476,22 @@ m prune deleted anyway
 = scan-prune-takes-live-map
 f lib/mux-scan_lib
 t mux-discover
--     *" $_spn "*) ;;
-+     *" __never__ "*) ;;
+-       *" $_spn "*) ;;
++       *" __never__ "*) ;;
 m LIVE partition's map was pruned
 
 = hostcolor-leading-zero-is-octal
 f lib/mux-hosts_lib
 t mux-host-color
--     0?*) _hc=${_hc#0} ;;
-+     000?*) _hc=${_hc#0} ;;
+-       0?*) _hc=${_hc#0} ;;
++       000?*) _hc=${_hc#0} ;;
 m padded-vs-not
 
 = hostcolor-cube-level-shifted
 f lib/mux-hosts_lib
 t mux-host-color
--   0) printf '0' ;;   1) printf '95' ;;  2) printf '135' ;;
-+   0) printf '0' ;;   1) printf '96' ;;  2) printf '135' ;;
+-     0) printf '0' ;;   1) printf '95' ;;  2) printf '135' ;;
++     0) printf '0' ;;   1) printf '96' ;;  2) printf '135' ;;
 m cube: got
 
 = hostcolor-greyscale-base
@@ -559,8 +559,8 @@ m idle
 = doctor-repair-not-opt-in
 f libexec/mux-agent-doctor
 t mux-agent-doctor
--       if [ "$_repair" -eq 1 ]; then
-+       if true; then
+-         if [ "$_repair" -eq 1 ]; then
++         if true; then
 m record was not surfaced
 
 = doctor-repair-ignores-epoch
@@ -580,15 +580,15 @@ m the epoch was rewritten
 = doctor-repair-fails-after-fixing
 f libexec/mux-agent-doctor
 t mux-agent-doctor
--   REPAIRED*)     echo fixed  >>"$_dir/.doctor.$$" ;;
-+   REPAIRED*)     echo stale  >>"$_dir/.doctor.$$" ;;
+-     REPAIRED*)     echo fixed  >>"$_dir/.doctor.$$" ;;
++     REPAIRED*)     echo stale  >>"$_dir/.doctor.$$" ;;
 m must exit 0
 
 = doctor-unknown-option-is-a-namespace
 f libexec/mux-agent-doctor
 t mux-agent-doctor
--   -*) echo "mux: agent-doctor: unknown option: $1" >&2
-+   --no-such-flag) echo "mux: agent-doctor: unknown option: $1" >&2
+-     -*) echo "mux: agent-doctor: unknown option: $1" >&2
++     --no-such-flag) echo "mux: agent-doctor: unknown option: $1" >&2
 m must exit 2
 
 = log-write-failure-propagates
@@ -608,8 +608,8 @@ m cap is not firing
 = log-none-still-writes
 f lib/mux-log_lib
 t mux-log
--   none) return 0 ;;
-+   none) : ;;
+-     none) return 0 ;;
++     none) : ;;
 m OFF
 
 = log-filter-matches-whole-line
@@ -741,15 +741,15 @@ m DRIFTED file read as current
 = latch-option-read-as-host
 f libexec/mux-latch
 t mux-latch
--   -*) echo "mux: latch: unknown option: $1" >&2; _usage >&2
-+   --nope) echo "mux: latch: unknown option: $1" >&2; _usage >&2
+-     -*) echo "mux: latch: unknown option: $1" >&2; _usage >&2
++     --nope) echo "mux: latch: unknown option: $1" >&2; _usage >&2
 m must be an unknown option
 
 = latch-stale-locks-never-reaped
 f libexec/mux-latch
 t mux-latch
--   *) kill -0 "$_sp" 2>/dev/null || rm -f "$_stale" ;;
-+   *) : ;;
+-     *) kill -0 "$_sp" 2>/dev/null || rm -f "$_stale" ;;
++     *) : ;;
 m was not reaped
 
 = latch-sweep-eats-its-own-lock
@@ -762,8 +762,8 @@ m no lock existed at hostwith_part_sess.lock
 = latch-sweep-reaps-live-locks
 f libexec/mux-latch
 t mux-latch
--   *) kill -0 "$_sp" 2>/dev/null || rm -f "$_stale" ;;
-+   *) rm -f "$_stale" ;;
+-     *) kill -0 "$_sp" 2>/dev/null || rm -f "$_stale" ;;
++     *) rm -f "$_stale" ;;
 m deleted a LIVE latch's lock
 
 = undo-pane-always-inserts-before
@@ -909,8 +909,8 @@ m a self-comparison reported a verdict
 = latch-spinner-doubled-backslash
 f libexec/mux-latch
 t mux-latch
--   *) _g=\\ ;;
-+   *) _g='\\' ;;
+-     *) _g=\\ ;;
++     *) _g='\\' ;;
 m DOUBLED backslash
 
 = latch-spinner-does-not-cycle
@@ -1014,20 +1014,20 @@ m test_a_TILE_STILL_RENDERS_with_no_fonts_at_all
 = rank-blocked-demoted
 f lib/mux-agent-state_lib
 t mux-agent-rank
--   blocked) echo 4 ;;
-+   blocked) echo 1 ;;
+-     blocked) echo 4 ;;
++     blocked) echo 1 ;;
 m must outrank working
 = rank-working-not-above-idle
 f lib/mux-agent-state_lib
 t mux-agent-rank
--   working) echo 3 ;;
-+   working) echo 0 ;;
+-     working) echo 3 ;;
++     working) echo 0 ;;
 m must outrank idle
 = rank-unknown-outranks-everything
 f lib/mux-agent-state_lib
 t mux-agent-rank
--   *)       echo 0 ;;
-+   *)       echo 9 ;;
+-     *)       echo 0 ;;
++     *)       echo 9 ;;
 m must outrank an UNKNOWN word
 = worst-wins-comparison-inverted
 f lib/mux-agent-state_lib
@@ -1038,8 +1038,8 @@ m should beat
 = sessions-dedup-disabled
 f lib/mux-agent-state_lib
 t mux-agent-rank
--     *"$MUX_AGENT_NL$_ss$MUX_AGENT_NL"*) continue ;;
-+     *"$MUX_AGENT_NL$_ss$MUX_AGENT_NL"*) ;;
+-       *"$MUX_AGENT_NL$_ss$MUX_AGENT_NL"*) continue ;;
++       *"$MUX_AGENT_NL$_ss$MUX_AGENT_NL"*) ;;
 m distinct sessions
 = sess-add-not-idempotent
 f lib/mux-sessions_lib
@@ -1166,15 +1166,15 @@ m not bound to mux
 = agent-hook-notification-not-blocked
 f libexec/mux-agent-hook
 t mux-agent-hook
-- Notification)     set -- blocked ;;
-+ Notification)     set -- working ;;
+-   Notification)     set -- blocked ;;
++   Notification)     set -- working ;;
 m Notification mapped to
 
 = agent-hook-posttooluse-not-a-beat
 f libexec/mux-agent-hook
 t mux-agent-hook
-- PostToolUse)      set -- working --beat ;;
-+ PostToolUse)      set -- working ;;
+-   PostToolUse)      set -- working --beat ;;
++   PostToolUse)      set -- working ;;
 m PostToolUse is not being passed as a --beat
 
 = agent-hook-drops-the-source
@@ -1187,8 +1187,8 @@ m did not reach the log
 = agent-hook-unknown-event-silent
 f libexec/mux-agent-hook
 t mux-agent-hook
--   echo "mux: agent-hook: unknown event: $_ev" >&2
-+   exit "$MUX_EC_OK"
+-     echo "mux: agent-hook: unknown event: $_ev" >&2
++     exit "$MUX_EC_OK"
 m an unknown event must exit 2
 
 
@@ -1251,8 +1251,8 @@ m did not report the OTHER partition
 = summary-all-drops-the-empty-caller
 f libexec/mux-agent-state-summary
 t mux-agent-summary
-- *) printf '%s %s\n' "${_ns:-global}" "none 0" ;;
-+   *) ;;
+-   *) printf '%s %s\n' "${_ns:-global}" "none 0" ;;
++     *) ;;
 m --all should still answer once
 
 = resume-unknown-partition-accepted
@@ -1587,8 +1587,8 @@ m plain:
 = json-num-unvalidated
 f lib/mux-json_lib
 t mux-json
--   ''|-|*[!0-9-]*|?*-*) printf 'null' ;;
-+   '') printf 'null' ;;
+-     ''|-|*[!0-9-]*|?*-*) printf 'null' ;;
++     '') printf 'null' ;;
 m num-word
 
 = json-array-no-separator
@@ -1658,15 +1658,15 @@ m peers-root
 = agent-peers-emits-an-epoch
 f libexec/mux-agent
 t mux-agent
--         (*) _ag=$((_now - _ep))
-+         (*) _ag=$_ep
+-           (*) _ag=$((_now - _ep))
++           (*) _ag=$_ep
 m peers-clamped
 
 = agent-peers-negative-age
 f libexec/mux-agent
 t mux-agent
--             [ "$_ag" -lt 0 ] && _ag=0 ;;
-+             true
+-               [ "$_ag" -lt 0 ] && _ag=0 ;;
++               true
 m peers-clamped
 
 = agent-peers-ignores-the-partition
@@ -1749,8 +1749,8 @@ m a missing policy wrote to stderr
 = send-policy-tokens-are-alternatives
 f lib/mux-send-policy_lib
 t mux-send-policy
--       *) _ok=0; break ;;
-+       *) ;;
+-         *) _ok=0; break ;;
++         *) ;;
 m part-nomatch
 
 = send-policy-bare-directive-grants
@@ -1777,15 +1777,15 @@ m sealed-star
 = send-policy-class-token-ignored
 f lib/mux-send-policy_lib
 t mux-send-policy
--       "control:$_spc") ;;
-+       "control:zzz") ;;
+-         "control:$_spc") ;;
++         "control:zzz") ;;
 m class-agent
 
 = send-policy-class-matches-any
 f lib/mux-send-policy_lib
 t mux-send-policy
--       "window:$_spwin") ;;
-+       "window:$_spwin"|control:*) ;;
+-         "window:$_spwin") ;;
++         "window:$_spwin"|control:*) ;;
 m class-hybrid
 
 = agent-send-default-socket
@@ -1808,22 +1808,22 @@ m blk-msg
 = agent-send-ack-not-required
 f libexec/mux-agent
 t mux-agent
--     [ "$_sack_prompt" -eq 1 ] || _refuse blocked --answer-prompt
-+     :
+-       [ "$_sack_prompt" -eq 1 ] || _refuse blocked --answer-prompt
++       :
 m grant-rc
 
 = agent-send-blind-ack-not-required
 f libexec/mux-agent
 t mux-agent
--     [ "$_sack_blind" -eq 1 ] || _refuse unknown --blind
-+     :
+-       [ "$_sack_blind" -eq 1 ] || _refuse unknown --blind
++       :
 m unk-noack-rc
 
 = agent-send-unclassified-is-agent
 f libexec/mux-agent
 t mux-agent
--   *) _sclass=human ;;
-+   *) _sclass=agent ;;
+-     *) _sclass=human ;;
++     *) _sclass=agent ;;
 m blk-class
 
 = agent-send-not-bracketed
@@ -1850,8 +1850,8 @@ m was not logged
 = agent-peers-unset-class-is-null
 f libexec/mux-agent
 t mux-agent
--           (*) _cl=human ;;
-+           (*) _cl= ;;
+-             (*) _cl=human ;;
++             (*) _cl= ;;
 m peers-class-default
 
 = agent-peers-stale-pane-gets-a-default
@@ -1864,8 +1864,8 @@ m peers-stale-pane
 = skill-name-is-a-path
 f libexec/mux-skill
 t mux-skill
-- ''|*[!abcdefghijklmnopqrstuvwxyz0123456789-]*|-*|*-)
-+ '')
+-   ''|*[!abcdefghijklmnopqrstuvwxyz0123456789-]*|-*|*-)
++   '')
 m should be a usage error
 
 = skill-missing-lists-nothing
@@ -1899,29 +1899,29 @@ m carries YAML frontmatter
 = latch-hostkey-is-untrusted-not-denied
 f share/latch/ssh-classify
 t mux-latch
--     printf 'untrusted'
-+     printf 'denied'
+-       printf 'untrusted'
++       printf 'denied'
 m not denied
 
 = latch-untrusted-retries
 f libexec/mux-latch
 t mux-latch
--     if [ "$_untrusted" -le "$UNTRUSTED_TRIES" ]; then
-+     if false; then
+-       if [ "$_untrusted" -le "$UNTRUSTED_TRIES" ]; then
++       if false; then
 m expected exactly 3
 
 = latch-untrusted-is-bounded
 f libexec/mux-latch
 t mux-latch
--     if [ "$_untrusted" -le "$UNTRUSTED_TRIES" ]; then
-+     if true; then
+-       if [ "$_untrusted" -le "$UNTRUSTED_TRIES" ]; then
++       if true; then
 m expected exactly 3
 
 = latch-untrusted-quotes-the-transport
 f libexec/mux-latch
 t mux-latch
--       _say untrusted "  $_uline"
-+       :
+-         _say untrusted "  $_uline"
++         :
 m not quoted
 
 = latch-backoff-reset-on-progress
@@ -1934,8 +1934,8 @@ m did not reset the
 = latch-untrusted-reason-whole
 f libexec/mux-latch
 t mux-latch
--       _uw="$_uw its key really changed"
-+       _uw="$_uw"
+-         _uw="$_uw its key really changed"
++         _uw="$_uw"
 m cut off mid-sentence
 
 = check-skill-assembles
@@ -1962,8 +1962,8 @@ m all-widens
 = agent-status-partition-flag
 f libexec/mux-agent
 t mux-agent
--     _spart=$2; shift 2 ;;
-+     shift 2 ;;
+-       _spart=$2; shift 2 ;;
++       shift 2 ;;
 m part-is-named
 
 = setup-indicator-drift-is-said
@@ -2018,8 +2018,8 @@ m must draw the unwired glyph
 = strip-unwired-glyph-is-its-own
 f lib/mux-agent-state_lib
 t mux-strip
--   unwired) printf '%s' "$MUX_GLYPH_UNWIRED" ;;
-+   unwired) printf '%s' "$MUX_GLYPH_NONE" ;;
+-     unwired) printf '%s' "$MUX_GLYPH_UNWIRED" ;;
++     unwired) printf '%s' "$MUX_GLYPH_NONE" ;;
 m must draw the unwired glyph
 
 = setup-preserves-foreign-hooks
@@ -2078,8 +2078,8 @@ t mux-demo
 # RE-ANCHORED when the runtime path was namespaced under `mux/` and the
 # guard before this `rm -rf` was tightened to match: a guard ahead of a
 # delete should be as specific as the thing it is protecting.
--   */mux/agent-state/"$SOCK") rm -rf "$_statedir" 2>/dev/null || true ;;
-+   */mux/agent-state/"$SOCK") : ;;
+-     */mux/agent-state/"$SOCK") rm -rf "$_statedir" 2>/dev/null || true ;;
++     */mux/agent-state/"$SOCK") : ;;
 m left the demo
 
 = demo-second-run-rebuilds
@@ -2120,8 +2120,8 @@ m a server with neither mux's bindings nor
 = agent-hook-sessionstart-is-qualified
 f libexec/mux-agent-hook
 t mux-agent-hook
-- SessionStart)     set -- idle --unless-working ;;
-+ SessionStart)     set -- idle ;;
+-   SessionStart)     set -- idle --unless-working ;;
++   SessionStart)     set -- idle ;;
 m demoted a WORKING record
 
 = emit-unless-working-reads-the-record
@@ -2180,15 +2180,15 @@ m under libexec alongside
 = et-connect-failure-retries
 f share/latch/et-classify
 t mux-latch-et
--   printf 'probing' ;;
-+   printf 'refused' ;;
+-     printf 'probing' ;;
++     printf 'refused' ;;
 m must be retryable
 
 = et-detach-is-ended
 f share/latch/et-classify
 t mux-latch-et
--   printf 'ended' ;;
-+   printf 'unknown' ;;
+-     printf 'ended' ;;
++     printf 'unknown' ;;
 m clean exit must be
 
 = et-documented-line-has-no-dash-t
@@ -2201,8 +2201,8 @@ m documented line passes
 = et-probe-closed-port-waits
 f share/latch/et-probe
 t mux-latch-et
-- 1)   exit 1 ;;
-+ 1)   exit 0 ;;
+-   1)   exit 1 ;;
++   1)   exit 0 ;;
 m closed etserver port must answer 1
 
 = et-probe-no-nc-does-not-park-latch
@@ -2215,8 +2215,8 @@ m it must answer 0
 = et-probe-tests-ets-port
 f share/latch/et-probe
 t mux-latch-et
-- ''|*[!0-9]*) _port=2022 ;;
-+ ''|*[!0-9]*) _port=2222 ;;
+-   ''|*[!0-9]*) _port=2022 ;;
++   ''|*[!0-9]*) _port=2222 ;;
 m default port
 
 = latch-bare-arg2-is-a-session
@@ -2252,8 +2252,8 @@ m a concurrent latch should refuse
 = latch-port-default-from-template
 f libexec/mux-latch
 t mux-latch
--       _wp=$(printf '%s' "$_wp" | sed "s|%p:$_pdef|${_port:-$_pdef}|g") ;;
-+       _wp=$(printf '%s' "$_wp" | sed "s|%p:$_pdef|$_port|g") ;;
+-         _wp=$(printf '%s' "$_wp" | sed "s|%p:$_pdef|${_port:-$_pdef}|g") ;;
++         _wp=$(printf '%s' "$_wp" | sed "s|%p:$_pdef|$_port|g") ;;
 m must fall back to the template
 
 = latch-port-must-be-numeric
@@ -2265,8 +2265,8 @@ t mux-latch
 # (adding a character to the negated class that the fixture never contains),
 # which SURVIVED and proved nothing: the replacement has to change the path
 # the fixture actually takes.
--   *[!0-9]*)
-+   *[!0-9a-z]*)
+-       *[!0-9]*)
++       *[!0-9a-z]*)
 m pre-0.84 target form must exit 2
 
 = latch-ipv6-is-not-split
@@ -2275,8 +2275,8 @@ t mux-latch
 # Requiring a THIRD colon sends `fe80::1` down the single-colon arm, where the
 # tail is digits, so it splits into host `fe80:` and port `1`, a host that
 # does not exist, dialled while looking like it worked.
-- *:*:*)
-+ *:*:*:*)
+-   *:*:*)
++   *:*:*:*)
 m IPv6 literal must be left whole
 
 = undo-pane-unwrapped-display-form
@@ -2288,8 +2288,8 @@ t mux-undo-pane
 # created, silent, wrong, on every Ubuntu LTS box. The assertion is a unit on
 # BOTH measured literals and sits AHEAD of the tmux skip, so it cannot depend on
 # which tmux this machine has, which is where the bug hid.
--   '"'*'"') _uq=${_uq#\"}; _uq=${_uq%\"} ;;
-+   '"'*'"') return 0 ;;
+-     '"'*'"') _uq=${_uq#\"}; _uq=${_uq%\"} ;;
++     '"'*'"') return 0 ;;
 m did not round-trip
 
 = scan-init-writes-without-a-terminal
@@ -2304,8 +2304,8 @@ t mux-scan-init
 # imply. With ~/src PRESENT the no-terminal path deliberately records it, and
 # `scan-init-no-terminal-records-src` below guards that half. The split exists
 # because $HOME is invented and an existing ~/src is observed.
--     if [ ! -t 0 ] || [ ! -t 1 ]; then
-+     if false; then
+-       if [ ! -t 0 ] || [ ! -t 1 ]; then
++       if false; then
 m must exit 2
 
 = scan-init-no-terminal-records-src
@@ -2319,8 +2319,8 @@ t mux-scan-init
 # nothing, so discovery went from working to OFF and `mux go <newrepo>` stopped
 # finding anything. Making the refusal unconditional again restores exactly
 # that silence.
--       if [ "$_def" = "$HOME" ]; then
-+       if true; then
+-         if [ "$_def" = "$HOME" ]; then
++         if true; then
 m with ~/src present and no terminal it must record
 
 = scan-init-is-not-idempotent
@@ -2328,8 +2328,8 @@ f libexec/mux-scan
 t mux-scan-init
 # Running it twice must not give the partition two roots: every scan would then
 # cover the same tree twice and the map would read as a mux that cannot count.
--   if [ -n "$_have" ]; then
-+   if false; then
+-     if [ -n "$_have" ]; then
++     if false; then
 m added another root
 
 = scan-init-overwrites-a-config
@@ -2338,8 +2338,8 @@ t mux-scan-init
 # THE ONE UNRECOVERABLE MISTAKE AVAILABLE HERE. A partition file may already
 # carry a label, a theme or a layout, so the bootstrap appends and never
 # rewrites. Inverting the test makes it clobber somebody's config.
--   if [ ! -e "$_pf" ]; then
-+   if true; then
+-     if [ ! -e "$_pf" ]; then
++     if true; then
 m DESTROYED an existing setting
 
 = scan-init-hardcodes-src
@@ -2356,8 +2356,8 @@ t mux-scan-init
 # exits 2, so the exit-code assertion passes and the one about the refusal's
 # WORDING is what fires. Reported by the corpus as a wrong-reason kill, which
 # the anchor rider cannot see.
--   [ -d "$HOME/src" ] && _def=$HOME/src
-+   _def=$HOME/src
+-     [ -d "$HOME/src" ] && _def=$HOME/src
++     _def=$HOME/src
 m the refusal did not say why
 
 = install-never-mentions-discovery
@@ -2424,8 +2424,8 @@ t mux-update-env
 # first. One line, two cases, so the real-mode twin is not separately
 # killable by it; both are kept because a bug reaching only one mode is
 # exactly what gap this closed.
--       *) continue ;;
-+       *) ;;
+-         *) continue ;;
++         *) ;;
 m named a pane stale for a value the run is about to
 
 = update-env-dry-run-writes
@@ -2490,8 +2490,8 @@ t mux-update-env
 # which is how it read on a live box. `set` is the only one of the three that
 # works in both tenses, which is exactly why this looked right for a release:
 # the common case is the one word that hides it.
--       dropped)  _l="drop ${_l#* }" ;;
-+       dropped)  : ;;
+-         dropped)  _l="drop ${_l#* }" ;;
++         dropped)  : ;;
 m would dropped
 
 # THE DRY RUN SEES THE PANES A RESTART CANNOT AVOID, and sees the RIGHT ones.
@@ -2550,8 +2550,8 @@ t mux-check
 # RE-POINTED when the `false` arm stopped returning directly: it now falls
 # through to the activatable question, so the line that carries the finding is
 # the one that keeps `false` OUT of the cannot-tell answer.
--     *false*) ;;
-+     *false*) continue ;;
+-       *false*) ;;
++       *false*) continue ;;
 m NOBODY owns the notification
 
 = check-notify-daemon-unasked-is-broken
@@ -2625,8 +2625,8 @@ t mux-addr
 # `::api` a second spelling of `api`, and one spelling per meaning is the
 # entire reason no placeholder is needed: two ways to say one thing is what
 # the doubled-separator design bought its way out of.
--     [ -n "$MUX_ADDR_PART" ] || {
-+     [ -n x ] || {
+-       [ -n "$MUX_ADDR_PART" ] || {
++       [ -n x ] || {
 m [::api] must be refused
 
 = addr-bare-word-is-not-a-session
@@ -2636,8 +2636,8 @@ t mux-addr
 # the common case costs nothing and the RARE field carries the delimiter.
 # Dropping the no-dot arm leaves the session empty for every bare name, so
 # every caller addressing `api` would act on a whole partition instead.
--   *) _aprest=$_apa ;;
-+   *) _aprest= ;;
+-     *) _aprest=$_apa ;;
++     *) _aprest= ;;
 m session: got
 
 = resume-two-fields-read-as-an-address
@@ -2704,8 +2704,8 @@ t mux-rename
 # THE RULE ITSELF, in the one place it now lives. It was open-coded as
 # `tr ':.' '--'` in FIVE places in bin/mux with no test anywhere, which is
 # the shape that drifts; a mutation here reaches every caller at once.
--   *:*) return 1 ;;
-+   *:*) return 0 ;;
+-     *:*) return 1 ;;
++     *:*) return 0 ;;
 m must be refused with 2
 
 = check-blind-to-an-unaddressable-session
@@ -2936,8 +2936,8 @@ t mux-pane-class
 # root-owned line nobody could satisfy. With this gone it is unreachable
 # again, and silently, because a pane with no option reads as `human`, which
 # is a REFUSAL and therefore looks like the policy working.
--       tm set-option -p -t "$thispane" "@mux-$verb" "$rest"
-+       :
+-         tm set-option -p -t "$thispane" "@mux-$verb" "$rest"
++         :
 m there was no @mux-control call at all
 
 = control-class-marks-the-wrong-pane
@@ -2949,8 +2949,8 @@ t mux-pane-class
 # mutation is one word. A fixture answering `%1` to every pane_id query
 # could not tell these apart, which is why this file's stub counts panes
 # rather than queries.
--       tm set-option -p -t "$thispane" "@mux-$verb" "$rest"
-+       tm set-option -p -t "$firstpane" "@mux-$verb" "$rest"
+-         tm set-option -p -t "$thispane" "@mux-$verb" "$rest"
++         tm set-option -p -t "$firstpane" "@mux-$verb" "$rest"
 m the class landed on the wrong pane
 
 = control-class-accepts-any-word
@@ -2962,8 +2962,8 @@ t mux-pane-class
 # call `notify` makes about its two words and `mux agent-hook` makes about an
 # unknown event: an UNSET thing says nothing because nobody asked, a NAMED
 # one mux cannot honour is an author claiming a contract that does not exist.
--   human|agent|hybrid) return 0 ;;
-+   human|agent|hybrid|supervisor) return 0 ;;
+-     human|agent|hybrid) return 0 ;;
++     human|agent|hybrid|supervisor) return 0 ;;
 m was accepted and should be refused
 
 = control-class-lost-on-save
@@ -2974,8 +2974,8 @@ t mux-save
 # build hands the pane to the human: a supervisor can no longer type into its
 # own worker and nothing anywhere says why. A save that quietly writes LESS
 # than it read is this file's whole subject.
--     agent|hybrid) printf 'control %s\n' "$_pk" ;;
-+     agent|hybrid) ;;
+-       agent|hybrid) printf 'control %s\n' "$_pk" ;;
++       agent|hybrid) ;;
 m came back unclassed
 
 = pane-class-refusal-names-the-wrong-directive
@@ -2988,8 +2988,8 @@ t mux-pane-class
 # actually wrote; hardcoding either directive sends the reader to the wrong
 # one, which is the whole cost of merging them and the reason this is
 # guarded rather than trusted.
--         echo "mux: '$verb' with no pane in $profile" >&2
-+         echo "mux: 'control' with no pane in $profile" >&2
+-           echo "mux: '$verb' with no pane in $profile" >&2
++           echo "mux: 'control' with no pane in $profile" >&2
 m 'attention' with no pane
 
 = attention-class-lost-on-save
@@ -3002,8 +3002,8 @@ t mux-save
 # exactly what a folded emitter would make unsayable. Dropping this hands a
 # worker back to the human's strip, notifications and next-blocked on the
 # next build: the inversion R2 exists to prevent.
--     agent|hybrid) printf 'attention %s\n' "$_pn" ;;
-+     agent|hybrid) ;;
+-       agent|hybrid) printf 'attention %s\n' "$_pn" ;;
++       agent|hybrid) ;;
 m 'attention agent' was dropped
 
 = strip-shows-a-worker-to-the-human
@@ -3334,8 +3334,8 @@ m declared name with no hook should exit 2
 = check-absent-session-pointer-reads-as-healthy
 f libexec/mux-check
 t mux-check
--       none) _envnone="$_envnone $_en" ;;
-+       none) : ;;
+-         none) _envnone="$_envnone $_en" ;;
++         none) : ;;
 m unresolvable managed pointer must be
 
 # And the declaration is validated where it is cheap rather than by a
@@ -3354,8 +3354,8 @@ m the typo was not reported as a
 = latch-notready-classified-as-a-reachability-problem
 f share/latch/ssh-classify
 t mux-latch
--   printf 'settling' ;;
-+   printf 'probing' ;;
+-     printf 'settling' ;;
++     printf 'probing' ;;
 m exit 4 must classify as its own state
 
 # AND THE ALLOWLIST HAS TO KNOW THE WORD. A state latch does not know
@@ -3365,8 +3365,8 @@ m exit 4 must classify as its own state
 = latch-settling-missing-from-the-state-allowlist
 f libexec/mux-latch
 t mux-latch
--   probing|blocked|denied|untrusted|unknown|ended|gone|refused|settling)
-+   probing|blocked|denied|untrusted|unknown|ended|gone|refused)
+-     probing|blocked|denied|untrusted|unknown|ended|gone|refused|settling)
++     probing|blocked|denied|untrusted|unknown|ended|gone|refused)
 m exit 4 must classify as its own state
 
 # The report is quoted ONCE. This polls on the ladder, so repeating
@@ -3374,8 +3374,8 @@ m exit 4 must classify as its own state
 = latch-settling-report-repeated-every-poll
 f libexec/mux-latch
 t mux-latch
--     if [ "$_settled" -eq 0 ]; then
-+     if true; then
+-       if [ "$_settled" -eq 0 ]; then
++       if true; then
 m it should be quoted once
 
 # THE LADDER HOLDS EACH RUNG. Pure doubling reached the cap in six
@@ -3407,8 +3407,8 @@ m was not read, so the delay never
 = latch-max-tries-bare-flag-unguarded
 f libexec/mux-latch
 t mux-latch
--     [ "$#" -ge 2 ] || { echo "mux: latch: --max-tries needs a count" >&2
-+     [ 1 = 1 ] || { echo "mux: latch: --max-tries needs a count" >&2
+-       [ "$#" -ge 2 ] || { echo "mux: latch: --max-tries needs a count" >&2
++       [ 1 = 1 ] || { echo "mux: latch: --max-tries needs a count" >&2
 m exited 2 without saying why
 
 # THE HOTTEST PATH MUST NOT LEAK. The render runs per client every
@@ -3439,8 +3439,8 @@ m r9-bare-lists-ids
 = agent-window-id-not-matched
 f libexec/mux-agent
 t mux-agent
--     @*) [ "$_wi" = "$2" ] || continue ;;
-+     @*) : ;;
+-       @*) [ "$_wi" = "$2" ] || continue ;;
++       @*) : ;;
 m --window by id was refused
 = agent-send-judges-the-session-not-the-pane
 f libexec/mux-agent
@@ -3470,15 +3470,15 @@ m a create that named no window id must refuse
 = notify-activatable-read-as-absent
 f lib/mux-notify_lib
 t mux-check
--     *"'$_ndn'"*|*"\"$_ndn\""*) return 3 ;;
-+     *nosuchpattern*) return 3 ;;
+-       *"'$_ndn'"*|*"\"$_ndn\""*) return 3 ;;
++       *nosuchpattern*) return 3 ;;
 m the name is ACTIVATABLE
 
 = notify-activatable-matched-loosely
 f lib/mux-notify_lib
 t mux-check
--     *"'$_ndn'"*|*"\"$_ndn\""*) return 3 ;;
-+     *Notifications*) return 3 ;;
+-       *"'$_ndn'"*|*"\"$_ndn\""*) return 3 ;;
++       *Notifications*) return 3 ;;
 m a name that merely CONTAINS ours
 
 = notify-activatable-never-asked
@@ -3513,15 +3513,15 @@ m a live session absent from the set
 = check-set-line-names-nothing
 f libexec/mux-check
 t mux-check
--         "rebuild$_unlive" ;;
-+         "rebuild" ;;
+-           "rebuild$_unlive" ;;
++           "rebuild" ;;
 m does not NAME the session
 
 = check-set-agreement-uncounted
 f libexec/mux-check
 t mux-check
--     '') ok "session set agrees with the server ($_nliv live, all recorded)" ;;
-+     '') ok "session set agrees with the server" ;;
+-       '') ok "session set agrees with the server ($_nliv live, all recorded)"
++       '') ok "session set agrees with the server"
 m agreeing line states no count
 
 = render-records-do-not-accumulate
@@ -3550,15 +3550,15 @@ t setup
 # live tmux server, because PREFIX is an environment variable and `$2` was
 # never read. Removing the guard restores exactly that: the run succeeds, so
 # the exit-code assertion fires before the absence-of-an-install one.
-- *) [ "$#" -le 1 ] || _badarg "${1:-help}" "$2" ;;
-+ *) ;;
+-   *) [ "$#" -le 1 ] || _badarg "${1:-help}" "$2" ;;
++   *) ;;
 m must be refused with
 
 = humming-rank-not-between
 f lib/mux-agent-state_lib
 t mux-agent-rank
--   humming) echo 2 ;;
-+   humming) echo 0 ;;
+-     humming) echo 2 ;;
++     humming) echo 0 ;;
 m must outrank idle
 
 = humming-glyph-is-the-check
@@ -3612,8 +3612,8 @@ t mux-strip
 # 5m" reads very differently from "just started". This is the derived-list
 # lesson met in a `case` pattern: a list that cannot miss a new ITEM can still
 # miss a new SHAPE, and nothing but an assertion notices.
--     blocked|working|idle|humming) _d=$(fmt_age "$_a") ;;
-+     blocked|working|idle) _d=$(fmt_age "$_a") ;;
+-       blocked|working|idle|humming) _d=$(fmt_age "$_a") ;;
++       blocked|working|idle) _d=$(fmt_age "$_a") ;;
 m dropped its age
 
 = stream-opens-silent
@@ -3647,8 +3647,8 @@ m cannot tell a keepalive
 = stream-interval-unvalidated
 f libexec/mux-agent
 t mux-agent-stream
--     ''|*[!0-9]*|0) _out usage 2 "-i needs whole seconds, 1 or more" ;;
-+     '') _out usage 2 "-i needs whole seconds, 1 or more" ;;
+-         ''|*[!0-9]*|0) _out usage 2 "-i needs whole seconds, 1 or more" ;;
++         '') _out usage 2 "-i needs whole seconds, 1 or more" ;;
 m was accepted
 
 = indicator-heartbeat-read-as-an-answer
@@ -3675,8 +3675,8 @@ m went silent past the staleness
 = strip-humming-falls-to-the-unknown-look
 f libexec/mux-agent-state-render
 t mux-strip
--   humming) sty=$STY_HUMMING; acc=$ACC_HUMMING ;;
-+   humming) sty=$STY_UNKNOWN; acc=$ACC_UNKNOWN ;;
+-     humming) sty=$STY_HUMMING; acc=$ACC_HUMMING ;;
++     humming) sty=$STY_UNKNOWN; acc=$ACC_UNKNOWN ;;
 m carries no background
 
 = strip-humming-is-idles-own-chip
@@ -3844,8 +3844,8 @@ m ran no ssh-probe
 = latch-hook-none-is-not-off
 f libexec/mux-latch
 t mux-latch
--   none) return 0 ;;
-+   nonexx) return 0 ;;
+-     none) return 0 ;;
++     nonexx) return 0 ;;
 m probe turned off latch should just attempt
 
 # AN INERT CONFIG DIRECTIVE. Measured before the marker existed: three
@@ -3856,8 +3856,8 @@ m probe turned off latch should just attempt
 = check-inert-config-key-silent
 f libexec/mux-check
 t mux-check
--       *) _unk="$_unk $_ck" ;;
-+       *) : ;;
+-         *) _unk="$_unk $_ck" ;;
++         *) : ;;
 m a config key mux does not read went un
 
 # AND THE MATCH IS EXACT. A substring match calls `latch-prob` a known key
@@ -3866,8 +3866,8 @@ m a config key mux does not read went un
 = check-config-key-match-is-loose
 f libexec/mux-check
 t mux-check
--       *" $_ck "*) ;;
-+       *$_ck*) ;;
+-         *" $_ck "*) ;;
++         *$_ck*) ;;
 m a config key mux does not read went un
 
 # A BARE `ok` CANNOT BE TOLD FROM A MARKER THAT STOPPED RUNNING, which is the
@@ -3876,8 +3876,8 @@ m a config key mux does not read went un
 = check-config-keys-pass-silent
 f libexec/mux-check
 t mux-check
--     '') ok "config directives are all ones mux reads" ;;
-+     '') : ;;
+-       '') ok "config directives are all ones mux reads" ;;
++       '') : ;;
 m the pass line is missing
 
 # AND THE HEDGE, which fired on its first real run: MUX_SHARE pointed at a
@@ -3928,22 +3928,22 @@ m gave every name the same theme
 = help-usage-prints-nothing
 f libexec/mux-help
 t mux-exit
-- --usage)           shift; usage "${1:-2}" ;;
-+ --usage)           shift; exit "${1:-2}" ;;
+-   --usage)           shift; usage "${1:-2}" ;;
++   --usage)           shift; exit "${1:-2}" ;;
 m printed no usage summary
 
 = help-bare-drifts-from-dash-dash-help
 f libexec/mux-help
 t mux-verbs
-- '')                usage 0 ;;
-+ '')                usage 0 2>&1 | sed 's/$/ /' >&2; exit "$MUX_EC_OK" ;;
+-   '')                usage 0 ;;
++   '')                usage 0 2>&1 | sed 's/$/ /' >&2; exit "$MUX_EC_OK" ;;
 m have drifted apart
 
 = help-usage-is-reachable-as-a-topic
 f libexec/mux-help
 t mux-verbs
-- --usage)           shift; usage "${1:-2}" ;;
-+ --usage|usage)     shift; usage "${1:-2}" ;;
+-   --usage)           shift; usage "${1:-2}" ;;
++   --usage|usage)     shift; usage "${1:-2}" ;;
 m answered instead of refused
 = why-lib-missing-is-silent
 f bin/mux
@@ -4003,20 +4003,20 @@ m sourced EAGERLY and every verb
 = geometry-in-tmux-reads-the-width-as-the-height
 f lib/mux-build_lib
 t mux-geometry
--       "${_wh##* }" ;;
-+       "${_wh%% *}" ;;
+-         "${_wh##* }" ;;
++         "${_wh%% *}" ;;
 m did not carry the window size
 = bottom-built-at-the-min
 f lib/mux-go_lib
 t mux-default-layout
--         tm split-window -v -f -l "$b_max" -t "$name:$win" -c "$root"
-+         tm split-window -v -f -l "$b_min" -t "$name:$win" -c "$root"
+-           tm split-window -v -f -l "$b_max" -t "$name:$win" -c "$root"
++           tm split-window -v -f -l "$b_min" -t "$name:$win" -c "$root"
 m not built at the spec's MAX
 = bottom-command-dropped
 f lib/mux-go_lib
 t mux-profile
--           -c "$root" "$bproc"
-+           -c "$root"
+-             -c "$root" "$bproc"
++             -c "$root"
 m command never reached tmux
 = conf-full-line-comments-kept
 f lib/mux-conf_lib
@@ -4048,35 +4048,35 @@ m blanks: got
 = args-attach-only-not-gated
 f lib/mux-args_lib
 t mux-args
--       echo "mux: --attach-only is only for go" >&2; usage; } ;;
-+       : ; } ;;
+-         echo "mux: --attach-only is only for go" >&2; usage; } ;;
++         : ; } ;;
 m attachonly-gate
 
 = args-no-wait-env-not-gated
 f lib/mux-args_lib
 t mux-args
--       echo "mux: --no-wait-env is only for resume" >&2; usage; } ;;
-+       : ; } ;;
+-         echo "mux: --no-wait-env is only for resume" >&2; usage; } ;;
++         : ; } ;;
 m nowaitenv-gate
 = args-verb-stops-the-option-loop
 f bin/mux
 t mux-args
--     *)  if [ -n "$cmd" ]; then break; fi
-+     *)  if [ -n "$cmd" ]; then break; fi; break
+-       *)  if [ -n "$cmd" ]; then break; fi
++       *)  if [ -n "$cmd" ]; then break; fi; break
 m force-after
 
 = args-resume-arity-off-by-one
 f lib/mux-args_lib
 t mux-args
--     resume) [ "$_an" -le 2 ] || {
-+     resume) [ "$_an" -le 3 ] || {
+-       resume) [ "$_an" -le 2 ] || {
++       resume) [ "$_an" -le 3 ] || {
 m resume-arity
 
 = args-help-exits-two
 f bin/mux
 t mux-args
--     -h|--help)    usage 0 ;;
-+     -h|--help)    usage ;;
+-       -h|--help)    usage 0 ;;
++       -h|--help)    usage ;;
 m help-long
 
 = args-partition-name-unvalidated

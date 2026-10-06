@@ -616,8 +616,8 @@ _o=$(printf 'from stdin' | env -u TMUX -u MUX_SHARE MUX_DIR="$MUX_DIR" \
   PATH="$T/bin:$PATH" CAPLOG="$CAPLOG" \
   "$HERE/bin/mux" agent send bravo - 2>&1)
 case $_o in
-*'"bytes":10'*) ;;
-*) fail "the stdin form did not read the text: [$_o]" ;;
+  *'"bytes":10'*) ;;
+  *) fail "the stdin form did not read the text: [$_o]" ;;
 esac
 
 # --- BLOCKED: mux will not answer a prompt on a human's behalf ------------
@@ -755,8 +755,8 @@ for _args in 'status' 'nosuchverb' 'status --nope' ''; do
   # shellcheck disable=SC2086   # deliberate word split
   WATCHED=global run $_args; unset WATCHED
   case $RC in
-  0|1|2|3) ;;
-  *) fail "\`mux agent $_args\` exited $RC, outside mux's four codes.
+    0|1|2|3) ;;
+    *) fail "\`mux agent $_args\` exited $RC, outside mux's four codes.
 126, 127 and 255 must stay attributable to the shell and to ssh" ;;
   esac
 done
@@ -849,15 +849,15 @@ eq "open-attention" "$(jq 'd["attention"]')" agent
 # a machine call that moves the human's view mid-turn is an interrupt nobody
 # asked for, and it is the exact defect the hand-rolled copy had.
 case "$(cat "$CAPLOG")" in
-*'new-window'*' -d '*) ;;
-*) fail "open did not pass -d, so tmux SELECTED the new window and the
+  *'new-window'*' -d '*) ;;
+  *) fail "open did not pass -d, so tmux SELECTED the new window and the
 human's view followed a worker: $(cat "$CAPLOG")" ;;
 esac
 # The target is anchored, or `alpha` would match `alpha-2`: the bug this
 # codebase has shipped four times.
 case "$(cat "$CAPLOG")" in
-*'new-window -t =alpha'*) ;;
-*) fail "open did not anchor the session target: $(cat "$CAPLOG")" ;;
+  *'new-window -t =alpha'*) ;;
+  *) fail "open did not anchor the session target: $(cat "$CAPLOG")" ;;
 esac
 # And both classes are declared on the window it just made, not on whatever
 # pane happened to be current.
@@ -868,13 +868,13 @@ esac
 # Measured that `set-option -p -t @N` resolves that window's active pane and
 # leaves the neighbouring window untouched.
 case "$(cat "$CAPLOG")" in
-*'set-option -p -t @3 @mux-control agent'*) ;;
-*) fail "the control class was not set on the new window BY ID:
+  *'set-option -p -t @3 @mux-control agent'*) ;;
+  *) fail "the control class was not set on the new window BY ID:
 $(cat "$CAPLOG")" ;;
 esac
 case "$(cat "$CAPLOG")" in
-*'set-option -p -t @3 @mux-attention agent'*) ;;
-*) fail "attention was not set on the new window: $(cat "$CAPLOG")" ;;
+  *'set-option -p -t @3 @mux-attention agent'*) ;;
+  *) fail "attention was not set on the new window: $(cat "$CAPLOG")" ;;
 esac
 
 # A ONE-FIELD ANSWER IS REFUSED. The create asks tmux for the index AND the
@@ -890,7 +890,7 @@ eq "open-halfanswer" "$(jq '"did not say which" in d["message"]')" True
 # AND IT DECLARED NOTHING, which is the half that matters: a class written
 # against an empty target is the plausible-wrong-answer shape.
 case "$(cat "$CAPLOG")" in
-*set-option*) fail "it refused the create and set a class anyway:
+  *set-option*) fail "it refused the create and set a class anyway:
 $(cat "$CAPLOG")" ;;
 esac
 
@@ -979,14 +979,14 @@ eq "class-status" "$(jq 'd["status"]')" ok
 eq "class-attention" "$(jq 'd["attention"]')" human
 eq "class-control-untouched" "$(jq 'd["control"]')" None
 case "$(cat "$CAPLOG")" in
-*'@mux-attention human'*) ;;
-*) fail "the escalation set nothing on the pane: $(cat "$CAPLOG")" ;;
+  *'@mux-attention human'*) ;;
+  *) fail "the escalation set nothing on the pane: $(cat "$CAPLOG")" ;;
 esac
 # AND IT LEFT `control` ALONE, which is the point of their being two markers:
 # the supervisor keeps the write access it needs to go on nudging while the
 # human is looking.
 case "$(cat "$CAPLOG")" in
-*'@mux-control'*) fail "changing attention also wrote control, so an
+  *'@mux-control'*) fail "changing attention also wrote control, so an
 escalation silently revokes the supervisor's ability to type at the exact
 moment it is handing over: $(cat "$CAPLOG")" ;;
 esac
@@ -1006,12 +1006,13 @@ ATTN=human run class alpha --attention agent; unset ATTN
 eq "relax-status" "$(jq 'd["status"]')" refused
 eq "relax-reason" "$(jq 'd["reason"]')" relax
 case "$(jq 'd["override"]')" in
-*terminal*) ;;
-*) fail "the refusal did not say what override exists, so a caller has to
+  *terminal*) ;;
+  *) fail "the refusal did not say what override exists, so a caller has to
 guess: $OUT" ;;
 esac
 case "$(cat "$CAPLOG")" in
-*set-option*) fail "it refused and wrote the option anyway: $(cat "$CAPLOG")" ;;
+  *set-option*) fail \
+    "it refused and wrote the option anyway: $(cat "$CAPLOG")" ;;
 esac
 
 # AND `--yes` ALONE IS NOT ENOUGH, which is the half that makes the flag mean
@@ -1021,7 +1022,7 @@ esac
 ATTN=human run class alpha --attention agent --yes; unset ATTN
 [ "$RC" = 1 ] || fail "--yes without a terminal must still refuse, got $RC"
 case "$(cat "$CAPLOG")" in
-*set-option*) fail "--yes alone was accepted: $(cat "$CAPLOG")" ;;
+  *set-option*) fail "--yes alone was accepted: $(cat "$CAPLOG")" ;;
 esac
 
 # ... AND WITH BOTH, IT GOES THROUGH. Driven under a pty, because the gate is
@@ -1038,8 +1039,8 @@ PATH='$T/bin:$PATH' CAPLOG='$CAPLOG' ATTN=human MUX_LOG='$T/log' \
 PANESFILE='$PANESFILE' \
 '$HERE/bin/mux' agent class alpha --attention agent --yes" >/dev/null 2>&1
   case "$(cat "$CAPLOG")" in
-  *'@mux-attention agent'*) ;;
-  *) fail "with a terminal AND --yes the relax was still refused, so the
+    *'@mux-attention agent'*) ;;
+    *) fail "with a terminal AND --yes the relax was still refused, so the
 override exists in the message and nowhere else: $(cat "$CAPLOG")" ;;
   esac
 fi
@@ -1156,7 +1157,7 @@ CLASS=agent run send alpha --window main 'queued'; unset CLASS
 acknowledgement, got rc=$RC: $OUT"
 eq r9-send-blocked "$(jq 'd["reason"]')" blocked
 case "$(cat "$CAPLOG")" in
-*send-keys*) fail "it refused and typed anyway: $(cat "$CAPLOG")" ;;
+  *send-keys*) fail "it refused and typed anyway: $(cat "$CAPLOG")" ;;
 esac
 
 # `peers` CARRIES BOTH, which is the answer side: a caller that cannot read

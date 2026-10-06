@@ -64,7 +64,7 @@ _host=${1:-}
 # target written without one.
 _port=${2:-}
 case ${_port:-} in
-*[!0-9]*) _port= ;;
+  *[!0-9]*) _port= ;;
 esac
 [ -n "$_port" ] || _port=${MUX_ET_PORT:-}
 if [ -z "$_port" ]; then
@@ -75,7 +75,7 @@ if [ -z "$_port" ]; then
   fi
 fi
 case ${_port:-} in
-''|*[!0-9]*) _port=2022 ;;
+  ''|*[!0-9]*) _port=2022 ;;
 esac
 
 # NO TOOL MEANS NO OPINION, AND THAT IS NOT THE SAME CALL ssh-probe MAKES.
@@ -114,15 +114,15 @@ _rc=0
 _bound nc -z -w "$_CONNECT" -- "$_host" "$_port" >/dev/null 2>&1 || _rc=$?
 
 case $_rc in
-0)   exit 0 ;;
-# timeout(1)'s own code. The port did not answer inside the bound, which is a
-# definite "not usable right now" rather than a "cannot tell": if it will not
-# complete a TCP handshake in ten seconds, an attach will not fare better.
-124) exit 1 ;;
-1)   exit 1 ;;
-# Any other code is nc failing for its own reasons (a usage error, a resolver
-# it could not use), which says nothing about the host. `unknown` is what latch
-# reports for this, and waiting is right: something here is misconfigured and
-# quietly attempting would hide it.
-*)   exit 78 ;;
+  0)   exit 0 ;;
+  # timeout(1)'s own code. The port did not answer inside the bound, which is a
+  # definite "not usable right now" rather than a "cannot tell": if it will not
+  # complete a TCP handshake in ten seconds, an attach will not fare better.
+  124) exit 1 ;;
+  1)   exit 1 ;;
+  # Any other code is nc failing for its own reasons (a usage error, a resolver
+  # it could not use), which says nothing about the host. `unknown` is what
+  # latch reports for this, and waiting is right: something here is
+  # misconfigured and quietly attempting would hide it.
+  *)   exit 78 ;;
 esac

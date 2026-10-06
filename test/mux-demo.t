@@ -59,8 +59,8 @@ _until() {   # <seconds> <command...>
 # twice, or from a shell that never started one.
 _o=$(demo --stop 2>&1) || fail "--stop on nothing failed: $_o"
 case $_o in
-*"no demo server"*) ;;
-*) fail "--stop on nothing should say so plainly: [$_o]" ;;
+  *"no demo server"*) ;;
+  *) fail "--stop on nothing should say so plainly: [$_o]" ;;
 esac
 
 # --- it builds, on its own socket -----------------------------------------
@@ -75,8 +75,8 @@ done
 # will actually read.
 for _want in 'prefix b' 'prefix d' 'mux demo --stop'; do
   case $_o in
-  *"$_want"*) ;;
-  *) fail "the banner never mentions [$_want]: [$_o]" ;;
+    *"$_want"*) ;;
+    *) fail "the banner never mentions [$_want]: [$_o]" ;;
   esac
 done
 
@@ -115,21 +115,21 @@ _strip=$(env TMUX="$_sp,0,0" MUX_STRIP_WIDTH=140 \
   "$HERE/libexec/mux-agent-state-render" api demo 2>/dev/null \
   | sed 's/#\[[^]]*\]//g')
 case $_strip in
-*"$MUX_GLYPH_BLOCKED"*) ;;
-*) fail "the demo strip shows no blocked glyph: [$_strip]" ;;
+  *"$MUX_GLYPH_BLOCKED"*) ;;
+  *) fail "the demo strip shows no blocked glyph: [$_strip]" ;;
 esac
 for _s in api web docs infra; do
   case $_strip in
-  *"$_s"*) ;;
-  *) fail "the demo strip omits $_s: [$_strip]" ;;
+    *"$_s"*) ;;
+    *) fail "the demo strip omits $_s: [$_strip]" ;;
   esac
 done
 
 # --- running it twice attaches rather than complaining --------------------
 _o=$(demo --no-attach 2>&1) || fail "second build failed: $_o"
 case $_o in
-*"already running"*) ;;
-*) fail "a second run should say it is already running: [$_o]" ;;
+  *"already running"*) ;;
+  *) fail "a second run should say it is already running: [$_o]" ;;
 esac
 
 # --- --stop takes the server AND the state -------------------------------

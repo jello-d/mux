@@ -76,8 +76,8 @@ lg latch 'attaching -- northgate via ssh'
 [ -f "$L" ] || fail "mux_log wrote nothing (and created no log)"
 _line=$(cat "$L")
 case $_line in
-20??-??-??T??:??:??Z' latch['*'] attaching -- northgate via ssh') ;;
-*) fail "the line is not <iso-ts> <subsys>[<pid>] <msg>:
+  20??-??-??T??:??:??Z' latch['*'] attaching -- northgate via ssh') ;;
+  *) fail "the line is not <iso-ts> <subsys>[<pid>] <msg>:
   $_line" ;;
 esac
 # The PID is there so two concurrent latches (to different hosts) can be told
@@ -197,8 +197,8 @@ _both=$(env MUX_STATE="$T/state" "$HERE/bin/mux" log -n 5 2>&1)
 no_has "$_both" 'log at' "a 2>&1 capture gained a line, which is how the first
 version of this broke an existing case in this very file"
 case $_so in
-*'one line only'*) ;;
-*) fail "stdout no longer carries the log lines: [$_so]" ;;
+  *'one line only'*) ;;
+  *) fail "stdout no longer carries the log lines: [$_so]" ;;
 esac
 
 # ... AND AT A TERMINAL IT SAYS SO, which needs a pty: the whole point is the
@@ -211,8 +211,8 @@ else
   t_pty "$T/pty.out" \
     "env MUX_STATE='$T/state' '$HERE/bin/mux' log -n 5 >/dev/null" || true
   case $(cat "$T/pty.out" 2>/dev/null) in
-  *"$L"*) ;;
-  *) fail "at a terminal the reader still does not name the file it printed,
+    *"$L"*) ;;
+    *) fail "at a terminal the reader still does not name the file it printed,
 so the path is only discoverable by reading source: [$(cat "$T/pty.out")]" ;;
   esac
 fi

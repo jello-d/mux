@@ -79,18 +79,18 @@ share/latch/et-classify's header. The test scrapes the documented line so the
 copy a user reads is the copy proven to work; without it every assertion below
 would pass vacuously against a line nobody publishes."
 case $_line in
-*%c*) ;;
-*) fail "the documented ET transport line does not use %c:
+  *%c*) ;;
+  *) fail "the documented ET transport line does not use %c:
   $_line
 ET types the command as keystrokes into a remote LOGIN shell, so it must arrive
 as ONE UNQUOTED element. %q shell-quotes it, which is right for ssh (the far
 side re-parses) and wrong here." ;;
 esac
 case $_line in
-*%q*) fail "the documented line uses %q: $_line. See above" ;;
+  *%q*) fail "the documented line uses %q: $_line. See above" ;;
 esac
 case $_line in
-*" -t "*) fail "the documented line passes \`-t\`: $_line
+  *" -t "*) fail "the documented line passes \`-t\`: $_line
 In et 7.0.0 that is --tunnel and it TAKES A VALUE, so it swallows the host and
 et exits 0 saying 'Missing host to connect to'. A pty is the default for
 --command, so no flag is needed. Measured between two VMs, 2026-09-29." ;;
@@ -136,8 +136,8 @@ _got=$(cat "$T/argv" 2>/dev/null || true)
 below would prove nothing. latch may have refused before attempting.
 latch said: ${_eo:-<nothing>}"
 case $_got in
-*'last=[mux go proj]') ;;
-*) fail "the ET transport did not hand the command over as one unquoted
+  *'last=[mux go proj]') ;;
+  *) fail "the ET transport did not hand the command over as one unquoted
 element. Wanted the last argv element to be exactly
   mux go proj
 got

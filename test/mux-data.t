@@ -60,7 +60,7 @@ eq stems-agents "$(mux_data_stems agents .agent | tr '\n' ' ')" "claude "
 eq stems-layouts "$(mux_data_stems '' .layout | tr '\n' ' ')" "api default "
 # defaults has no .theme extension, so it is not a theme NAME.
 case "$(mux_data_stems themes .theme)" in
-*defaults*) fail "stems: the extensionless defaults file listed as a theme" ;;
+  *defaults*) fail "stems: the extensionless defaults file listed as a theme" ;;
 esac
 
 # --- mux_data_files: every stem resolved to the file mux would read ---------

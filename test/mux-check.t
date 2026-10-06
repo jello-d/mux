@@ -258,7 +258,7 @@ optional, and a provisioner's apply cannot install somebody's desktop"
 ln -sfn "$T/nowhere/mux-desktop-notifier" "$_nbd/mux-desktop-notifier"
 check >/dev/null
 case $OUT in
-*"no desktop notifier here"*) fail "a dangling notifier link read as absent,
+  *"no desktop notifier here"*) fail "a dangling notifier link read as absent,
 so the one state a rename leaves behind is the one this cannot see" ;;
 esac
 # `notify-send` IS NO LONGER PART OF THE QUESTION, and its absence being
@@ -269,7 +269,7 @@ esac
 rm -f "$T/bin/notify-send"
 check >/dev/null
 case $OUT in
-*notify-send*) fail "the check still reports on notify-send, which mux no
+  *notify-send*) fail "the check still reports on notify-send, which mux no
 longer uses: the notifier raises banners now and does it over the bus" ;;
 esac
 
@@ -366,7 +366,7 @@ _bus '(true,)' "([ 'org.freedesktop.Notifications' ],)"
 # offering one: the user would believe they had redirected their banners.
 check MUX_NOTIFY_SEND=true MUX_NOTIFY_CLOSE=true >/dev/null
 case $OUT in
-*overridden*) fail "the check credited a retired override pair, so a user
+  *overridden*) fail "the check credited a retired override pair, so a user
 setting it would believe their notifications had been redirected" ;;
 esac
 
@@ -724,8 +724,8 @@ if command -v tmux >/dev/null 2>&1; then
     MUX_CTX_PARTITION="$_sock" MUX_DIR="$T/conf" \
     "$HERE/libexec/mux-check" 2>&1 || true)
   case $_o in
-  *"no tmux server"*) ;;
-  *) fail "with no server running, the check did not say so. Its honest
+    *"no tmux server"*) ;;
+    *) fail "with no server running, the check did not say so. Its honest
 'tmux state unchecked' line is unreachable if the probe can create what it is
 looking for, and every assertion below it then fails about a server the user
 never started:

@@ -67,8 +67,8 @@ T=$(CDPATH= cd -- "$_t" && pwd -P) || T=
 # A quote in the path would break the LITERAL trap built below. mktemp never
 # produces one; refusing is cheaper than reasoning about it again later.
 case $T in
-*\'*) echo "harness: refusing a scratch dir containing a quote: [$T]" >&2
-  exit 1 ;;
+  *\'*) echo "harness: refusing a scratch dir containing a quote: [$T]" >&2
+    exit 1 ;;
 esac
 
 # --- THE DESTRUCTIVE TRAP HOLDS LITERALS, NEVER A VARIABLE ------------------
@@ -180,9 +180,10 @@ mkdir -p "$HOME"
 # litter property is unchanged.
 TMUX_TMPDIR=$(mktemp -d /tmp/muxt.XXXXXX) || TMUX_TMPDIR=
 case ${TMUX_TMPDIR:-} in
-''|*\'*) echo "harness: mktemp -d for the tmux socket dir failed or gave an" >&2
-  echo "harness: unusable path: [${TMUX_TMPDIR:-}]" >&2
-  exit 1 ;;
+  ''|*\'*)
+    echo "harness: mktemp -d for the tmux socket dir failed or gave an" >&2
+    echo "harness: unusable path: [${TMUX_TMPDIR:-}]" >&2
+    exit 1 ;;
 esac
 [ -d "$TMUX_TMPDIR" ] || {
   echo "harness: [$TMUX_TMPDIR] is not a directory" >&2; exit 1; }
@@ -393,12 +394,12 @@ t_pty_detect
 t_pty() {   # <typescript-file> <command string>
   _tp_f=$1; _tp_c=$2
   case $T_PTY in
-  gnu) script -q -c "$_tp_c" "$_tp_f" ;;
-  # A SHELL IS EXPLICIT HERE, because BSD script execs the command directly
-  # rather than handing it to a shell, so a command STRING (which every caller
-  # passes, some with a `;` in it) needs one.
-  bsd) script -q "$_tp_f" /bin/sh -c "$_tp_c" ;;
-  *)   return 127 ;;
+    gnu) script -q -c "$_tp_c" "$_tp_f" ;;
+    # A SHELL IS EXPLICIT HERE, because BSD script execs the command directly
+    # rather than handing it to a shell, so a command STRING (which every caller
+    # passes, some with a `;` in it) needs one.
+    bsd) script -q "$_tp_f" /bin/sh -c "$_tp_c" ;;
+    *)   return 127 ;;
   esac
 }
 
@@ -469,7 +470,7 @@ t_lib_lazy() {   # <runner-fn> <lib name> <own verb [args]> <other verb>
 $_tl_l, so the lib is sourced EAGERLY and every verb now pays for it:
 $_tl_out"
   case $_tl_out in
-  *POISONED*) fail "mux $_tl_o read $_tl_l, so it is sourced EAGERLY and
+    *POISONED*) fail "mux $_tl_o read $_tl_l, so it is sourced EAGERLY and
 every verb now pays for it" ;;
   esac
   _tl_rc=0
@@ -483,8 +484,8 @@ every verb now pays for it" ;;
   # shellcheck disable=SC2086
   _tl_out=$("$_tl_r" $_tl_v 2>&1) || _tl_rc=$?
   case $_tl_out in
-  *"$_tl_l missing"*) ;;
-  *) fail "a lost $_tl_l must name itself; got: $_tl_out" ;;
+    *"$_tl_l missing"*) ;;
+    *) fail "a lost $_tl_l must name itself; got: $_tl_out" ;;
   esac
   [ "$_tl_rc" -eq 1 ] || fail "a lost $_tl_l exited $_tl_rc, want 1. An
 install missing a file is this package's exit 1, and a verb that cannot run

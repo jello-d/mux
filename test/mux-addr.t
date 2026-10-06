@@ -132,8 +132,8 @@ r() {
   _ro=$(mux_addr_parse "$1" 2>&1 >/dev/null) || _rr=$?
   [ "$_rr" -eq 2 ] || fail "[$1] must be refused with 2, got $_rr"
   case $_ro in
-  *"$2"*) ;;
-  *) fail "[$1] was refused without saying why: want [$2] in [$_ro]" ;;
+    *"$2"*) ;;
+    *) fail "[$1] was refused without saying why: want [$2] in [$_ro]" ;;
   esac
 }
 

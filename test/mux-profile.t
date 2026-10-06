@@ -79,8 +79,9 @@ printf 'layout  withcmd\nroot    %s\n' "$T/proj" \
 go withcmd >/dev/null || fail "a bottom with a command should build"
 has withcmd-max 'split-window -v -f -l 9 '
 case "$(grep 'split-window -v -f' "$TMUXLOG")" in
-*'tail -F /dev/null'*) ;;
-*) fail "the bottom's command never reached tmux: [$(grep 'split-window -v -f' \
+  *'tail -F /dev/null'*) ;;
+  *) fail \
+    "the bottom's command never reached tmux: [$(grep 'split-window -v -f' \
   "$TMUXLOG")]" ;;
 esac
 
@@ -123,8 +124,8 @@ rm -f "$T/conf/partitions/global.partition"
 printf 'theme   green\n' >"$T/conf/old.layout"
 _o=$(go old) || fail "a pre-rename .layout should still build"
 case $_o in
-*"pre-rename"*) ;;
-*) fail "a pre-rename .layout must warn, got [$_o]" ;;
+  *"pre-rename"*) ;;
+  *) fail "a pre-rename .layout must warn, got [$_o]" ;;
 esac
 has legacy-builds '@mux-theme green'
 

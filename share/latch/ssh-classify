@@ -38,100 +38,100 @@ _err=${2:-/dev/null}
 _saw() { grep -qi -- "$1" "$_err" 2>/dev/null; }
 
 case $_rc in
-0)
-  # ssh passes the remote command's status through, so 0 is mux on the far
-  # side exiting cleanly: the human detached or quit. Terminal by design;
-  # retrying here resurrects a session they just closed, which is the case
-  # autossh gets wrong.
-  printf 'ended' ;;
-2)
-  # mux's usage/unknown-verb code, from the far side. A VERSION answer, not
-  # a transport failure: the remote mux is too old for the verb asked of
-  # it, and no amount of retrying teaches it.
-  printf 'refused' ;;
-126|127)
-  # The remote SHELL, not ssh and not mux: 127 not found, 126 found but not
-  # executable. Almost always mux missing from a non-interactive ssh PATH,
-  # which is its own trap: `~/.local/bin` is on PATH for a login shell
-  # and not for `ssh host mux ...`. Terminal: only a human fixes a PATH,
-  # and latch retried this forever until a live run against a second box
-  # showed it. man 1 mux EXIT STATUS had documented the meaning all along.
-  printf 'refused' ;;
-255)
-  # ssh's own catch-all. Everything below is the stderr discriminator.
-  #
-  # HOST KEY VERIFICATION WAS GROUPED WITH THE CREDENTIAL REFUSALS, and
-  # that was right about the important half and wrong about one axis. The
-  # finding it came from stands: a live run against a rebuilt host showed
-  # ssh exiting 255 saying nothing resembling "denied", so it classified as
-  # retryable and latch spun forever on something only a human can fix.
-  # What the old reasoning got wrong was "the handling is identical".
-  #
-  # MEASURED, 2026-09-29: the refusal happens during KEY EXCHANGE, before
-  # user authentication. An `ssh -v` trace of a mismatched key contains no
-  # "Offering public key" line at all. So the two differ on the axis that
-  # decides terminality:
-  #
-  #   a credential denial SPENDS an authentication attempt and raises a
-  #   prompt, which is the storm argument, and why it is terminal;
-  #   a host key refusal spends NOTHING, exposes no credential to the
-  #   unverified peer, and fails fast.
-  #
-  # And latch CAN observe this one being fixed, which was the other stated
-  # reason for stopping: the next attempt simply answers, at no cost. So it
-  # is its own state, retried a bounded number of times and then terminal.
-  # Bounded because the two causes are indistinguishable from here (an
-  # interception in the path resolves itself; a rebuilt host does not) and
-  # the asymmetry says to try: the cost of retrying a permanent change is a
-  # short delay before the human is told, and the cost of NOT retrying a
-  # transient one is a roaming attachment that stays dead.
-  # ONE PATTERN, not two. `host key for ... has changed` sits in the same
-  # message as `host key verification failed`, so matching both would make
-  # either one individually unkillable by mutation: the two-guards trap
-  # this suite has now met six times.
-  if _saw 'host key verification'; then
-    printf 'untrusted'
-  elif _saw 'permission denied' || _saw 'authenticat'; then
-    printf 'denied'
-  else
-    printf 'probing'
-  fi ;;
-4)
-  # NOT READY YET, AND TRY AGAIN. The far side has no server for the partition
-  # asked for, so it has not been set up since it came up, and a pointer its
-  # own `env-ready` declaration names has not arrived. It REFUSED to rebuild
-  # rather than baking that absence into every pane it would create, which
-  # nothing could repair afterwards because an environment is fixed at exec.
-  #
-  # RETRYABLE, AND THE RETRY IS THE WHOLE MECHANISM: each attempt is a new
-  # remote process with a new login shell, so it re-reads the environment
-  # rather than remembering the one it started with. Nothing here has to know
-  # what it is waiting for, which is the point: mux declares the names, the
-  # host decides, and latch only has to keep asking.
-  #
-  # ITS OWN STATE rather than `probing`, because the two are opposite facts
-  # about the host: probing means it cannot be reached, this means it answered.
-  # Reporting the second as the first would send a human to look at the
-  # network.
-  printf 'settling' ;;
-3)
-  # THE NAME IS NOT KNOWN THERE. mux's standard unknown-name code, and the
-  # ONLY thing consulted for it: this used to be `grep 'no such session'`
-  # on the far side's stderr, which made the WORDING of a message on one
-  # machine load-bearing for a decision on another, and needed a test whose
-  # only job was stopping anyone improving the sentence.
-  #
-  # The string fallback for pre-0.35 remotes is deliberately NOT kept. Two
-  # mechanisms for one fact is two things to test and two ways to drift,
-  # and mux is young enough to prefer a coordinated release. A remote older
-  # than 0.35 answers 1 with its own message, which still reports as
-  # `refused` and still prints what the far side said: worse, but not
-  # silent, and the fix is to upgrade it.
-  printf 'gone' ;;
-1)
-  # The remote mux refused, for a reason it put on stderr.
-  printf 'refused' ;;
-*)
-  printf 'unknown' ;;
+  0)
+    # ssh passes the remote command's status through, so 0 is mux on the far
+    # side exiting cleanly: the human detached or quit. Terminal by design;
+    # retrying here resurrects a session they just closed, which is the case
+    # autossh gets wrong.
+    printf 'ended' ;;
+  2)
+    # mux's usage/unknown-verb code, from the far side. A VERSION answer, not
+    # a transport failure: the remote mux is too old for the verb asked of
+    # it, and no amount of retrying teaches it.
+    printf 'refused' ;;
+  126|127)
+    # The remote SHELL, not ssh and not mux: 127 not found, 126 found but not
+    # executable. Almost always mux missing from a non-interactive ssh PATH,
+    # which is its own trap: `~/.local/bin` is on PATH for a login shell
+    # and not for `ssh host mux ...`. Terminal: only a human fixes a PATH,
+    # and latch retried this forever until a live run against a second box
+    # showed it. man 1 mux EXIT STATUS had documented the meaning all along.
+    printf 'refused' ;;
+  255)
+    # ssh's own catch-all. Everything below is the stderr discriminator.
+    #
+    # HOST KEY VERIFICATION WAS GROUPED WITH THE CREDENTIAL REFUSALS, and
+    # that was right about the important half and wrong about one axis. The
+    # finding it came from stands: a live run against a rebuilt host showed
+    # ssh exiting 255 saying nothing resembling "denied", so it classified as
+    # retryable and latch spun forever on something only a human can fix.
+    # What the old reasoning got wrong was "the handling is identical".
+    #
+    # MEASURED, 2026-09-29: the refusal happens during KEY EXCHANGE, before
+    # user authentication. An `ssh -v` trace of a mismatched key contains no
+    # "Offering public key" line at all. So the two differ on the axis that
+    # decides terminality:
+    #
+    #   a credential denial SPENDS an authentication attempt and raises a
+    #   prompt, which is the storm argument, and why it is terminal;
+    #   a host key refusal spends NOTHING, exposes no credential to the
+    #   unverified peer, and fails fast.
+    #
+    # And latch CAN observe this one being fixed, which was the other stated
+    # reason for stopping: the next attempt simply answers, at no cost. So it
+    # is its own state, retried a bounded number of times and then terminal.
+    # Bounded because the two causes are indistinguishable from here (an
+    # interception in the path resolves itself; a rebuilt host does not) and
+    # the asymmetry says to try: the cost of retrying a permanent change is a
+    # short delay before the human is told, and the cost of NOT retrying a
+    # transient one is a roaming attachment that stays dead.
+    # ONE PATTERN, not two. `host key for ... has changed` sits in the same
+    # message as `host key verification failed`, so matching both would make
+    # either one individually unkillable by mutation: the two-guards trap
+    # this suite has now met six times.
+    if _saw 'host key verification'; then
+      printf 'untrusted'
+    elif _saw 'permission denied' || _saw 'authenticat'; then
+      printf 'denied'
+    else
+      printf 'probing'
+    fi ;;
+  4)
+    # NOT READY YET, AND TRY AGAIN. The far side has no server for the partition
+    # asked for, so it has not been set up since it came up, and a pointer its
+    # own `env-ready` declaration names has not arrived. It REFUSED to rebuild
+    # rather than baking that absence into every pane it would create, which
+    # nothing could repair afterwards because an environment is fixed at exec.
+    #
+    # RETRYABLE, AND THE RETRY IS THE WHOLE MECHANISM: each attempt is a new
+    # remote process with a new login shell, so it re-reads the environment
+    # rather than remembering the one it started with. Nothing here has to know
+    # what it is waiting for, which is the point: mux declares the names, the
+    # host decides, and latch only has to keep asking.
+    #
+    # ITS OWN STATE rather than `probing`, because the two are opposite facts
+    # about the host: probing means it cannot be reached, this means it
+    # answered. Reporting the second as the first would send a human to look at
+    # the network.
+    printf 'settling' ;;
+  3)
+    # THE NAME IS NOT KNOWN THERE. mux's standard unknown-name code, and the
+    # ONLY thing consulted for it: this used to be `grep 'no such session'`
+    # on the far side's stderr, which made the WORDING of a message on one
+    # machine load-bearing for a decision on another, and needed a test whose
+    # only job was stopping anyone improving the sentence.
+    #
+    # The string fallback for pre-0.35 remotes is deliberately NOT kept. Two
+    # mechanisms for one fact is two things to test and two ways to drift,
+    # and mux is young enough to prefer a coordinated release. A remote older
+    # than 0.35 answers 1 with its own message, which still reports as
+    # `refused` and still prints what the far side said: worse, but not
+    # silent, and the fix is to upgrade it.
+    printf 'gone' ;;
+  1)
+    # The remote mux refused, for a reason it put on stderr.
+    printf 'refused' ;;
+  *)
+    printf 'unknown' ;;
 esac
 exit 0

@@ -135,15 +135,15 @@ push_palette() {
     mux_conf_clean < "$_f" > "$_ct"
     while read -r _k _v; do
       case $_k in
-      bar) tmux "$@" set -g "@theme-$_name-bar" "$_v" ;;
-      window) tmux "$@" set -g "@theme-$_name-window" "$_v" ;;
-      accent) tmux "$@" set -g "@theme-$_name-accent" "$_v" ;;
-      border) tmux "$@" set -g "@theme-$_name-border" "$_v" ;;
-      select) tmux "$@" set -g "@theme-$_name-select" "$_v" ;;
-      prompt) tmux "$@" set -g "@theme-$_name-prompt" "$_v" ;;
-      *)
-        echo "mux-themes: $_f: bad key: $_k" >&2
-        exit "$MUX_EC_FAIL" ;;
+        bar) tmux "$@" set -g "@theme-$_name-bar" "$_v" ;;
+        window) tmux "$@" set -g "@theme-$_name-window" "$_v" ;;
+        accent) tmux "$@" set -g "@theme-$_name-accent" "$_v" ;;
+        border) tmux "$@" set -g "@theme-$_name-border" "$_v" ;;
+        select) tmux "$@" set -g "@theme-$_name-select" "$_v" ;;
+        prompt) tmux "$@" set -g "@theme-$_name-prompt" "$_v" ;;
+        *)
+          echo "mux-themes: $_f: bad key: $_k" >&2
+          exit "$MUX_EC_FAIL" ;;
       esac
     done <"$_ct"
   done <"$_fl"
@@ -199,59 +199,59 @@ heal() {                # KEY ARGS HASH
 }
 
 case "${1:-}" in
-load)
-  # Ambient server: push honouring $TMUX, stamp under its socket name.
-  _key=$(tmux display-message -p '#{socket_path}' 2>/dev/null || true)
-  _key=${_key##*/}
-  [ -n "$_key" ] || _key=default
-  push_palette
-  stamp_write "$_key" "$(themes_hash)"
-  # After the stamp, never before: a failure here must not cost the
-  # server the palette it just loaded.
-  prune_stamps
-  ;;
-sync)
-  _h=$(themes_hash)
-  # The global partition is addressed as -L global (unambiguous, never
-  # the ambient $TMUX server, which may be another partition's).
-  heal global "-L global" "$_h"
-  # Plus every non-default context server the hook names, each healed only
-  # if it is up.
-  # Line by line: a partition name may contain a space, and splitting it
-  # would heal two servers that do not exist while missing the real one.
-  while IFS= read -r _s; do
-    [ -n "$_s" ] || continue
-    heal "$_s" "-L $_s" "$_h"
-  done <<EOF
+  load)
+    # Ambient server: push honouring $TMUX, stamp under its socket name.
+    _key=$(tmux display-message -p '#{socket_path}' 2>/dev/null || true)
+    _key=${_key##*/}
+    [ -n "$_key" ] || _key=default
+    push_palette
+    stamp_write "$_key" "$(themes_hash)"
+    # After the stamp, never before: a failure here must not cost the
+    # server the palette it just loaded.
+    prune_stamps
+    ;;
+  sync)
+    _h=$(themes_hash)
+    # The global partition is addressed as -L global (unambiguous, never
+    # the ambient $TMUX server, which may be another partition's).
+    heal global "-L global" "$_h"
+    # Plus every non-default context server the hook names, each healed only
+    # if it is up.
+    # Line by line: a partition name may contain a space, and splitting it
+    # would heal two servers that do not exist while missing the real one.
+    while IFS= read -r _s; do
+      [ -n "$_s" ] || continue
+      heal "$_s" "-L $_s" "$_h"
+    done <<EOF
 $(mux_ctx_partitions)
 EOF
-  ;;
-''|list)
-  # Bare `mux themes` LISTS them. It used to print an internal usage
-  # string: a helper's business, not an answer to the obvious question
-  # asked of a verb one character away from `mux theme`.
-  printf 'themes:\n'
-  mux_data_stems themes .theme | tr '\n' ' ' | fold -s -w 70 \
-    | sed -e 's/^/  /' -e 's/[[:space:]]*$//'
-  printf '\n'
-  _d=$(mux_data_find themes defaults '')
-  if [ -n "$_d" ]; then
-    printf 'default: %s' \
-      "$(mux_conf_clean <"$_d" | awk '$1=="default"{print $2;exit}')"
-    _dv=$(mux_conf_clean <"$_d" | awk '$1=="derive"{print $2;exit}')
-    [ -n "$_dv" ] && printf '  (unset themes: %s)' "$_dv"
+    ;;
+  ''|list)
+    # Bare `mux themes` LISTS them. It used to print an internal usage
+    # string: a helper's business, not an answer to the obvious question
+    # asked of a verb one character away from `mux theme`.
+    printf 'themes:\n'
+    mux_data_stems themes .theme | tr '\n' ' ' | fold -s -w 70 \
+      | sed -e 's/^/  /' -e 's/[[:space:]]*$//'
     printf '\n'
-  fi
-  printf 'swatches: mux help colors\n'
-  ;;
-prune)
-  # The same sweep `load` does, on demand. Exposed as a verb for two
-  # reasons: it is the only way to TEST the prune without an ambient
-  # server to hang a load off, and it is the escape hatch for a box that
-  # accumulated stamps before this existed (60 of them, here).
-  prune_stamps
-  ;;
-*)
-  echo "usage: mux themes [load|sync|list|prune]" >&2
-  exit "$MUX_EC_USAGE" ;;
+    _d=$(mux_data_find themes defaults '')
+    if [ -n "$_d" ]; then
+      printf 'default: %s' \
+        "$(mux_conf_clean <"$_d" | awk '$1=="default"{print $2;exit}')"
+      _dv=$(mux_conf_clean <"$_d" | awk '$1=="derive"{print $2;exit}')
+      [ -n "$_dv" ] && printf '  (unset themes: %s)' "$_dv"
+      printf '\n'
+    fi
+    printf 'swatches: mux help colors\n'
+    ;;
+  prune)
+    # The same sweep `load` does, on demand. Exposed as a verb for two
+    # reasons: it is the only way to TEST the prune without an ambient
+    # server to hang a load off, and it is the escape hatch for a box that
+    # accumulated stamps before this existed (60 of them, here).
+    prune_stamps
+    ;;
+  *)
+    echo "usage: mux themes [load|sync|list|prune]" >&2
+    exit "$MUX_EC_USAGE" ;;
 esac

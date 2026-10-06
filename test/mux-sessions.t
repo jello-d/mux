@@ -120,8 +120,8 @@ mux_sess_has "" $K && fail "has: an empty name reads as present"
 # would notice is the `mux resume` after a reboot, exactly when you cannot
 # reconstruct it.
 case "$(mux_sess_file probe)" in
-"$MUX_STATE"/sessions.probe) ;;
-*) fail "the set must live under \$MUX_STATE, got [$(mux_sess_file probe)].
+  "$MUX_STATE"/sessions.probe) ;;
+  *) fail "the set must live under \$MUX_STATE, got [$(mux_sess_file probe)].
 ~/.cache is by definition what anything may delete to reclaim space, and this
 file is unreconstructible." ;;
 esac

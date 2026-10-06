@@ -148,8 +148,8 @@ _o=$(sum --all)
 [ "$(printf '%s\n' "$_o" | grep -c .)" = 1 ] \
   || fail "with no state at all, --all should still answer once: [$_o]"
 case $_o in
-*" none 0") ;;
-*) fail "with no state at all, --all said [$_o]" ;;
+  *" none 0") ;;
+  *) fail "with no state at all, --all said [$_o]" ;;
 esac
 
 # --- THE RUNTIME PATH IS NAMESPACED, AND A READER NEVER MIGRATES ----------
@@ -176,8 +176,8 @@ agent_rec "$_nr/agent-state/global/p1" blocked %1 100 oldsess x
 _no=$(env XDG_RUNTIME_DIR="$_nr" "$HERE/bin/mux" agent-summary global 2>&1) \
   || fail "agent-summary failed over an old-layout runtime dir: [$_no]"
 case $_no in
-'none 0'*) ;;
-*) fail "the summary READ the old runtime path, or adopted it. It must do
+  'none 0'*) ;;
+  *) fail "the summary READ the old runtime path, or adopted it. It must do
 neither: a read-only verb that migrates state takes a snapshot that goes
 stale the moment the old writer moves again. Got [$_no]" ;;
 esac
@@ -221,12 +221,12 @@ _so=$(WATCHED= sum --all --sessions)
 [ -n "$_so" ] || fail "precondition: --sessions answered nothing, so every
 assertion below is about an empty string"
 case $_so in
-*"two words"*) ;;
-*) fail "the session whose name contains a SPACE did not survive, so the
+  *"two words"*) ;;
+  *) fail "the session whose name contains a SPACE did not survive, so the
 session is not last on the line: [$_so]" ;;
 esac
 case $_so in
-*" none "*) fail "a collapsed \`none\` line leaked into --sessions output,
+  *" none "*) fail "a collapsed \`none\` line leaked into --sessions output,
 where the third field is a SESSION NAME: a reader publishes a session called
 \`0\` that does not exist. [$_so]" ;;
 esac

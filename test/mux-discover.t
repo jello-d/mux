@@ -132,12 +132,12 @@ fails no-roots "discovery is off" "$T/elsewhere" go whatever
 fails no-roots-fix "scan <dir>" "$T/elsewhere" go whatever
 _o=$(mux "$T/elsewhere" go whatever) || true
 case $_o in
-*"did you mean"*) fail "suggested a spelling with no map to search" ;;
+  *"did you mean"*) fail "suggested a spelling with no map to search" ;;
 esac
 # It also says the partition is unconfigured, rather than only failing later.
 case $_o in
-*"no config for context 'nomap'"*) ;;
-*) fail "an unconfigured context should say so: [$_o]" ;;
+  *"no config for context 'nomap'"*) ;;
+  *) fail "an unconfigured context should say so: [$_o]" ;;
 esac
 rm -f "$T/conf/config"
 

@@ -55,14 +55,14 @@ _usage() {
 _stop=0 _attach=1
 while [ $# -gt 0 ]; do
   case $1 in
-  -h|--help) _usage; exit "$MUX_EC_OK" ;;
-  --stop) _stop=1; shift ;;
-  # Same name `mux go` uses for the same idea. It is also what makes this verb
-  # testable: the attach needs a terminal, so a suite that could only run the
-  # whole thing could assert nothing about the part that matters.
-  --no-attach) _attach=0; shift ;;
-  *) echo "mux: demo: unknown option: $1" >&2; _usage >&2
-     exit "$MUX_EC_USAGE" ;;
+    -h|--help) _usage; exit "$MUX_EC_OK" ;;
+    --stop) _stop=1; shift ;;
+    # Same name `mux go` uses for the same idea. It is also what makes this verb
+    # testable: the attach needs a terminal, so a suite that could only run the
+    # whole thing could assert nothing about the part that matters.
+    --no-attach) _attach=0; shift ;;
+    *) echo "mux: demo: unknown option: $1" >&2; _usage >&2
+       exit "$MUX_EC_USAGE" ;;
   esac
 done
 
@@ -85,7 +85,7 @@ if [ "$_stop" -eq 1 ]; then
   # `mux agent-doctor` on the demo socket report findings about a demo nobody
   # is running.
   case $_statedir in
-  */mux/agent-state/"$SOCK") rm -rf "$_statedir" 2>/dev/null || true ;;
+    */mux/agent-state/"$SOCK") rm -rf "$_statedir" 2>/dev/null || true ;;
   esac
   exit "$MUX_EC_OK"
 fi

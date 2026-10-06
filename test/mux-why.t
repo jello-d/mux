@@ -47,13 +47,13 @@ run() {
 }
 has() {  # OUTPUT WANT LABEL
   case "$1" in
-  *"$2"*) ;;
-  *) fail "$3: want [$2] in: $1" ;;
+    *"$2"*) ;;
+    *) fail "$3: want [$2] in: $1" ;;
   esac
 }
 no_has() {
   case "$1" in
-  *"$2"*) fail "$3: did NOT want [$2] in: $1" ;;
+    *"$2"*) fail "$3: did NOT want [$2] in: $1" ;;
   esac
 }
 # One field's line. `where` legitimately says "the project you are in" on every
@@ -116,8 +116,8 @@ rm -f "$T/conf/profiles"
 _o=$(run "$T" why "$T/src/solo"); _r=$(line "$_o" root)
 has "$_r" "the path you gave" "path: provenance"
 case "$_o" in
-*"name      solo"*) ;;
-*) fail "path: name not derived to the basename: $_o" ;;
+  *"name      solo"*) ;;
+  *) fail "path: name not derived to the basename: $_o" ;;
 esac
 
 # --- a bare `mux why` still answers about where you are standing -----------
