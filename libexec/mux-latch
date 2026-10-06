@@ -294,6 +294,10 @@ UNTRUSTED_TRIES=${MUX_LATCH_UNTRUSTED_TRIES:-4}
 # Above any sane connect timeout (the shipped transport uses 10s), because an
 # attempt that merely timed out reached nothing and must not reset anything.
 PROGRESS=${MUX_LATCH_PROGRESS:-30}
+# Below this an attempt was not long enough to have looked like a hang, and
+# tagging every one-second failure with "(1s)" trains the eye to skip the
+# field. Not a seam: nobody needs to tune when a duration is worth printing.
+REPORT_ELAPSED_S=20
 SLEEP=${MUX_LATCH_SLEEP:-sleep}
 
 _usage() {
@@ -1108,7 +1112,8 @@ while :; do
     # Only when it was long enough to have looked like a hang. Tagging
     # every one-second failure with "(1s)" is noise that trains the eye
     # to skip the field.
-    [ "$_el" -ge 20 ] && _took=" after $((_el / 60))m$((_el % 60))s"
+    [ "$_el" -ge "$REPORT_ELAPSED_S" ] \
+      && _took=" after $((_el / 60))m$((_el % 60))s"
     # AND PROGRESS RESETS THE BACKOFF. Without this `_delay` is a
     # RATCHET: it is set once and only ever doubled, so the first
     # disruption in a latch's life pins it at BACKOFF_MAX for the

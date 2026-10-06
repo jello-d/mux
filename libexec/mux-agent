@@ -40,6 +40,11 @@ _lib=$_libexec/../lib
   || { echo "mux: $_lib/mux-exit_lib missing" >&2; exit 1; }
 # shellcheck source=/dev/null
 . "$_lib/mux-exit_lib"
+
+# How long `mux agent wait` blocks when the caller gives no -t. Named rather
+# than inline because it is the one bound a caller inherits without asking
+# for it; `-t` overrides, and 0 is refused.
+MUX_AGENT_WAIT_DEFAULT=${MUX_AGENT_WAIT_DEFAULT:-300}
 # mux-conf_lib FIRST: mux-context_lib reads $MUX_DIR/config through
 # mux_conf_clean, and says so in its own header.
 . "$_lib/mux-conf_lib"
@@ -328,7 +333,7 @@ if [ "$_verb" = wait ]; then
   #
   # ALWAYS BOUNDED. An unbounded wait from an agent is a hang with no
   # operator, so -t has a default rather than meaning forever.
-  _wt=300
+  _wt=$MUX_AGENT_WAIT_DEFAULT
   _wpart=
   _wsess=
   _want=
