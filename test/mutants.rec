@@ -4045,3 +4045,16 @@ t mux-conf
 - /^[[:space:]]*$/d'
 + s/^//'
 m blanks: got
+= args-attach-only-not-gated
+f bin/mux
+t mux-args
+-     echo "mux: --attach-only is only for go" >&2; usage; } ;;
++     : ; } ;;
+m attachonly-gate
+
+= args-no-wait-env-not-gated
+f bin/mux
+t mux-args
+-     echo "mux: --no-wait-env is only for resume" >&2; usage; } ;;
++     : ; } ;;
+m nowaitenv-gate

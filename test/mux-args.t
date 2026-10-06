@@ -89,10 +89,60 @@ no resume-part   "no such partition"            resume nosuchpartition::
 no resume-flag   "--resume is only for go"   resume --resume
 no resume-flag2  "--resume is only for go"   new --resume lay5
 no list-gate     "--list is only for resume" kill --list lay4
+# These two shipped UNGATED and were found by the class audit at the bottom of
+# this file; the per-flag cases are here so each arm is individually killable,
+# where the audit only sees a flag with no gate at all.
+no attachonly-gate "--attach-only is only for go"    kill --attach-only lay4
+no nowaitenv-gate  "--no-wait-env is only for resume" kill --no-wait-env lay4
 
 # The flag itself still works, in either position: the old behaviour did not
 # go away with the verb, it just has one spelling now.
 ok go-resume-after  go --resume lay4
 ok go-resume-before --resume go lay4
+
+# --- EVERY FLAG THAT SETS A VARIABLE MUST HAVE A PER-VERB GATE -------------
+# Asked as a CLASS rather than per flag, which is the only version that can
+# catch the regression that matters: a flag added to the option loop and
+# never gated parses on every verb and is then silently IGNORED, and no
+# mutation record can see a MISSING arm. That is the defect this package
+# already records for `mux agent status --all` (assigned, set by the flag,
+# never read): a flag that parses and does nothing is worse than a missing
+# one, because the caller believes it asked for something.
+#
+# IT FOUND TWO ON ITS FIRST RUN, 2026-10-05: `--attach-only` and
+# `--no-wait-env`. Measured, `mux kill --attach-only x` and
+# `mux ls --no-wait-env` were both accepted in silence while the identical
+# `mux kill --persist x` was refused. The sharpest was --no-wait-env, whose
+# whole purpose is to override the readiness wait: typed on `go` it did
+# nothing and said nothing, which reads as the override being broken.
+#
+# BOTH LISTS COME OUT OF THE SOURCE. A second copy here would drift in
+# exactly the direction this is checking for, which is what `mux check`
+# learned about its own key list.
+_flags=$(awk '/^while \[ "\$#" -gt 0 \]; do/{p=1} p && /^  esac$/{p=0}
+ p && /^    -/ && /=1; shift ;;/ {
+   match($0, /^    [^)]*\)/); a=substr($0, 5, RLENGTH-5)
+   split(a, f, "|"); print f[1] }' "$HERE/bin/mux" | sort -u)
+_gated=$(sed -n 's/.*"mux: \(--[a-z-]*\) is only for.*/\1/p' "$HERE/bin/mux" \
+  | sort -u)
+# VACUITY FIRST: a scrape that matched nothing would make the comparison
+# below pass about the empty set, for ever.
+[ "$(printf '%s\n' "$_flags" | grep -c .)" -ge 8 ] \
+  || fail "the flag scrape found $(printf '%s\n' "$_flags" | grep -c .) flags,
+which cannot be right: the option loop has carried at least eight that set a
+variable since 0.56. The scrape has stopped matching the loop's shape."
+# A GENUINELY UNIVERSAL FLAG WOULD GO HERE, with its reason, and there are
+# none today: every flag the loop records is verb-specific. `-h`, `-V` and
+# `--` are not in the list at all, because they act and exit rather than
+# setting a variable for a verb to read.
+_ungated=
+for _f in $_flags; do
+  printf '%s\n' "$_gated" | grep -qxF -- "$_f" || _ungated="$_ungated $_f"
+done
+[ -z "$_ungated" ] || fail "flag(s) with no per-verb gate:$_ungated
+Each parses on EVERY verb and is then silently ignored, so a caller that
+typed it believes it asked for something. Add a \`case \$cmd in\` block
+beside the others naming the verb(s) it applies to, or if it is genuinely
+universal, say so in this test with the reason."
 
 pass
