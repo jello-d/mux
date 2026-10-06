@@ -4006,3 +4006,15 @@ t mux-geometry
 -       "${_wh##* }" ;;
 +       "${_wh%% *}" ;;
 m did not carry the window size
+= bottom-built-at-the-min
+f bin/mux
+t mux-default-layout
+-       tm split-window -v -f -l "$b_max" -t "$name:$win" -c "$root"
++       tm split-window -v -f -l "$b_min" -t "$name:$win" -c "$root"
+m not built at the spec's MAX
+= bottom-command-dropped
+f bin/mux
+t mux-profile
+-         -c "$root" "$bproc"
++         -c "$root"
+m command never reached tmux

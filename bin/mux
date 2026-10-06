@@ -1774,12 +1774,25 @@ while read -r verb rest; do
     # command runs as the pane's process; with none it is a shell.
     bproc=
     [ -n "$b_cmd" ] && bproc=$(pane_process "$b_cmd")
+    # THE TWO ARMS WRAP DIFFERENTLY ON PURPOSE, and this is not a style
+    # choice to harmonise away: wrapped identically they were the SAME LINE
+    # TWICE, each ending in a continuation, so the height that reaches tmux
+    # could not be a mutation anchor at all (the corpus refuses a target
+    # that is ambiguous OR a line continuation, and this was both). The
+    # `else` arm is one line now, which is what `bottom-built-at-the-min`
+    # anchors on.
+    #
+    # THE COLLAPSE WAS THE OTHER OPTION AND WAS REFUSED. `set -- -v -f -l
+    # "$b_max" ...` then one call reads better and is MEASURABLY safe today
+    # (nothing after this loop reads the script's positionals), but it
+    # mutates the SCRIPT's `$@` from the middle of the build path to buy a
+    # local convenience, and "nothing reads them later" is a whole-file
+    # property that rots the first time somebody appends a line.
     if [ -n "$bproc" ]; then
-      tm split-window -v -f -l "$b_max" \
-        -t "$name:$win" -c "$root" "$bproc"
+      tm split-window -v -f -l "$b_max" -t "$name:$win" \
+        -c "$root" "$bproc"
     else
-      tm split-window -v -f -l "$b_max" \
-        -t "$name:$win" -c "$root"
+      tm split-window -v -f -l "$b_max" -t "$name:$win" -c "$root"
     fi
     bpane=$(tm display-message -p -t "$name:$win" '#{pane_id}')
     tm set-option -p -t "$bpane" @mux-bottom "$b_min-$b_max"

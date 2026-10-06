@@ -59,6 +59,31 @@ has named-window 'new-session -d -s named -n solo'
 grep -q 'split-window -v -f' "$TMUXLOG" \
   && fail "named: the solo layout has no bottom, one was built anyway"
 
+# --- a bottom may carry a COMMAND, and both halves reach tmux --------------
+# `bottom MIN-MAX [CMD]` is the one build arm nothing exercised: every shipped
+# layout declares a bare `bottom 5-10`, so the arm that appends a command had
+# no fixture, and the height it uses had no assertion either. Both were
+# measured as gaps while the build machinery moved into lib/mux-build_lib
+# (2026-10-05), and they are the same gap: which end of the range reaches
+# tmux, and whether the command does.
+#
+# NOT A HYPOTHETICAL DIRECTIVE. `mux save` WRITES this form, because
+# emit_window reads the bottom pane's running command and emits
+# `bottom <spec> <cmd>` whenever it is not a shell, so a round trip through
+# save produces it. (The man page describes a bottom as a "shell pane" and
+# says nothing about the command, which is a separate finding.)
+printf 'window logs\npane\nbottom  4-9 tail -F /dev/null\n' \
+  >"$T/conf/layouts/withcmd.layout"
+printf 'layout  withcmd\nroot    %s\n' "$T/proj" \
+  >"$T/conf/profiles.d/withcmd.profile"
+go withcmd >/dev/null || fail "a bottom with a command should build"
+has withcmd-max 'split-window -v -f -l 9 '
+case "$(grep 'split-window -v -f' "$TMUXLOG")" in
+*'tail -F /dev/null'*) ;;
+*) fail "the bottom's command never reached tmux: [$(grep 'split-window -v -f' \
+  "$TMUXLOG")]" ;;
+esac
+
 # --- the split is enforced BOTH ways ---------------------------------------
 printf 'window nope\npane\n' >"$T/conf/profiles.d/inprofile.profile"
 fails arrangement-in-profile "belongs in a layout, not a profile" inprofile
