@@ -29,7 +29,7 @@ class Mux < Formula
   # the suite red instead of leaving Homebrew users on an old mux forever.
   url "https://github.com/jello-d/mux.git",
       tag:      "v0.86",
-      revision: "e53666258f2780b25f0f4eed6d4b3acbd0914add"
+      revision: "f1255db71a5c536f7f27282285341468cb25cde2"
   license "Apache-2.0"
   head "https://github.com/jello-d/mux.git", branch: "main"
 
