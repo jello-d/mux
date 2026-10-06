@@ -4000,3 +4000,9 @@ t mux-save
 + . "$MUX_LIB/mux-save_lib"; if [ -r "$_ctx_lib" ]; then . "$_ctx_lib"
 m sourced EAGERLY and every verb
 
+= geometry-in-tmux-reads-the-width-as-the-height
+f lib/mux-build_lib
+t mux-geometry
+-       "${_wh##* }" ;;
++       "${_wh%% *}" ;;
+m did not carry the window size

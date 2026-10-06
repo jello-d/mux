@@ -49,6 +49,16 @@ grep -q 'new-session -d -s proj -n main' "$TMUXLOG" \
   || fail "no new-session for the default layout (see $TMUXLOG)"
 grep -q 'split-window -v -f' "$TMUXLOG" \
   || fail "the default layout built no bottom pane"
+# AND AT THE HEIGHT THE SPEC NAMES. `bottom 5-10` means 5 minimum, 10 at
+# build, and the build uses the MAX: nothing asserted which end of that range
+# reached tmux, so a `bottom_spec` that answered 5 (or the whole `5-10`
+# string) built a differently shaped session and every check still passed.
+# Measured as a gap while moving that function into lib/mux-build_lib, which
+# carried no mutation record of any kind.
+grep -q 'split-window -v -f -l 10 ' "$TMUXLOG" \
+  || fail "the bottom pane was not built at the spec's MAX (10 rows). The
+shipped default declares \`bottom 5-10\`, so bottom_spec must answer b_max=10;
+the build log says: $(grep 'split-window' "$TMUXLOG")"
 grep -q 'attach-session -t =proj' "$TMUXLOG" \
   || fail "mux did not attach the session it built"
 

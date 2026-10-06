@@ -1153,259 +1153,25 @@ hide|show)
   ;;
 esac
 
-# Attach a fresh client, or switch THIS client's view if we are genuinely inside
-# a live client on the same socket. $TMUX alone is NOT a safe test: it (and
-# TMUX_PANE) LEAK into any terminal spawned from within a pane: a kitty opened
-# from a tmux pane inherits them though it is not a tmux client. Acting on
-# that stale value made `mux go X` run switch-client and HIJACK a different
-# window instead of attaching this one (the same trap the session watcher dodges
-# by scrubbing $TMUX before it launches a restored window). The reliable signal:
-# a real in-pane shell's controlling tty IS that pane's tty; a leaked one's is
-# not. Across sockets switch-client cannot reach either, so we attach there too.
-# Record this session in the set. Done HERE rather than only after a build
-# because every path that lands you in a session funnels through mux_attach, so
-# recording is idempotent AND heals a set that predates the feature or a session
-# made with raw tmux. --no-attach still records (it built the thing), it just
-# does not take you there.
-_attach_record() {
-  _sr=${root:-}
-  [ -n "$_sr" ] || _sr=$(tm list-sessions \
-    -F '#{session_name} #{session_path}' 2>/dev/null \
-    | awk -v n="$name" '$1==n{sub(/^[^ ]* /,""); print; exit}')
-  mux_sess_add "$name" "$_sr" "$part"
-}
-
-# Are we genuinely inside a live tmux pane?
+# --- the session BUILD machinery -------------------------------------------
+# ATTACH, THE PROFILE READER AND THE PANE VOCABULARY ARE lib/mux-build_lib
+# (2026-10-05): 312 lines that `go`, `new` and `resume` all share, plus the
+# geometry a session is built at. Its header says why it is a sourced lib,
+# names the ten values from this file it reads and the three functions of
+# this file it calls.
 #
-# $TMUX alone cannot answer this: it and TMUX_PANE LEAK into any terminal
-# spawned from a pane, so a kitty opened from tmux claims to be inside one. The
-# reliable signal is that a real in-pane shell's controlling tty IS that pane's
-# tty.
-#
-# A SEPARATE question from "is the target on my socket", and keeping them
-# separate is the whole point. This test used to be nested inside the socket
-# comparison, so a CROSS-socket target skipped it, fell through to the
-# fresh-attach path, and that path deliberately unsets $TMUX, which is exactly
-# what defeats tmux's own "sessions should be nested with care" guard. Result: a
-# session nested in a pane. Rare when the only other socket was a work one you
-# seldom crossed; routine the moment the personal partition got a socket name of
-# its own.
-_attach_in_pane() {
-  [ -n "${TMUX:-}" ] && [ -n "${TMUX_PANE:-}" ] || return 1
-  _mytty=$(tty 2>/dev/null || true)
-  _panetty=$(tmux display-message -pt "$TMUX_PANE" \
-    '#{pane_tty}' 2>/dev/null || true)
-  [ -n "$_mytty" ] && [ "$_mytty" = "$_panetty" ]
-}
-
-# Attach a fresh client, or switch THIS client's view when we are genuinely
-# inside a live client on the same socket. Across sockets switch-client cannot
-# reach either way, so from outside a pane we attach and from inside we refuse.
-mux_attach() {
-  _attach_record
-  if [ "$noattach" -eq 1 ]; then return 0; fi
-  # WIRED BEFORE THE exec, since every branch below replaces this process and
-  # nothing after them runs. An attach is one of the two moments mux is
-  # entitled to an opinion about a server it may not have created.
-  mux_wire || true
-  # THE ATTACH IS BOTH THE DAMAGE AND THE OPPORTUNITY:
-  # `update-environment` has just copied this client environment into
-  # the session, removals included, so this is the moment to put back
-  # what it took. Before the exec, since every branch below replaces
-  # this process.
-  mux_env_ensure "$name" || true
-  cur=${TMUX:-}                   # our client, if any: socket,pid,session
-  cur=${cur%%,*}                  # -> just the socket path
-  if _attach_in_pane; then
-    if [ "${cur##*/}" = "${sock:-default}" ]; then
-      # Same socket: switch this client's view. exec the real
-      # tmux, not tm() (exec needs a binary), so mux is
-      # replaced by the client rather than lingering.
-      if [ -n "$sock" ]; then
-        exec tmux -L "$sock" switch-client -t "=$name"
-      fi
-      exec tmux switch-client -t "=$name"
-    fi
-    # Different socket, and switch-client cannot cross one. The only
-    # other move is a fresh attach, which from inside a pane NESTS,
-    # so refuse and say how. Partitions are isolated on purpose;
-    # reaching across one is a thing to do deliberately, from
-    # outside.
-    echo "mux: '$name' is in partition" \
-      "'${sock:-default}', you are in" \
-      "'${cur##*/}'" >&2
-    echo "mux: attaching would nest a session inside this pane." \
-      "Detach first (prefix d)," >&2
-    echo "mux: then:  mux go $name" >&2
-    exit 1
-  fi
-
-  # Not in a pane. Any $TMUX here is LEAKED (a terminal spawned from one),
-  # and tmux would refuse to attach with it set, so scrub it. exec
-  # replaces mux, so the unset only affects the client.
-  unset TMUX
-  if [ -n "$sock" ]; then
-    exec tmux -L "$sock" attach-session -t "=$name"
-  fi
-  exec tmux attach-session -t "=$name"
-}
-
-# Expand a leading tilde without eval.
-expand_tilde() {
-  case $1 in
-    "~") printf '%s' "$HOME" ;;
-    "~/"*) printf '%s' "$HOME/${1#\~/}" ;;
-    *) printf '%s' "$1" ;;
-  esac
-}
-
-# Agent PROFILES make the "agent pane" pluggable, and are the ONE Claude
-# coupling in the front end, now behind a file, so another CLI (gemini, codex)
-# is just a profile and mux can run with no Claude at all. A profile is data in
-# agents/<name>.agent: a `go` line and a `resume` line, each a shell command.
-# `mux go` runs the agent's `go` (continue the recent conversation), `mux
-# resume` its `resume` (pick one), --bare runs neither (a plain shell). Claude
-# is the default; a layout selects another with `agent <name>`. Resolved
-# through the shared overlay rule like every other data kind, so a profile in
-# $MUX_DIR/agents overrides its shipped twin and `mux help agents` lists
-# exactly what a pane can actually run.
-_find_agent() {   # <name>
-  mux_data_find agents "$1" .agent
-}
-
-# Which of the agent profile's lines to run. `new` builds a session exactly as
-# `go` does (it only differs in having bound a name first), so it takes go's.
-agent_verb=go
-# $resume, not `cmd = resume`: `resume` is now the session-rebuild VERB, so the
-# flag has to be read from the flag.
-[ "$resume" -eq 1 ] && agent_verb=resume
-
-# agent_launch NAME -> the command NAME's pane runs for THIS verb (go/resume),
-# empty under --bare. An unknown agent (no profile) fails loud.
-agent_launch() {
-  _af=$(_find_agent "$1")
-  [ -n "$_af" ] || {
-    echo "mux: unknown agent: $1 (see: mux help agents)" >&2
-    exit 1; }
-  [ "$bare" -eq 1 ] && return 0
-  mux_conf_clean < "$_af" \
-    | awk -v v="$agent_verb" \
-      '$1==v{sub("^"v"[ \t]+","");print;exit}'
-}
-
-# shape_cmd TOKEN -> a pane's actual command. `agent` is the session's agent
-# (active_agent, resolved from the layout); a token that names a profile is that
-# agent (so `pane claude` still shapes to its go cmd); else run literally.
-shape_cmd() {
-  case $1 in
-  agent) agent_launch "$active_agent" ;;
-  *)     if [ -n "$(_find_agent "$1")" ]; then agent_launch "$1"
-         else printf '%s' "$1"; fi ;;
-  esac
-}
-
-# The process a pane runs: the (reshaped) command, then an interactive shell so
-# the pane drops back to a prompt when the command exits: the behaviour
-# send-keys gave, but run AS the pane's own process, so nothing is typed into a
-# starting shell and it cannot race the rc. An empty command (--bare claude) is
-# just the shell.
-pane_process() {
-  _c=$(shape_cmd "$1")
-  if [ -n "$_c" ]; then
-    printf '%s; exec "${SHELL:-/bin/sh}"' "$_c"
-  else
-    printf 'exec "${SHELL:-/bin/sh}"'
-  fi
-}
-
-# Flatten a PROFILE and the LAYOUT it names into one directive stream: the
-# profile's own lines, then the layout's window/pane/bottom lines. Two files,
-# one level, no recursion: a profile names a layout, a layout names nothing.
-#
-# This replaced a recursive `include` with a depth cap, a visited-path set and
-# cycle detection. That machinery existed to support composition that never
-# happened: every layout in the wild held the single line `include shapes/code`.
-# A profile that declares `layout code` says the same thing without a splice.
-expand_profile() {      # PROFILE_PATH [LABEL]
-  # Normalize via mux_conf_clean (the single comment/whitespace/CRLF
-  # rule), then read from a FILE: a bad layout name must exit the whole
-  # run, which a pipe's subshell would swallow. Every surviving line is a
-  # directive, so no comment/blank case is needed here.
-  _cl=$(mktemp) || { echo "mux: mktemp failed" >&2; exit 1; }
-  # Pass A: the profile's own directives. It is the only place that knows
-  # which FILE a line came from, so it is where the split is enforced:
-  # identity and appearance here, arrangement in the layout, and a line in
-  # the wrong file says so rather than half-working.
-  mux_conf_clean < "$1" > "$_cl"
-  _want_layout=
-  while read -r _verb _rest; do
-    case $_verb in
-    layout) _want_layout=$_rest ;;
-    window|pane|bottom)
-      echo "mux: '$_verb' belongs in a layout, not a" \
-        "profile: ${2:-$1}" >&2
-      echo "mux: put the arrangement in a .layout and" \
-        "name it with 'layout <name>'" >&2
-      rm -f "$_cl"; exit 1 ;;
-    *)      printf '%s\n' "$_verb${_rest:+ $_rest}" ;;
-    esac
-  done <"$_cl"
-  # No `layout` line: the context's default arrangement, then mux's own.
-  # So a profile can be nothing but a theme or a root and still build a
-  # whole session, and a context can change what "nothing" means.
-  _dfl=${MUX_CFG_layout:-default}
-  _lf=$(mux_data_find layouts "${_want_layout:-$_dfl}" .layout)
-  [ -n "$_lf" ] || {
-    echo "mux: no layout: ${_want_layout:-$_dfl}" \
-      "(see: mux help layouts)" >&2
-    rm -f "$_cl"; exit 1
-  }
-  # Pass B: the layout's arrangement.
-  mux_conf_clean < "$_lf" > "$_cl"
-  while read -r _verb _rest; do
-    case $_verb in
-    root|theme|agent|notify|layout)
-      echo "mux: '$_verb' belongs in a profile, not a" \
-        "layout: $_lf" >&2
-      rm -f "$_cl"; exit 1 ;;
-    *)      printf '%s\n' "$_verb${_rest:+ $_rest}" ;;
-    esac
-  done <"$_cl"
-  rm -f "$_cl"
-}
-
-# Split a `bottom` argument into b_min/b_max (the size bounds) and b_cmd (the
-# optional command), or print a message and return 1 on a malformed spec. Used
-# by both the validate and the build pass, so the parse lives in one place.
-bottom_spec() {         # ARG
-  b_min=; b_max=; b_cmd=
-  _spec=${1%% *}
-  case $_spec in
-  *-*)
-    b_min=${_spec%%-*}
-    b_max=${_spec##*-}
-    [ "$_spec" = "$b_min-$b_max" ] || {
-      echo "mux: 'bottom' wants N or MIN-MAX: $1" >&2
-      return 1
-    }
-    ;;
-  *)
-    b_min=$_spec
-    b_max=$_spec
-    ;;
-  esac
-  case $b_min in ''|*[!0-9]*)
-    echo "mux: 'bottom' wants N or MIN-MAX: $1" >&2; return 1 ;;
-  esac
-  case $b_max in ''|*[!0-9]*)
-    echo "mux: 'bottom' wants N or MIN-MAX: $1" >&2; return 1 ;;
-  esac
-  [ "$b_min" -le "$b_max" ] || {
-    echo "mux: 'bottom' min above max: $_spec" >&2; return 1; }
-  b_cmd=${1#"$_spec"}
-  b_cmd=${b_cmd# }
-  return 0
-}
+# SOURCED HERE, UNCONDITIONALLY, which is the whole ordering argument: a
+# function is defined when the shell reaches it either way, so sourcing at
+# the point these definitions used to sit makes availability identical to
+# before by construction, with no verb list to keep correct. The saving is
+# still real, because every verb that exits ABOVE this line never reads it:
+# ls, reload, theme, why, edit and save, plus every hot path, which leaves
+# at the early exec dispatch far above.
+[ -r "$MUX_LIB/mux-build_lib" ] || {
+  echo "mux: mux-build_lib missing (incomplete install)" >&2
+  exit 1; }
+# shellcheck source=/dev/null
+. "$MUX_LIB/mux-build_lib"
 
 # --- kill --all: tear down every session on the current socket -------------
 # No name, and it hits the whole context (personal OR work: whichever socket
@@ -2104,65 +1870,9 @@ fi
 
 # Pass 2: build. Everything is validated, so this only executes; using the
 # now-final root for every pane's -c, wherever root sat in the source.
-# The geometry a session is BUILT at, as `-x W -y H` for new-session, or empty
-# when no terminal can be asked (a hook, a cron job, a headless script).
-#
-# tmux builds a detached session at `default-size`, which is 80x24. Every split
-# below is then sized against 24 rows (a `bottom 5-10` pane takes 10 of them,
-# 42% of the window), and when the session is finally shown at a real terminal
-# size tmux rescales every pane PROPORTIONALLY. A 10-row bottom becomes 22.
-#
-# `mux pin` exists to undo exactly that, but it only runs from the
-# client-attached and client-resized hooks. Neither fires when an ALREADY
-# attached client switches to a session built detached, which is what `mux go
-# NAME` does from inside a session and what every session but the first gets
-# after `mux resume`. So the layout stayed at its rescaled proportions until
-# something forced a re-pin by hand.
-#
-# Building at the right size means there is no rescale to undo.
-_session_geometry() {
-  # Inside tmux the current window's size is EXACT: tmux has already
-  # subtracted this client's status lines, so no guessing is needed.
-  if [ -n "${TMUX:-}" ]; then
-    _wh=$(tmux display-message \
-      -p '#{window_width} #{window_height}' \
-      2>/dev/null || true)
-    case $_wh in
-    [0-9]*' '[0-9]*) printf -- '-x %s -y %s' "${_wh%% *}" \
-      "${_wh##* }" ;;
-    esac
-    return 0
-  fi
-  # Outside it, ask the terminal. stty reports "rows cols" and needs a
-  # tty on its INPUT, which mux's stdin may not be: /dev/tty is the
-  # controlling terminal regardless of redirection.
-  # 2>/dev/null comes FIRST, and that ordering is the whole point:
-  # redirections are applied left to right, so with </dev/tty first the
-  # OPEN is what fails, and it fails while stderr is still the terminal.
-  # The shell then prints "cannot open /dev/tty" itself: stty never
-  # runs, so stty's own 2>/dev/null never covers it. Any context without
-  # a controlling terminal (a cron job, a systemd unit, the test suite)
-  # got a spurious error on a path that is designed to fall through.
-  _sz=$(stty size 2>/dev/null </dev/tty || true)
-  case $_sz in
-  [0-9]*' '[0-9]*) ;;
-  *) return 0 ;;
-  esac
-  _rows=${_sz%% *}; _cols=${_sz##* }
-  # A status line costs the window a row; tmux subtracts it on attach, so
-  # subtract it here too or the session is built one row too tall and
-  # rescales by that row. `status` is on/off or a count.
-  _st=$(tm show-options -gv status 2>/dev/null || echo on)
-  case $_st in
-  off) _st=0 ;;
-  on)  _st=1 ;;
-  [0-9]) ;;
-  *)   _st=1 ;;
-  esac
-  _rows=$((_rows - _st))
-  [ "$_rows" -ge 4 ] || return 0        # implausible; let tmux decide
-  printf -- '-x %s -y %s' "$_cols" "$_rows"
-}
+# The geometry a session is BUILT at (`-x W -y H`, or empty with no
+# terminal to ask) lives in lib/mux-build_lib with the rest of the build,
+# sourced below. Its header carries the rescale story that made it exist.
 _geom=$(_session_geometry)
 
 have_session=0
@@ -2172,6 +1882,9 @@ agentwin=
 agentpane=
 win=
 paneseen=0
+# bottom_spec ANSWERS in b_min/b_max/b_cmd, because POSIX sh cannot return
+# three fields; its arm below reads all three. See mux-build_lib's header.
+# shellcheck disable=SC2154
 while read -r verb rest; do
   case $verb in
   window)
