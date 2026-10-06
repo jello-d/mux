@@ -4281,3 +4281,66 @@ t mux-session-names
 -     *"$MUX_EXCL_NL$2$MUX_EXCL_NL"*) return 0 ;;
 +     *"$2"*) return 0 ;;
 m was hidden by 'my project'
+
+= views-side-ignores-the-status-line
+f lib/mux-views_lib
+t mux-views
+-   _eh=$((MUX_VIEW_CH - MUX_VIEW_ST))
++   _eh=$((MUX_VIEW_CH ))
+m fit: wrong colour
+
+= views-tension-counts-the-whole-server
+f lib/mux-views_lib
+t mux-views
+-   [ -n "${MUX_VIEW_SESS:-}" ] || { mux_view_sizes; return 0; }
++   [ -z "${MUX_VIEW_SESS:-}" ] || { mux_view_sizes; return 0; }
+m ANOTHER session read as tension
+
+= views-sizes-counts-clients-not-sizes
+f lib/mux-views_lib
+t mux-views
+-   mux_view_clients | awk '{print $2}' | LC_ALL=C sort -u | grep . || true
++   mux_view_clients | awk '{print $2}' | LC_ALL=C sort | grep . || true
+m counted by CLIENT rather than by distinct SIZE
+
+= views-glyph-ignores-the-mode
+f lib/mux-views_lib
+t mux-views
+-     floor) printf '\342\224\273' ;;   # U+253B  heavy bar below, stem up
++     xxxx) printf '\342\224\273' ;;   # U+253B  heavy bar below, stem up
+m wants ┻
+
+= views-chip-has-no-alarm
+f lib/mux-views_lib
+t mux-views
+-     clipped) _vs='#[fg=colour226,bg=colour202,bold]' ;;
++     xxxxxxx) _vs='#[fg=colour226,bg=colour202,bold]' ;;
+m must wear the caution colour
+
+= views-socket-override-is-overwritten
+f libexec/mux-views
+t mux-views
+-     MUX_VIEW_SOCKET=$MUX_CTX_PARTITION
++     MUX_VIEW_SOCKET=global
+m did not address its own partition's socket
+
+= views-next-skips-floor
+f libexec/mux-views
+t mux-views
+-       auto)  _nx=floor ;;
++       auto)  _nx=ceil ;;
+m next from auto should reach floor
+
+= views-detach-takes-an-unknown-client
+f libexec/mux-views
+t mux-views
+-     mux_view_clients | awk '{print $1}' | grep -qxF -- "$2" || {
++     mux_view_clients | awk '{print $1}' | true || {
+m detaching an unknown client succeeded
+
+= views-floor-sets-the-wrong-tmux-name
+f lib/mux-views_lib
+t mux-views
+-     floor) _wz=smallest ;;
++     floor) _wz=largest ;;
+m did not set smallest

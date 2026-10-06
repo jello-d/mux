@@ -56,6 +56,20 @@ calm() { printf '/dev/pts/0 161x64 alpha 100\n/dev/pts/1 161x56 bravo 100\n' \
 # which window-size decides anything.
 tense() { printf '/dev/pts/0 161x64 alpha 100\n/dev/pts/1 161x56 alpha 100\n' \
   >"$CLIENTS"; }
+# agree: THREE clients on one session, all the SAME size. The case this file's
+# own heading claimed and the fixtures never built: both of the two above hold
+# differently-sized clients, so "tension is the set of SIZES, not the number of
+# clients" was an intent nothing implemented, and counting clients instead of
+# distinct sizes passed every assertion here.
+#
+# THREE printfs, NOT one with a line continuation: a `\` inside the format
+# puts a literal backslash and a newline into the file, which the reader takes
+# as a fourth, malformed client. Cost one confusing run.
+agree() {
+  { printf '/dev/pts/0 161x64 alpha 100\n'
+    printf '/dev/pts/1 161x64 alpha 100\n'
+    printf '/dev/pts/2 161x64 alpha 100\n'; } >"$CLIENTS"
+}
 
 views() {
   env -u TMUX -u MUX_SHARE PATH="$T/bin:$PATH" MUX_DIR="$T/conf" \
@@ -70,6 +84,18 @@ calm
 _o=$(views); has "$_o" "2 sizes attached" "server-wide sizes not reported"
 tense
 _o=$(views); has "$_o" "2 sizes attached" "server-wide sizes not reported"
+# THREE CLIENTS THAT AGREE ARE ONE SIZE, so the report says so and the chip is
+# calm: nothing contends, and window-size has no second opinion to reconcile.
+# Asserted on BOTH, because counting clients makes the report read `3` while
+# the chip independently reads tense, and either alone is the bug.
+agree
+_o=$(views); has "$_o" "no tension: every client is 161x64" \
+  "three agreeing clients read as tension, so the set is being counted by \
+CLIENT rather than by distinct SIZE"
+[ "$(views --chip /dev/pts/0 | grep -o 'fg=colour[0-9]*' | head -1)" \
+  = "fg=colour240" ] \
+  || fail "three clients of the SAME size read as tension; there is nothing \
+for window-size to decide between them"
 
 # --- the chip is ALWAYS drawn ----------------------------------------------
 # Fixed furniture at the right edge: the bar must not change width as tension
@@ -153,6 +179,24 @@ env -u TMUX -u MUX_SHARE PATH="$T/bin:$PATH" MUX_DIR="$T/conf" \
   MUX_VIEW_SOCKET=probe "$HERE/libexec/mux-views" --chip /dev/pts/0 \
   >/dev/null 2>&1 || true
 has "$(cat "$LOG")" "-L probe" "an explicit MUX_VIEW_SOCKET was ignored"
+
+# ... AND WITH NOTHING SET, THE PARTITION IS RESOLVED AND ADDRESSED. The other
+# half, and it had never run: every case above either sets the variable or is
+# inside tmux, so the block that exists for a HEADLESS caller (the tray, a
+# remote verb) was asserted only by what it must NOT do. Without it such a
+# caller reaches tmux's DEFAULT socket and is answered about another server
+# entirely, which looks like a working answer.
+mkdir -p "$T/conf"
+printf '#!/bin/sh\nprintf %%s work\n' >"$T/conf/ctxcmd"
+chmod +x "$T/conf/ctxcmd"
+printf 'context-command ctxcmd\n' >"$T/conf/config"
+: >"$LOG"
+env -u TMUX -u MUX_SHARE -u MUX_VIEW_SOCKET PATH="$T/bin:$PATH" \
+  MUX_DIR="$T/conf" "$HERE/libexec/mux-views" --chip /dev/pts/0 \
+  >/dev/null 2>&1 || true
+has "$(cat "$LOG")" "-L work" "a headless caller with no MUX_VIEW_SOCKET did \
+not address its own partition's socket"
+rm -f "$T/conf/config" "$T/conf/ctxcmd"
 
 # --- setting the mode writes the tmux name, not mux's ----------------------
 for _pair in 'auto latest' 'floor smallest' 'ceil largest'; do

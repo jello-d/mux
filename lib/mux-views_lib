@@ -74,6 +74,13 @@ mux_view_mode_set() {   # <auto|floor|ceil>
     echo "mux: could not set window-size" >&2; return 1; }
   # The probe cached the OLD mode; anything reading it after this would
   # report the value we just replaced.
+  #
+  # NO MUTATION RECORD, because nothing reads it after a set TODAY: both
+  # callers in `mux-views` answer from their own `$1`/`$_nx`, so the line is
+  # unkillable through behaviour. Kept rather than deleted (this package reads
+  # an unkillable mutation as redundant code OR as a property with no current
+  # consequence, and this is the second): the next reader of the cache in the
+  # same process would otherwise get a value that was true a line ago.
   MUX_VIEW_MODE=$1
 }
 
