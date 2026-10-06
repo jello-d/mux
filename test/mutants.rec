@@ -320,7 +320,7 @@ t mux-latch
 m config error (exit 2)
 
 = attach-only-creates-anyway
-f bin/mux
+f lib/mux-go_lib
 t mux-attach-only
 -   if [ "$attachonly" -eq 1 ]; then
 +   if false; then
@@ -2928,7 +2928,7 @@ t setup
 m kept a record unjudged and said so only on stdout
 
 = control-class-not-written
-f bin/mux
+f lib/mux-go_lib
 t mux-pane-class
 # THE PRODUCER ITSELF. `libexec/mux-agent` reads `@mux-control` in two places
 # to decide whether a send may proceed, and before this nothing in the tree
@@ -2941,7 +2941,7 @@ t mux-pane-class
 m there was no @mux-control call at all
 
 = control-class-marks-the-wrong-pane
-f bin/mux
+f lib/mux-go_lib
 t mux-pane-class
 # MARKING THE WRONG PANE IS THE SIGNATURE FAILURE: plausible, wrong, silent.
 # `control` qualifies the pane just declared, so the builder must use the
@@ -2979,7 +2979,7 @@ t mux-save
 m came back unclassed
 
 = pane-class-refusal-names-the-wrong-directive
-f bin/mux
+f lib/mux-go_lib
 t mux-pane-class
 # THE ONE RISK OF A SHARED PARSER ARM. `control` and `attention` are two
 # markers answering two questions, read by different consumers, and they
@@ -4007,13 +4007,13 @@ t mux-geometry
 +       "${_wh%% *}" ;;
 m did not carry the window size
 = bottom-built-at-the-min
-f bin/mux
+f lib/mux-go_lib
 t mux-default-layout
 -         tm split-window -v -f -l "$b_max" -t "$name:$win" -c "$root"
 +         tm split-window -v -f -l "$b_min" -t "$name:$win" -c "$root"
 m not built at the spec's MAX
 = bottom-command-dropped
-f bin/mux
+f lib/mux-go_lib
 t mux-profile
 -           -c "$root" "$bproc"
 +           -c "$root"
