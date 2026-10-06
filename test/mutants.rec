@@ -4400,3 +4400,108 @@ t mux-pin
 -     continue
 +     exit 0
 m bad-spec-does-not-truncate
+
+= cycle-next-does-not-wrap
+f libexec/mux-cycle
+t mux-session-names
+-   if [ "$idx" -eq 0 ]; then j=1; else j=$((idx % n + 1)); fi
++   if [ "$idx" -eq 0 ]; then j=1; else j=$((idx + 1)); fi
+m next from zulu should wrap to alpha
+
+= cycle-prev-goes-forward
+f libexec/mux-cycle
+t mux-session-names
+-   if [ "$idx" -eq 0 ]; then j=$n; else j=$(((idx - 2 + n) % n + 1)); fi
++   if [ "$idx" -eq 0 ]; then j=$n; else j=$(((idx + n) % n + 1)); fi
+m prev from zulu reached
+
+= cycle-ignores-the-hidden-set
+f libexec/mux-cycle
+t mux-session-names
+-   mux_excluded_has "$excluded" "$_s" && continue
++   mux_excluded_has "$excluded" "$_s" || :
+m hiding 'my project' did not skip it
+
+= cycle-switches-without-exact-match
+f libexec/mux-cycle
+t mux-session-names
+-     tmux switch-client -c "$client" -t "=$_s"
++     tmux switch-client -c "$client" -t "$_s"
+m reached [], want
+
+= edit-a-comment-does-not-promote
+f lib/mux-edit_lib
+t mux-edit
+-         _promote=1; continue ;;
++         continue ;;
+m no promotion reported
+
+= edit-a-spaced-value-does-not-promote
+f lib/mux-edit_lib
+t mux-edit
+-     case $_v in *[[:space:]]*) _promote=1 ;; esac
++     case $_v in *[[:space:]]*) : ;; esac
+m the spaced value was not preserved
+
+= edit-accepts-an-unknown-key
+f lib/mux-edit_lib
+t mux-edit
+-       *) _bad="unknown key '$_k'"; break ;;
++       *) _ignored="unknown key '$_k'"; break ;;
+m an unknown key should fail the save
+
+= edit-promotion-leaves-the-row
+f lib/mux-edit_lib
+t mux-edit
+-     mux_prof_drop "$_en"
++     :
+m a name is in both
+
+= edit-keeps-the-draft-after-a-save
+f lib/mux-edit_lib
+t mux-edit
+-   rm -f "$_df"
++   :
+m left its draft behind
+
+= profiles-replace-keeps-the-old-row
+f lib/mux-profiles_lib
+t mux-edit
+-   $1 == n { printf "%-11s %s\n", n, p; found = 1; next }
++   $1 == n { printf "%-11s %s\n", n, p; found = 1; print }
+m deleted in the draft survived
+
+= refresh-no-bottom-skips-the-balance
+f libexec/mux-refresh
+t mux-refresh
+- _balance() { "$_libexec/mux-even" 2>/dev/null || true; }
++ _balance() { :; }
+m two panes in 161: got
+
+= refresh-force-is-not-recognised
+f libexec/mux-refresh
+t mux-refresh
+- case "${1:-}" in --force|-f) force=1 ;; esac
++ case "${1:-}" in --force|-f) force=0 ;; esac
+m did not break the bottom pane out
+
+= refresh-force-rejoins-at-the-minimum
+f libexec/mux-refresh
+t mux-refresh
+-   max=${max##*-}          # MIN-MAX or N -> the height cap
++   max=${max%%-*}          # MIN-MAX or N -> the height cap
+m re-joined the bottom pane at the wrong height
+
+= host-color-answers-an-unresolvable-pair
+f libexec/mux-host-color
+t mux-host-color
+- [ -n "$_pair" ] || {
++ [ -z "$_pair" ] || {
+m greyscale: got
+
+= host-color-has-no-default-host
+f libexec/mux-host-color
+t mux-host-color
+- _h=${1:-$(mux_host_name)}
++ _h=${1:-}
+m must answer for THIS host

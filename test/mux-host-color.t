@@ -75,6 +75,18 @@ eq stable "$(hc some-unlisted-host)" "$_u"
 only eight), but if EVERY name collided the derivation would be broken, and
 this is the cheapest way to notice."
 
+# --- WITH NO HOST IT ANSWERS FOR THIS ONE -------------------------------
+# The common call: the status bar and the tray both want the colour of the box
+# they are drawing on. Uncovered until now, so the default argument had never
+# run, and without it the verb refuses with "no host to answer for" on every
+# ordinary invocation.
+_me=$(hc) || fail "with no argument, host-color must answer for THIS host"
+case $_me in
+  '#'??????' #'??????) ;;
+  *) fail "the bare form did not resolve to a hex pair, got [$_me]" ;;
+esac
+eq bare-stable "$(hc)" "$_me"
+
 # --- the two halves are never the same colour --------------------------
 # The pair exists so text is legible on its own background. A pair whose fg
 # equals its bg is invisible, and the tray would draw a blank tile.

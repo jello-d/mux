@@ -96,4 +96,17 @@ printf '%%0 52\n%%1 52\n%%2 10 5-10\n' >"$PANES"
 run --force
 [ "$(widths)" = "%0=80 " ] || fail "--force did not balance: [$(widths)]"
 
+# ... AND IT REBUILDS, which is the half that makes it the bigger hammer.
+# Nothing asserted this: with `--force` unrecognised the plain path runs,
+# which also balances, so every assertion above passed either way and the two
+# paths were indistinguishable. prefix-R exists for the rebuild.
+grep -q 'break-pane -d -s %2' "$LOG" \
+  || fail "--force did not break the bottom pane out, so it did nothing the
+plain refresh does not already do and prefix-R is prefix-r with extra steps"
+# AT THE SPEC'S MAX, read from `MIN-MAX`: re-joining at the MIN would shrink
+# the pane every time somebody reached for a rebuild.
+grep -q 'join-pane -v -f -l 10 -s %2' "$LOG" \
+  || fail "--force re-joined the bottom pane at the wrong height; want the
+spec's MAX (10 of 5-10): [$(grep join-pane "$LOG")]"
+
 pass
