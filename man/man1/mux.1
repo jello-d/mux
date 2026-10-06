@@ -2625,6 +2625,93 @@ means ignore nothing. Defaults to the
 socket, so a demo does not fill your notification daemon with news about
 sessions that do not exist; clear it to watch the demo's banners.
 .TP
+.BR MUX_SSH_PROBE_TIMEOUT ", " MUX_ET_PROBE_TIMEOUT ", " MUX_ET_PROBE_CONNECT
+Bounds the shipped
+.B latch
+probes: how long the whole probe may take (10 seconds each) and, for
+.BR et\-probe ,
+how long one TCP connect may take (3). A probe that has not answered in ten
+seconds has already answered, and the bound is the probe's own rather than
+whichever ssh option happens to enforce it.
+.TP
+.BR MUX_AGENT_STREAM_INTERVAL ", " MUX_AGENT_STREAM_HEARTBEAT
+How often
+.B mux agent stream
+re-collects (default 2 seconds) and how often it writes when nothing has
+changed (default 15). The heartbeat is what lets a reader tell a calm host
+from an unreachable one, and it is also how the producer learns its reader
+has gone, so a reader's staleness deadline must sit ABOVE it.
+.TP
+.B MUX_AGENT_WAIT_DEFAULT
+How long
+.B mux agent wait
+blocks when the caller passes no
+.BR \-t ,
+in seconds (default 300). The one bound a caller inherits without asking for
+it; an unbounded wait from an agent is a hang with no operator.
+.TP
+.B MUX_AGENT_BEAT_WINDOW
+How long a
+.B \-\-beat
+mark stays eligible for corroboration, in seconds (default 300). One beat over
+an
+.B idle
+record is a straggler and may not promote it; a second beat inside this window
+is sustained activity and does.
+.TP
+.B MUX_ENV_TIMEOUT
+Seconds an
+.I envhooks.d
+validator may take before its answer is read as "cannot tell" (default 2). Also
+settable as
+.B env\-timeout
+in
+.IR config ,
+and the environment wins.
+.TP
+.B MUX_BANNER_STYLE
+The tmux style for the context banner (default
+.IR bg=colour196,fg=colour231,bold ).
+.TP
+.B MUX_DEMO_SOCKET
+The socket
+.B mux demo
+runs on (default
+.IR mux.demo ).
+The dot is load\-bearing: a partition name is a DNS label, so this name is
+unreachable by the partition machinery by construction.
+.TP
+.B MUX_DESKTOP_NOTIFIER_VENV
+Where
+.B mux\-desktop\-notifier
+installs its virtualenv, and where
+.B mux paths
+reports it (default
+.IR ~/.local/share/mux/venv ).
+.TP
+.B MUX_DESKTOP_NOTIFIER_BIN
+Where
+.B mux check
+looks for an installed
+.B mux\-desktop\-notifier
+(default
+.IR ~/.local/bin ).
+.TP
+.B MUX_STRIP_WIDTH
+Override the column budget the agent\-state strip fits itself into. A TEST
+SEAM: the real budget comes from the client width, which a piped test has none
+of.
+.TP
+.B MUX_HUM_PROC
+Relocate
+.I /proc
+for the
+.B humming
+scan. A TEST SEAM, and the same reason as
+.BR MUX_STYLE_PROC :
+the cases that matter (an orphan whose parent exited, a daemon in its own
+session) cannot be arranged out of real processes inside a test.
+.TP
 .B MUX_STYLE_PROC
 Relocate
 .I /proc
