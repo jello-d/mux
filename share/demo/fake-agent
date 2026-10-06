@@ -86,6 +86,12 @@ while :; do
         say "  ... still working"
         _n=$((_n + 1))
       done
+      # NO MUTATION RECORD FOR THIS ONE, and the reason is the two-guards
+      # pattern: `blocked` mode reaches the same state in about a second, so
+      # the suite's wait is satisfied before a cycling agent gets here. Only a
+      # per-session assertion separates them, and the one that matters is
+      # `api`, which must STAY blocked so prefix-b always has a target.
+      # Covering this arm too would mean waiting out a full cycle.
       hook Notification
       say "BLOCKED: needs you."
       sleep $((_beat * 2))

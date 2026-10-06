@@ -91,7 +91,14 @@ done
 # `working` and the assertion failed for a reason that had nothing to do with
 # the demo. Wait for the condition under test.
 _dir=$XDG_RUNTIME_DIR/mux/agent-state/$SOCK
-_blocked() { grep -lq '^blocked ' "$_dir"/* 2>/dev/null; }
+# PER SESSION, not "something is blocked". `mux demo`'s own help says "'api'
+# stays blocked on purpose, so prefix b always has somewhere to go", and
+# nothing implemented that: `web cycle 3` also reaches blocked inside this
+# window, so the two arms of fake-agent COVERED EACH OTHER and neither was
+# individually killable. Naming the session is what separates the mode that
+# must stay blocked from the one that merely passes through it.
+_blocked() { awk '$1=="blocked" && $NF=="api"{f=1} END{exit !f}' \
+  "$_dir"/* 2>/dev/null; }
 _until 20 _blocked || fail "nothing reached \`blocked\`, so \`prefix b\` has no
 target and the demo's main claim does not hold. Either the pretend agents are
 not reaching mux's hook path, or the event table no longer maps Notification to

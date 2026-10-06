@@ -4624,3 +4624,17 @@ t mux-focus-hooks
 - [ -n "${WAYFIRE_SOCKET:-}" ] || {
 + [ -z "${WAYFIRE_SOCKET:-}" ] || {
 m missing-wfmsg-names-it
+
+= demo-agent-writes-state-directly
+f share/demo/fake-agent
+t mux-demo
+- hook() { mux agent-hook "$1" >/dev/null 2>&1 || true; }
++ hook() { mux agent-emit "$1" >/dev/null 2>&1 || true; }
+m nothing reached `blocked`
+
+= demo-agent-never-blocks
+f share/demo/fake-agent
+t mux-demo
+-     hook Notification
++     hook PostToolUse
+m nothing reached `blocked`
