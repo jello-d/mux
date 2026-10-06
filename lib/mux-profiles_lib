@@ -201,12 +201,24 @@ mux_prof_drop() {       # <name>
 #   mux_prof_partition  needs mux-context_lib   (_mux_ctx_file)
 #
 # Both of today's callers, bin/mux and libexec/mux-help, source all three.
+# A BREAKOUT profile: $MUX_DIR/profiles.d/<name>.profile, the heavier form a
+# row is promoted to when it outgrows one line (comments, or a value with a
+# space in it). Most profiles are rows in $MUX_DIR/profiles.
+#
+# TRANSITIONAL: profiles were once called layouts and lived in <name>.layout.
+# A leftover is still accepted, with a warning, so a new mux and a converted
+# config need not land in the same instant. Delete this fallback, and the
+# mux-check warning, once nobody has one.
 mux_prof_find() {  # <name>
   _p=$(mux_data_find profiles.d "$1" .profile)
   [ -n "$_p" ] || _p=$(mux_data_find '' "$1" .layout)
   printf '%s' "$_p"
 }
 
+# Every profile NAME, in any form: a row, a breakout file, or
+# (transitionally) a pre-rename <name>.layout at the overlay root. The table
+# is the PRIMARY form, so anything listing profiles starts there: listing only
+# FILES showed an empty set to anyone who had sensibly used rows.
 mux_prof_all_names() {
   {
     mux_prof_names
@@ -222,6 +234,15 @@ mux_prof_all_names() {
   return 0
 }
 
+# The PARTITION a profile belongs to. Its `context=` tag names a context,
+# whose file names a partition (defaulting to the token); UNTAGGED means
+# `global`.
+#
+# This replaced classifying by ROOT, which made the integrator answer "which
+# context owns this path": the one question needing its private knowledge
+# (personal carve-outs inside a work tree), and the messiest part of the old
+# contract. A profile's root is now purely a session property, where its panes
+# open, never a context signal.
 mux_prof_partition() {   # <name>
   _pc=$(mux_prof_get "$1" context)
   if [ -z "$_pc" ]; then

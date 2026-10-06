@@ -113,43 +113,37 @@ set -eu
 # man page already had.
 MUX_VERSION=0.86
 
-# EXIT 3: THE NAME YOU GAVE IS NOT KNOWN HERE. A standard code rather than a
-# per-verb one, because it is one CONDITION that many verbs can trip on (go,
-# kill, rename, hide, show, why), and a caller should not have to learn six
-# spellings of the same answer.
+# EXIT 3: THE NAME IS NOT KNOWN HERE. One CONDITION, six verbs (go, kill,
+# rename, hide, show, why), one code: a caller should not learn six spellings
+# of the same answer.
 #
-# It replaces a STRING contract with a numeric one, which is the real win.
-# `mux latch` had to grep stderr for "no such session" to tell a rebooted host
-# from an ordinary refusal, so the wording of an error message was load-bearing
-# across two files, and a test existed only to hold it still. A code cannot be
-# reworded.
+# IT REPLACES A STRING CONTRACT WITH A NUMERIC ONE, which is the win. `mux
+# latch` used to grep stderr for "no such session", so a message's WORDING was
+# load-bearing across two files and a test existed only to hold it still. A
+# code cannot be reworded.
 #
-# 3 keeps the small-set property the contract depends on: mux still uses only
-# 0, 1, 2 and 3, so 126, 127 and 255 remain unambiguously NOT mux. Callers that
-# only know 0/1/2 still behave correctly, since 3 is non-zero and the reason is
-# still on stderr.
+# THE SMALL SET IS THE POINT: mux emits only 0, 1, 2 and 3, so 126, 127 and
+# 255 stay unambiguously NOT mux. A caller that knows only 0/1/2 is still
+# right, since 3 is non-zero and the reason is on stderr.
 MUX_EX_NONAME=3
 
-# 4 = NOT READY YET, AND TRY AGAIN. The second cross-cutting condition, added
-# for the same reason as 3: a decision on another machine must not depend on
-# the WORDING of a message, and a code cannot be reworded.
+# 4 = NOT READY YET, TRY AGAIN. Second cross-cutting condition, same argument
+# as 3: a decision on another machine must not rest on a message's wording.
 #
-# IT EXISTS FOR THE LATCH-AFTER-A-REBOOT CASE. A host that has no server for
-# this partition and whose declared session pointers have not arrived refuses
-# rather than rebuilding every session into an environment that is still
-# starting. The client already owns waiting, bounding and reporting, so the
-# host says "not yet" and stays stateless about it.
+# FOR THE LATCH-AFTER-A-REBOOT CASE. A host with no server for this partition
+# and declared session pointers that have not arrived refuses, rather than
+# rebuilding every session into an environment that is still starting. The
+# client owns waiting, bounding and reporting; the host says "not yet" and
+# stays stateless.
 #
-# AND THE RETRY IS THE MECHANISM, which is why a code beats blocking here:
-# each attempt is a NEW remote process with a new login shell, so it re-reads
-# the environment rather than remembering the one it started with. That is this
-# package's re-derive-never-remember rule falling out of the shape.
+# THE RETRY IS THE MECHANISM, which is why a code beats blocking: each attempt
+# is a NEW remote process with a new login shell, so it re-reads the
+# environment instead of remembering one. Re-derive, never remember, falling
+# out of the shape.
 #
-# IT DEGRADES IN BOTH DIRECTIONS WITH NO NEGOTIATION, which is what makes it
-# safe to add: a latch that does not know 4 falls through to `unknown` and
-# RETRIES, which is the behaviour wanted anyway, and an older remote never
-# emits it. Still a small set, so 126, 127 and 255 remain unambiguously not
-# mux.
+# AND IT DEGRADES BOTH WAYS WITH NO NEGOTIATION: a latch that does not know 4
+# falls through to `unknown` and RETRIES, which is what you want anyway, and
+# an older remote never emits it.
 MUX_EX_NOTREADY=4
 
 MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
@@ -202,25 +196,20 @@ MUX_LIB=${_self%/*}/../lib
 # layout), lives in share, a sibling of bin/ and libexec/ under the prefix.
 # User layouts and the integrator OVERLAY (context, hosts) live in $MUX_DIR.
 #
-# Respect an exported $MUX_SHARE ONLY if it still points at a real directory: a
-# stale value: e.g. inherited from a long-running tmux server started against
-# a since-moved or removed install: would otherwise send every include/theme
-# lookup to a dead path. Unset or dangling, self-locate the sibling share/.
+# Respect an exported $MUX_SHARE ONLY while it points at a real directory. A
+# stale one (inherited from a long-running tmux server whose install has since
+# moved) would send every include and theme lookup to a dead path. Unset or
+# dangling, self-locate the sibling share/.
 if [ -n "${MUX_SHARE:-}" ] && [ -d "$MUX_SHARE" ]; then :   # a valid override
 else MUX_SHARE=${_self%/*}/../share
 fi
 export MUX_DIR MUX_SHARE   # the helper verbs (mux themes ...) inherit both
 
-# THE CAPABILITY MANIFEST MOVED to libexec/mux-capabilities (2026-10-05).
-# It sat HERE, before the dispatch below, so every hot-path invocation
-# parsed 153 lines it never called: `mux style` and `mux agent-render` run
-# per client per status-interval and `mux agent-emit` on every agent state
-# change. The dispatch's own promise ("never parsed past here on a hot
-# path") was true only of what came AFTER it.
-#
-# THE VERB LISTS STAYED, deliberately: test/mux-capabilities.t scrapes both
-# `case` blocks in THIS file to prove every dispatchable verb is classified,
-# so a verb nobody declared still fails the suite.
+# THE CAPABILITY MANIFEST MOVED to libexec/mux-capabilities (2026-10-05). It
+# sat here, ABOVE the dispatch, so every hot-path invocation parsed 153 lines
+# it never called: the dispatch's promise below was true only of what came
+# after it. The VERB LISTS stayed, because test/mux-capabilities.t scrapes
+# both `case` blocks in THIS file to prove every verb is classified.
 
 # Fast path: the helper verbs ARE standalone executables in libexec, and the
 # tmux fragment + agent hooks reach them as `mux <verb>` (one entry point, on
@@ -228,6 +217,18 @@ export MUX_DIR MUX_SHARE   # the helper verbs (mux themes ...) inherit both
 # script is never parsed past here on a hot path: the status bar runs `mux
 # style` / `mux agent-render` every tick and the agent hooks fire `mux
 # agent-emit` on every state change. Each helper self-locates its own siblings.
+#
+# AND THAT DISPATCH IS WHY EVERY `*_lib` BELOW IS SOURCED WHERE IT IS USED,
+# never at the top. Stated once here; each banner names only its own part:
+#
+#   in a verb's BRANCH   a verb nobody called must not cost a lib.
+#   UNCONDITIONALLY, at  where several paths need it (args, build, go). A
+#   the old code's spot  function is defined when the shell reaches it
+#                        either way, so availability is identical to before
+#                        BY CONSTRUCTION, with no verb list to keep correct.
+#
+# Each site guards on `-r` and says "incomplete install", or a lost lib is
+# the shell's wording and a code nobody chose.
 case ${1:-} in
 cycle)         shift; exec "$LIBEXEC/mux-cycle" "$@" ;;
 click)         shift; exec "$LIBEXEC/mux-click" "$@" ;;
@@ -329,32 +330,6 @@ else
   mux_ctx_partitions() { echo global; }
 fi
 
-# Resolve a BREAKOUT profile: $MUX_DIR/profiles.d/<name>.profile, the heavier
-# form a row is promoted to when it outgrows one line (comments, or a value
-# with a space in it). Most profiles are rows in $MUX_DIR/profiles instead; see
-# mux-profiles_lib.
-#
-# TRANSITIONAL: mux profiles were once called layouts and lived in <name>.layout
-# files. A leftover .layout is still accepted, with a warning, so that deploying
-# a new mux and converting your config need not happen in the same instant.
-# Delete this fallback (and the mux-check warning) once nobody has one.
-
-# Every profile NAME available, in any of its forms: a row in the table, a
-# breakout file, or (transitionally) a pre-rename <name>.layout at the overlay
-# root. The table is the PRIMARY form now, so anything that lists profiles has
-# to start here: listing only files showed an empty set to anyone who had
-# done the sensible thing and used rows.
-
-# The PARTITION a profile belongs to. Its `context=` tag names a context; that
-# context's file names a partition (defaulting to the token). An UNTAGGED
-# profile belongs to `global`.
-#
-# This replaced classifying a profile by its ROOT, which needed the integrator
-# to answer "which context owns this path": the one question requiring its
-# private knowledge (severance's personal carve-outs inside the work tree), and
-# the messiest thing in the old contract. A profile's root is now purely a
-# session property: where its panes open, never a context signal.
-
 # The root a profile declares, whichever form it is in. Empty when it declares
 # none (the session then roots where it is launched).
 _profile_root() {   # <name>
@@ -428,16 +403,11 @@ if [ -z "$cmd" ]; then
   cmd=go
 fi
 # --- the verb vocabulary, the arity table and the per-flag gates ----------
-# ALL OF IT IS lib/mux-args_lib (2026-10-05), as `mux_args_check COUNT`.
-# Its header says why the boundary falls HERE and not around the loop above:
-# a function's `shift` moves the function's positionals, never the caller's,
-# so the loop cannot move, while the validation reads only `$#` and the flag
-# variables and so takes the count as one argument.
-#
-# SOURCED AT THE POINT THE BLOCK SAT, unconditionally, for the same reason
-# the build lib is: availability becomes identical to before by
-# construction. Every verb reaches this line anyway, so there is nothing to
-# be lazy about.
+# ALL OF IT IS lib/mux-args_lib (2026-10-05), as `mux_args_check COUNT`,
+# sourced unconditionally (every verb reaches this line). The boundary falls
+# here and not around the loop above because a function's `shift` moves the
+# function's positionals, never the caller's; the validation reads only `$#`
+# and the flag variables, so the count is one argument.
 [ -r "$MUX_LIB/mux-args_lib" ] || {
   echo "mux: mux-args_lib missing (incomplete install)" >&2
   exit 1; }
@@ -494,6 +464,7 @@ elif [ -n "$name_arg" ]; then
   # wrong, and silent. A DERIVED name is rewritten instead (see
   # mux_sess_sanitise), since a directory called `example.com` is nobody's
   # mistake.
+  #
   # NOT FOR `resume`, WHOSE ARGUMENT IS AN ADDRESS rather than a session
   # name: `mux resume work::api` is the qualified form and the colons there
   # are mux's own grammar doing its job. This block is the SHARED name
@@ -527,19 +498,19 @@ name=$(mux_sess_sanitise "$name")
 mux_ctx_resolve || { echo "mux: ${MUX_CTX_ERR:-context error}" >&2; exit 1; }
 sock=$(mux_ctx_socket)
 
-# The PARTITION KEY: what the session set, the scan map and the agent-state dir
-# are filed under. Identical in VALUE to $sock (a partition's socket is named
-# after it) but a different QUESTION: $sock answers "which tmux -L", $part
-# answers "whose records". Conflating them is how a stale name spread: eleven
-# sites wrote ${sock:-default} as a partition key, naming a partition that
-# stopped existing when the personal one became `global`, while every library
-# fell back to `global`. Unreachable today (resolve either sets a partition or
-# exits), but this is the third sighting of that default and the first two were
-# live bugs: the tray indicator (15cc461) and mux-agent-state-emit (6099078).
+# The PARTITION KEY: what the session set, the scan map and the agent-state
+# dir are filed under. Same VALUE as $sock (a partition's socket is named
+# after it), different QUESTION: $sock is "which tmux -L", $part is "whose
+# records". Conflating them spread a stale name through eleven sites that
+# wrote ${sock:-default} as a partition key, naming a partition that stopped
+# existing when the personal one became `global` while every library fell back
+# to `global`. Unreachable today (resolve sets a partition or exits), but this
+# was its third sighting and the first two were live: the tray (15cc461) and
+# mux-agent-state-emit (6099078).
 #
-# The `default` left in the SOCKET comparisons below is a different string with
-# the same spelling, and is correct: with no -L, tmux's own socket really is
-# named `default`, so that is what a socket basename compares against.
+# The `default` in the SOCKET comparisons below is the same spelling and a
+# different string, and is correct: with no -L, tmux's socket really is named
+# `default`.
 part=$MUX_CTX_PARTITION
 # resume's optional PARTITION and SESSION. Only resume takes them today; every
 # other verb acts on the partition you are in, which is the point of a context.
@@ -552,27 +523,21 @@ part=$MUX_CTX_PARTITION
 rs_want=${1:-}
 rs_focus=${2:-}
 # ONE ARGUMENT IS AN ADDRESS, two are the legacy pair, and the discriminator
-# is the ARGUMENT COUNT rather than emptiness: `mux resume work ''` is a
-# deliberate two-field call naming a partition and no focus, and reading it as
-# an address would turn it into the session `work`, silently.
+# is the COUNT rather than emptiness: `mux resume work ''` is a deliberate
+# two-field call naming a partition and no focus, and reading it as an address
+# would silently make it the session `work`.
 #
-# WHY RESUME MOVED TO THE COMMON GRAMMAR: its space-separated positionals were
-# a SECOND grammar for the same concept, with the first field always a
-# partition, which collides with "a bare word is always a session" everywhere
-# else in mux.
+# RESUME MOVED TO THE COMMON GRAMMAR because its positionals were a SECOND
+# grammar for one concept, first field always a partition, colliding with "a
+# bare word is always a session" everywhere else.
 #
-# THE BREAK IS LOUD, which is what makes it safe to take: `mux resume work`
-# now rebuilds the caller's own partition and tries to FOCUS a session called
-# `work`, and when there is no such session that is exit 3 naming every
-# session there is. A silent change of meaning would have been the thing to
-# refuse; an immediate, listed refusal is a prompt.
+# THE BREAK IS LOUD, which is what makes it safe: `mux resume work` rebuilds
+# the caller's own partition and tries to FOCUS a session `work`, and with no
+# such session that is exit 3 LISTING every session there is. A silent change
+# of meaning is the thing to refuse; a listed refusal is a prompt.
 #
-# THE TWO-FIELD FORM IS KEPT as the compatibility path, because it is what an
-# OLDER `mux latch` composes as a remote command and a remote contract cannot
-# be changed from one side.
-#
-# SOURCED LAZILY, inside the branch: the front end parses this file on every
-# invocation and a verb nobody called must not cost a lib.
+# THE TWO-FIELD FORM IS KEPT, because an OLDER `mux latch` composes it as a
+# remote command and a remote contract cannot be changed from one side.
 if [ "$cmd" = resume ] && [ "$#" -le 1 ] && [ -n "$rs_want" ]; then
   # shellcheck source=/dev/null
   . "$MUX_LIB/mux-addr_lib"
@@ -638,58 +603,52 @@ tm() {
 }
 
 # --- mux's own wiring, guaranteed on every server mux acts on --------------
-# WHY THIS EXISTS: a mux install was NOT complete on its own. The fragment
-# loaded only because the user's ~/.config/tmux/tmux.conf carried a
-# `source-file` line for it, and on the fleet this was written for that file
-# belongs to the PROVISIONER. Remove that project and mux's bindings, status
-# strip and hooks all stop loading, while `mux check` reports the remedy as
-# "add a line to a file you do not own". Two projects owning one install is
-# also how an option drifts, and `update-environment`, which mux needs to own,
-# was set in that same foreign file.
+# WHY: a mux install was not complete on its own. The fragment loaded only
+# because the user's tmux.conf carried a `source-file` line, and on this fleet
+# that file belongs to the PROVISIONER: remove it and the bindings, strip and
+# hooks stop loading, while `mux check` names a remedy in a file you do not
+# own. Two owners is also how an option drifts, and `update-environment`,
+# which mux must own, lived in that same foreign file.
 #
-# IT DOES NOT TAKE THE CONFIG FILE, and that is the design rather than a
-# compromise. tmux reads the user's tmux.conf when the server starts, exactly
-# as before, so their prefix key and bindings keep working with no migration;
-# mux sources its own fragment AFTERWARDS, so a mux binding wins, which is the
-# order tmux already gives the last file sourced.
+# IT DOES NOT TAKE THE CONFIG FILE. tmux still reads the user's tmux.conf at
+# server start, so their prefix key and bindings keep working with no
+# migration, and mux sources its fragment AFTERWARDS, which is how tmux
+# already decides: last sourced wins.
 #
-# `-f` WAS THE OBVIOUS SHAPE AND IS WORSE, measured both ways. A `-f` server
-# reads ONLY that file, so mux would have to re-source the user's config
-# itself and a plain `tmux` would then behave differently from a mux one.
-# Sourcing afterwards is equivalent: into a RUNNING server the fragment
-# delivers status-right, every binding and every hook.
+# `-f` IS THE OBVIOUS SHAPE AND IS WORSE, measured: a `-f` server reads ONLY
+# that file, so mux would have to re-source the user's config and a plain
+# `tmux` would behave differently from a mux one. Sourcing afterwards is
+# equivalent: into a RUNNING server the fragment delivers status-right, every
+# binding and every hook.
 #
-# THE OVERLAP IS FREE, which is what lets this ship before the provisioner
-# drops its line, with no flag day. mux.tmux is IDEMPOTENT, proven rather than
-# assumed: the whole `show-options -g` hash, all 271 bindings, and even the
-# APPENDED `window-layout-changed` array are byte-identical after one, two and
-# three sourcings, because that hook is reset with `set-hook -g` before its
-# three `-ag` appends. Note the reverse is NOT free and is not claimed: if the
-# provisioner dropped its line while this was not yet live, a server would get
-# NO sourcing at all. Two different windows; idempotence only frees one.
+# THE OVERLAP IS FREE, so this ships before the provisioner drops its line
+# with no flag day. mux.tmux is IDEMPOTENT, proven: the whole
+# `show-options -g` hash, all 271 bindings and even the APPENDED
+# `window-layout-changed` array are byte-identical after one, two and three
+# sourcings, because that hook resets with `set-hook -g` before its three
+# `-ag` appends. The REVERSE is not free and is not claimed: drop the
+# provisioner's line before this is live and a server gets no wiring at all.
+# Two windows; idempotence frees one.
 #
-# THE MARKER CARRIES THE VERSION AND MUX WRITES IT, not the fragment, because
-# `set -gF @x '#(mux -V)'` does NOT expand at set time (measured: it reads back
-# empty). Writing it here is better anyway: a fragment left by an OLDER mux
-# compares unequal and is re-sourced, which closes the staleness that once had
-# `mux check` telling a live server to source a file it had already sourced.
+# MUX WRITES THE VERSION MARKER, not the fragment, because
+# `set -gF @x '#(mux -V)'` does NOT expand at set time (measured: reads back
+# empty). Better anyway: a fragment left by an OLDER mux compares unequal and
+# re-sources, which closes the staleness that once had `mux check` telling a
+# live server to source a file it already had.
 #
-# THE PROBE CANNOT CREATE A SERVER, which matters because this runs on paths
-# where none may exist yet. `show-options -gqv` exits non-zero and spawns
-# nothing (measured), unlike the `list-keys` that had to be taken out of
-# `mux check` for exactly that reason. No server means nothing to wire.
+# THE PROBE CANNOT CREATE A SERVER, which matters on paths where none exists
+# yet: `show-options -gqv` exits non-zero and spawns nothing (measured),
+# unlike the `list-keys` that had to come out of `mux check`.
 #
-# ONLY mux.tmux. `mux-opinions.tmux` says in its own header that it is optional
-# taste to source or skip, so forcing it would make mux impose a mouse mode
-# nobody asked for.
+# ONLY mux.tmux. `mux-opinions.tmux` is optional taste by its own header, so
+# forcing it would impose a mouse mode nobody asked for.
 #
-# AND A SERVER MUX NEVER TOUCHES IS NOT WIRED, which is the honest limit. A
-# plain `tmux new-session` gives mux no hook. This is called from the
-# SESSION-AFFECTING paths (the build, the attach, reload) and deliberately NOT
-# from the hot read-only ones: `mux agent-render` runs per client every
-# status-interval, and a round trip there is paid forever. So such a server is
-# wired the first time a mux verb acts on it, which is the first moment mux is
-# entitled to an opinion about it.
+# AND A SERVER MUX NEVER TOUCHES IS NOT WIRED, the honest limit: a plain
+# `tmux new-session` gives mux no hook. Called from the SESSION-AFFECTING
+# paths (build, attach, reload) and never the hot read-only ones, where
+# `mux agent-render` would pay a round trip per client per status-interval. So
+# such a server is wired by the first mux verb that acts on it, which is the
+# first moment mux is entitled to an opinion.
 # --- the session pointers a pane must not start without -------------------
 # R1 and R2 from the environment work. A pane's environment comes from the
 # SERVER, not from whoever asked for the pane (measured: a client holding a
@@ -704,12 +663,9 @@ tm() {
 # box this was found on, that client was an ssh from another machine while the
 # box sat at its login greeter, so any cross-box attach does it.
 #
-# THE LIBS ARE SOURCED LAZILY, INSIDE THE FUNCTION, and that is deliberate
-# rather than lazy writing. `mux agent-render` runs per client every
-# status-interval, and a `.` at the top of this file is parsed on every
-# invocation including those. Sourcing here costs the hot paths nothing,
-# because they never call this. Functions defined by a `.` inside a function
-# are global afterwards, so the guard only has to fire once.
+# THE LIBS ARE SOURCED INSIDE THE FUNCTION, not at the top: the hot paths
+# never call this, so they pay nothing. Functions defined by a `.` inside a
+# function are global afterwards, so the guard fires once.
 _mux_env_loaded=0
 # ONE LOADER, TWO CALLERS, and extracted rather than copied the moment the
 # second one appeared: `mux resume`'s readiness gate needs the same libs (in
@@ -850,16 +806,13 @@ _reload_one() {   # <socket, or empty for the default server>
 }
 
 cmd_reload() {
-  # THE USER'S CONFIG IS OPTIONAL, which is the whole of R10 in one line. This
-  # used to `exit 1` with "no tmux.conf at ..." when that file was absent, so
-  # mux's own reload verb DEPENDED on a file mux does not ship and does not
-  # own: on the fleet this was written for, that file belongs to the
+  # THE USER'S CONFIG IS OPTIONAL, which is R10 in one line. This used to
+  # `exit 1` with "no tmux.conf at ...", so mux's own reload DEPENDED on a
+  # file mux neither ships nor owns: on this fleet it belongs to the
   # provisioner, and removing that project broke `mux reload` outright.
   #
-  # Now the file is sourced IF PRESENT and mux's fragment always is, in that
-  # order, so a mux binding wins and a box with no tmux.conf at all reloads
-  # correctly. Nothing is required of whoever ships that file, including its
-  # existence.
+  # Now: the file IF PRESENT, then mux's fragment always, in that order, so a
+  # mux binding wins and a box with no tmux.conf reloads correctly.
   did=
   if _reload_one ""; then did="$did default"; fi
   # Plus every non-default context server the hook knows, so a reload
@@ -904,12 +857,9 @@ cmd_ls() {
 if [ "$cmd" = ls ]; then cmd_ls; fi
 
 # --- theme: set / cycle / show the current session's colour theme -----------
-# THE WHOLE VERB IS lib/mux-theme_lib (2026-10-05). Its header says why it
-# is a sourced lib rather than an executed helper (`tm` carries the
-# partition socket), and names the three libs sourced above.
-#
-# SOURCED LAZILY, inside the branch: the front end is parsed on every
-# invocation and a verb nobody called must not cost a lib.
+# THE WHOLE VERB IS lib/mux-theme_lib (2026-10-05), sourced in the branch. A
+# lib and not a helper because `tm` carries the partition socket; its header
+# names the three libs it needs.
 if [ "$cmd" = theme ]; then
   [ -r "$MUX_LIB/mux-theme_lib" ] || {
     echo "mux: mux-theme_lib missing (incomplete install)" >&2
@@ -920,15 +870,10 @@ if [ "$cmd" = theme ]; then
 fi
 
 # --- why: where every resolved value came from -----------------------------
-# THE REPORT IS lib/mux-why_lib (2026-10-05): 243 lines that only describe
-# values this file has already resolved, so it is a sourced lib rather than
-# an executed helper and the globals contract between its pieces is
-# unchanged. Its header says why, and names the five libs it needs, all of
-# which are sourced above.
-#
-# SOURCED LAZILY, inside the branch, the same rule the resume and hide/show
-# branches follow: the front end is parsed on every invocation and a verb
-# nobody called must not cost a lib.
+# THE REPORT IS lib/mux-why_lib (2026-10-05), sourced in the branch: 243
+# lines that only DESCRIBE values this file already resolved, so a separate
+# process would need a second copy of the resolution this verb exists to
+# explain. Its header names the five libs it needs.
 if [ "$cmd" = why ]; then
   [ -r "$MUX_LIB/mux-why_lib" ] || {
     echo "mux: mux-why_lib missing (incomplete install)" >&2
@@ -974,11 +919,10 @@ cmd_rename() {
   _oroot=$(mux_sess_root "$_old" "$part")
   tm rename-session -t "=$_old" "$_new"
   # The recorded set has to learn the new name too. It did not, and the
-  # cost only showed up after a REBOOT: `mux resume` faithfully rebuilt
-  # the OLD name (a session that no longer exists) and never restored the
-  # renamed one, so a rename silently dropped the session from the set
-  # that exists to bring it back. Same shape as the other state bugs here:
-  # one store learned about a change and another did not.
+  # cost showed up only after a REBOOT: `mux resume` rebuilt the OLD name
+  # and never the renamed one, so a rename silently dropped the session
+  # from the set that exists to bring it back. One store learned about a
+  # change and another did not.
   #
   # Order matters: read the root BEFORE dropping, or the new entry is
   # recorded rootless and resume cannot rebuild it.
@@ -998,12 +942,9 @@ cmd_rename() {
 if [ "$cmd" = rename ]; then cmd_rename; fi
 
 # --- edit: open a profile, and never eat the work ---------------------------
-# THE WHOLE VERB IS lib/mux-edit_lib (2026-10-05). Its header says why it
-# is a sourced lib rather than an executed helper (`tm` carries the
-# partition socket), and names the four libs sourced above.
-#
-# SOURCED LAZILY, inside the branch: the front end is parsed on every
-# invocation and a verb nobody called must not cost a lib.
+# THE WHOLE VERB IS lib/mux-edit_lib (2026-10-05), sourced in the branch. A
+# lib and not a helper because `tm` carries the partition socket; its header
+# names the four libs it needs.
 if [ "$cmd" = edit ]; then
   [ -r "$MUX_LIB/mux-edit_lib" ] || {
     echo "mux: mux-edit_lib missing (incomplete install)" >&2
@@ -1014,14 +955,10 @@ if [ "$cmd" = edit ]; then
 fi
 
 # --- save: snapshot the live session ---------------------------------------
-# THE WHOLE VERB IS lib/mux-save_lib (2026-10-05), including the window/pane
-# serialiser `emit_window` and its `is_shell`, which lived here for one
-# caller. Its header says what it does, why it is a sourced lib rather than
-# an executed helper, the one function it still needs from THIS file (`tm`)
-# and the five libs sourced above.
-#
-# SOURCED LAZILY, inside the branch: the front end is parsed on every
-# invocation and a verb nobody called must not cost a lib.
+# THE WHOLE VERB IS lib/mux-save_lib (2026-10-05), sourced in the branch,
+# including the serialiser `emit_window` and its `is_shell`, which lived here
+# for one caller. It still needs `tm` from this file; its header has the
+# rest.
 if [ "$cmd" = save ]; then
   [ -r "$MUX_LIB/mux-save_lib" ] || {
     echo "mux: mux-save_lib missing (incomplete install)" >&2
@@ -1075,18 +1012,12 @@ esac
 
 # --- the session BUILD machinery -------------------------------------------
 # ATTACH, THE PROFILE READER AND THE PANE VOCABULARY ARE lib/mux-build_lib
-# (2026-10-05): 312 lines that `go`, `new` and `resume` all share, plus the
-# geometry a session is built at. Its header says why it is a sourced lib,
-# names the ten values from this file it reads and the three functions of
-# this file it calls.
+# (2026-10-05), sourced unconditionally: 312 lines that `go`, `new` and
+# `resume` share, plus the geometry a session is built at. It reads ten values
+# from this file and calls three of its functions; the header has the list.
 #
-# SOURCED HERE, UNCONDITIONALLY, which is the whole ordering argument: a
-# function is defined when the shell reaches it either way, so sourcing at
-# the point these definitions used to sit makes availability identical to
-# before by construction, with no verb list to keep correct. The saving is
-# still real, because every verb that exits ABOVE this line never reads it:
-# ls, reload, theme, why, edit and save, plus every hot path, which leaves
-# at the early exec dispatch far above.
+# Unconditional still saves, because every verb that exits ABOVE this line
+# never reads it: ls, reload, theme, why, edit and save, plus every hot path.
 [ -r "$MUX_LIB/mux-build_lib" ] || {
   echo "mux: mux-build_lib missing (incomplete install)" >&2
   exit 1; }
@@ -1126,14 +1057,12 @@ if [ "$cmd" = kill ] && [ "$all" -eq 1 ]; then cmd_kill_all; fi
 # Nothing else prunes: that is the whole reason a snapshot of the live set
 # would be wrong.
 #
-# Which left a hole: the set is pruned ONLY here, and this used to require the
-# session to be LIVE. A recorded session whose root has since moved or been
-# deleted is already dead, so it could not be killed, and therefore could
-# never be forgotten. `mux resume` reported it as unbuildable on every single
-# run while offering no way out, and the only real fix was hand-editing
-# $MUX_CACHE. So a name that is merely RECORDED is killable too: there is
-# nothing to tear down, but saying "I am done with this" is exactly what you
-# mean, and it is the same sentence either way.
+# Which left a hole, since the set is pruned ONLY here and this used to
+# require the session to be LIVE: a recorded session whose root has moved or
+# gone is already dead, so it could not be killed and could never be
+# forgotten. `mux resume` called it unbuildable on every run with no way out,
+# and the only fix was hand-editing $MUX_CACHE. So a merely RECORDED name is
+# killable too: nothing to tear down, same sentence either way.
 cmd_kill() {
   if tm has-session -t "=$name" 2>/dev/null; then
     tm kill-session -t "=$name"
@@ -1206,13 +1135,9 @@ cmd_new() {
 if [ "$cmd" = new ]; then cmd_new; fi
 
 # --- resume: bring back this partition's sessions --------------------------
-# THE WHOLE VERB IS lib/mux-resume_lib (2026-10-05). Its header says why it
-# is a sourced lib rather than an executed helper (it is the heaviest
-# consumer of mux-build_lib there is), and names the six libs it needs, all
-# of which are sourced above it.
-#
-# SOURCED LAZILY, inside the branch: the front end is parsed on every
-# invocation and a verb nobody called must not cost a lib.
+# THE WHOLE VERB IS lib/mux-resume_lib (2026-10-05), sourced in the branch.
+# A lib and not a helper because it is the heaviest consumer of
+# mux-build_lib there is; its header names the six libs it needs.
 if [ "$cmd" = resume ]; then
   [ -r "$MUX_LIB/mux-resume_lib" ] || {
     echo "mux: mux-resume_lib missing (incomplete install)" >&2
@@ -1223,17 +1148,11 @@ if [ "$cmd" = resume ]; then
 fi
 
 # --- go / new: the session build flow -------------------------------------
-# ALL 581 LINES ARE lib/mux-go_lib (2026-10-05), as nine phases and
-# `mux_go`. Its header lists the phases in call order, the twenty caller
-# values they read, and the longest dependency list in the package, which is
-# itself the argument for a sourced lib: nothing in that flow is addressable
-# from another process.
-#
-# SOURCED HERE AND UNCONDITIONALLY, at the point the flow sat, which is the
-# same call mux-build_lib and mux-args_lib make: a function is defined when
-# the shell reaches it either way, so availability is identical to before by
-# construction. Every verb that had another answer has already exited above
-# this line.
+# ALL 581 LINES ARE lib/mux-go_lib (2026-10-05), as nine phases and `mux_go`,
+# sourced unconditionally: every verb with another answer has exited above
+# this line. It reads twenty caller values and calls twenty-three functions
+# across six libs, the longest dependency list in the package, which is the
+# argument for a lib: nothing in that flow is addressable from elsewhere.
 [ -r "$MUX_LIB/mux-go_lib" ] || {
   echo "mux: mux-go_lib missing (incomplete install)" >&2
   exit 1; }
