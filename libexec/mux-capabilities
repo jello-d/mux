@@ -27,6 +27,10 @@ set -eu
 
 _libexec=$(dirname "$0")
 _lib=$_libexec/../lib
+[ -r "$_lib/mux-exit_lib" ] \
+  || { echo "mux: $_lib/mux-exit_lib missing" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$_lib/mux-exit_lib"
 # mux-conf_lib for the ONE comment rule: `_cap_usable` reads a directive out
 # of $MUX_DIR/config, and a reader with its own idea of what a comment is was
 # a live defect in this package three days ago.
@@ -190,7 +194,7 @@ _cmd_capabilities() {
       fi ;;
     esac
   done
-  exit 0
+  exit "$MUX_EC_OK"
 }
 
 _cmd_capabilities "$@"

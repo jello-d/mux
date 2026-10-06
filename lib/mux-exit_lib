@@ -1,0 +1,20 @@
+#!/bin/sh
+# mux-exit_lib - mux's exit codes, named. THE SET IS THE CONTRACT: mux emits
+# these five and nothing else, so 126, 127 and 255 stay attributable to the
+# shell or a transport rather than to mux.
+#
+# NO LITERAL `exit <digit>` IN bin/, lib/ OR libexec/, which test/lint.t
+# refuses: a bare number at a call site says nothing about which condition it
+# reports, and 2, 3 and 4 are not guessable. `man mux` EXIT STATUS is the
+# user-facing copy and test/mux-exit.t pins what the verbs actually return.
+MUX_EC_OK=0           # answered or succeeded. An empty answer is still one
+MUX_EC_FAIL=1         # refused, with the reason on stderr
+MUX_EC_USAGE=2        # a usage error, or a verb this mux does not know
+MUX_EC_NONAME=3       # that name is not known here: session OR partition
+MUX_EC_NOTREADY=4     # reachable, not ready yet, try again (see env-ready)
+
+# 78 IS NOT HERE, DELIBERATELY. It is the HOOK contract (0 yes, 1 no, 78 cannot
+# tell), answered BY a hook TO mux, which is the opposite direction. A shipped
+# hook under share/ is meant to be replaceable by a ten-line script, so it may
+# not depend on this lib; each declares the value itself and test/lint.t
+# enforces that set separately.

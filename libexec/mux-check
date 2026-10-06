@@ -9,6 +9,13 @@
 # integrator machinery: the markers are a string convention, not shared code.
 set -eu
 
+
+_libexec=$(dirname "$0")
+_lib=$_libexec/../lib
+[ -r "$_lib/mux-exit_lib" ] \
+  || { echo "mux: $_lib/mux-exit_lib missing" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$_lib/mux-exit_lib"
 # Inherited from the mux entry point (exported there); self-located as a
 # fallback so `mux-check` also works when run by its own path. share/ is a
 # sibling of this libexec dir under the install prefix.
@@ -24,7 +31,7 @@ for _l in mux-conf_lib mux-paths_lib mux-data_lib mux-context_lib \
   _lp=$(dirname "$0")/../lib/$_l
   [ -r "$_lp" ] || {
     printf '  [FAIL] %s missing (broken install)\n' "$_lp" >&2
-    exit 1; }
+    exit "$MUX_EC_FAIL"; }
   . "$_lp"
 done
 # The audit reports on the context the caller is ACTUALLY in, so a work session

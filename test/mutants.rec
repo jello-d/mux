@@ -99,7 +99,7 @@ m did not name its cause
 = kill-all-confirm-accepts-anything
 f bin/mux
 t mux-kill
--     *) echo "mux: aborted"; exit 0 ;;
+-     *) echo "mux: aborted"; exit "$MUX_EC_OK" ;;
 +     *) ;;
 m expected an abort
 
@@ -190,7 +190,7 @@ m still wrote
 = click-accepts-any-tag
 f libexec/mux-click
 t mux-click
-- case "$range" in s:?*) ;; *) exit 0 ;; esac
+- case "$range" in s:?*) ;; *) exit "$MUX_EC_OK" ;; esac
 + :
 m acted on a mis-click
 
@@ -212,7 +212,7 @@ m broken bindings
 f lib/mux-args_lib
 t mux-exit
 -     *) echo "mux: unknown verb: $cmd" >&2; usage ;;
-+     *) echo "mux: unknown verb: $cmd" >&2; exit 0 ;;
++     *) echo "mux: unknown verb: $cmd" >&2; exit "$MUX_EC_OK" ;;
 m an unknown verb
 
 = wire-failure-is-loud
@@ -741,8 +741,8 @@ m DRIFTED file read as current
 = latch-option-read-as-host
 f libexec/mux-latch
 t mux-latch
--   -*) echo "mux: latch: unknown option: $1" >&2; _usage >&2; exit 2 ;;
-+   --nope) echo "mux: latch: unknown option: $1" >&2; _usage >&2; exit 2 ;;
+-   -*) echo "mux: latch: unknown option: $1" >&2; _usage >&2
++   --nope) echo "mux: latch: unknown option: $1" >&2; _usage >&2
 m must be an unknown option
 
 = latch-stale-locks-never-reaped
@@ -1097,7 +1097,7 @@ m stalling at [silent] was NOT bounded
 f libexec/mux-agent-state-emit
 t mux-session-names
 -     rm -f "$_beatf" 2>/dev/null || true
-+     exit 0
++     exit "$MUX_EC_OK"
 m a SECOND beat did not corroborate
 
 = beat-mark-survives-a-transition
@@ -1188,7 +1188,7 @@ m did not reach the log
 f libexec/mux-agent-hook
 t mux-agent-hook
 -   echo "mux: agent-hook: unknown event: $_ev" >&2
-+   exit 0
++   exit "$MUX_EC_OK"
 m an unknown event must exit 2
 
 
@@ -1209,8 +1209,8 @@ m did not pick the most recently active
 = next-blocked-headless-refuses
 f libexec/mux-next-blocked
 t mux-next-blocked
--     echo "mux: no attached client to switch" >&2; exit 1; }
-+     echo "mux: no attached client to switch" >&2; exit 0; }
+-     echo "mux: no attached client to switch" >&2; exit "$MUX_EC_FAIL"; }
++     echo "mux: no attached client to switch" >&2; exit "$MUX_EC_OK"; }
 m expected a non-zero exit
 
 = indicator-click-polls-instead
@@ -1518,7 +1518,7 @@ m attached-only
 = summary-attached-keeps-the-empty-caller
 f libexec/mux-agent-state-summary
 t mux-agent-summary
-- [ "$_att" -eq 0 ] || exit 0
+- [ "$_att" -eq 0 ] || exit "$MUX_EC_OK"
 + :
 m attached-other
 
@@ -1631,7 +1631,7 @@ m noverb-status
 f libexec/mux-agent
 t mux-agent
 -   exit "$2"
-+   exit 0
++   exit "$MUX_EC_OK"
 m part-needs-a-name
 
 = agent-status-unfiltered-by-default
@@ -1714,8 +1714,8 @@ m wait never returned
 = agent-wait-timeout-exits-zero
 f libexec/mux-agent
 t mux-agent
--   exit 1
-+   exit 0
+-   exit "$MUX_EC_FAIL"
++   exit "$MUX_EC_OK"
 m wait-to-rc
 
 = agent-wait-hides-the-real-state
@@ -1879,7 +1879,7 @@ m did not name what there IS
 f libexec/mux-skill
 t mux-skill
 -   echo "mux: skill: no skill called $_name" >&2
-+   echo "mux: skill: no skill called $_name" >&2; exit 0
++   echo "mux: skill: no skill called $_name" >&2; exit "$MUX_EC_OK"
 m should exit 1
 
 = skill-frontmatter-missing-is-fatal
@@ -2450,7 +2450,7 @@ t mux-update-env
 # message printed, the substitution came back empty, and the script ran on to
 # report "nothing needed changing" and exit 0. Same shape as `mux latch -V`.
 # The test asserts the CODE, which is the only observable that differs.
--     exit 2; }
+-     exit "$MUX_EC_USAGE"; }
 +     : ; }
 m a WINDOW field must be refused
 
@@ -3790,7 +3790,7 @@ m did not answer exactly one
 = summary-collapsed-fallback-leaks-into-sessions
 f libexec/mux-agent-state-summary
 t mux-agent-summary
-- [ "$_sess_mode" -eq 0 ] || exit 0
+- [ "$_sess_mode" -eq 0 ] || exit "$MUX_EC_OK"
 + :
 m leaked into --sessions output
 
@@ -3936,7 +3936,7 @@ m printed no usage summary
 f libexec/mux-help
 t mux-verbs
 - '')                usage 0 ;;
-+ '')                usage 0 2>&1 | sed 's/$/ /' >&2; exit 0 ;;
++ '')                usage 0 2>&1 | sed 's/$/ /' >&2; exit "$MUX_EC_OK" ;;
 m have drifted apart
 
 = help-usage-is-reachable-as-a-topic

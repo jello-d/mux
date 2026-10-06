@@ -26,26 +26,31 @@ set -eu
 
 _libexec=$(dirname "$0")
 _lib=$_libexec/../lib
+[ -r "$_lib/mux-exit_lib" ] \
+  || { echo "mux: $_lib/mux-exit_lib missing" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$_lib/mux-exit_lib"
 MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
 
 for _l in mux-conf_lib mux-hosts_lib; do
   [ -r "$_lib/$_l" ] || {
     echo "mux: host-color: $_lib/$_l missing (broken install)" >&2
-    exit 1; }
+    exit "$MUX_EC_FAIL"; }
   . "$_lib/$_l"
 done
 
 case ${1:-} in
 -h|--help)
   echo "usage: mux host-color [HOST]" >&2
-  exit 0 ;;
+  exit "$MUX_EC_OK" ;;
 -*)
   echo "mux: host-color: unknown option: $1" >&2
-  exit 2 ;;
+  exit "$MUX_EC_USAGE" ;;
 esac
 
 _h=${1:-$(mux_host_name)}
-[ -n "$_h" ] || { echo "mux: host-color: no host to answer for" >&2; exit 1; }
+[ -n "$_h" ] || { echo "mux: host-color: no host to answer for" >&2
+  exit "$MUX_EC_FAIL"; }
 
 _pair=$(mux_host_hex "$_h")
 # Empty means a half-resolvable pair: a 0-15 colour, which is the terminal's
@@ -57,5 +62,5 @@ _pair=$(mux_host_hex "$_h")
   echo "mux:   its style is '$(mux_host_style "$_h")'" >&2
   echo "mux:   colours 0-15 are the terminal's own and have no fixed" >&2
   echo "mux:   value; set an explicit fg/bg in $MUX_DIR/hosts" >&2
-  exit 1; }
+  exit "$MUX_EC_FAIL"; }
 printf '%s\n' "$_pair"

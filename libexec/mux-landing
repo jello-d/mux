@@ -40,10 +40,14 @@ set -eu
 # so rather than relying on whoever sources first.
 _libexec=$(dirname "$0")
 _lib=$_libexec/../lib
+[ -r "$_lib/mux-exit_lib" ] \
+  || { echo "mux: $_lib/mux-exit_lib missing" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$_lib/mux-exit_lib"
 for _l in mux-paths_lib mux-sessions_lib; do
   [ -r "$_lib/$_l" ] || {
     echo "mux: $_lib/$_l missing (incomplete install)" >&2
-    exit 1; }
+    exit "$MUX_EC_FAIL"; }
   # shellcheck source=/dev/null
   . "$_lib/$_l"
 done
@@ -54,11 +58,11 @@ while [ $# -gt 0 ]; do
   --record) _rec=1 ;;
   -h|--help)
     echo "usage: mux landing [--record]"
-    exit 0 ;;
+    exit "$MUX_EC_OK" ;;
   *)
     echo "mux: unknown argument: $1" >&2
     echo "usage: mux landing [--record]" >&2
-    exit 2 ;;
+    exit "$MUX_EC_USAGE" ;;
   esac
   shift
 done
@@ -78,16 +82,16 @@ fi
 [ -n "$_key" ] || _key=${MUX_CTX_PARTITION:-global}
 
 if [ "$_rec" -eq 1 ]; then
-  [ -n "$_sockpath" ] || exit 0
+  [ -n "$_sockpath" ] || exit "$MUX_EC_OK"
   # -S (the socket PATH $TMUX just handed us) rather than -L (a NAME resolved
   # against TMUX_TMPDIR): the path is already exact, and resolving a name again
   # is another chance to answer about a different server.
   _s=$(tmux -S "$_sockpath" display-message -p '#{client_session}' \
-    2>/dev/null) || exit 0
+    2>/dev/null) || exit "$MUX_EC_OK"
   mux_landing_set "$_s" "$_key"
-  exit 0
+  exit "$MUX_EC_OK"
 fi
 
 _m=$(mux_landing_get "$_key")
-[ -n "$_m" ] || exit 0
+[ -n "$_m" ] || exit "$MUX_EC_OK"
 printf '%s\n' "$_m"

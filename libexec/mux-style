@@ -30,6 +30,13 @@
 # a marked session attaches.
 set -eu
 
+
+_libexec=$(dirname "$0")
+_lib=$_libexec/../lib
+[ -r "$_lib/mux-exit_lib" ] \
+  || { echo "mux: $_lib/mux-exit_lib missing" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$_lib/mux-exit_lib"
 quiet=0
 [ "${1:-}" = -q ] && { quiet=1; shift; }
 
@@ -50,7 +57,8 @@ fi
 # would disagree silently about which machine is which.
 _hostslib=$(dirname "$0")/../lib/mux-hosts_lib
 [ -r "$_hostslib" ] || {
-  echo "mux-style: $_hostslib missing (incomplete install)" >&2; exit 1; }
+  echo "mux-style: $_hostslib missing (incomplete install)" >&2
+    exit "$MUX_EC_FAIL"; }
 . "$_hostslib"
 # The context seam (see mux-context_lib). A stub yields the global context if
 # the lib is somehow missing.

@@ -45,6 +45,10 @@ set -eu
 # Sibling libs in this script's own (colocated) libexec dir.
 _libexec=$(dirname "$0")
 _lib=$_libexec/../lib
+[ -r "$_lib/mux-exit_lib" ] \
+  || { echo "mux: $_lib/mux-exit_lib missing" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$_lib/mux-exit_lib"
 # mux-conf_lib FIRST: mux-context_lib reads $MUX_DIR/config through
 # mux_conf_clean, and says so in its own header.
 . "$_lib/mux-conf_lib"
@@ -92,4 +96,4 @@ done <<EOF
 $(mux_agent_sessions "$dir")
 EOF
 
-exit 0
+exit "$MUX_EC_OK"

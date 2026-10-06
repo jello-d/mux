@@ -12,8 +12,13 @@ set -eu
 
 _libexec=$(dirname "$0")
 _lib=$_libexec/../lib
+[ -r "$_lib/mux-exit_lib" ] \
+  || { echo "mux: $_lib/mux-exit_lib missing" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$_lib/mux-exit_lib"
 [ -r "$_lib/mux-views_lib" ] || {
-  echo "mux: mux-views_lib missing (incomplete install)" >&2; exit 1; }
+  echo "mux: mux-views_lib missing (incomplete install)" >&2
+    exit "$MUX_EC_FAIL"; }
 # mux-conf_lib FIRST: mux-context_lib reads $MUX_DIR/config through
 # mux_conf_clean, and says so in its own header.
 . "$_lib/mux-conf_lib"
@@ -43,7 +48,7 @@ fi
 if [ "${1:-}" = --chip ]; then
   mux_view_chip "${2:-}"
   echo
-  exit 0
+  exit "$MUX_EC_OK"
 fi
 
 # --- mode switching --------------------------------------------------------
@@ -51,7 +56,7 @@ case "${1:-}" in
 auto|floor|ceil)
   mux_view_mode_set "$1" || exit $?
   echo "mux: view mode $1"
-  exit 0 ;;
+  exit "$MUX_EC_OK" ;;
 next)
   # Cycle in the order a person reasons about them: the default, then the
   # two ways of buying stability.
@@ -64,27 +69,28 @@ next)
   # Silent on stdout: this is what a status-bar click runs, and tmux
   # run-shell pops any output into a view-mode buffer over the pane.
   _vt display-message "mux: view mode $_nx" 2>/dev/null || true
-  exit 0 ;;
+  exit "$MUX_EC_OK" ;;
 --detach)
-  [ -n "${2:-}" ] || { echo "mux: views --detach CLIENT" >&2; exit 2; }
+  [ -n "${2:-}" ] || { echo "mux: views --detach CLIENT" >&2
+    exit "$MUX_EC_USAGE"; }
   mux_view_clients | awk '{print $1}' | grep -qxF -- "$2" || {
     echo "mux: no such client: $2" >&2
     echo "mux: see them with  mux views" >&2
-    exit 1; }
+    exit "$MUX_EC_FAIL"; }
   _vt detach-client -t "$2" 2>/dev/null || {
-    echo "mux: could not detach $2" >&2; exit 1; }
+    echo "mux: could not detach $2" >&2; exit "$MUX_EC_FAIL"; }
   echo "mux: detached $2"
-  exit 0 ;;
+  exit "$MUX_EC_OK" ;;
 '') ;;
 *) echo "usage: mux views [auto|floor|ceil|next|--detach CLIENT]" >&2
-   exit 2 ;;
+   exit "$MUX_EC_USAGE" ;;
 esac
 
 # --- the report ------------------------------------------------------------
 _cl=$(mux_view_clients)
 if [ -z "$_cl" ]; then
   echo "mux: no clients attached to this server"
-  exit 0
+  exit "$MUX_EC_OK"
 fi
 
 # Age as a person says it, so "idle 10h" reads as a stale window rather than a

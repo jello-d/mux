@@ -111,15 +111,6 @@ set -eu
 # asserts they agree.
 MUX_VERSION=0.86
 
-# EXIT CODES. mux emits these five and nothing else, so 126, 127 and 255 stay
-# attributable to the shell or a transport rather than to mux. `man mux` EXIT
-# STATUS is the user-facing copy; test/mux-exit.t holds the two together.
-MUX_EC_OK=0           # answered or succeeded. An empty answer is still one
-MUX_EC_FAIL=1         # refused, with the reason on stderr
-MUX_EC_USAGE=2        # a usage error, or a verb this mux does not know
-MUX_EC_NONAME=3       # that name is not known here: session OR partition
-MUX_EC_NOTREADY=4     # reachable, not ready yet, try again (see env-ready)
-
 MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
 TMUX_CONF=${XDG_CONFIG_HOME:-$HOME/.config}/tmux/tmux.conf
 
@@ -165,6 +156,14 @@ else
 fi
 LIBEXEC=${_self%/*}/../libexec
 MUX_LIB=${_self%/*}/../lib
+# THE EXIT CODES, before anything that can exit. A lib rather than five lines
+# here because every helper needs the same names; no fallback, because a
+# missing one leaves `exit "$MUX_EC_FAIL"` unset under `set -u`.
+[ -r "$MUX_LIB/mux-exit_lib" ] || {
+  echo "mux: $MUX_LIB/mux-exit_lib missing (incomplete install)" >&2
+  exit "$MUX_EC_FAIL"; }
+# shellcheck source=/dev/null
+. "$MUX_LIB/mux-exit_lib"
 # Package DATA, the shipped defaults (themes, agents, shapes, the default
 # layout), lives in share, a sibling of bin/ and libexec/ under the prefix.
 # User layouts and the integrator OVERLAY (context, hosts) live in $MUX_DIR.
@@ -281,7 +280,7 @@ for _l in mux-paths_lib mux-data_lib mux-profiles_lib mux-scan_lib \
     mux-sessions_lib mux-class_lib mux-log_lib mux-resolve_lib; do
   [ -r "$MUX_LIB/$_l" ] || {
     echo "mux: $MUX_LIB/$_l missing (incomplete install)" >&2
-    exit 1; }
+    exit "$MUX_EC_FAIL"; }
   . "$MUX_LIB/$_l"
 done
 
@@ -367,7 +366,7 @@ while [ "$#" -gt 0 ]; do
     --force)      force=1; shift ;;
     --persist|-p) persist=1; shift ;;   # retired: now the default
     -h|--help)    usage 0 ;;
-    --version|-V) printf 'mux %s\n' "$MUX_VERSION"; exit 0 ;;
+    --version|-V) printf 'mux %s\n' "$MUX_VERSION"; exit "$MUX_EC_OK" ;;
     --) shift; break ;;
     -*) echo "mux: unknown option: $1" >&2; usage ;;
     *)  if [ -n "$cmd" ]; then break; fi
@@ -388,7 +387,7 @@ fi
 # and the flag variables, so the count is one argument.
 [ -r "$MUX_LIB/mux-args_lib" ] || {
   echo "mux: mux-args_lib missing (incomplete install)" >&2
-  exit 1; }
+  exit "$MUX_EC_FAIL"; }
 # shellcheck source=/dev/null
 . "$MUX_LIB/mux-args_lib"
 mux_args_check "$#"
@@ -427,7 +426,7 @@ if [ -n "$name_arg" ] && mux_resolve_is_path "$name_arg"; then
   _bp=$(mux_expand_tilde "$name_arg")
   _bp=$(readlink -f -- "$_bp" 2>/dev/null || printf '%s' "$_bp")
   [ -d "$_bp" ] || {
-    echo "mux: not a directory: $name_arg" >&2; exit 1; }
+    echo "mux: not a directory: $name_arg" >&2; exit "$MUX_EC_FAIL"; }
   name=$(mux_prof_by_root "$_bp")
   if [ -n "$name" ]; then
     base=$_bp
@@ -473,7 +472,8 @@ name=$(mux_sess_sanitise "$name")
 # to the default socket when no hook is installed, or
 # when the caller is in no special context. Prime _cur_side here too, so the
 # common path resolves the hook once.
-mux_ctx_resolve || { echo "mux: ${MUX_CTX_ERR:-context error}" >&2; exit 1; }
+mux_ctx_resolve || { echo "mux: ${MUX_CTX_ERR:-context error}" >&2
+  exit "$MUX_EC_FAIL"; }
 sock=$(mux_ctx_socket)
 
 # The PARTITION KEY: what the session set, the scan map and the agent-state
@@ -548,7 +548,7 @@ elif [ "$cmd" = resume ] && [ "${MUX_CTX_SRC:-baseline}" = failed ]; then
   # did not supply: this is the same lie, available to resume.
   echo "mux: the context-command FAILED, so the partition is unknown" >&2
   echo "mux: name one (mux resume global), or fix the command" >&2
-  exit 1
+  exit "$MUX_EC_FAIL"
 fi
 
 # A session name may contain a space but never a newline (tmux's own -F
@@ -702,7 +702,7 @@ if [ "$pick" = 1 ]; then
   _sessions=$(tm list-sessions -F '#{session_name}' 2>/dev/null || true)
   if [ -z "$_sessions" ]; then
     echo "mux: no sessions in this context (start one: mux go)"
-    exit 0
+    exit "$MUX_EC_OK"
   fi
   _count=$(printf '%s\n' "$_sessions" | grep -c .)
   if [ "$_count" -eq 1 ]; then
@@ -727,20 +727,20 @@ if [ "$pick" = 1 ]; then
     if command -v fzf >/dev/null 2>&1; then
       _sel=$(printf '%s\n' "$_menu" \
         | fzf --prompt='mux> ' --height=40% --reverse) \
-        || exit 0
+        || exit "$MUX_EC_OK"
       name=${_sel##* }
     else
       printf '%s\n' "$_menu" | nl -w2 -s') ' >&2
       printf 'mux: session #? ' >&2
-      read -r _n || exit 0
+      read -r _n || exit "$MUX_EC_OK"
       case $_n in
-      ''|*[!0-9]*) echo "mux: not a number" >&2; exit 1 ;;
+      ''|*[!0-9]*) echo "mux: not a number" >&2; exit "$MUX_EC_FAIL" ;;
       esac
       _sel=$(printf '%s\n' "$_menu" | sed -n "${_n}p")
       name=${_sel##* }
     fi
   fi
-  [ -n "$name" ] || { echo "mux: nothing selected" >&2; exit 0; }
+  [ -n "$name" ] || { echo "mux: nothing selected" >&2; exit "$MUX_EC_OK"; }
 fi
 
 # --- reload: re-source tmux.conf on every running mux server ---------------
@@ -791,7 +791,7 @@ cmd_reload() {
 $(mux_ctx_partitions)
 EOF
   echo "mux: reloaded${did:- (no running servers)}"
-  exit 0
+  exit "$MUX_EC_OK"
 }
 
 if [ "$cmd" = reload ]; then cmd_reload; fi
@@ -802,7 +802,8 @@ if [ "$cmd" = reload ]; then cmd_reload; fi
 # the shared state lib is absent, or when a session line has no name to key on.
 cmd_ls() {
   _ls=$(tm list-sessions 2>/dev/null || true)
-  [ -n "$_ls" ] || { echo "mux: no sessions in this context"; exit 0; }
+  [ -n "$_ls" ] || { echo "mux: no sessions in this context"
+    exit "$MUX_EC_OK"; }
   if [ "$_have_astate" -eq 1 ]; then
     _adir=$(mux_agent_dir "$part")
     printf '%s\n' "$_ls" | while IFS= read -r _line; do
@@ -814,7 +815,7 @@ cmd_ls() {
   else
     printf '%s\n' "$_ls"
   fi
-  exit 0
+  exit "$MUX_EC_OK"
 }
 
 if [ "$cmd" = ls ]; then cmd_ls; fi
@@ -824,7 +825,7 @@ if [ "$cmd" = ls ]; then cmd_ls; fi
 if [ "$cmd" = theme ]; then
   [ -r "$MUX_LIB/mux-theme_lib" ] || {
     echo "mux: mux-theme_lib missing (incomplete install)" >&2
-    exit 1; }
+    exit "$MUX_EC_FAIL"; }
   # shellcheck source=/dev/null
   . "$MUX_LIB/mux-theme_lib"
   mux_theme
@@ -837,7 +838,7 @@ fi
 if [ "$cmd" = why ]; then
   [ -r "$MUX_LIB/mux-why_lib" ] || {
     echo "mux: mux-why_lib missing (incomplete install)" >&2
-    exit 1; }
+    exit "$MUX_EC_FAIL"; }
   # shellcheck source=/dev/null
   . "$MUX_LIB/mux-why_lib"
   mux_why
@@ -852,7 +853,7 @@ cmd_rename() {
   if [ -z "$layout_arg" ]; then
     [ -n "${TMUX:-}" ] || {
       echo "mux: rename NEW needs a session (or: OLD NEW)" >&2
-      exit 1; }
+      exit "$MUX_EC_FAIL"; }
     _old=$(tm display-message -p '#{session_name}'); _new=$name_arg
   else
     _old=$name_arg; _new=$layout_arg
@@ -896,7 +897,7 @@ cmd_rename() {
     mv "$MUX_DIR/$_old.profile" "$MUX_DIR/$_new.profile"
     echo "mux: renamed profile $_old -> $_new"
   fi
-  exit 0
+  exit "$MUX_EC_OK"
 }
 
 if [ "$cmd" = rename ]; then cmd_rename; fi
@@ -906,7 +907,7 @@ if [ "$cmd" = rename ]; then cmd_rename; fi
 if [ "$cmd" = edit ]; then
   [ -r "$MUX_LIB/mux-edit_lib" ] || {
     echo "mux: mux-edit_lib missing (incomplete install)" >&2
-    exit 1; }
+    exit "$MUX_EC_FAIL"; }
   # shellcheck source=/dev/null
   . "$MUX_LIB/mux-edit_lib"
   mux_edit
@@ -918,7 +919,7 @@ fi
 if [ "$cmd" = save ]; then
   [ -r "$MUX_LIB/mux-save_lib" ] || {
     echo "mux: mux-save_lib missing (incomplete install)" >&2
-    exit 1; }
+    exit "$MUX_EC_FAIL"; }
   # shellcheck source=/dev/null
   . "$MUX_LIB/mux-save_lib"
   mux_save
@@ -932,13 +933,13 @@ fi
 case $cmd in
 hide|show)
   [ -n "${TMUX:-}" ] || {
-    echo "mux: $cmd must run inside a session" >&2; exit 1; }
+    echo "mux: $cmd must run inside a session" >&2; exit "$MUX_EC_FAIL"; }
   [ -r "$MUX_LIB/mux-exclude_lib" ] || {
     echo "mux: mux-exclude_lib missing (incomplete install)" >&2
-    exit 1; }
+    exit "$MUX_EC_FAIL"; }
   _client=$(tm display-message -p '#{client_name}' 2>/dev/null || true)
   [ -n "$_client" ] || {
-    echo "mux: could not identify the client" >&2; exit 1; }
+    echo "mux: could not identify the client" >&2; exit "$MUX_EC_FAIL"; }
   . "$MUX_LIB/mux-exclude_lib"
   _f=$(mux_exclude_file "$_client")
   mkdir -p "$(dirname "$_f")"
@@ -962,7 +963,7 @@ hide|show)
     fi
   fi
   tm refresh-client 2>/dev/null || true
-  exit 0
+  exit "$MUX_EC_OK"
   ;;
 esac
 
@@ -976,7 +977,7 @@ esac
 # reads it (ls, reload, theme, why, edit, save, and every hot path).
 [ -r "$MUX_LIB/mux-build_lib" ] || {
   echo "mux: mux-build_lib missing (incomplete install)" >&2
-  exit 1; }
+  exit "$MUX_EC_FAIL"; }
 # shellcheck source=/dev/null
 . "$MUX_LIB/mux-build_lib"
 
@@ -988,7 +989,7 @@ cmd_kill_all() {
   _all=$(tm list-sessions -F '#{session_name}' 2>/dev/null || true)
   if [ -z "$_all" ]; then
     echo "mux: no sessions in this context"
-    exit 0
+    exit "$MUX_EC_OK"
   fi
   _n=$(printf '%s\n' "$_all" | wc -l | tr -d ' ')
   printf 'mux: kill ALL %s session(s) on socket "%s":\n' \
@@ -998,12 +999,12 @@ cmd_kill_all() {
   read -r _ans || _ans=
   case $_ans in
     yes|YES|y|Y) ;;
-    *) echo "mux: aborted"; exit 0 ;;
+    *) echo "mux: aborted"; exit "$MUX_EC_OK" ;;
   esac
   tm kill-server 2>/dev/null || true
   mux_sess_clear "$part"
   echo "mux: killed all sessions on \"${sock:-default}\""
-  exit 0
+  exit "$MUX_EC_OK"
 }
 
 if [ "$cmd" = kill ] && [ "$all" -eq 1 ]; then cmd_kill_all; fi
@@ -1022,13 +1023,13 @@ cmd_kill() {
     tm kill-session -t "=$name"
     mux_sess_drop "$name" "$part"
     echo "mux: killed $name"
-    exit 0
+    exit "$MUX_EC_OK"
   fi
   if mux_sess_has "$name" "$part"; then
     mux_sess_drop "$name" "$part"
     echo "mux: $name was not running; forgotten (it will no" \
       "longer be resumed)"
-    exit 0
+    exit "$MUX_EC_OK"
   fi
   echo "mux: no such session: $name" >&2
   exit "$MUX_EC_NONAME"
@@ -1048,14 +1049,14 @@ if [ "$cmd" = kill ]; then cmd_kill; fi
 cmd_new() {
   if tm has-session -t "=$name" 2>/dev/null; then
     echo "mux: $name is already up (attach it: mux go $name)" >&2
-    exit 1
+    exit "$MUX_EC_FAIL"
   fi
   if [ "$force" -eq 0 ]; then
     if mux_prof_has "$name" || [ -n "$(mux_prof_find "$name")" ]
     then
       echo "mux: $name already has a profile" \
         "(edit it: mux edit $name, or --force)" >&2
-      exit 1
+      exit "$MUX_EC_FAIL"
     fi
     # Already discoverable as a DIFFERENT project: binding it here
     # would silently change what `mux go $name` means elsewhere.
@@ -1067,7 +1068,7 @@ cmd_new() {
       echo "mux: '$name' already means $_other" >&2
       echo "mux: choose another name, or --force to" \
         "rebind it here" >&2
-      exit 1
+      exit "$MUX_EC_FAIL"
     fi
   fi
   # `new` names THIS DIRECTORY, not the project enclosing it. That is
@@ -1080,7 +1081,7 @@ cmd_new() {
   if [ "$name" != "$_derived" ] || [ "$here" != "$base" ]; then
     mux_prof_set "$name" root "$(mux_fold_tilde "$here")" || {
       echo "mux: could not write $(mux_prof_file)" >&2
-      exit 1; }
+      exit "$MUX_EC_FAIL"; }
     echo "mux: $name -> $(mux_fold_tilde "$here")"
   fi
   base=$here
@@ -1094,7 +1095,7 @@ if [ "$cmd" = new ]; then cmd_new; fi
 if [ "$cmd" = resume ]; then
   [ -r "$MUX_LIB/mux-resume_lib" ] || {
     echo "mux: mux-resume_lib missing (incomplete install)" >&2
-    exit 1; }
+    exit "$MUX_EC_FAIL"; }
   # shellcheck source=/dev/null
   . "$MUX_LIB/mux-resume_lib"
   mux_resume
@@ -1107,7 +1108,7 @@ fi
 # addressable from another process.
 [ -r "$MUX_LIB/mux-go_lib" ] || {
   echo "mux: mux-go_lib missing (incomplete install)" >&2
-  exit 1; }
+  exit "$MUX_EC_FAIL"; }
 # shellcheck source=/dev/null
 . "$MUX_LIB/mux-go_lib"
 mux_go

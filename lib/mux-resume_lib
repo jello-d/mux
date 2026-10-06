@@ -15,6 +15,7 @@
 # THE CALLER SOURCES THE DEPENDENCIES (see bin/mux's lib loop for why):
 #
 #     from bin/mux        tm
+#     mux-exit_lib       MUX_EC_* (the exit codes)
 #     mux-build_lib       mux_attach
 #     mux-context_lib     mux_ctx_conf
 #     mux-env_lib         mux_env_names  mux_env_ready
@@ -120,7 +121,7 @@ mux_resume() {
   # shellcheck disable=SC2154  # a caller input; see the header
   if [ "$listing" -eq 1 ]; then
     [ -n "$rs_set" ] && printf '%s\n' "$rs_set"
-    exit 0
+    exit "$MUX_EC_OK"
   fi
   if [ -z "$rs_set" ]; then
     echo "mux: no sessions recorded for this partition" >&2
@@ -130,7 +131,7 @@ mux_resume() {
     # looks exactly like this, and the difference between "the set
     # was empty" and "resume was never run" is the whole question.
     mux_log resume "nothing recorded for partition ${part:-?}"
-    exit 1
+    exit "$MUX_EC_FAIL"
   fi
   # THE FOCUS TARGET, checked BEFORE rebuilding. Naming a session that
   # is not in the set is a typo, and finding that out after the rebuild
@@ -237,6 +238,6 @@ mux_resume() {
       | tr '\n' ' ')"
   fi
   name=$(_resume_landing "$rs_set" "$rs_key")
-  [ -n "$name" ] || { echo "mux: nothing to attach" >&2; exit 1; }
+  [ -n "$name" ] || { echo "mux: nothing to attach" >&2; exit "$MUX_EC_FAIL"; }
   mux_attach
 }

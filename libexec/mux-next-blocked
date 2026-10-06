@@ -21,6 +21,10 @@ set -eu
 # Sibling libs in this script's own (colocated) libexec dir.
 _libexec=$(dirname "$0")
 _lib=$_libexec/../lib
+[ -r "$_lib/mux-exit_lib" ] \
+  || { echo "mux: $_lib/mux-exit_lib missing" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$_lib/mux-exit_lib"
 
 # --partition NAME scopes the whole run to another partition's server and
 # state. THE TRAY IS THE CALLER: one host can publish several items now, one
@@ -42,7 +46,7 @@ while [ $# -gt 0 ]; do
     # distinguished from.
     if [ $# -gt 1 ]; then shift; fi ;;
   --) shift; break ;;
-  -*) echo "mux: next-blocked: unknown option: $1" >&2; exit 2 ;;
+  -*) echo "mux: next-blocked: unknown option: $1" >&2; exit "$MUX_EC_USAGE" ;;
   *)  break ;;
   esac
   shift
@@ -51,7 +55,8 @@ done
 # own partition: a click composed without its name would jump somewhere
 # plausible and wrong, which is this codebase's recurring failure shape.
 [ "$_pflag" = 0 ] || [ -n "$_part" ] || {
-  echo "mux: next-blocked: --partition needs a name" >&2; exit 2; }
+  echo "mux: next-blocked: --partition needs a name" >&2
+    exit "$MUX_EC_USAGE"; }
 
 client=${1:-}
 current=${2:-}
@@ -103,7 +108,7 @@ if [ -z "$client" ]; then
       | sort -rn | awk 'NR == 1 { print $2 }')
   fi
   [ -n "$client" ] || {
-    echo "mux: no attached client to switch" >&2; exit 1; }
+    echo "mux: no attached client to switch" >&2; exit "$MUX_EC_FAIL"; }
 fi
 if [ -z "$current" ]; then
   current=$(_nb display-message -c "$client" -p '#{client_session}' \
@@ -146,7 +151,8 @@ done <<EOF
 $(_nb list-sessions -F '#{session_name}' 2>/dev/null)
 EOF
 
-[ -n "$best" ] || exit 0            # nothing blocked; nowhere to jump
+# nothing blocked; nowhere to jump
+[ -n "$best" ] || exit "$MUX_EC_OK"
 if [ -n "$client" ]; then
   _nb switch-client -c "$client" -t "=$best"
 else

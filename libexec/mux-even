@@ -40,6 +40,10 @@ set -eu
 
 _libexec=$(dirname "$0")
 _lib=$_libexec/../lib
+[ -r "$_lib/mux-exit_lib" ] \
+  || { echo "mux: $_lib/mux-exit_lib missing" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$_lib/mux-exit_lib"
 
 # ONE NAMESPACE, COMPUTED ONCE: the same repair next-blocked needed, and for
 # the same reason. Every tmux call here was bare, which is right INSIDE tmux
@@ -63,7 +67,7 @@ _all=0
 case "${1:-}" in
 --all|-a) _all=1 ;;
 '') ;;
-*) echo "usage: mux even [--all]" >&2; exit 2 ;;
+*) echo "usage: mux even [--all]" >&2; exit "$MUX_EC_USAGE" ;;
 esac
 
 # Even out the widths of one window's TOP ROW: every pane that is not the
@@ -128,7 +132,7 @@ if [ "$_all" -eq 1 ]; then
 else
   _wins=$(_tx display-message -p '#{window_id}' 2>/dev/null || true)
 fi
-[ -n "$_wins" ] || exit 0
+[ -n "$_wins" ] || exit "$MUX_EC_OK"
 
 # The spec the rest of the server agrees on: most common wins, and ties go to
 # whichever sorts first, because any consistent answer beats an arbitrary one.
@@ -176,4 +180,4 @@ if [ -n "$_lost" ]; then
   echo "mux: no @mux-bottom, so the height cannot be held:$_lost" >&2
   echo "mux:   that pane was recreated without its options." >&2
 fi
-exit 0
+exit "$MUX_EC_OK"

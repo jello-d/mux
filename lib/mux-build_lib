@@ -38,6 +38,7 @@
 # THE CALLER SOURCES THE DEPENDENCIES (see bin/mux's lib loop for why):
 #
 #     from bin/mux       tm  mux_wire  mux_env_ensure
+#     mux-exit_lib       MUX_EC_* (the exit codes)
 #     mux-conf_lib       mux_conf_clean
 #     mux-data_lib       mux_data_find
 #     mux-sessions_lib   mux_sess_add
@@ -133,7 +134,7 @@ mux_attach() {
     echo "mux: attaching would nest a session inside this pane." \
       "Detach first (prefix d)," >&2
     echo "mux: then:  mux go $name" >&2
-    exit 1
+    exit "$MUX_EC_FAIL"
   fi
 
   # Not in a pane. Any $TMUX here is LEAKED (a terminal spawned from one),
@@ -183,7 +184,7 @@ agent_launch() {
   _af=$(_find_agent "$1")
   [ -n "$_af" ] || {
     echo "mux: unknown agent: $1 (see: mux help agents)" >&2
-    exit 1; }
+    exit "$MUX_EC_FAIL"; }
   # shellcheck disable=SC2154  # a caller input; see the header
   [ "$bare" -eq 1 ] && return 0
   mux_conf_clean < "$_af" \
@@ -230,7 +231,7 @@ expand_profile() {      # PROFILE_PATH [LABEL]
   # rule), then read from a FILE: a bad layout name must exit the whole
   # run, which a pipe's subshell would swallow. Every surviving line is a
   # directive, so no comment/blank case is needed here.
-  _cl=$(mktemp) || { echo "mux: mktemp failed" >&2; exit 1; }
+  _cl=$(mktemp) || { echo "mux: mktemp failed" >&2; exit "$MUX_EC_FAIL"; }
   # Pass A: the profile's own directives. It is the only place that knows
   # which FILE a line came from, so it is where the split is enforced:
   # identity and appearance here, arrangement in the layout, and a line in
@@ -245,7 +246,7 @@ expand_profile() {      # PROFILE_PATH [LABEL]
         "profile: ${2:-$1}" >&2
       echo "mux: put the arrangement in a .layout and" \
         "name it with 'layout <name>'" >&2
-      rm -f "$_cl"; exit 1 ;;
+      rm -f "$_cl"; exit "$MUX_EC_FAIL" ;;
     *)      printf '%s\n' "$_verb${_rest:+ $_rest}" ;;
     esac
   done <"$_cl"
@@ -257,7 +258,7 @@ expand_profile() {      # PROFILE_PATH [LABEL]
   [ -n "$_lf" ] || {
     echo "mux: no layout: ${_want_layout:-$_dfl}" \
       "(see: mux help layouts)" >&2
-    rm -f "$_cl"; exit 1
+    rm -f "$_cl"; exit "$MUX_EC_FAIL"
   }
   # Pass B: the layout's arrangement.
   mux_conf_clean < "$_lf" > "$_cl"
@@ -266,7 +267,7 @@ expand_profile() {      # PROFILE_PATH [LABEL]
     root|theme|agent|notify|layout)
       echo "mux: '$_verb' belongs in a profile, not a" \
         "layout: $_lf" >&2
-      rm -f "$_cl"; exit 1 ;;
+      rm -f "$_cl"; exit "$MUX_EC_FAIL" ;;
     *)      printf '%s\n' "$_verb${_rest:+ $_rest}" ;;
     esac
   done <"$_cl"

@@ -23,10 +23,15 @@ set -eu
 
 _libexec=$(dirname "$0")
 _lib=$_libexec/../lib
+[ -r "$_lib/mux-exit_lib" ] \
+  || { echo "mux: $_lib/mux-exit_lib missing" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$_lib/mux-exit_lib"
 [ -d "${MUX_SHARE:-}" ] || MUX_SHARE=$_lib/../share
 
 _keys=$MUX_SHARE/keys
-[ -r "$_keys" ] || { echo "mux: keys: $_keys is missing" >&2; exit 1; }
+[ -r "$_keys" ] || { echo "mux: keys: $_keys is missing" >&2
+  exit "$MUX_EC_FAIL"; }
 
 # The live prefix, if there is a server to ask. Outside tmux there is nothing to
 # ask, so the label stays generic rather than guessing.

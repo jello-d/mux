@@ -27,10 +27,14 @@ set -eu
 
 _libexec=$(dirname "$0")
 _lib=$_libexec/../lib
+[ -r "$_lib/mux-exit_lib" ] \
+  || { echo "mux: $_lib/mux-exit_lib missing" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$_lib/mux-exit_lib"
 for _l in mux-conf_lib mux-addr_lib mux-sessions_lib mux-class_lib \
     mux-window_lib mux-context_lib; do
   [ -r "$_lib/$_l" ] || {
-    echo "mux: $_l missing (incomplete install)" >&2; exit 1; }
+    echo "mux: $_l missing (incomplete install)" >&2; exit "$MUX_EC_FAIL"; }
   # shellcheck source=/dev/null
   . "$_lib/$_l"
 done
@@ -39,7 +43,7 @@ _usage() {
   echo "usage: mux window [[PARTITION::]SESSION:]NAME [--dir DIR]" >&2
   echo "                  [--cmd COMMAND] [--control CLASS]" >&2
   echo "                  [--attention CLASS]" >&2
-  exit 2
+  exit "$MUX_EC_USAGE"
 }
 
 _addr= _dir= _cmd= _ctl= _attn=
@@ -50,14 +54,15 @@ while [ "$#" -gt 0 ]; do
   --control)   _ctl=${2:-}; shift 2 || _usage ;;
   --attention) _attn=${2:-}; shift 2 || _usage ;;
   -h|--help)   _usage ;;
-  -*)          echo "mux: unknown option: $1" >&2; exit 2 ;;
-  *) [ -z "$_addr" ] || { echo "mux: one address, not two: $1" >&2; exit 2; }
+  -*)          echo "mux: unknown option: $1" >&2; exit "$MUX_EC_USAGE" ;;
+  *) [ -z "$_addr" ] || { echo "mux: one address, not two: $1" >&2
+    exit "$MUX_EC_USAGE"; }
      _addr=$1; shift ;;
   esac
 done
 [ -n "$_addr" ] || _usage
 
-mux_addr_parse "$_addr" || exit 2
+mux_addr_parse "$_addr" || exit "$MUX_EC_USAGE"
 
 # THE REINTERPRETATION, in one place and nowhere else. The shared parser reads
 # a bare word as a SESSION, because every other verb's subject is one; here
@@ -76,7 +81,7 @@ if [ -z "$_wsess" ]; then
   [ -z "$_wpart" ] || {
     echo "mux: naming a partition needs the session too:" >&2
     echo "mux: mux window $_wpart::SESSION:$_wname" >&2
-    exit 2; }
+    exit "$MUX_EC_USAGE"; }
   # THE SESSION DEFAULTS ONLY FROM A LIVE $TMUX, and where there is none this
   # REFUSES rather than letting tmux pick. tmux's own default target is the
   # most recently CREATED session, so an unqualified call outside tmux would
@@ -85,12 +90,12 @@ if [ -z "$_wsess" ]; then
   [ -n "${TMUX:-}" ] || {
     echo "mux: no session to open a window in. Name one:" >&2
     echo "mux: mux window SESSION:$_wname" >&2
-    exit 2; }
+    exit "$MUX_EC_USAGE"; }
   _wsess=$(tmux display-message -p '#{session_name}' 2>/dev/null || true)
   [ -n "$_wsess" ] || {
     echo "mux: could not resolve the current session. Name one:" >&2
     echo "mux: mux window SESSION:$_wname" >&2
-    exit 2; }
+    exit "$MUX_EC_USAGE"; }
 fi
 
 # THE PARTITION, from the address or from the context, and a CROSSING IS
@@ -104,15 +109,15 @@ if [ -z "$_wpart" ]; then
 fi
 mux_ctx_crossing "${_wpart:-global}" 'open a window across' || {
   echo "mux: refusing to open a window in $_wsess: $MUX_CTX_CROSS" >&2
-  exit 2; }
+  exit "$MUX_EC_USAGE"; }
 
 _wrc=0
 mux_window_open "${_wpart:-global}" "$_wsess" "$_wname" "$_dir" \
   "$_cmd" "$_ctl" "$_attn" 1 || _wrc=$?
 case $_wrc in
 0) ;;
-3) echo "mux: $MUX_WIN_ERR" >&2; exit 3 ;;
-*) echo "mux: $MUX_WIN_ERR" >&2; exit 2 ;;
+3) echo "mux: $MUX_WIN_ERR" >&2; exit "$MUX_EC_NONAME" ;;
+*) echo "mux: $MUX_WIN_ERR" >&2; exit "$MUX_EC_USAGE" ;;
 esac
 
 # AND GO THERE, which is the whole difference from the machine verb. The

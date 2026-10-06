@@ -32,6 +32,13 @@
 # can point it wherever it keeps runtime stamps.
 set -eu
 
+
+_libexec=$(dirname "$0")
+_lib=$_libexec/../lib
+[ -r "$_lib/mux-exit_lib" ] \
+  || { echo "mux: $_lib/mux-exit_lib missing" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$_lib/mux-exit_lib"
 MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
 # The shipped defaults root: the FALLBACK set, which the $MUX_DIR overlay
 # may override per fragment (see mux-data_lib). Inherited from the mux entry
@@ -43,7 +50,8 @@ MUX_SHARE=${MUX_SHARE:-$(dirname "$0")/../share}
 # would be a second copy of the very rule that lib exists to hold.
 _paths=$(dirname "$0")/../lib/mux-paths_lib
 [ -r "$_paths" ] || {
-  echo "mux-themes: $_paths missing (incomplete install)" >&2; exit 1; }
+  echo "mux-themes: $_paths missing (incomplete install)" >&2
+    exit "$MUX_EC_FAIL"; }
 . "$_paths"
 # AFTER the source, obviously, and it was not: assigning this above the `.` line
 # left STAMPDIR empty and every stamp read and write landed at `/mux-themes...`.
@@ -54,7 +62,8 @@ STAMPDIR=$(mux_cache_dir)
 # server gets and the palette the help shows come from one resolution.
 _data=$(dirname "$0")/../lib/mux-data_lib
 [ -r "$_data" ] || {
-  echo "mux-themes: $_data missing (incomplete install)" >&2; exit 1; }
+  echo "mux-themes: $_data missing (incomplete install)" >&2
+    exit "$MUX_EC_FAIL"; }
 . "$_data"
 
 # The shared comment/normalize rule (see bin/mux); a fallback strips only
@@ -134,7 +143,7 @@ push_palette() {
       prompt) tmux "$@" set -g "@theme-$_name-prompt" "$_v" ;;
       *)
         echo "mux-themes: $_f: bad key: $_k" >&2
-        exit 1 ;;
+        exit "$MUX_EC_FAIL" ;;
       esac
     done <"$_ct"
   done <"$_fl"
@@ -244,5 +253,5 @@ prune)
   ;;
 *)
   echo "usage: mux themes [load|sync|list|prune]" >&2
-  exit 2 ;;
+  exit "$MUX_EC_USAGE" ;;
 esac

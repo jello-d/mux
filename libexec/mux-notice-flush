@@ -19,9 +19,13 @@ _self=$(command -v -- "$0" 2>/dev/null || printf '%s' "$0")
 _self=$(readlink -f -- "$_self" 2>/dev/null || printf '%s' "$_self")
 _libexec=${_self%/*}
 _lib=$_libexec/../lib
+[ -r "$_lib/mux-exit_lib" ] \
+  || { echo "mux: $_lib/mux-exit_lib missing" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$_lib/mux-exit_lib"
 . "$_lib/mux-paths_lib"
 . "$_lib/mux-notice_lib"
 
-[ -n "${1:-}" ] || exit 0
+[ -n "${1:-}" ] || exit "$MUX_EC_OK"
 mux_notice_flush "$1" || true
-exit 0
+exit "$MUX_EC_OK"

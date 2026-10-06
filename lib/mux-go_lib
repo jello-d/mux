@@ -41,6 +41,7 @@
 # front end rather than in a process of its own:
 #
 #     from bin/mux       tm  mux_wire  mux_env_ensure
+#     mux-exit_lib       MUX_EC_* (the exit codes)
 #     mux-build_lib      mux_attach  expand_profile  bottom_spec
 #                        pane_process  _session_geometry  _find_agent
 #                        expand_tilde
@@ -92,14 +93,15 @@ _go_attach_live() {
         echo "mux:   attach it anyway: mux go $name" \
           "--attach" >&2
         echo "mux:   or name this one: mux new <name>" >&2
-        exit 1
+        exit "$MUX_EC_FAIL"
       fi
     fi
     [ "$resume" -eq 1 ] && \
       echo "mux: $name already up; --resume applies only at" \
         "build" >&2
     mux_attach
-    exit 0          # reached only under --no-attach; otherwise exec'd away
+    # reached only under --no-attach; otherwise exec'd away
+    exit "$MUX_EC_OK"
   fi
   return 0
 }
@@ -144,7 +146,7 @@ _go_pick_profile() {
     if [ -z "$profile" ]; then
       mux_prof_has "$layout_arg" && prow=$layout_arg
       [ -n "$prow" ] || {
-        echo "mux: no profile: $layout_arg" >&2; exit 1; }
+        echo "mux: no profile: $layout_arg" >&2; exit "$MUX_EC_FAIL"; }
     fi
   else
     # A BREAKOUT file wins over a row of the same name. Promotion is meant
@@ -191,7 +193,7 @@ _go_resolve_name() {
           "but you are in $(mux_fold_tilde "$base")" >&2
         echo "mux:   that project:     mux go $name" >&2
         echo "mux:   this one, named:  mux new <name>" >&2
-        exit 1
+        exit "$MUX_EC_FAIL"
       fi
     fi
   fi
@@ -212,7 +214,7 @@ _go_resolve_name() {
       echo "mux: '$name' is ambiguous ($nhit projects share it):" >&2
       printf '%s\n' "$hits" | sed 's/^/         /' >&2
       echo "mux: name one of them:  cd <dir> && mux new <alias>" >&2
-      exit 1
+      exit "$MUX_EC_FAIL"
     elif [ -z "$prow$profile" ]; then
       # Step 5: nothing knows this name, so "new session" and "typo"
       # are indistinguishable. Refuse, and hand over both fixes.
@@ -243,8 +245,8 @@ _go_flatten() {
   # so there is one parse path below whichever form the profile was stored in.
   plabel=$profile
   if [ -n "$prow" ]; then
-    profile=$(mktemp) || { echo "mux: mktemp failed" >&2; exit 1; }
-    mux_prof_directives "$prow" >"$profile" || exit 1
+    profile=$(mktemp) || { echo "mux: mktemp failed" >&2; exit "$MUX_EC_FAIL"; }
+    mux_prof_directives "$prow" >"$profile" || exit "$MUX_EC_FAIL"
     plabel="$(mux_prof_file) [$prow]"
   fi
   : "${profile:=/dev/null}"
@@ -255,7 +257,7 @@ _go_flatten() {
   # no tmux state), then to build. A malformed layout (or a missing or cyclic
   # include), fails before any session exists, never leaving a half-built one,
   # and root/theme are position-independent (last one wins).
-  flat=$(mktemp) || { echo "mux: mktemp failed" >&2; exit 1; }
+  flat=$(mktemp) || { echo "mux: mktemp failed" >&2; exit "$MUX_EC_FAIL"; }
   trap 'rm -f "$flat"' EXIT
   expand_profile "$profile" "$plabel" >"$flat"
   return 0
@@ -281,7 +283,7 @@ _go_validate() {
       root=$(expand_tilde "$rest")
       [ -d "$root" ] || {
         echo "mux: root not a dir: $root" >&2
-        exit 1
+        exit "$MUX_EC_FAIL"
       }
       ;;
     theme)
@@ -295,7 +297,7 @@ _go_validate() {
       always|away) want_notify=$rest ;;
       *)
         echo "mux: 'notify' wants always|away: $rest" >&2
-        exit 1 ;;
+        exit "$MUX_EC_FAIL" ;;
       esac
       ;;
     window)
@@ -306,13 +308,13 @@ _go_validate() {
     pane)
       [ "$v_win" -eq 1 ] || {
         echo "mux: 'pane' before 'window' in $profile" >&2
-        exit 1
+        exit "$MUX_EC_FAIL"
       }
       # even-horizontal at build would flatten a bottom pane back
       # into the row, so refuse the order that would wreck it.
       [ "$v_bottom" -eq 0 ] || {
         echo "mux: 'pane' after 'bottom' in $profile" >&2
-        exit 1
+        exit "$MUX_EC_FAIL"
       }
       v_panes=$((v_panes + 1))
       ;;
@@ -344,7 +346,7 @@ _go_validate() {
       # to reclassify a pane somebody else created.
       [ "$v_panes" -gt 0 ] || {
         echo "mux: '$verb' with no pane in $profile" >&2
-        exit 1
+        exit "$MUX_EC_FAIL"
       }
       # REFUSED AFTER `bottom` for the same reason `pane` is: the builder
       # qualifies the pane it last created, and after a bottom that is no
@@ -352,7 +354,7 @@ _go_validate() {
       # the wrong pane is the failure this package keeps paying for.
       [ "$v_bottom" -eq 0 ] || {
         echo "mux: '$verb' after 'bottom' in $profile" >&2
-        exit 1
+        exit "$MUX_EC_FAIL"
       }
       # THE VOCABULARY LIVES IN `mux-class_lib` NOW, with its ORDERING, because
       # `mux agent class` needs the direction and three copies of a word list
@@ -362,29 +364,29 @@ _go_validate() {
       # policy file is read at all.
       mux_class_valid "$rest" || {
         echo "mux: '$verb' wants human|agent|hybrid: $rest" >&2
-        exit 1; }
+        exit "$MUX_EC_FAIL"; }
       ;;
     bottom)
       [ "$v_panes" -gt 0 ] || {
         echo "mux: 'bottom' with no pane in $profile" >&2
-        exit 1
+        exit "$MUX_EC_FAIL"
       }
       [ "$v_bottom" -eq 0 ] || {
         echo "mux: two 'bottom' in one window in $profile" >&2
-        exit 1
+        exit "$MUX_EC_FAIL"
       }
-      bottom_spec "$rest" || exit 1
+      bottom_spec "$rest" || exit "$MUX_EC_FAIL"
       v_bottom=1
       ;;
     include)
       echo "mux: 'include' was replaced by 'layout <name>' in a" \
         "profile: $profile" >&2
       echo "mux: convert it:  mux-migrate-profiles" >&2
-      exit 1
+      exit "$MUX_EC_FAIL"
       ;;
     *)
       echo "mux: unknown directive: $verb in $profile" >&2
-      exit 1
+      exit "$MUX_EC_FAIL"
       ;;
     esac
   done <"$flat"
@@ -394,7 +396,7 @@ _go_validate() {
   # saying which profile was empty: a broken message on an error path,
   # which is where a clear one matters most.
   [ "$v_win" -eq 1 ] || {
-    echo "mux: empty layout: $plabel" >&2; exit 1; }
+    echo "mux: empty layout: $plabel" >&2; exit "$MUX_EC_FAIL"; }
   return 0
 }
 
@@ -412,7 +414,7 @@ _go_settle() {
     [ -n "$(mux_data_find themes "$want_theme" .theme)" ] || {
       echo "mux: unknown theme: $want_theme" \
         "(see: mux help colors)" >&2
-      exit 1
+      exit "$MUX_EC_FAIL"
     }
   fi
 
@@ -423,7 +425,7 @@ _go_settle() {
     [ -n "$(_find_agent "$want_agent")" ] || {
       echo "mux: unknown agent: $want_agent" \
         "(see: mux help agents)" >&2
-      exit 1
+      exit "$MUX_EC_FAIL"
     }
   fi
   # The context's agent, then mux's built-in. `agent` is a documented context
@@ -548,7 +550,7 @@ _go_build() {
       # re-applied by mux-pin, because tmux rescales panes
       # proportionally on resize and would otherwise inflate this one
       # well past its split height.
-      bottom_spec "$rest" || exit 1
+      bottom_spec "$rest" || exit "$MUX_EC_FAIL"
       # -f spans the full window width, so the new pane sits under
       # every pane above rather than splitting only the active one. A
       # command runs as the pane's process; with none it is a shell.

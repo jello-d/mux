@@ -529,19 +529,25 @@ if [ -s "$_dash" ]; then
 fi
 
 # --- the exit-code contract, mechanically -------------------------------
-# THE ALLOWED SET IS SCRAPED FROM bin/mux's MUX_EC_* BLOCK, so this rule cannot
-# drift from the declaration: it hardcoded `[0123]` while MUX_EC_NOTREADY=4 was
-# live, which would have failed a literal `exit 4` and told the author that 4
-# was not in the contract.
+# NO LITERAL `exit <digit>` AT ALL in bin/, lib/ or libexec/: the names in
+# lib/mux-exit_lib say which condition is being reported, where a bare 2, 3 or
+# 4 does not. The ABSENCE of every other code is what the set buys, so a
+# caller attributes 255 to ssh and 127 to a missing binary rather than to mux.
 #
-# The ABSENCE of everything else is what it buys: a caller attributes 255 to
-# ssh and 127 to a missing binary rather than to mux. test/mux-exit.t pins what
-# today's verbs return; this holds the rule against code nobody has written.
+# THREE EXCEPTIONS, and each is a different language or a different contract,
+# listed here because an exemption nobody can explain becomes a hole:
 #
-# Literal codes only. A few sites exit through a variable (`exit "$RC"` in
-# mux-check, `exit "${1:-2}"` in usage) and are covered behaviourally: a grep
-# cannot evaluate them, and pretending otherwise is a guard that looks stronger
-# than it is.
+#   an `exit` inside an awk/sed PROGRAM   awk's exit, not the shell's, and
+#                                         `$MUX_EC_X` in a single-quoted
+#                                         program is a literal string awk
+#                                         evaluates as 0
+#   an `exit` inside a `( )` SUBSHELL     the subshell's true/false, read by
+#                                         the caller as a predicate
+#   share/ hooks                          the 0/1/78 hook contract, checked
+#                                         separately below
+#
+# test/mux-exit.t pins what today's verbs return; this holds the rule against
+# code nobody has written.
 #
 # Whole-line COMMENTS are excluded and have to be: a file that classifies a
 # FOREIGN code must name it to explain itself, and mux-latch documenting "ssh
@@ -553,22 +559,57 @@ fi
 # states (0 yes, 1 no, 78 cannot tell), and 78 is the point: "cannot tell" must
 # be distinguishable from "no", or an edge nobody can check reports as fine.
 # Exempting the directories with a hole would let a hook invent a fourth code.
-_ecset=$(sed -n 's/^MUX_EC_[A-Z]*=\([0-9]*\).*/\1/p' "$HERE/bin/mux" \
+_ecset=$(sed -n 's/^MUX_EC_[A-Z]*=\([0-9]*\).*/\1/p' "$HERE/lib/mux-exit_lib" \
   | sort -u | tr -d '\n')
-[ -n "$_ecset" ] || fail "no MUX_EC_* declarations found in bin/mux, so the
-exit-code rule below would allow everything"
+[ -n "$_ecset" ] || fail "no MUX_EC_* declarations found in lib/mux-exit_lib,
+so the exit-code rule below would allow everything"
+# TWO NAMED EXEMPTIONS, both in one file and both the subshell case: the
+# status of a `( )` read by the caller as a predicate is a true/false, not one
+# of mux's codes. Named here rather than pattern-matched, because "is this
+# exit inside a subshell" is not a question a grep can answer.
+_ecx='lib/mux-send-policy_lib'
 _ec=$T/exitcodes
-( cd "$HERE" && grep -rnE '\bexit [0-9]+' bin lib libexec share setup.sh \
-  2>/dev/null | grep -vE "\\bexit [$_ecset]\\b" \
-  | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' \
-  | grep -vE '^share/(latch|desktop-notifier)/' ) >"$_ec" || true
+# A single-quoted `exit N` is an awk or sed program's own exit, in a language
+# where `"$MUX_EC_FAIL"` would be a literal string evaluating to 0. That is
+# not a hypothetical: this sweep converted one and the mutation went silent.
+#
+# AND THE BOOTSTRAP GUARD CANNOT USE THE LIB IT IS CHECKING FOR, so the line
+# that reports mux-exit_lib missing keeps a literal. It is written with the
+# exit ON that line precisely so this exemption is one grep and names itself.
+( cd "$HERE" && grep -rnE '\bexit [0-9]+' bin lib libexec setup.sh \
+  2>/dev/null \
+  | grep -vE "^($_ecx):" \
+  | grep -vE "^[^:]+:[0-9]+:[[:space:]]*#" \
+  | grep -vE "'[^']*\bexit [0-9]+[^']*'" \
+  | grep -vE 'mux-exit_lib' ) >"$_ec" || true
 if [ -s "$_ec" ]; then
-  printf 'FAIL %s: an exit code outside the mux contract:\n' "$_name" >&2
+  printf 'FAIL %s: a literal exit code in shipped code:\n' "$_name" >&2
   sed 's/^/  /' "$_ec" >&2
-  printf 'mux exits only %s, declared as MUX_EC_* in bin/mux.\n' \
+  printf 'Use the MUX_EC_* name from lib/mux-exit_lib (%s), so the\n' \
     "$(printf '%s' "$_ecset" | sed 's/./&, /g; s/, $//')" >&2
-  printf 'Anything else makes 255 and 127 ambiguous for a remote\n' >&2
-  printf 'caller. See test/mux-exit.t and man mux EXIT STATUS.\n' >&2
+  printf 'call site says WHICH condition it reports. See test/mux-exit.t\n' >&2
+  printf 'and man mux EXIT STATUS.\n' >&2
+  exit 1
+fi
+
+# AND A FILE USING THE NAMES MUST GET THEM FROM SOMEWHERE. bin/ and libexec/
+# source the lib; a lib cannot source another, so it declares the dependency
+# in its header and the caller supplies it. Without this, a forgotten source
+# is an unset variable under `set -u`, which is loud but only on the path that
+# exits.
+_ecs=$T/ecsrc
+: >"$_ecs"
+for _f in "$HERE"/bin/mux "$HERE"/libexec/* "$HERE"/lib/*_lib \
+    "$HERE"/setup.sh; do
+  [ -f "$_f" ] || continue
+  grep -vE '^[[:space:]]*#' "$_f" | grep -q 'MUX_EC_' || continue
+  case ${_f##*/} in mux-exit_lib) continue ;; esac
+  grep -q 'mux-exit_lib' "$_f" || printf '%s\n' "${_f#"$HERE"/}" >>"$_ecs"
+done
+if [ -s "$_ecs" ]; then
+  printf 'FAIL %s: uses MUX_EC_* without sourcing or declaring the lib:\n' \
+    "$_name" >&2
+  sed 's/^/  /' "$_ecs" >&2
   exit 1
 fi
 

@@ -49,8 +49,13 @@ set -eu
 
 _libexec=$(dirname "$0")
 _lib=$_libexec/../lib
+[ -r "$_lib/mux-exit_lib" ] \
+  || { echo "mux: $_lib/mux-exit_lib missing" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$_lib/mux-exit_lib"
 [ -r "$_lib/mux-log_lib" ] || {
-  echo "mux: mux-log_lib missing (incomplete install)" >&2; exit 1; }
+  echo "mux: mux-log_lib missing (incomplete install)" >&2
+    exit "$MUX_EC_FAIL"; }
 . "$_lib/mux-log_lib"
 
 # PER-USER FALLBACK, matching every other site: see the note in mux-latch.
@@ -59,7 +64,7 @@ _lib=$_libexec/../lib
 _run=${XDG_RUNTIME_DIR:-/tmp/user-$(id -u)}/mux-undo
 _tab=$(printf '\t')
 
-_die() { echo "mux: undo-pane: $*" >&2; exit 1; }
+_die() { echo "mux: undo-pane: $*" >&2; exit "$MUX_EC_FAIL"; }
 
 # The record for a window. The window ID (`@3`) is the key: it is stable for the
 # window's whole life and safe as a filename, where a session NAME is neither.
@@ -367,5 +372,5 @@ case "${1:-}" in
   ;;
 '') _restore ;;
 *)  echo "mux: undo-pane: unknown option: $1" >&2
-    echo "usage: mux undo-pane" >&2; exit 2 ;;
+    echo "usage: mux undo-pane" >&2; exit "$MUX_EC_USAGE" ;;
 esac

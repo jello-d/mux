@@ -35,6 +35,10 @@ set -eu
 # Sibling libs in this script's own (colocated) libexec dir.
 _libexec=$(dirname "$0")
 _lib=$_libexec/../lib
+[ -r "$_lib/mux-exit_lib" ] \
+  || { echo "mux: $_lib/mux-exit_lib missing" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$_lib/mux-exit_lib"
 
 # The state GLYPHS (MUX_GLYPH_*) and the state reader (mux_agent_state) live in
 # a shared lib, so the strip and the mux picker map state the same way and
@@ -306,7 +310,7 @@ while read -r sess; do
 done <<EOF
 $_SLIST
 EOF
-[ "$nsess" -gt 0 ] || exit 0
+[ "$nsess" -gt 0 ] || exit "$MUX_EC_OK"
 
 # Width budget: columns status-right may fill (status-right-length), less the
 # one-space margin in its format string. MUX_STRIP_WIDTH overrides (tests).

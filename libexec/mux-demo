@@ -31,6 +31,10 @@ set -eu
 
 _libexec=$(dirname "$0")
 _lib=$_libexec/../lib
+[ -r "$_lib/mux-exit_lib" ] \
+  || { echo "mux: $_lib/mux-exit_lib missing" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$_lib/mux-exit_lib"
 [ -d "${MUX_SHARE:-}" ] || MUX_SHARE=$_lib/../share
 
 # A FIXED SOCKET, and one that cannot collide with a partition: a partition name
@@ -38,7 +42,7 @@ _lib=$_libexec/../lib
 # unreachable by the partition machinery by construction.
 SOCK=${MUX_DEMO_SOCKET:-mux.demo}
 
-_die() { echo "mux: demo: $*" >&2; exit 1; }
+_die() { echo "mux: demo: $*" >&2; exit "$MUX_EC_FAIL"; }
 _tx() { tmux -L "$SOCK" "$@"; }
 
 _usage() {
@@ -51,13 +55,14 @@ _usage() {
 _stop=0 _attach=1
 while [ $# -gt 0 ]; do
   case $1 in
-  -h|--help) _usage; exit 0 ;;
+  -h|--help) _usage; exit "$MUX_EC_OK" ;;
   --stop) _stop=1; shift ;;
   # Same name `mux go` uses for the same idea. It is also what makes this verb
   # testable: the attach needs a terminal, so a suite that could only run the
   # whole thing could assert nothing about the part that matters.
   --no-attach) _attach=0; shift ;;
-  *) echo "mux: demo: unknown option: $1" >&2; _usage >&2; exit 2 ;;
+  *) echo "mux: demo: unknown option: $1" >&2; _usage >&2
+     exit "$MUX_EC_USAGE" ;;
   esac
 done
 
@@ -82,7 +87,7 @@ if [ "$_stop" -eq 1 ]; then
   case $_statedir in
   */mux/agent-state/"$SOCK") rm -rf "$_statedir" 2>/dev/null || true ;;
   esac
-  exit 0
+  exit "$MUX_EC_OK"
 fi
 
 command -v tmux >/dev/null 2>&1 || _die "tmux is not installed"
@@ -153,7 +158,7 @@ cat <<EOF
 EOF
 if [ "$_attach" -eq 0 ]; then
   echo "  (built; attach with: mux demo)"
-  exit 0
+  exit "$MUX_EC_OK"
 fi
 printf '  press Enter to attach ... '
 read -r _ || true

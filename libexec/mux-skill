@@ -55,6 +55,10 @@ set -eu
 
 _libexec=$(dirname "$0")
 _lib=$_libexec/../lib
+[ -r "$_lib/mux-exit_lib" ] \
+  || { echo "mux: $_lib/mux-exit_lib missing" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$_lib/mux-exit_lib"
 [ -d "${MUX_SHARE:-}" ] || MUX_SHARE=$_lib/../share
 
 _form=skill
@@ -68,8 +72,8 @@ case ${_name:-} in
   echo "usage: mux skill [--agents-md] [NAME]"
   echo "  print the agent instructions that match this mux, on stdout"
   echo "  --agents-md   the body alone, with no YAML frontmatter"
-  exit 0 ;;
--*) echo "mux: skill: unknown option: $_name" >&2; exit 2 ;;
+  exit "$MUX_EC_OK" ;;
+-*) echo "mux: skill: unknown option: $_name" >&2; exit "$MUX_EC_USAGE" ;;
 esac
 
 # A NAME THAT IS NOT A NAME IS A USAGE ERROR, checked before it becomes a
@@ -80,7 +84,7 @@ esac
 case $_name in
 ''|*[!abcdefghijklmnopqrstuvwxyz0123456789-]*|-*|*-)
   echo "mux: skill: not a skill name: $_name" >&2
-  exit 2 ;;
+  exit "$MUX_EC_USAGE" ;;
 esac
 
 _dir=$MUX_SHARE/skills/$_name
@@ -96,12 +100,12 @@ if [ ! -r "$_body" ]; then
       echo "mux: skill: have: ${_d##*/}" >&2
     done
   fi
-  exit 1
+  exit "$MUX_EC_FAIL"
 fi
 
 if [ "$_form" = agents ]; then
   cat "$_body"
-  exit 0
+  exit "$MUX_EC_OK"
 fi
 
 # A MISSING FRONTMATTER IS FATAL, not an omission. A SKILL.md without it
@@ -112,7 +116,7 @@ _front=$_dir/frontmatter.yaml
 if [ ! -r "$_front" ]; then
   echo "mux: skill: $_name has no frontmatter.yaml, so the skill form" >&2
   echo "mux: skill: cannot be assembled; --agents-md still works" >&2
-  exit 1
+  exit "$MUX_EC_FAIL"
 fi
 
 echo '---'

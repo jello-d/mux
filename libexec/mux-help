@@ -34,6 +34,10 @@ set -eu
 
 _libexec=$(dirname "$0")
 _lib=$_libexec/../lib
+[ -r "$_lib/mux-exit_lib" ] \
+  || { echo "mux: $_lib/mux-exit_lib missing" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$_lib/mux-exit_lib"
 [ -d "${MUX_SHARE:-}" ] || MUX_SHARE=$_lib/../share
 MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
 export MUX_DIR MUX_SHARE
@@ -227,10 +231,10 @@ help_profiles() {
 _palette_preview() {    # BAR_FG BAR_BG ACT_FG ACT_BG
   [ "$#" -eq 4 ] || { echo \
     "mux: palette test BAR_FG BAR_BG ACT_FG ACT_BG" >&2
-    exit 2; }
+    exit "$MUX_EC_USAGE"; }
   for _c in "$@"; do
     [ -n "$(_sgr_frag "$_c" 48)" ] || {
-      echo "mux: bad colour: $_c" >&2; exit 2; }
+      echo "mux: bad colour: $_c" >&2; exit "$MUX_EC_USAGE"; }
   done
   _b=$(_sgr_color "$2" 48)$(_sgr_color "$1" 38)   # bar bg + fg
   _a=$(_sgr_color "$4" 48)$(_sgr_color "$3" 38)$(printf '\033[1m')
@@ -282,14 +286,14 @@ help_palette() {        # [FG] | test BAR_FG BAR_BG ACT_FG ACT_BG
   if [ "${1:-}" = test ]; then
     shift
     _palette_preview "$@"
-    exit 0
+    exit "$MUX_EC_OK"
   fi
   _fg=                            # empty => B&W contrast per cell
   if [ -n "${1:-}" ]; then
     _fg=$(_sgr_frag "$1" 38)
     [ -n "$_fg" ] || { echo \
       "mux: palette fg: 0-255, colourN, #rrggbb, or 0x..." >&2
-      exit 2; }
+      exit "$MUX_EC_USAGE"; }
   fi
   if [ -n "$_fg" ]; then
     printf 'palette (fg %s over every bg):\n\n' "$1"
@@ -454,6 +458,6 @@ profiles|layouts)  help_profiles ;;
 palette)           shift; help_palette "$@" ;;
 *) echo "mux: unknown help topic: ${1:-}" \
   "(agents, themes, profiles, palette)" >&2
-   exit 2 ;;
+   exit "$MUX_EC_USAGE" ;;
 esac
-exit 0
+exit "$MUX_EC_OK"

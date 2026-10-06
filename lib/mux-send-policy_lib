@@ -181,5 +181,8 @@ mux_send_allowed() {   # <what> <partition> <session> <window> <class>
     done
     [ "$_ok" = 1 ] && exit 0
   done <"$(_sp_file)"
+  # LITERAL 0/1, NOT MUX_EC_*: this is the SUBSHELL's status, which the
+  # caller reads as a predicate. It is a true/false, not one of mux's exit
+  # codes, and naming it would claim the function had decided mux's own.
   exit 1 )
 }

@@ -14,16 +14,21 @@ MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
 
 _libexec=$(dirname "$0")
 _lib=$_libexec/../lib
+[ -r "$_lib/mux-exit_lib" ] \
+  || { echo "mux: $_lib/mux-exit_lib missing" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$_lib/mux-exit_lib"
 for _l in mux-conf_lib mux-paths_lib mux-profiles_lib mux-context_lib \
     mux-scan_lib; do
   [ -r "$_lib/$_l" ] || {
-    echo "mux: $_l missing (incomplete install)" >&2; exit 1; }
+    echo "mux: $_l missing (incomplete install)" >&2; exit "$MUX_EC_FAIL"; }
   . "$_lib/$_l"
 done
 
 # The partition decides which map this is: a scan run in one partition cannot
 # see another's trees.
-mux_ctx_resolve || { echo "mux: ${MUX_CTX_ERR:-context error}" >&2; exit 1; }
+mux_ctx_resolve || { echo "mux: ${MUX_CTX_ERR:-context error}" >&2
+  exit "$MUX_EC_FAIL"; }
 _key=$MUX_CTX_PARTITION
 
 case "${1:-}" in
@@ -37,7 +42,7 @@ case "${1:-}" in
       "$MUX_DIR/partitions/$_key.partition)" >&2
     echo "mux: there is no built-in root on purpose: a partition scans" \
       "only where you say" >&2
-    exit 1
+    exit "$MUX_EC_FAIL"
   fi
   printf 'mux: scanning'
   printf '%s\n' "$_roots" | while read -r _p _d; do
@@ -82,9 +87,9 @@ case "${1:-}" in
   # EXIT 1 FOR NONE, matching what plain `mux scan` already does about the same
   # condition, rather than inventing a second spelling of it.
   _r=$(mux_scan_roots)
-  [ -n "$_r" ] || exit 1
+  [ -n "$_r" ] || exit "$MUX_EC_FAIL"
   printf '%s\n' "$_r"
-  exit 0
+  exit "$MUX_EC_OK"
   ;;
 --init)
   # --- TURNING DISCOVERY ON, WITHOUT GUESSING ------------------------------
@@ -108,7 +113,7 @@ case "${1:-}" in
       printf 'mux:   %s (depth %s)\n' "$_p" "$_d"
     done
     echo "mux: edit $MUX_DIR/partitions/$_key.partition to change them"
-    exit 0
+    exit "$MUX_EC_OK"
   fi
   _def=$HOME
   [ -d "$HOME/src" ] && _def=$HOME/src
@@ -142,7 +147,7 @@ case "${1:-}" in
         echo "mux:   mux scan --init $_def" >&2
         echo "mux: ($HOME/src does not exist here, and indexing a whole" >&2
         echo "mux:  home directory is too big a guess to make unasked.)" >&2
-        exit 2
+        exit "$MUX_EC_USAGE"
       fi
       _want=$_def
       echo "mux: no terminal to ask, and $_want exists, so using it."
@@ -163,10 +168,10 @@ case "${1:-}" in
   "~/"*) _want=$HOME/${_want#\~/} ;;
   esac
   [ -d "$_want" ] || {
-    echo "mux: not a directory: $_want" >&2; exit 2; }
+    echo "mux: not a directory: $_want" >&2; exit "$MUX_EC_USAGE"; }
   _pf=$MUX_DIR/partitions/$_key.partition
   mkdir -p "$MUX_DIR/partitions" || {
-    echo "mux: cannot create $MUX_DIR/partitions" >&2; exit 1; }
+    echo "mux: cannot create $MUX_DIR/partitions" >&2; exit "$MUX_EC_FAIL"; }
   # APPENDED IF THE FILE EXISTS, never rewritten: a partition file may already
   # carry a label, a theme or a layout, and a bootstrap step that overwrote
   # somebody's config would be the one unrecoverable mistake available here.
@@ -178,22 +183,23 @@ case "${1:-}" in
       printf '# projects. DEPTH is how many levels below DIR to descend;\n'
       printf '# raise it for a deeper tree, and add more `scan` lines for\n'
       printf '# more roots.\n'
-    } >"$_pf" || { echo "mux: cannot write $_pf" >&2; exit 1; }
+    } >"$_pf" || { echo "mux: cannot write $_pf" >&2; exit "$MUX_EC_FAIL"; }
   fi
   printf 'scan\t%s 3\n' "$_want" >>"$_pf" || {
-    echo "mux: cannot write $_pf" >&2; exit 1; }
+    echo "mux: cannot write $_pf" >&2; exit "$MUX_EC_FAIL"; }
   echo "mux: discovery on for '$_key': $_want (depth 3)"
   echo "mux: recorded in $_pf"
   echo "mux: now run:  mux scan"
-  exit 0
+  exit "$MUX_EC_OK"
   ;;
-*) echo "usage: mux scan [--list] [--init [DIR]] [--roots]" >&2; exit 2 ;;
+*) echo "usage: mux scan [--list] [--init [DIR]] [--roots]" >&2
+   exit "$MUX_EC_USAGE" ;;
 esac
 
 _sf=$(mux_scan_file "$_key")
 if [ ! -f "$_sf" ]; then
   echo "mux: no map at $_sf (run: mux scan)" >&2
-  exit 1
+  exit "$MUX_EC_FAIL"
 fi
 _n=$(cut -f1 "$_sf" | grep -c . || true)
 printf 'mux: %s project(s) in %s\n' "$_n" "$_sf"

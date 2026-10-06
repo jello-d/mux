@@ -28,6 +28,12 @@ set -eu
 
 PKG=mux
 _root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+# The exit codes mux itself uses, so this installer refuses with the same
+# vocabulary the package does.
+[ -r "$_root/lib/mux-exit_lib" ] \
+  || { echo "setup.sh: $_root/lib/mux-exit_lib missing" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$_root/lib/mux-exit_lib"
 
 PREFIX=${PREFIX:-$HOME/.local}
 _bin=${XDG_BIN_HOME:-$PREFIX/bin}
@@ -733,7 +739,7 @@ _badarg() {   # <verb> <offending argument>
     printf "setup.sh: unexpected argument '%s' after '%s'\n" "$2" "$1" >&2 ;;
   esac
   printf '%s\n' "$_U" >&2
-  exit 2
+  exit "$MUX_EC_USAGE"
 }
 # `desktop-notifier` is the one verb that legitimately takes more: it passes a
 # verb and its flags straight through to the sub-package.
@@ -759,5 +765,6 @@ case "${1:-help}" in
   desktop-notifier)                                        # passthrough
              shift; exec sh "$_root/desktop-notifier/setup.sh" "$@" ;;
   -h|--help|help) echo "$_U" ;;
-  *) echo "setup.sh: unknown command '${1:-}'" >&2; echo "$_U" >&2; exit 2 ;;
+  *) echo "setup.sh: unknown command '${1:-}'" >&2; echo "$_U" >&2
+     exit "$MUX_EC_USAGE" ;;
 esac

@@ -25,12 +25,16 @@ set -eu
 
 _libexec=$(dirname "$0")
 _lib=$_libexec/../lib
+[ -r "$_lib/mux-exit_lib" ] \
+  || { echo "mux: $_lib/mux-exit_lib missing" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$_lib/mux-exit_lib"
 
 _ev=${1:-}
 [ -n "$_ev" ] || {
-  echo "usage: mux agent-hook <EventName>" >&2; exit 2; }
+  echo "usage: mux agent-hook <EventName>" >&2; exit "$MUX_EC_USAGE"; }
 [ $# -eq 1 ] || {
-  echo "mux: agent-hook takes one event name" >&2; exit 2; }
+  echo "mux: agent-hook takes one event name" >&2; exit "$MUX_EC_USAGE"; }
 
 # THE TABLE. A beat is an event that merely WITNESSES activity; only a turn
 # START may create `working` out of `idle`, which is why PostToolUse and
@@ -58,7 +62,7 @@ SessionStart)     set -- idle --unless-working ;;
     mux_log agent "unknown hook event: $_ev"
   fi
   echo "mux: agent-hook: unknown event: $_ev" >&2
-  exit 2 ;;
+  exit "$MUX_EC_USAGE" ;;
 esac
 
 exec "$_libexec/mux-agent-state-emit" "$@" --source "$_ev"

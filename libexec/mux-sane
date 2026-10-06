@@ -64,16 +64,23 @@
 # trying to guess whether it was needed.
 set -eu
 
+
+_libexec=$(dirname "$0")
+_lib=$_libexec/../lib
+[ -r "$_lib/mux-exit_lib" ] \
+  || { echo "mux: $_lib/mux-exit_lib missing" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$_lib/mux-exit_lib"
 # NO TERMINAL, NOTHING TO REPAIR. Checked before anything is emitted, because
 # writing escape sequences into a pipe corrupts whatever is reading it. All
 # three descriptors are tested: latch's own stderr is the usual one, but a
 # caller may have redirected it while still owning the terminal.
 if [ ! -t 0 ] && [ ! -t 1 ] && [ ! -t 2 ]; then
-  exit 0
+  exit "$MUX_EC_OK"
 fi
 # The CONTROLLING terminal, not stdout: the repair has to reach the real
 # terminal even when the caller's streams are redirected somewhere else.
-[ -w /dev/tty ] || exit 0
+[ -w /dev/tty ] || exit "$MUX_EC_OK"
 
 # A terminfo capability, or a fallback when TERM is unset, dumb, or unknown.
 # The fallbacks are the xterm-family sequences the capture above recorded.
@@ -107,4 +114,4 @@ _cap() {   # <capname> <fallback>
 # and first would mean a failure here skipped the part that matters.
 stty sane </dev/tty >/dev/null 2>&1 || true
 
-exit 0
+exit "$MUX_EC_OK"

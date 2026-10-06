@@ -23,6 +23,10 @@ set -eu
 # Sibling lib in this script's own (colocated) libexec dir.
 _libexec=$(dirname "$0")
 _lib=$_libexec/../lib
+[ -r "$_lib/mux-exit_lib" ] \
+  || { echo "mux: $_lib/mux-exit_lib missing" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$_lib/mux-exit_lib"
 
 force=0
 case "${1:-}" in --force|-f) force=1 ;; esac
@@ -39,7 +43,7 @@ bottom=$(tmux list-panes -F '#{pane_id} #{@mux-bottom}' \
   | awk 'NF > 1 { print $1; exit }')
 
 if [ "$force" -eq 1 ]; then
-  [ -n "${bottom:-}" ] || exit 0          # nothing to rebuild
+  [ -n "${bottom:-}" ] || exit "$MUX_EC_OK"          # nothing to rebuild
   win=$(tmux display-message -p '#{window_id}')
   act=$(tmux display-message -p '#{pane_id}')     # restore focus after
   max=$(tmux display-message -t "$bottom" -p '#{@mux-bottom}')
@@ -47,12 +51,13 @@ if [ "$force" -eq 1 ]; then
   # Break the pane out (content preserved) then rejoin it full-width: that
   # re-lays-out the border and re-emits its cells clean, which a redraw of
   # the existing layout does not. mux-pin restores the canonical height.
-  tmux break-pane -d -s "$bottom" -n _muxrefresh 2>/dev/null || exit 0
+  tmux break-pane -d -s "$bottom" -n _muxrefresh 2>/dev/null \
+    || exit "$MUX_EC_OK"
   tmux join-pane -v -f -l "$max" -s "$bottom" -t "$win" 2>/dev/null || :
   _balance
   "$_libexec/mux-pin" 2>/dev/null || true
   tmux select-pane -t "$act" 2>/dev/null || true
-  exit 0
+  exit "$MUX_EC_OK"
 fi
 
 # Even the top row's widths first: proportional resize drifts them off even and

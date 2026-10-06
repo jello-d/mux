@@ -89,6 +89,12 @@ cat >"$T/vbin/mux-views" <<'EOF'
 printf 'views %s\n' "$*" >>"$LOG"
 EOF
 chmod +x "$T/vbin/mux-views"
+# RELOCATED, SO ITS LIBS COME WITH IT. The copy exists to put a fake
+# mux-views next door, and a helper resolves its libs as `$(dirname $0)/../lib`,
+# so a bare copy leaves mux-exit_lib unreachable and the helper refuses before
+# it dispatches: the test then exits with no verdict at all.
+mkdir -p "$T/lib"
+cp "$HERE/lib/mux-exit_lib" "$T/lib/"
 cp "$HERE/libexec/mux-click" "$T/vbin/mux-click"
 : >"$LOG"
 env PATH="$T/bin:$PATH" "$T/vbin/mux-click" 'v:fit' '/dev/pts/3' >/dev/null 2>&1

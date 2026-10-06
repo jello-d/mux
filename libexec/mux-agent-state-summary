@@ -24,6 +24,10 @@ set -eu
 # Sibling libs in this script's own (colocated) libexec dir.
 _libexec=$(dirname "$0")
 _lib=$_libexec/../lib
+[ -r "$_lib/mux-exit_lib" ] \
+  || { echo "mux: $_lib/mux-exit_lib missing" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$_lib/mux-exit_lib"
 # mux-conf_lib FIRST: mux-context_lib reads $MUX_DIR/config through
 # mux_conf_clean, and says so in its own header.
 . "$_lib/mux-conf_lib"
@@ -148,7 +152,7 @@ EOF
 
 if [ "$_all" -eq 0 ]; then
   _summarise "$(mux_agent_dir "$_ns")" ""
-  exit 0
+  exit "$MUX_EC_OK"
 fi
 
 # _watched PARTITION: is anyone actually LOOKING at that partition?
@@ -194,14 +198,14 @@ for _d in "$_root"/*; do
     printf '%s %s\n' "$_p" "$(_summarise "$_d" "")"
   fi
 done
-[ "$_att" -eq 0 ] || exit 0
+[ "$_att" -eq 0 ] || exit "$MUX_EC_OK"
 # COLLAPSED MODE ONLY. `none 0` is a state and a COUNT, so in --sessions mode
 # it is a line of the wrong shape: a reader splitting `<partition> <state>
 # <session>` takes it as a session literally called `0`. There is no
 # per-session equivalent to emit, because the guarantee this provides is "a
 # consumer always gets at least one line", and a partition with no sessions
 # has no session lines to give.
-[ "$_sess_mode" -eq 0 ] || exit 0
+[ "$_sess_mode" -eq 0 ] || exit "$MUX_EC_OK"
 case " $_seen " in
 *" ${_ns:-global} "*) ;;
 *) printf '%s %s\n' "${_ns:-global}" "none 0" ;;

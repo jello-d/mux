@@ -29,6 +29,13 @@
 # dropped so you can promote the ones worth keeping.
 set -eu
 
+
+_libexec=$(dirname "$0")
+_lib=$_libexec/../lib
+[ -r "$_lib/mux-exit_lib" ] \
+  || { echo "mux: $_lib/mux-exit_lib missing" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$_lib/mux-exit_lib"
 MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
 MUX_SHARE=${MUX_SHARE:-$(dirname "$0")/../share}
 
@@ -37,7 +44,7 @@ MUX_SHARE=${MUX_SHARE:-$(dirname "$0")/../share}
 # rule (so a spliced layout arrives normalized, as the parser would see it).
 for _l in mux-data_lib mux-conf_lib mux-profiles_lib; do
   [ -r "$(dirname "$0")/../lib/$_l" ] || {
-    echo "mux: $_l missing (incomplete install)" >&2; exit 1; }
+    echo "mux: $_l missing (incomplete install)" >&2; exit "$MUX_EC_FAIL"; }
   . "$(dirname "$0")/../lib/$_l"
 done
 
@@ -45,10 +52,10 @@ APPLY=0
 case "${1:-}" in
 --apply) APPLY=1 ;;
 ''|--dry-run) ;;
-*) echo "usage: mux migrate-profiles [--apply]" >&2; exit 2 ;;
+*) echo "usage: mux migrate-profiles [--apply]" >&2; exit "$MUX_EC_USAGE" ;;
 esac
 
-[ -d "$MUX_DIR" ] || { echo "mux: no $MUX_DIR to migrate"; exit 0; }
+[ -d "$MUX_DIR" ] || { echo "mux: no $MUX_DIR to migrate"; exit "$MUX_EC_OK"; }
 
 _n=0
 _commented=

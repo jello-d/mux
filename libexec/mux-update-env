@@ -67,6 +67,10 @@ _self=$(command -v -- "$0" 2>/dev/null || printf '%s' "$0")
 _self=$(readlink -f -- "$_self" 2>/dev/null || printf '%s' "$_self")
 _libexec=${_self%/*}
 _lib=$_libexec/../lib
+[ -r "$_lib/mux-exit_lib" ] \
+  || { echo "mux: $_lib/mux-exit_lib missing" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$_lib/mux-exit_lib"
 MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
 MUX_SHARE=${MUX_SHARE:-$_lib/../share}
 [ -d "$MUX_SHARE" ] || MUX_SHARE=$_lib/../share
@@ -86,18 +90,18 @@ while [ $# -gt 0 ]; do
   -n|--dry-run) _dry=1; shift ;;
   -h|--help)
     echo "usage: mux update-env [[PARTITION::]SESSION] [--all] [-n]"
-    exit 0 ;;
+    exit "$MUX_EC_OK" ;;
   --) shift; break ;;
-  -*) echo "mux: update-env: unknown option: $1" >&2; exit 2 ;;
+  -*) echo "mux: update-env: unknown option: $1" >&2; exit "$MUX_EC_USAGE" ;;
   *)  [ -z "$_addr" ] || {
-        echo "mux: update-env takes one address" >&2; exit 2; }
+        echo "mux: update-env takes one address" >&2; exit "$MUX_EC_USAGE"; }
       _addr=$1; shift ;;
   esac
 done
 
 [ "$_all" -eq 0 ] || [ -z "$_addr" ] || {
   echo "mux: update-env: --all and an address contradict each other" >&2
-  exit 2; }
+  exit "$MUX_EC_USAGE"; }
 
 # --- which sessions ---------------------------------------------------------
 # VALIDATED IN THE MAIN SHELL, EMITTED IN A SUBSHELL, and the split is not
@@ -112,14 +116,14 @@ _tsess=
 if [ "$_all" -eq 1 ]; then
   _tmode=all
 elif [ -n "$_addr" ]; then
-  mux_addr_parse "$_addr" || exit 2
+  mux_addr_parse "$_addr" || exit "$MUX_EC_USAGE"
   [ -z "$MUX_ADDR_WIN" ] || {
     echo "mux: update-env: a window cannot be addressed here." >&2
     echo "mux: tmux keeps an environment per SESSION and per server, so" >&2
     echo "mux: there is nothing per-window for this to act on. Try:" >&2
     _twant=${MUX_ADDR_PART:+${MUX_ADDR_PART}::}$MUX_ADDR_SESS
     echo "mux:   mux update-env $_twant" >&2
-    exit 2; }
+    exit "$MUX_EC_USAGE"; }
   _tpart=$MUX_ADDR_PART
   _tsess=$MUX_ADDR_SESS
   _tmode=addr
@@ -135,7 +139,7 @@ if [ "$_tmode" = cur ]; then
   echo "mux: update-env: no session to act on." >&2
   echo "mux: run it inside a session, name one ([PARTITION::]SESSION)," >&2
   echo "mux: or ask for every session with --all." >&2
-  exit 2
+  exit "$MUX_EC_USAGE"
 fi
 
 # Emits `<partition>\t<session>` lines. A TAB because a session name may
@@ -191,7 +195,8 @@ _saw=0
 # appended: see the subshell note at the loop below.
 _stalef=$(mktemp "${TMPDIR:-/tmp}/mux-updenv.XXXXXX" 2>/dev/null) || _stalef=
 [ -n "$_stalef" ] && [ -f "$_stalef" ] || {
-  echo "mux: update-env: could not make a scratch file" >&2; exit 1; }
+  echo "mux: update-env: could not make a scratch file" >&2
+    exit "$MUX_EC_FAIL"; }
 # The literal is baked in at ARM time, per the standing rm rule: `trap` then
 # prints exactly what will be removed and no later assignment moves it.
 _cleanup="'$_stalef'"
@@ -365,4 +370,4 @@ elif [ "$_did" -eq 0 ]; then
     echo "mux: nothing needed changing"
   fi
 fi
-exit 0
+exit "$MUX_EC_OK"

@@ -49,6 +49,10 @@ set -eu
 
 _libexec=$(dirname "$0")
 _lib=$_libexec/../lib
+[ -r "$_lib/mux-exit_lib" ] \
+  || { echo "mux: $_lib/mux-exit_lib missing" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$_lib/mux-exit_lib"
 # mux-conf_lib for mux_conf_clean: the `busy` marker is read through the same
 # comment-and-whitespace cleaner every other mux config file uses, rather
 # than a private parser. Omitting it made _busy_pat silently return nothing,
@@ -60,7 +64,7 @@ for _l in mux-agent-state_lib mux-data_lib mux-context_lib mux-conf_lib \
     mux-log_lib
 do
   [ -r "$_lib/$_l" ] || {
-    echo "mux: $_l missing (incomplete install)" >&2; exit 1; }
+    echo "mux: $_l missing (incomplete install)" >&2; exit "$MUX_EC_FAIL"; }
   . "$_lib/$_l"
 done
 
@@ -78,7 +82,8 @@ while [ "$#" -gt 0 ]; do
   --repair) _repair=1; shift ;;
   --) shift; break ;;
   -*) echo "mux: agent-doctor: unknown option: $1" >&2
-      echo "usage: mux agent-doctor [--repair] [NS]" >&2; exit 2 ;;
+      echo "usage: mux agent-doctor [--repair] [NS]" >&2
+         exit "$MUX_EC_USAGE" ;;
   *)  break ;;
   esac
 done
@@ -96,7 +101,8 @@ _dt() {
 }
 
 _dir=$(mux_agent_dir "$_ns")
-[ -d "$_dir" ] || { echo "mux: no agent state for partition '$_ns'"; exit 0; }
+[ -d "$_dir" ] || { echo "mux: no agent state for partition '$_ns'"
+  exit "$MUX_EC_OK"; }
 
 # The agents mux knows, as a space-padded set: a descendant whose command is one
 # of these is THE agent for that pane. Taken from the shipped agent files rather
@@ -247,7 +253,8 @@ $_panes
 EOF
 _rows="$_rows$_orph"
 
-[ -n "$_rows" ] || { echo "mux: no agent state recorded in '$_ns'"; exit 0; }
+[ -n "$_rows" ] || { echo "mux: no agent state recorded in '$_ns'"
+  exit "$MUX_EC_OK"; }
 
 # How long to watch, and how busy counts as busy. Measured across six live
 # agents: a genuinely idle one sits at 0.1% of a core, mid-turn ones at 3.7% to
@@ -434,6 +441,6 @@ if [ "$_orphans" -gt 0 ]; then
   echo "mux: idle for days fires none until you interact with it." >&2
 fi
 if [ "$_drift" -gt 0 ] || [ "$_stale" -gt 0 ] || [ "$_orphans" -gt 0 ]; then
-  exit 1
+  exit "$MUX_EC_FAIL"
 fi
 echo "mux: recorded state agrees with every agent."

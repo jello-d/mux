@@ -43,9 +43,13 @@ set -eu
 
 _libexec=$(dirname "$0")
 _lib=$_libexec/../lib
+[ -r "$_lib/mux-exit_lib" ] \
+  || { echo "mux: $_lib/mux-exit_lib missing" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$_lib/mux-exit_lib"
 [ -d "${MUX_SHARE:-}" ] || MUX_SHARE=$_lib/../share
 
-_die() { echo "mux: setup: $*" >&2; exit 1; }
+_die() { echo "mux: setup: $*" >&2; exit "$MUX_EC_FAIL"; }
 
 _usage() {
   echo "usage: mux setup <AGENT> [--yes] [--remove] [--dry-run]"
@@ -67,32 +71,33 @@ _known() {
 _agent= _yes=0 _remove=0 _dry=0
 while [ $# -gt 0 ]; do
   case $1 in
-  -h|--help) _usage; exit 0 ;;
+  -h|--help) _usage; exit "$MUX_EC_OK" ;;
   --yes|-y)  _yes=1; shift ;;
   --remove)  _remove=1; shift ;;
   --dry-run) _dry=1; shift ;;
-  -*) echo "mux: setup: unknown option: $1" >&2; _usage >&2; exit 2 ;;
+  -*) echo "mux: setup: unknown option: $1" >&2; _usage >&2
+     exit "$MUX_EC_USAGE" ;;
   *)
     [ -z "$_agent" ] || {
-      echo "mux: setup: one agent at a time" >&2; exit 2; }
+      echo "mux: setup: one agent at a time" >&2; exit "$MUX_EC_USAGE"; }
     _agent=$1; shift ;;
   esac
 done
 
-[ -n "$_agent" ] || { _usage >&2; exit 2; }
+[ -n "$_agent" ] || { _usage >&2; exit "$MUX_EC_USAGE"; }
 # VALIDATED BEFORE IT IS A PATH, the same rule `mux skill` follows: the name
 # picks a file, so a traversal must be refused as a usage error and not read.
 # ENUMERATED RATHER THAN `[a-z]`, for the reason mux_ctx_valid records: a range
 # is a collation range, and macOS let `UPPER` through one.
 case $_agent in
 ''|*[!abcdefghijklmnopqrstuvwxyz0123456789-]*|-*|*-)
-  echo "mux: setup: not an agent name: $_agent" >&2; exit 2 ;;
+  echo "mux: setup: not an agent name: $_agent" >&2; exit "$MUX_EC_USAGE" ;;
 esac
 if ! _known | grep -qxF -- "$_agent"; then
   echo "mux: setup: mux ships no descriptor for $_agent" >&2
   _known | while IFS= read -r _h; do
     echo "mux: setup: have: $_h" >&2; done
-  exit 1
+  exit "$MUX_EC_FAIL"
 fi
 
 # THE EVENTS COME FROM MUX, not from a list typed here. `mux agent-hook`'s
@@ -121,7 +126,7 @@ command -v python3 >/dev/null 2>&1 || {
     printf '"command":"mux agent-hook %s ' "$_e" >&2
     printf '>/dev/null 2>&1 || true"}]}]\n' >&2
   done
-  exit 1
+  exit "$MUX_EC_FAIL"
 }
 
 # RUN DIRECTLY, not as `python3 "$_impl"`. Dropping the suffix is only half the
@@ -143,9 +148,9 @@ _plan=$(MUX_SETUP_EVENTS="$_events" "$_impl" plan "$_settings" \
     "$_mode" 2>&1) || _die "$_plan"
 printf '%s\n' "$_plan"
 case $_plan in
-*'nothing to change'*) exit 0 ;;
+*'nothing to change'*) exit "$MUX_EC_OK" ;;
 esac
-[ "$_dry" -eq 0 ] || exit 0
+[ "$_dry" -eq 0 ] || exit "$MUX_EC_OK"
 
 # NOT WITHOUT AN ANSWER. A provisioner passes --yes; a human is asked. With
 # neither a tty nor --yes this REFUSES rather than assuming consent, because
@@ -157,7 +162,7 @@ if [ "$_yes" -eq 0 ]; then
   read -r _ans || _ans=
   case ${_ans:-} in
   y|Y|yes|YES) ;;
-  *) echo "mux: setup: nothing changed" >&2; exit 1 ;;
+  *) echo "mux: setup: nothing changed" >&2; exit "$MUX_EC_FAIL" ;;
   esac
 fi
 
@@ -178,7 +183,7 @@ if [ "$_remove" -eq 1 ]; then
     rmdir "$_skdir" 2>/dev/null || true
     echo "mux: setup: removed $_skdir/SKILL.md"
   fi
-  exit 0
+  exit "$MUX_EC_OK"
 fi
 mkdir -p "$_skdir" 2>/dev/null || _die "cannot create $_skdir"
 # RELEASE-MATCHED, which is why it is generated rather than linked: a symlink

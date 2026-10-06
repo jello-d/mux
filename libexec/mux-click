@@ -8,6 +8,13 @@
 # hidden session has no chip, hence no range, hence nothing to click.
 set -eu
 
+
+_libexec=$(dirname "$0")
+_lib=$_libexec/../lib
+[ -r "$_lib/mux-exit_lib" ] \
+  || { echo "mux: $_lib/mux-exit_lib missing" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$_lib/mux-exit_lib"
 range=${1:-}
 client=${2:-}
 
@@ -19,7 +26,7 @@ v:*)
   exec "$(dirname "$0")/mux-views" next ;;
 esac
 
-case "$range" in s:?*) ;; *) exit 0 ;; esac
+case "$range" in s:?*) ;; *) exit "$MUX_EC_OK" ;; esac
 sess=${range#s:}
 
 if [ -n "$client" ]; then

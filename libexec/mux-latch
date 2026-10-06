@@ -94,6 +94,10 @@ set -eu
 
 _libexec=$(dirname "$0")
 _lib=$_libexec/../lib
+[ -r "$_lib/mux-exit_lib" ] \
+  || { echo "mux: $_lib/mux-exit_lib missing" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$_lib/mux-exit_lib"
 . "$_lib/mux-conf_lib"
 # mux-log_lib for mux_log: latch is the reason the log exists. Every transition
 # went to stderr and the state machine lived in shell variables, so a latch that
@@ -248,7 +252,7 @@ _hook_must_run() {   # <value> <what>
   echo "mux: latch: $2 hook not found: $_hw" >&2
   echo "mux: latch: looked in $MUX_DIR/latch, $MUX_SHARE/latch," \
     "then PATH" >&2
-  exit 2
+  exit "$MUX_EC_USAGE"
 }
 _hook_must_run "$AUTH" auth
 _hook_must_run "$CLASSIFY" classify
@@ -325,13 +329,13 @@ MAX_TRIES=0
 # mux usage error uses, so a typo can never be mistaken for a host.
 while [ "$#" -gt 0 ]; do
   case $1 in
-  -h|--help) _usage; exit 0 ;;
+  -h|--help) _usage; exit "$MUX_EC_OK" ;;
   --max-tries)
     # GUARDED, NOT `shift 2`: a bare `--max-tries` makes the shift a shell
     # error that also exits 2, which is the right code for the wrong reason
     # and one no mutation of a real guard could be told apart from.
     [ "$#" -ge 2 ] || { echo "mux: latch: --max-tries needs a count" >&2
-      _usage >&2; exit 2; }
+      _usage >&2; exit "$MUX_EC_USAGE"; }
     MAX_TRIES=$2
     # VALIDATED, because an unparseable value would otherwise surface much
     # later as a shell error inside the retry loop, exiting 2 from a place
@@ -339,11 +343,12 @@ while [ "$#" -gt 0 ]; do
     case $MAX_TRIES in
     ''|*[!0-9]*)
       echo "mux: latch: --max-tries wants a number: $MAX_TRIES" >&2
-      exit 2 ;;
+      exit "$MUX_EC_USAGE" ;;
     esac
     shift ;;
   --) shift; break ;;
-  -*) echo "mux: latch: unknown option: $1" >&2; _usage >&2; exit 2 ;;
+  -*) echo "mux: latch: unknown option: $1" >&2; _usage >&2
+     exit "$MUX_EC_USAGE" ;;
   *)  break ;;
   esac
   shift
@@ -389,11 +394,11 @@ done
 _target=${1:-}
 [ -n "$_target" ] || {
   echo "mux: latch needs a target: HOST[:PORT] [[PARTITION::]SESSION]" >&2
-  _usage >&2; exit 2; }
+  _usage >&2; exit "$MUX_EC_USAGE"; }
 _arg2=${2:-}
 [ "$#" -le 2 ] || {
   echo "mux: latch takes HOST[:PORT] and at most one [PARTITION::]SESSION" >&2
-  _usage >&2; exit 2; }
+  _usage >&2; exit "$MUX_EC_USAGE"; }
 
 # --- arg 1: HOST[:PORT] ---------------------------------------------------
 # A COLON IS ONLY A PORT WHEN IT CANNOT BE ANYTHING ELSE, because an IPv6
@@ -407,7 +412,7 @@ case $_target in
   case $_host in
   *\]:*) _port=${_host#*\]:}; _host=${_host%%\]:*} ;;
   *\]) _host=${_host%\]} ;;
-  *) echo "mux: latch: unclosed '[' in '$_target'" >&2; exit 2 ;;
+  *) echo "mux: latch: unclosed '[' in '$_target'" >&2; exit "$MUX_EC_USAGE" ;;
   esac ;;
 *:*:*)
   # TWO OR MORE COLONS AND NO BRACKETS: an IPv6 literal, or the pre-0.84
@@ -419,7 +424,7 @@ case $_target in
     echo "mux: latch: '$_target' is not a host:port" >&2
     echo "mux:   a partition is the SECOND argument, after a '::':" >&2
     echo "mux:     mux latch ${_target%%:*} ${_target#*:}::" >&2
-    exit 2 ;;
+    exit "$MUX_EC_USAGE" ;;
   esac
   _host=$_target ;;
 *:*)
@@ -434,11 +439,12 @@ case $_target in
     echo "mux: latch: '$_port' is not a port number" >&2
     echo "mux:   a partition is the SECOND argument, after a '::':" >&2
     echo "mux:     mux latch $_host $_port::" >&2
-    exit 2 ;;
+    exit "$MUX_EC_USAGE" ;;
   esac ;;
 *) _host=$_target ;;
 esac
-[ -n "$_host" ] || { echo "mux: latch: empty host in '$_target'" >&2; exit 2; }
+[ -n "$_host" ] || { echo "mux: latch: empty host in '$_target'" >&2
+  exit "$MUX_EC_USAGE"; }
 
 # --- arg 2: [PARTITION::]SESSION ------------------------------------------
 # PARSED BY THE SHARED LIB, never here, so latch cannot grow a second opinion
@@ -448,7 +454,7 @@ _part= _sess=
 if [ -n "$_arg2" ]; then
   # shellcheck source=/dev/null
   . "$_lib/mux-addr_lib"
-  mux_addr_parse "$_arg2" || exit 2
+  mux_addr_parse "$_arg2" || exit "$MUX_EC_USAGE"
   # A SINGLE COLON IS REFUSED, AFTER THE `::` HAS BEEN TAKEN OFF, and the
   # placement of that "after" is the whole correctness of it: latch attaches
   # a SESSION so a lone colon can only name a window, while `::` is the
@@ -479,7 +485,7 @@ if [ -n "$_arg2" ]; then
     *)    _a2fix=${_arg2%%:*}::${_arg2#*:} ;;
     esac
     echo "mux:   mux latch $_target $_a2fix" >&2
-    exit 2 ;;
+    exit "$MUX_EC_USAGE" ;;
   esac
   _part=$MUX_ADDR_PART
   _sess=$MUX_ADDR_SESS
@@ -544,7 +550,7 @@ if [ -f "$_lock" ]; then
   *) if kill -0 "$_other" 2>/dev/null; then
       echo "mux: latch already running for" \
         "$_target${_sess:+ $_sess} (pid $_other)" >&2
-      exit 1
+      exit "$MUX_EC_FAIL"
     fi ;;
   esac
 fi
@@ -1017,7 +1023,7 @@ while :; do
   _tries=$((_tries + 1))
   if [ "$MAX_TRIES" -gt 0 ] && [ "$_tries" -gt "$MAX_TRIES" ]; then
     _say giving-up "after $MAX_TRIES attempt(s) in state $_state"
-    exit 1
+    exit "$MUX_EC_FAIL"
   fi
 
   if [ "$_state" = blocked ]; then
@@ -1141,7 +1147,7 @@ while :; do
   case $_state in
   ended)
     _say ended "the session was closed deliberately"
-    exit 0 ;;
+    exit "$MUX_EC_OK" ;;
   gone)
     # NOT "the session is gone": exit 3 is the far side saying it does
     # not know the NAME it was given, and since 0.56 that name may be
@@ -1149,7 +1155,7 @@ while :; do
     # asserting a history latch cannot know. The far side's own
     # message follows and says which name it was.
     _say gone "the far side does not know that name; NOT recreating"
-    exit 1 ;;
+    exit "$MUX_EC_FAIL" ;;
   refused)
     # WHAT THE FAR SIDE SAID COMES FIRST, ALWAYS. An earlier version
     # of this replaced that message with a guess at the cause ("its
@@ -1180,7 +1186,7 @@ while :; do
           "either, so the connection is down too."
       fi
     fi
-    exit 1 ;;
+    exit "$MUX_EC_FAIL" ;;
   denied)
     _say denied "$(_errline)"
     # THE HOST KEY HALF OF THIS SENTENCE WAS FALSE and is now its own
@@ -1192,7 +1198,7 @@ while :; do
     _say denied "this needs a human: latch cannot see when a" \
       "credential is fixed, so it stops rather than retrying" \
       "a rejected credential forever"
-    exit 1 ;;
+    exit "$MUX_EC_FAIL" ;;
   untrusted)
     # THE FAR SIDE IS NOT WHO WE HAVE ON FILE. Two causes, and from
     # here they are the same bytes: something is interfering with the
@@ -1237,7 +1243,7 @@ while :; do
       [ "$_ul" -le 20 ] || break
       _say untrusted "  $_uline"
     done <"$_errf"
-    exit 1 ;;
+    exit "$MUX_EC_FAIL" ;;
   blocked)
     # Only reachable from a classifier that says "no credential yet"
     # rather than "rejected". Waiting is right; attempting is not.

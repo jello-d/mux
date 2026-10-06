@@ -17,6 +17,7 @@
 # loads eagerly:
 #
 #     mux-conf_lib       mux_conf_clean
+#     mux-exit_lib       MUX_EC_* (the exit codes)
 #     mux-profiles_lib   mux_expand_tilde mux_fold_tilde mux_prof_by_root
 #                        mux_prof_find mux_prof_get mux_prof_has
 #     mux-resolve_lib    mux_resolve_hash_theme mux_resolve_is_path
@@ -277,6 +278,6 @@ mux_why() {
      && [ -z "$w_file" ]; then
     exit "$MUX_EC_NONAME"
   fi
-  exit 0
+  exit "$MUX_EC_OK"
 }
 

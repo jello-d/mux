@@ -36,6 +36,10 @@ set -eu
 
 _libexec=$(dirname "$0")
 _lib=$_libexec/../lib
+[ -r "$_lib/mux-exit_lib" ] \
+  || { echo "mux: $_lib/mux-exit_lib missing" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$_lib/mux-exit_lib"
 # mux-conf_lib FIRST: mux-context_lib reads $MUX_DIR/config through
 # mux_conf_clean, and says so in its own header.
 . "$_lib/mux-conf_lib"
@@ -313,7 +317,7 @@ if [ "$_verb" = read ]; then
   printf '"window":%s,"pane":%s,"text":%s}\n' \
     "$(mux_json_str "$_ws_wid")" \
     "$(mux_json_str "$_pane")" "$(mux_json_str "$_text")"
-  exit 0
+  exit "$MUX_EC_OK"
 fi
 
 if [ "$_verb" = wait ]; then
@@ -394,7 +398,7 @@ if [ "$_verb" = wait ]; then
       printf '"state":%s,"waited":%s}\n' \
         "$(mux_json_str "$_wnow")" \
         "$(mux_json_num "$_el")"
-      exit 0
+      exit "$MUX_EC_OK"
     fi
     [ "$_el" -lt "$_wt" ] || break
     sleep 1
@@ -418,7 +422,7 @@ if [ "$_verb" = wait ]; then
     "$(mux_json_str "${_se%% *}")" \
     "$(mux_json_num "$_el")" \
     "$(mux_json_str "$_wsess is ${_se%% *}, not $_want, after ${_el}s")"
-  exit 1
+  exit "$MUX_EC_FAIL"
 fi
 
 if [ "$_verb" = send ]; then
@@ -567,7 +571,7 @@ if [ "$_verb" = send ]; then
     printf '"state":%s,"message":%s}\n' \
       "$(mux_json_str "$_sstate")" \
       "$(mux_json_str "$_ssess: $_rf_why")"
-    exit 1
+    exit "$MUX_EC_FAIL"
   }
 
   # THE BOUNDARY GATE RUNS UNCONDITIONALLY AND FIRST, never inside `_refuse`:
@@ -630,7 +634,7 @@ $_sstate$_sov ${#_stext} bytes"
   printf '"pane":%s,"class":%s,"state":%s,"bytes":%s}\n' \
     "$(mux_json_str "$_spane")" "$(mux_json_str "$_sclass")" \
     "$(mux_json_str "$_sstate")" "$(mux_json_num "${#_stext}")"
-  exit 0
+  exit "$MUX_EC_OK"
 fi
 
 if [ "$_verb" = open ]; then
@@ -685,7 +689,7 @@ if [ "$_verb" = open ]; then
         "$(mux_json_str none)" \
         "$(mux_json_str "refusing to open a window in $_osess: \
 $MUX_CTX_CROSS")"
-      exit 1
+      exit "$MUX_EC_FAIL"
     }
   fi
 
@@ -718,7 +722,7 @@ $MUX_CTX_CROSS")"
   printf '"control":%s,"attention":%s}\n' \
     "$([ -n "$_octl" ] && mux_json_str "$_octl" || printf null)" \
     "$([ -n "$_oattn" ] && mux_json_str "$_oattn" || printf null)"
-  exit 0
+  exit "$MUX_EC_OK"
 fi
 
 if [ "$_verb" = class ]; then
@@ -783,7 +787,7 @@ if [ "$_verb" = class ]; then
         "$(mux_json_str cross-partition)" \
         "$(mux_json_str none)" \
         "$(mux_json_str "refusing to reclassify $_clsess: $MUX_CTX_CROSS")"
-      exit 1
+      exit "$MUX_EC_FAIL"
     }
   fi
 
@@ -817,7 +821,7 @@ if [ "$_verb" = class ]; then
           "$(mux_json_str 'a human at a terminal with --yes')" \
           "$(mux_json_str "$_clsess $_mk $_was -> $_mv moves AWAY from the \
 human, which only a human may do")"
-        exit 1
+        exit "$MUX_EC_FAIL"
       fi
     fi
     _tx set-option -p -t "$_clpane" "@mux-$_mk" "$_mv" 2>/dev/null || :
@@ -837,7 +841,7 @@ human, which only a human may do")"
     "$(mux_json_str "$_ws_wid")" \
     "$([ -n "$_clctl" ] && mux_json_str "$_clctl" || printf null)" \
     "$([ -n "$_clattn" ] && mux_json_str "$_clattn" || printf null)"
-  exit 0
+  exit "$MUX_EC_OK"
 fi
 
 
@@ -1033,7 +1037,7 @@ if [ "$_verb" = peers ]; then
     done | mux_json_array
   )
   printf '{"status":"ok","peers":%s}\n' "$_items"
-  exit 0
+  exit "$MUX_EC_OK"
 fi
 
 # --- status ---------------------------------------------------------------
@@ -1206,4 +1210,4 @@ fi
 
 _collect
 _status_doc
-exit 0
+exit "$MUX_EC_OK"

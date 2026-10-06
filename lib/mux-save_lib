@@ -18,6 +18,7 @@
 # THE CALLER SOURCES THE DEPENDENCIES (see bin/mux's lib loop for why):
 #
 #     from bin/mux       tm
+#     mux-exit_lib       MUX_EC_* (the exit codes)
 #     mux-conf_lib       mux_conf_clean
 #     mux-data_lib       mux_data_find mux_data_stems
 #     mux-profiles_lib   mux_fold_tilde mux_prof_drop mux_prof_file
@@ -116,17 +117,17 @@ emit_window() {
 # Which live session this is, and what to call the saved profile.
 _save_identify() {
   [ -n "${TMUX:-}" ] || {
-    echo "mux: save must run inside a session" >&2; exit 1; }
+    echo "mux: save must run inside a session" >&2; exit "$MUX_EC_FAIL"; }
   sv_sess=$(tm display-message -p '#{session_name}' 2>/dev/null || true)
   [ -n "$sv_sess" ] || {
-    echo "mux: could not identify the session" >&2; exit 1; }
+    echo "mux: could not identify the session" >&2; exit "$MUX_EC_FAIL"; }
   sv_name=${name_arg:-$sv_sess}
   sv_name=$(mux_sess_sanitise "$sv_name")
 }
 
 # The arrangement, into a temp so it can be compared before it lands.
 _save_capture() {
-  sv_tmp=$(mktemp) || { echo "mux: mktemp failed" >&2; exit 1; }
+  sv_tmp=$(mktemp) || { echo "mux: mktemp failed" >&2; exit "$MUX_EC_FAIL"; }
   trap 'rm -f "$sv_tmp"' EXIT
   tm list-windows -t "=$sv_sess" -F '#{window_index} #{window_name}' \
   | while read -r _wi _wn; do
@@ -134,7 +135,7 @@ _save_capture() {
     emit_window "=$sv_sess:$_wi"
   done >"$sv_tmp"
   [ -s "$sv_tmp" ] || {
-    echo "mux: read no windows from $sv_sess" >&2; exit 1; }
+    echo "mux: read no windows from $sv_sess" >&2; exit "$MUX_EC_FAIL"; }
 }
 
 # Does an existing layout already say this? Compared NORMALIZED, so comments
@@ -170,7 +171,7 @@ _save_write_layout() {
     # shellcheck disable=SC2154
     [ "$force" -eq 1 ] || [ ! -e "$sv_lfile" ] || {
       echo "mux: exists: $sv_lfile (use --force)" >&2
-      exit 1
+      exit "$MUX_EC_FAIL"
     }
     mkdir -p "$MUX_DIR/layouts"
     {
@@ -223,7 +224,7 @@ _save_record() {
   if [ -n "$sv_pairs" ]; then
     mux_prof_replace "$sv_name" "$sv_pairs" || {
       echo "mux: could not write $(mux_prof_file)" >&2
-      exit 1; }
+      exit "$MUX_EC_FAIL"; }
     echo "mux: $sv_name -> $sv_pairs"
   else
     mux_prof_drop "$sv_name"
@@ -239,6 +240,6 @@ mux_save() {
   _save_write_layout
   _save_deltas
   _save_record
-  exit 0
+  exit "$MUX_EC_OK"
 }
 

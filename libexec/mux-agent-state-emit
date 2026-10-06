@@ -33,12 +33,13 @@ while [ $# -gt 0 ]; do
   --source) shift
     [ $# -gt 0 ] || {
       echo "mux-agent-state-emit: --source wants a name" >&2
-      exit 2; }
+      exit "$MUX_EC_USAGE"; }
     _src=$1 ;;
-  -*) echo "mux-agent-state-emit: unknown option: $1" >&2; exit 2 ;;
+  -*) echo "mux-agent-state-emit: unknown option: $1" >&2
+     exit "$MUX_EC_USAGE" ;;
   *)
     [ -z "$state" ] || {
-      echo "mux-agent-state-emit: one STATE only" >&2; exit 2; }
+      echo "mux-agent-state-emit: one STATE only" >&2; exit "$MUX_EC_USAGE"; }
     state=$1 ;;
   esac
   shift
@@ -46,14 +47,18 @@ done
 [ -n "$state" ] || {
   echo "usage: mux-agent-state-emit STATE [--beat] [--unless-working]" \
     "[--source NAME]" >&2
-  exit 2; }
+  exit "$MUX_EC_USAGE"; }
 
 # No tmux pane means nothing to track. Exit clean so the hook never fails.
-[ -n "${TMUX_PANE:-}" ] || exit 0
+[ -n "${TMUX_PANE:-}" ] || exit "$MUX_EC_OK"
 
 # Sibling libs in this script's own (colocated) libexec dir.
 _libexec=$(dirname "$0")
 _lib=$_libexec/../lib
+[ -r "$_lib/mux-exit_lib" ] \
+  || { echo "mux: $_lib/mux-exit_lib missing" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$_lib/mux-exit_lib"
 . "$_lib/mux-agent-state_lib"
 # NOT mux-notify_lib, and the absence is the point: this file raised banners
 # until the desktop notifier took them over, and the source outlived the
@@ -148,7 +153,7 @@ if [ -n "$_beat" ] && [ "$_pstate" = idle ]; then
   # untestable is the shape this codebase deletes rather than defends.
   if [ -z "$_bfirst" ]; then
     printf '%s\n' "$_bnow" 2>/dev/null >"$_beatf" || true
-    exit 0
+    exit "$MUX_EC_OK"
   fi
   if [ "$((_bnow - _bfirst))" -le "$_BEAT_WINDOW" ] \
      && [ "$_bnow" -ge "$_bfirst" ]; then
@@ -161,7 +166,7 @@ if [ -n "$_beat" ] && [ "$_pstate" = idle ]; then
     # The window lapsed. Two beats this far apart are two
     # stragglers, not sustained work: restart the clock.
     printf '%s\n' "$_bnow" 2>/dev/null >"$_beatf" || true
-    exit 0
+    exit "$MUX_EC_OK"
   fi
 fi
 
@@ -197,7 +202,7 @@ fi
 if [ -n "$_unless_working" ] && [ "$_pstate" = working ]; then
   mux_log agent "${_ps:-?} kept working; $state refused" \
     "${_src:+via }${_src:-}"
-  exit 0
+  exit "$MUX_EC_OK"
 fi
 
 # Claude Code fires Notification for TWO things: a permission prompt (mid-work),
@@ -373,4 +378,4 @@ fi
 # cross server backstop, so a failure here is not fatal.
 tmux refresh-client -S 2>/dev/null || true
 
-exit 0
+exit "$MUX_EC_OK"
