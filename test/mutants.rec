@@ -4540,3 +4540,87 @@ t mux-setup
 -     y|Y|yes|YES) ;;
 +     y|Y|yes|YES) exit 1 ;;
 m answering 'y' at the prompt did not apply
+
+= migrate-dry-run-acts
+f libexec/mux-migrate-profiles
+t mux-migrate-profiles
+-   [ "$APPLY" -eq 1 ] || continue
++   [ "$APPLY" -eq 0 ] || continue
+m a dry run () MOVED the original away
+
+= migrate-bad-arg-is-accepted
+f libexec/mux-migrate-profiles
+t mux-migrate-profiles
+-   *) echo "usage: mux migrate-profiles [--apply]" >&2; exit "$MUX_EC_USAGE" ;;
++   *) echo "usage: mux migrate-profiles [--apply]" >&2; exit "$MUX_EC_OK" ;;
+m bad-arg-rc: got
+
+= migrate-reconverts-a-migrated-name
+f libexec/mux-migrate-profiles
+t mux-migrate-profiles
+-     echo "skip  $_base: already migrated"
++     : "skip  $_base: already migrated"
+m second-run-skips
+
+= migrate-carries-default-over
+f libexec/mux-migrate-profiles
+t mux-migrate-profiles
+-   if [ "$_base" = default ]; then
++   if [ "$_base" = defaultx ]; then
+m default-noted
+
+= migrate-takes-no-backup
+f libexec/mux-migrate-profiles
+t mux-migrate-profiles
+-   mv "$_f" "$_f.bak"
++   :
+m not kept as api.layout.bak
+
+= migrate-loses-a-comment-silently
+f libexec/mux-migrate-profiles
+t mux-migrate-profiles
+-     _commented="$_commented $_base"
++     :
+m comments-reported
+
+= migrate-row-does-not-point-at-the-layout
+f libexec/mux-migrate-profiles
+t mux-migrate-profiles
+-   if [ -n "$_has_shape" ]; then _pairs="$_pairs layout=$_base"
++   if false; then _pairs="$_pairs layout=$_base"
+m split-row: got
+
+= focus-kitty-matches-an-unanchored-title
+f share/desktop-notifier/focus-kitty
+t mux-focus-hooks
+- kitten @ focus-window --match "title:\\[$_label\\]" 2>/dev/null || {
++ kitten @ focus-window --match "title:$_label" 2>/dev/null || {
+m kitty-argv: got
+
+= focus-kitty-acts-with-no-label
+f share/desktop-notifier/focus-kitty
+t mux-focus-hooks
+- [ -n "$_label" ] || { echo "usage: focus-kitty LABEL" >&2; exit 78; }
++ [ -z "$_label" ] || { echo "usage: focus-kitty LABEL" >&2; exit 78; }
+m no-label-focus-kitty: got
+
+= focus-kitty-skips-the-tool-check
+f share/desktop-notifier/focus-kitty
+t mux-focus-hooks
+- command -v kitten >/dev/null 2>&1 || {
++ true >/dev/null 2>&1 || {
+m kitten is not on PATH
+
+= focus-wayfire-matches-an-unanchored-title
+f share/desktop-notifier/focus-wayfire
+t mux-focus-hooks
+- wf-msg focus-window "title:\\[$_label\\]" 2>/dev/null || {
++ wf-msg focus-window "title:$_label" 2>/dev/null || {
+m wayfire-argv: got
+
+= focus-wayfire-skips-the-socket-check
+f share/desktop-notifier/focus-wayfire
+t mux-focus-hooks
+- [ -n "${WAYFIRE_SOCKET:-}" ] || {
++ [ -z "${WAYFIRE_SOCKET:-}" ] || {
+m missing-wfmsg-names-it
