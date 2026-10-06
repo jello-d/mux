@@ -4141,3 +4141,66 @@ t mux-exit
 - MUX_EC_NONAME=3       # that name is not known here: session OR partition
 + MUX_EC_NONAME=2       # that name is not known here: session OR partition
 m nothing knows
+
+= profiles-by-root-matches-a-subdirectory
+f lib/mux-profiles_lib
+t mux-profiles
+-       if (r == want) { print $1; exit }
++       if (index(want, r) == 1) { print $1; exit }
+m by-root-subdir
+
+= profiles-by-root-ignores-a-stored-tilde
+f lib/mux-profiles_lib
+t mux-profiles
+-       else if (substr(r, 1, 2) == "~/") r = home "/" substr(r, 3)
++       else if (substr(r, 1, 2) == "~/") r = r
+m by-root-tilde
+
+= profiles-set-eats-the-rows-other-pairs
+f lib/mux-profiles_lib
+t mux-profiles
+-       else pairs = pairs " " $i
++       else pairs = pairs
+m set-keeps-root
+
+= profiles-set-cannot-add-a-new-key
+f lib/mux-profiles_lib
+t mux-profiles
+-     if (!seen) pairs = pairs " " k "=" v
++     if (0) pairs = pairs " " k "=" v
+m set-add
+
+= profiles-drop-takes-every-row
+f lib/mux-profiles_lib
+t mux-profiles
+-   $1 == n { next }
++   $1 != n { next }
+m drop
+
+= envhook-runtime-dir-accepts-a-plain-file
+f share/envhooks.d/XDG_RUNTIME_DIR
+t mux-envhooks
+- [ -d "${1:-}" ]
++ [ -e "${1:-}" ]
+m not a runtime directory
+
+= envhook-ssh-sock-accepts-a-plain-file
+f share/envhooks.d/SSH_AUTH_SOCK
+t mux-envhooks
+- [ -S "${1:-}" ]
++ [ -e "${1:-}" ]
+m a plain FILE is not a socket
+
+= envhook-dbus-reads-past-the-path
+f share/envhooks.d/DBUS_SESSION_BUS_ADDRESS
+t mux-envhooks
+-     _p=${_p%%,*}
++     _p=${_p}
+m read only the path
+
+= envhook-dbus-calls-an-abstract-socket-dead
+f share/envhooks.d/DBUS_SESSION_BUS_ADDRESS
+t mux-envhooks
+-     exit 2 ;;
++     exit 1 ;;
+m CANNOT TELL (2)
