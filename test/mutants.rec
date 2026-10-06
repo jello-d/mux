@@ -4018,3 +4018,30 @@ t mux-profile
 -         -c "$root" "$bproc"
 +         -c "$root"
 m command never reached tmux
+= conf-full-line-comments-kept
+f lib/mux-conf_lib
+t mux-conf
+-   _cc_script='/^[[:space:]]*#/d
++   _cc_script='s/^//
+m full-line: got
+
+= conf-inline-comments-kept
+f lib/mux-conf_lib
+t mux-conf
+- s/[[:space:]]#.*$//
++ s/^//
+m inline-space: got
+
+= conf-trailing-space-kept
+f lib/mux-conf_lib
+t mux-conf
+- s/[[:space:]]*$//
++ s/^//
+m trailing-ws: got
+
+= conf-blank-lines-kept
+f lib/mux-conf_lib
+t mux-conf
+- /^[[:space:]]*$/d'
++ s/^//'
+m blanks: got
