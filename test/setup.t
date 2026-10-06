@@ -26,6 +26,16 @@ _pay=$T/share/mux
 [$(readlink "$T/bin/mux")]"
 [ -e "$T/share/man/man1/mux.1" ] || fail "man page not linked"
 
+# THE MAN PAGE FOOTER IS A SECOND COPY OF MUX_VERSION, so it needs a check
+# rather than vigilance: it said `mux 0.77` for nine releases while bin/mux
+# said 0.86, and the comment beside MUX_VERSION claimed the two "cannot
+# drift".
+_sv=$(sed -n 's/^MUX_VERSION=//p' "$HERE/bin/mux" | head -1)
+[ -n "$_sv" ] || fail "MUX_VERSION not found in bin/mux"
+_mv=$(sed -n '1s/.*"mux \([0-9.]*\)".*/\1/p' "$HERE/man/man1/mux.1")
+[ "$_mv" = "$_sv" ] || fail "the man page .TH says [mux ${_mv:-?}] and
+bin/mux says [$_sv]. Bump the .TH line with MUX_VERSION."
+
 # A TREE, NOT A LINK, which is the whole point and the one assertion that
 # would have caught the old layout.
 [ ! -L "$_pay" ] || fail "the payload is a SYMLINK, so this install still

@@ -26,7 +26,7 @@
 # CALLER INPUTS: `part` (which partition), `rs_focus` (where to land),
 # `listing` (--list), `nowaitenv` (--no-wait-env) and `cmd`, plus the
 # exit-code and env-verdict constants bin/mux declares at the top
-# (MUX_EX_NONAME, MUX_EX_NOTREADY, MUX_ENV_UNMANAGED, MUX_ENV_UNREADY,
+# (MUX_EC_NONAME, MUX_EC_NOTREADY, MUX_ENV_UNMANAGED, MUX_ENV_UNREADY,
 # _RS_NL, _self). All the parser's or the file's, and all loud if absent
 # under `set -u`.
 # THE POINT OF THE SESSION SET: after a reboot, `mux resume` and the five
@@ -143,7 +143,7 @@ mux_resume() {
     echo "mux: no such session recorded here: $rs_focus" >&2
     echo "mux: partition '$rs_key' has:" >&2
     printf '%s\n' "$rs_set" | sed 's/^/mux:   /' >&2
-    exit "$MUX_EX_NONAME"
+    exit "$MUX_EC_NONAME"
   fi
   # THE HOST-RELATCH GATE. A TMUX SERVER CANNOT OUTLIVE THE BOOT, so no
   # server for this partition means this host has not been set up since it came
@@ -190,7 +190,7 @@ mux_resume() {
       echo "mux: env-ready names nothing manages:$MUX_ENV_UNMANAGED" >&2
       echo "mux: envhooks.d manages:" >&2
       mux_env_names | sed 's/^/mux:   /' >&2
-      exit 2
+      exit "$MUX_EC_USAGE"
     fi
     if [ "$rs_erc" -eq 1 ]; then
       echo "mux: this host has no server for '$rs_key' yet, and the" \
@@ -204,7 +204,7 @@ mux_resume() {
       # unobservable: this is the evidence for the next time it is argued
       # about, and `mux log` is already where that lives.
       mux_log resume "not ready, refused to rebuild '$rs_key':$MUX_ENV_UNREADY"
-      exit "$MUX_EX_NOTREADY"
+      exit "$MUX_EC_NOTREADY"
     fi
   fi
   _resume_rebuild "$rs_key" "$rs_set"

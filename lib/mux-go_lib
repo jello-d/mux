@@ -32,7 +32,7 @@
 #     from the config    MUX_CFG_theme MUX_CFG_agent MUX_CFG_derive
 #                        MUX_CTX_PARTITION MUX_DIR MUX_THEME_FALLBACK
 #     from bottom_spec   b_min b_max b_cmd   (mux-build_lib answers in these)
-#     the exit code      MUX_EX_NONAME
+#     the exit code      MUX_EC_NONAME
 #
 # EACH PHASE ENDS `return 0`, load-bearing rather than tidy: several end in an
 # `&&` list that is FALSE in the common case, and a function called bare under
@@ -122,7 +122,7 @@ _go_attach_only() {
   if [ "$attachonly" -eq 1 ]; then
     echo "mux: no such session: $name" >&2
     echo "mux:   --attach-only will not create one" >&2
-    exit "$MUX_EX_NONAME"
+    exit "$MUX_EC_NONAME"
   fi
   return 0
 }
@@ -236,7 +236,7 @@ _go_resolve_name() {
           echo "mux:   did you mean:      $near" >&2
       fi
       echo "mux:   or create it here:  mux new $name" >&2
-      exit "$MUX_EX_NONAME"
+      exit "$MUX_EC_NONAME"
     fi
   fi
   return 0

@@ -1,4 +1,4 @@
-.TH MUX 1 "" "mux 0.77" "User Commands"
+.TH MUX 1 "" "mux 0.86" "User Commands"
 .SH NAME
 mux \- a tmux session manager for agent-heavy, many-session work
 .SH SYNOPSIS
@@ -2505,27 +2505,19 @@ That is how a fleet part way through an upgrade stops reading as half\-broken:
 is a VERSION answer, not a failure. It is also what a reconnect supervisor
 classifies retries on.
 .PP
-THIS SECTION USED TO SAY "do not add a code", AND 3 IS WHY THAT WAS TOO STRONG.
-The warning was aimed at per\-VERB codes, which multiply without bound and make
-every caller learn a dialect. A small set of cross\-cutting CONDITIONS is the
-opposite thing, and 3 earned its place by deleting a worse contract:
-.B mux latch
-had to grep stderr for the phrase "no such session" to tell a rebooted host
-from an ordinary refusal, so the WORDING of a message on one machine was
-load\-bearing for a decision on another, and a test existed only to stop anyone
-improving the sentence. A code cannot be reworded.
+A code earns its place by being a condition MANY verbs share, that a caller
+would otherwise have to detect by parsing English. Per\-VERB codes do not
+qualify: they multiply without bound and make every caller learn a dialect.
 .PP
-What actually has to hold is that mux never produces 126, 127 or 255, so those
-stay attributable. That is untouched. The bar for a fifth code is the one 3
-cleared: a condition MANY verbs share, that a caller would otherwise have to
-detect by parsing English.
+What must hold is that mux never produces 126, 127 or 255, so those stay
+attributable to the shell or the transport.
 .PP
 Held by two tests.
 .I test/mux-exit.t
 pins what today's verbs return, including that every refusal also SAYS why;
 .I test/lint.t
-rejects any literal exit outside 0, 1 and 2 anywhere in shipped code, which is
-the half that holds against code nobody has written yet.
+rejects any literal exit outside the set bin/mux declares, which is the half
+that holds against code nobody has written yet.
 .SH ENVIRONMENT
 .TP
 .B MUX_DIR

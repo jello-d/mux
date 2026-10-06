@@ -1,35 +1,26 @@
 #!/bin/sh
 # test/mux-exit.t - the EXIT CODE contract, which is what a remote or automated
-# caller reads instead of the prose.
+# caller reads instead of the prose. bin/mux declares the set as MUX_EC_*; this
+# pins what today's verbs actually return, and test/lint.t holds the rule
+# against code nobody has written yet by scraping that same declaration.
 #
-# mux uses exactly three codes and nothing else:
-#
-#   0   answered, or succeeded
-#   1   refused for a stated reason (a guard fired, drift was found, no such
-#       session). Something is on stderr saying why.
-#   2   usage error, or a verb this mux does not know
-#
-# THE ABSENCE OF EVERYTHING ELSE IS THE LOAD-BEARING PART, and it is why this
-# file exists rather than a paragraph in the man page. `ssh` returns 255 for its
-# OWN errors and otherwise passes the remote command's status through, and a
-# shell returns 126 and 127 for not-executable and not-found. Because mux never
-# produces any of those, a caller can attribute them to the transport or the
-# shell with certainty:
+# THE ABSENCE OF EVERY OTHER CODE IS THE LOAD-BEARING PART. `ssh` returns 255
+# for its own errors and otherwise passes the remote status through, and a shell
+# returns 126 and 127 for not-executable and not-found, so a caller can
+# attribute those with certainty:
 #
 #   ssh host mux agent-list
-#     0        an answer (possibly empty, which is a valid answer)
+#     0        an answer, possibly empty, which is a valid answer
 #     1        mux refused, for a reason on stderr
 #     2        that mux is too old to know the verb
+#     3        the name is not known there
+#     4        reachable, not ready yet
 #     255      the transport, not mux
 #     127      mux is not on that box's PATH
 #
-# That attribution is what the planned `latch` supervisor classifies retries on,
-# and it is also how a fleet mid-upgrade stops reading as half-broken: `2` is a
-# version answer, not a failure. None of it holds if some verb ever returns 3.
-#
-# test/lint.t carries the mechanical half (no literal `exit N` above 2 anywhere
-# in shipped code), which holds the rule against code nobody has written yet.
-# This half pins what today's verbs actually do.
+# `latch` classifies its retries on that attribution, and it is how a fleet
+# mid-upgrade stops reading as half-broken: 2 is a version answer, not a
+# failure.
 set -eu
 _name=mux-exit
 . "$(dirname "$0")/harness_lib"

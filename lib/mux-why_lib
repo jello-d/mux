@@ -278,7 +278,7 @@ mux_why() {
   if [ "$w_nhit" -eq 0 ] && [ -n "$name_arg" ] \
      && [ "$w_bypath" -eq 0 ] && [ "$w_row" -eq 0 ] \
      && [ -z "$w_file" ]; then
-    exit "$MUX_EX_NONAME"
+    exit "$MUX_EC_NONAME"
   fi
   exit 0
 }

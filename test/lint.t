@@ -529,50 +529,46 @@ if [ -s "$_dash" ]; then
 fi
 
 # --- the exit-code contract, mechanically -------------------------------
-# mux uses exactly 0, 1, 2 and 3. The ABSENCE of everything else is what lets a
-# caller attribute 255 to ssh and 127 to a missing binary rather than to mux,
-# which is what `latch` will classify retries on and how a fleet mid-upgrade
-# avoids reading as half-broken. test/mux-exit.t pins what today's verbs return;
-# this holds the rule against code nobody has written yet, which a per-verb test
-# cannot do.
+# THE ALLOWED SET IS SCRAPED FROM bin/mux's MUX_EC_* BLOCK, so this rule cannot
+# drift from the declaration: it hardcoded `[0123]` while MUX_EC_NOTREADY=4 was
+# live, which would have failed a literal `exit 4` and told the author that 4
+# was not in the contract.
 #
-# Literal codes only. A handful of sites exit through a variable (`exit "$RC"`
-# in mux-check, `exit "${1:-2}"` in usage), and those are covered behaviourally
-# instead: a grep cannot evaluate them, and pretending otherwise would be a
-# guard that looks stronger than it is.
+# The ABSENCE of everything else is what it buys: a caller attributes 255 to
+# ssh and 127 to a missing binary rather than to mux. test/mux-exit.t pins what
+# today's verbs return; this holds the rule against code nobody has written.
 #
-# Whole-line COMMENTS are excluded, and they have to be: the files that classify
-# a FOREIGN exit code have to name it to explain themselves, and mux-latch
-# documenting "ssh exits 255" is the opposite of mux exiting 255. A trailing
-# comment on a real line is still caught, so the exclusion is as narrow as it
-# can be made with a grep.
+# Literal codes only. A few sites exit through a variable (`exit "$RC"` in
+# mux-check, `exit "${1:-2}"` in usage) and are covered behaviourally: a grep
+# cannot evaluate them, and pretending otherwise is a guard that looks stronger
+# than it is.
+#
+# Whole-line COMMENTS are excluded and have to be: a file that classifies a
+# FOREIGN code must name it to explain itself, and mux-latch documenting "ssh
+# exits 255" is the opposite of mux exiting 255. A trailing comment on a real
+# line is still caught.
 #
 # share/latch/ AND share/desktop-notifier/ ARE A DIFFERENT CONTRACT, checked
-# separately below rather than merely excluded. A hook is not a mux command:
-# it answers a QUESTION in three states (0 yes, 1 no, 78 cannot tell), and 78
-# is the whole point: "cannot tell" has to be distinguishable from "no" or
-# an edge nobody can check gets reported as fine. Exempting the directories
-# with a hole would let a hook invent a fourth code; a rule of their own does
-# not. The original wording, kept because it is the argument:
-#
-# share/latch/ IS A DIFFERENT CONTRACT and is checked separately below, not
-# merely excluded. A latch hook is not a mux command: it answers a QUESTION in
-# three states (0 yes, 1 no, 78 cannot tell), and 78 is the whole point:
-# "cannot tell" has to be distinguishable from "no" or an edge nobody can check
-# gets reported as fine. Exempting the directory with a hole would let a hook
-# invent a fourth code; a rule of its own does not.
+# separately below rather than excluded. A hook answers a QUESTION in three
+# states (0 yes, 1 no, 78 cannot tell), and 78 is the point: "cannot tell" must
+# be distinguishable from "no", or an edge nobody can check reports as fine.
+# Exempting the directories with a hole would let a hook invent a fourth code.
+_ecset=$(sed -n 's/^MUX_EC_[A-Z]*=\([0-9]*\).*/\1/p' "$HERE/bin/mux" \
+  | sort -u | tr -d '\n')
+[ -n "$_ecset" ] || fail "no MUX_EC_* declarations found in bin/mux, so the
+exit-code rule below would allow everything"
 _ec=$T/exitcodes
 ( cd "$HERE" && grep -rnE '\bexit [0-9]+' bin lib libexec share setup.sh \
-  2>/dev/null | grep -vE '\bexit [0123]\b' \
+  2>/dev/null | grep -vE "\\bexit [$_ecset]\\b" \
   | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' \
   | grep -vE '^share/(latch|desktop-notifier)/' ) >"$_ec" || true
 if [ -s "$_ec" ]; then
-  printf 'FAIL %s: an exit code outside the 0/1/2 contract:\n' "$_name" >&2
+  printf 'FAIL %s: an exit code outside the mux contract:\n' "$_name" >&2
   sed 's/^/  /' "$_ec" >&2
-  printf 'mux exits 0 (answered), 1 (refused, reason on stderr),\n' >&2
-  printf '2 (usage/unknown verb) or 3 (the name is not known here).\n' >&2
+  printf 'mux exits only %s, declared as MUX_EC_* in bin/mux.\n' \
+    "$(printf '%s' "$_ecset" | sed 's/./&, /g; s/, $//')" >&2
   printf 'Anything else makes 255 and 127 ambiguous for a remote\n' >&2
-  printf 'caller. See test/mux-exit.t.\n' >&2
+  printf 'caller. See test/mux-exit.t and man mux EXIT STATUS.\n' >&2
   exit 1
 fi
 
