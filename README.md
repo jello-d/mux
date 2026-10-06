@@ -871,6 +871,13 @@ mux agent read NAME [-n N]   capture that session's agent pane
 mux agent wait NAME STATE    block until it gets there (-t SECONDS)
 mux agent send NAME TEXT     hand it work (refuses a blocked or unknown pane)
   ... --window NAME|@ID      which worker, on read, send and class
+mux agent open SESSION       open a worker's window, detached, answering its id
+mux agent class SESSION      move a pane toward the human (or, with a human
+                             at a terminal and --yes, grant the reverse)
+mux agent stream             the same document as `status`, on a loop, one
+                             line per change: what the tray reads
+mux window [SESSION:]NAME    open a window and go there (the human half of
+                             `agent open`)
 mux scan                     rebuild the project discovery map
 mux why [NAME]               show each resolved value and where it came from
 mux views [auto|floor|ceil]  who is attached, at what size, what it costs

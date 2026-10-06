@@ -98,18 +98,51 @@ last week's icon. `setup.sh service` says which of `RESTARTED`, "starts at the
 next login" (no user manager here) and `RESTART FAILED` actually happened;
 it used to print the same sentence for all three.
 
-The feed is **`mux agent status`**: mux's machine contract, which answers
-JSON for every partition a human is watching. The tray is a program, so it
-reads the surface that promises a stable shape; `mux agent-summary` stays free
-to change for whoever reads it in a terminal. Polled every
-`MUX_DESKTOP_NOTIFIER_POLL` seconds (default 5).
-Overrides via env: `MUX_BIN` (path to `mux`), `MUX_DESKTOP_NOTIFIER_BLINK` /
-`_BLINK_MS` (the cursor blink on change),
-`MUX_DESKTOP_NOTIFIER_TIMEOUT` (per-source
-deadline, default 10s). Writing
-`"<state> <count>"` to `/tmp/mux-desktop-notifier.ctl` forces a value
-for testing;
-remove the file to revert to the live feed.
+The feed is **`mux agent stream`**, mux's machine contract on a loop: one JSON
+object per line, emitted only when the answer CHANGES, with the first line
+being the current state so a reader is never blank waiting for an event. The
+polling therefore happens on the watched box and only changes cross the
+network, where the tray used to open a connection to every host every few
+seconds.
+
+**A source that cannot stream falls back to a poll.** A remote running a mux
+too old to know the verb answers one `{"status":"usage"}` line and exits, which
+from the stream alone is indistinguishable from a host that is simply
+unreachable. So on a stream that has never once produced a usable answer, the
+other channel is asked: `mux agent status` answers for a remote that is merely
+old, and neither answers if the box is down. A stream that worked and then
+dropped is a disruption and is retried, never downgraded.
+
+**A heartbeat, because silence is ambiguous.** Polling could tell a calm host
+from an unreachable one by the exit code; a stream cannot, so it writes one
+every `MUX_AGENT_STREAM_HEARTBEAT` seconds and a feed silent past
+`MUX_DESKTOP_NOTIFIER_STALE` (45) is UNKNOWN rather than calm. The same write
+is how the producer learns its reader has gone, so closing the pipe stops it.
+
+Overrides via env, all optional:
+
+| name | default | what it does |
+|------|---------|--------------|
+| `MUX_BIN` | `mux` | path to the `mux` to run |
+| `MUX_DESKTOP_NOTIFIER_TRAY` | on | draw the tray items at all |
+| `MUX_DESKTOP_NOTIFIER_TOASTS` | on | raise desktop notifications |
+| `MUX_DESKTOP_NOTIFIER_IGNORE` | the demo | partitions to leave out |
+| `MUX_DESKTOP_NOTIFIER_TRANSPORT` | ssh | the remote command template |
+| `MUX_DESKTOP_NOTIFIER_ACTIVATE` | unset | hook run after a click |
+| `MUX_DESKTOP_NOTIFIER_POLL` | 5 | the fallback poll interval |
+| `MUX_DESKTOP_NOTIFIER_TIMEOUT` | 10 | per-source deadline |
+| `MUX_DESKTOP_NOTIFIER_STALE` | 45 | a quiet feed becomes unknown |
+| `MUX_DESKTOP_NOTIFIER_RESPAWN` / `_MAX` | 2 / 30 | stream restart backoff |
+| `MUX_DESKTOP_NOTIFIER_BLINK` / `_MS` | on | the cursor blink on change |
+| `MUX_DESKTOP_NOTIFIER_CTL` | unset | a path to force a value, below |
+
+The three config keys (`desktop-notifier-transport`, `-ignore`,
+`-activate`) are read from `$MUX_DIR/config`, and the env name always wins.
+
+**Forcing a value for testing** is opt-in: set `MUX_DESKTOP_NOTIFIER_CTL` to a
+path and write `"<state> <count>"` into it. Remove the file to revert to the
+live feed. It is not a fixed location, because a tray that could be driven by
+anything able to create one path is a tray nobody can trust.
 
 ## Several hosts, one tray
 
@@ -341,15 +374,15 @@ remaps them), the item draws host-neutral rather than guessing.
 
 **Quote the remote command as one argument.** `ssh` concatenates its remaining
 arguments into a single string and the remote shell re-splits it, so
-`ssh host sh -lc "mux agent-summary"` arrives as `sh -lc mux` with
-`agent-summary` as `$0`, which runs mux's bare session picker. It fails by
+`ssh host sh -lc "mux agent stream"` arrives as `sh -lc mux` with `agent` as
+`$0`, which runs mux's bare session picker. It fails by
 doing something plausible rather than erroring, so it is worth getting right
 once. The nested form above is correct. `sh -lc` is needed because sshd runs a
 remote command without a login shell, so `~/.local/bin` is not on `PATH`.
 
-**An unreachable host reads as `unknown`, never as calm.** `mux agent-summary`
-exits 0 and prints `none 0` on a quiet host, so empty *is* an answer and a
-non-zero exit can only be the transport. A source that fails, times out, or
+**An unreachable host reads as `unknown`, never as calm.** A quiet host is an
+ANSWER: the stream says so and keeps beating, so silence is the transport
+rather than the news. A source that fails, goes quiet past its deadline, or
 answers something mux would never emit gets its own slate-blue glyph with a `?`
 badge: visually distinct from `none` (agentless) and from `idle`, because
 drawing either of those would assert the one thing we do not know.
@@ -358,14 +391,19 @@ drawing either of those would assert the one thing we do not know.
 
 Live. Registers a StatusNotifierItem with the tray watcher, draws an owned
 terminal-tile glyph (state = frame colour + tint; a corner badge holds the
-count, or a check when idle), reads state from `mux agent-summary`, and blinks
+count, or a check when idle), reads state from `mux agent stream`, and blinks
 the cursor on a change.
+
+It owns every desktop surface now, not just the tray: the toasts come from here
+too. That is what makes a LATCHED session notify the right machine, which was
+structurally impossible while the agent's own hook raised the banner on the box
+the agent runs on. One owner, so the two cannot drift.
 
 Multi-host is live: N items from one process (a D-Bus connection each, which is
 required. `RegisterStatusNotifierItem` takes only a service name, so two names
 on one connection resolve to the same object and you get the same item twice).
 Verified against a live waybar.
 
-Next, in order: left-click activates `mux next-blocked`, then a per-session menu
-(right-click). The visual identity lives entirely in `render.py`; the D-Bus
-plumbing is in `sni.py`; the source list is in `sources.py`.
+Left-click activating `mux next-blocked` is live (see **Clicking an item**).
+Next: a per-session menu on right-click. The visual identity lives entirely in
+`render.py`, the D-Bus plumbing in `sni.py`, the source list in `sources.py`.
