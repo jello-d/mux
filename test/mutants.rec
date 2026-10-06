@@ -4344,3 +4344,59 @@ t mux-views
 -     floor) _wz=smallest ;;
 +     floor) _wz=largest ;;
 m did not set smallest
+
+= pin-divisor-moved
+f libexec/mux-pin
+t mux-pin
+- DIVISOR=5
++ DIVISOR=4
+m idempotent: got
+
+= pin-ignores-the-minimum
+f libexec/mux-pin
+t mux-pin
+-   [ "$want" -ge "$min" ] || want=$min
++   [ "$want" -ge "$min" ] || :
+m clamp-min: got
+
+= pin-ignores-the-maximum
+f libexec/mux-pin
+t mux-pin
+-   [ "$want" -le "$max" ] || want=$max
++   [ "$want" -le "$max" ] || :
+m clamp-max: got
+
+= pin-resizes-what-is-already-right
+f libexec/mux-pin
+t mux-pin
+-   [ "$want" -ne "$ph" ] || continue
++   [ "$want" -eq "$ph" ] || continue
+m divisor: got
+
+= pin-touches-an-unmarked-pane
+f libexec/mux-pin
+t mux-pin
+-   [ -n "${spec:-}" ] || continue
++   [ -n "${spec:-}" ] || :
+m skips-quietly: got
+
+= pin-accepts-a-bad-minimum
+f libexec/mux-pin
+t mux-pin
+-   case $min in ''|*[!0-9]*) spec= ;; esac
++   case $min in ''|*[!0-9]*) : ;; esac
+m bad-spec-x-10-no-resize
+
+= pin-accepts-a-bad-maximum
+f libexec/mux-pin
+t mux-pin
+-   case $max in ''|*[!0-9]*) spec= ;; esac
++   case $max in ''|*[!0-9]*) : ;; esac
+m of [5-x] was skipped SILENTLY
+
+= pin-stops-at-the-first-bad-spec
+f libexec/mux-pin
+t mux-pin
+-     continue
++     exit 0
+m bad-spec-does-not-truncate
