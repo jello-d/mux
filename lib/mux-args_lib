@@ -1,0 +1,189 @@
+#!/bin/sh
+# mux-args_lib - the front end's argument VALIDATION: the verb vocabulary, the
+# retired-verb aliases, the per-verb arity table, and the per-flag gates.
+#
+# EXTRACTED FROM bin/mux (2026-10-05), 123 lines, and the boundary is decided
+# by a fact about POSIX sh rather than by taste: WHAT CAN BE A FUNCTION.
+#
+#   the option LOOP stays in bin/mux    it SHIFTS the script's own argv, and a
+#                                       function's `shift` moves the
+#                                       function's positionals, never the
+#                                       caller's. (A sourced file CAN shift
+#                                       the caller's argv, measured; a lib
+#                                       whose body is top-level logic
+#                                       mutating its caller is a shape
+#                                       nothing else in this tree has, and
+#                                       not one to invent on the way to a
+#                                       release.)
+#   the VALIDATION moves                it reads `$#` and the flag variables
+#                                       and nothing else positional, so the
+#                                       count is one argument and the rest
+#                                       are globals.
+#
+# mux_args_check COUNT, where COUNT is the caller's remaining `$#` AFTER the
+# option loop. It reads and may REWRITE `cmd` (the aliases: `kill-all` becomes
+# `kill` plus `all=1`), reads every flag variable the loop set, and `usage`es
+# out on any refusal, which never returns.
+#
+# THE CALLER SOURCES NOTHING FOR THIS: it needs `usage` (bin/mux's one-line
+# exec shim over libexec/mux-help) and the flag variables, both of which are
+# the caller's by construction.
+#
+# WHY THE FLAG GATES ARE TEN NEAR-IDENTICAL BLOCKS and not a table: they are
+# today, and that is the next simplification rather than this one. Collapsing
+# them would be a behaviour-preserving transform of the most load-bearing
+# block mux has, in the same commit that moves it, and their messages are
+# asserted in nine test cases and scraped by `test/mux-args.t`'s gate audit.
+# One change at a time.
+#
+# GUARDED BEFORE IT MOVED, which is the order that made the move provable:
+# this block had five assertions and no mutation records until the commits
+# immediately before this one. Four mechanisms are pinned now (an option is
+# an option wherever it sits, the arity table, `-h` exits zero, a partition
+# name is validated) plus the gate audit, which found two flags that parsed
+# and were silently ignored.
+# ONE DISABLE FOR THE WHOLE FUNCTION rather than nine identical ones at the
+# nine gates: every flag variable below is a CALLER INPUT the option loop in
+# bin/mux set, which is exactly what the contract above documents, so nine
+# copies of that sentence would be noise where one is the fact. Not a
+# file-level suppression: a genuinely unassigned variable anywhere else in
+# this file still fails.
+# shellcheck disable=SC2154
+mux_args_check() {   # <the caller's remaining $#>
+  _an=$1
+  case $cmd in
+    go|resume|kill|kill-all|reload|ls|hide|show|show-all) ;;
+    save|new|help|theme|rename|edit|why) ;;
+    *) echo "mux: unknown verb: $cmd" >&2; usage ;;
+  esac
+  # The retired verbs are the flag forms spelled out. Kept as aliases
+  # rather than removed: they are in muscle memory and in whatever scripts
+  # already call them, and folding them here means one code path below.
+  #
+  # `resume` is NOT one of them any more. It used to be a second spelling of
+  # `go --resume` (the agent offers a conversation to pick up) and now names the
+  # session rebuild that was briefly called `restore`. The FLAG is untouched, so
+  # the old behaviour is still there as `mux go --resume`; only the bare verb
+  # moved. Nothing may test `cmd = resume` to mean the flag now ($resume does
+  # that), since under the rename the two meanings are the same string, and a
+  # leftover test would silently give one of them the other's behaviour.
+  case $cmd in
+    kill-all)  cmd=kill; all=1 ;;
+    show-all)  cmd=show; all=1 ;;
+  esac
+
+  # Arity per verb. --bare is meaningful only where claude is launched. kill
+  # requires an explicit NAME: it is too destructive to run against an inferred
+  # session; kill-all takes none (it hits the whole socket, behind a prompt).
+  case $cmd in
+    reload|ls) [ "$_an" -eq 0 ] || {
+      echo "mux: $cmd takes no arguments" >&2; usage; } ;;
+    resume) [ "$_an" -le 2 ] || {
+      echo "mux: resume [PARTITION [SESSION]]" >&2; usage; } ;;
+    kill|show) if [ "$all" -eq 1 ]; then
+      [ "$_an" -eq 0 ] || { echo "mux: $cmd --all takes no NAME" >&2
+        usage; }
+       else
+      [ "$_an" -eq 1 ] || {
+        echo "mux: $cmd needs a NAME, or --all" >&2; usage; }
+       fi ;;
+    hide) [ "$_an" -eq 1 ] || {
+      echo "mux: hide needs a session NAME (see: mux ls)" >&2
+      usage; } ;;
+    go) [ "$_an" -le 2 ] || {
+      echo "mux: too many arguments" >&2; usage; } ;;
+    save|theme|edit|why) [ "$_an" -le 1 ] || {
+      echo "mux: $cmd takes at most a NAME" >&2; usage; } ;;
+    rename) { [ "$_an" -ge 1 ] && [ "$_an" -le 2 ]; } || {
+      echo "mux: rename [OLD] NEW" >&2; usage; } ;;
+    new) [ "$_an" -eq 1 ] || {
+      echo "mux: new NAME (the session to create here)" >&2
+      usage; } ;;
+    help) [ "$_an" -le 6 ] || {
+      echo "mux: help [agents|themes|profiles|palette]" >&2
+      usage; } ;;
+  esac
+  case $cmd in
+    go|new) ;;
+    *) [ "$bare" -eq 0 ] || {
+      echo "mux: --no-agent is only for go/new" >&2; usage; } ;;
+  esac
+  case $cmd in
+    go) ;;
+    *) [ "$attach" -eq 0 ] || {
+      echo "mux: --attach is only for go" >&2; usage; } ;;
+  esac
+  case $cmd in
+    go) ;;
+    *) [ "$resume" -eq 0 ] || {
+      echo "mux: --resume is only for go" >&2; usage; } ;;
+  esac
+  # THESE TWO WERE UNGATED, and parsed-but-ignored on every other verb. Found by
+  # asking the question as a CLASS rather than per flag: scrape the flags the
+  # option loop sets a variable for, scrape the flags a gate names, and diff.
+  # Measured: `mux kill --attach-only x` and `mux ls --no-wait-env` were both
+  # accepted in silence, where the identical `mux kill --persist x` is refused.
+  #
+  # A FLAG THAT PARSES AND DOES NOTHING IS WORSE THAN A MISSING ONE, because the
+  # caller believes it asked for something: this package already records that
+  # defect for `mux agent status --all`, which was assigned, set by the flag and
+  # never read. The sharpest case here is `--no-wait-env`, whose whole
+  # purpose is to OVERRIDE the readiness wait: typed on `go` it did nothing
+  # and said nothing, which reads as the override being broken.
+  #
+  # test/mux-args.t now audits the class, so a flag added without a gate fails
+  # rather than shipping quiet.
+  case $cmd in
+    go) ;;
+    *) [ "$attachonly" -eq 0 ] || {
+      echo "mux: --attach-only is only for go" >&2; usage; } ;;
+  esac
+  case $cmd in
+    resume) ;;
+    *) [ "$nowaitenv" -eq 0 ] || {
+      echo "mux: --no-wait-env is only for resume" >&2; usage; } ;;
+  esac
+  case $cmd in
+    kill|show) ;;
+    *) [ "$all" -eq 0 ] || {
+      echo "mux: --all is only for kill/show" >&2; usage; } ;;
+  esac
+  case $cmd in
+    resume) ;;
+    *) [ "$listing" -eq 0 ] || {
+      echo "mux: --list is only for resume" >&2; usage; } ;;
+  esac
+  case $cmd in
+    go|new) ;;
+    *) [ "$noattach" -eq 0 ] || {
+      echo "mux: --no-attach is only for go/new" >&2
+      usage; } ;;
+  esac
+  case $cmd in
+    save|new) ;;
+    *) [ "$force" -eq 0 ] || {
+      echo "mux: --force is only for save/new" >&2
+      usage; } ;;
+  esac
+  case $cmd in
+    theme) ;;
+    *) [ "$persist" -eq 0 ] || {
+      echo "mux: --persist is only for theme" >&2; usage; } ;;
+  esac
+  # -p used to be how a theme was made to stick. It always sticks now, so
+  # the flag is accepted and ignored rather than breaking a habit or a
+  # script.
+  [ "$persist" -eq 1 ] && [ "$cmd" = theme ] && \
+    echo "mux: -p is the default now; the theme is always remembered" >&2
+
+  # THE EXPLICIT RETURN IS LOAD-BEARING, and it is the whole cost of making
+  # this a function. The `&&` list above is FALSE in the common case (persist
+  # is 0), so without this the function's status is 1, the caller invokes it
+  # BARE, and `set -e` kills the front end SILENTLY: `mux new lay` exited 1
+  # with no output at all. Caught within a minute by test/mux-args.t, and it
+  # is the THIRD time this exact shape has bitten here (mux_env_plan's
+  # truncation, then the unified agent-state walk), which is why the habit
+  # that works is to end a function that answers nothing with `return 0`
+  # rather than to reason about what its last command evaluates to.
+  return 0
+}

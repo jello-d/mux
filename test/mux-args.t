@@ -135,8 +135,15 @@ _flags=$(awk '/^while \[ "\$#" -gt 0 \]; do/{p=1} p && /^  esac$/{p=0}
  p && /^    -/ && /=1; shift ;;/ {
    match($0, /^    [^)]*\)/); a=substr($0, 5, RLENGTH-5)
    split(a, f, "|"); print f[1] }' "$HERE/bin/mux" | sort -u)
-_gated=$(sed -n 's/.*"mux: \(--[a-z-]*\) is only for.*/\1/p' "$HERE/bin/mux" \
-  | sort -u)
+# THE TWO SCRAPES READ TWO FILES NOW, and that is the split the parser took
+# on 2026-10-05 rather than an accident: the option LOOP stayed in bin/mux,
+# because a function's `shift` cannot move the caller's argv, while the GATES
+# moved to lib/mux-args_lib, which reads only `$#` and the flag variables.
+# When they moved, this audit failed LOUDLY with every flag reported ungated,
+# which is the diff-and-vacuity shape working: a selector whose input has
+# moved reads as "nothing is gated" rather than quietly scanning an empty set.
+_gated=$(sed -n 's/.*"mux: \(--[a-z-]*\) is only for.*/\1/p' \
+  "$HERE/lib/mux-args_lib" | sort -u)
 # VACUITY FIRST: a scrape that matched nothing would make the comparison
 # below pass about the empty set, for ever.
 [ "$(printf '%s\n' "$_flags" | grep -c .)" -ge 8 ] \

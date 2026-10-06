@@ -209,10 +209,10 @@ t mux-check
 m broken bindings
 
 = exit-unknown-verb-not-2
-f bin/mux
+f lib/mux-args_lib
 t mux-exit
--   *) echo "mux: unknown verb: $cmd" >&2; usage ;;
-+   *) echo "mux: unknown verb: $cmd" >&2; exit 0 ;;
+-     *) echo "mux: unknown verb: $cmd" >&2; usage ;;
++     *) echo "mux: unknown verb: $cmd" >&2; exit 0 ;;
 m an unknown verb
 
 = wire-failure-is-loud
@@ -4046,17 +4046,17 @@ t mux-conf
 + s/^//'
 m blanks: got
 = args-attach-only-not-gated
-f bin/mux
+f lib/mux-args_lib
 t mux-args
--     echo "mux: --attach-only is only for go" >&2; usage; } ;;
-+     : ; } ;;
+-       echo "mux: --attach-only is only for go" >&2; usage; } ;;
++       : ; } ;;
 m attachonly-gate
 
 = args-no-wait-env-not-gated
-f bin/mux
+f lib/mux-args_lib
 t mux-args
--     echo "mux: --no-wait-env is only for resume" >&2; usage; } ;;
-+     : ; } ;;
+-       echo "mux: --no-wait-env is only for resume" >&2; usage; } ;;
++       : ; } ;;
 m nowaitenv-gate
 = args-verb-stops-the-option-loop
 f bin/mux
@@ -4066,10 +4066,10 @@ t mux-args
 m force-after
 
 = args-resume-arity-off-by-one
-f bin/mux
+f lib/mux-args_lib
 t mux-args
--   resume) [ "$#" -le 2 ] || {
-+   resume) [ "$#" -le 3 ] || {
+-     resume) [ "$_an" -le 2 ] || {
++     resume) [ "$_an" -le 3 ] || {
 m resume-arity
 
 = args-help-exits-two
