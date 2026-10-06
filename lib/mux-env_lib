@@ -1,51 +1,47 @@
 #!/bin/sh
 # mux-env_lib: the session pointers a pane must not start without.
 #
-# THE BUG THIS EXISTS FOR, measured on a real box rather than imagined. Every
-# agent pane on a machine was running with no `SSH_AUTH_SOCK`: `git push`
-# failed in every repo and `git fetch` failed in the four with ssh origins,
-# while the box itself was healthy (the agent held the key and could sign, and
-# an https fetch worked with no key at all). It read as broken configuration
-# and it was a missing variable.
+# THE BUG THIS EXISTS FOR, measured rather than imagined. Every agent pane on
+# a machine was running with no `SSH_AUTH_SOCK`: `git push` failed in every
+# repo and `git fetch` in the four with ssh origins, while the box was healthy
+# (the agent held the key and could sign, an https fetch worked with no key).
+# It read as broken configuration and it was a missing variable.
 #
-# WHY IT IS MUX'S TO OWN rather than a caller's: A PANE'S ENVIRONMENT COMES
-# FROM THE SERVER, not from whoever asked for the pane. Measured: a client
-# holding a perfectly good value still got the SERVER's value in a new window.
-# So no caller can fix this from outside, however careful it is.
+# WHY IT IS MUX'S TO OWN: A PANE'S ENVIRONMENT COMES FROM THE SERVER, not from
+# whoever asked for the pane. Measured, a client holding a perfectly good
+# value still got the SERVER's value in a new window, so no caller can fix
+# this from outside however careful it is.
 #
-# AND AN ATTACH DESTROYS, which is worse than a gap and is the actual
-# mechanism. tmux's `update-environment` copies the attaching client's
-# environment into the SESSION, and copying an ABSENT variable records a
-# REMOVAL:
+# AND AN ATTACH DESTROYS, which is the actual mechanism and worse than a gap.
+# tmux's `update-environment` copies the attaching client's environment into
+# the SESSION, and copying an ABSENT variable records a REMOVAL:
 #
 #     session before : SSH_AUTH_SOCK=/tmp/GOOD
 #     after attach   : -SSH_AUTH_SOCK
 #     pane after     : UNSET
 #
-# One attach from a client with no agent turns a healthy session into a broken
-# one, and a session-level removal MASKS the server global, so there is no
-# lower layer to fall back on. Measured both ways. On the box this was found on
-# it happened because the human was latched in from ANOTHER MACHINE while that
-# box sat at its login greeter, so the attaching client was an agent-less ssh.
-# Any cross-box attach does it.
+# One attach from a client with no agent turns a healthy session broken, and a
+# session-level removal MASKS the server global, so there is no lower layer to
+# fall back on. Measured both ways. On the box it was found on, the human was
+# latched in from ANOTHER MACHINE while that box sat at its login greeter, so
+# the attaching client was an agent-less ssh. Any cross-box attach does it.
 #
 # ---------------------------------------------------------------------------
 # THREE TIERS, AND ONLY THE MIDDLE ONE IS MUX'S
 #
 #   NAMES       `envhooks.d/<VARNAME>`, one file per variable. The directory
-#               LISTING is the set, so there is no separate list that can
-#               drift from the validators, and `ls` answers "what does mux
-#               manage here". Which variables matter is not mux's knowledge:
-#               this fleet needs four, another environment needs others, and
-#               mux holding the list would make every such environment a patch
-#               to mux.
+#               LISTING is the set, so no separate list can drift from the
+#               validators and `ls` answers "what does mux manage here".
+#               WHICH variables matter is not mux's knowledge: this fleet
+#               needs four and another environment needs others, so mux
+#               holding the list makes every such environment a patch to mux.
 #   VALUES      mux's own generic hunt (`mux_env_resolve`): the systemd user
 #               manager first, then the caller's own environment.
-#   VALIDATION  the hook from tier 1, run with the value as $1. NOT mux's,
-#               because the value is usually not the thing to check.
+#   VALIDATION  tier 1's hook, run with the value as $1. NOT mux's, because
+#               the value is usually not the thing to check.
 #
-# WHY VALIDATION CANNOT BE A CLOSED VOCABULARY, which is the one design point
-# worth reading twice. Of the five real variables, only TWO validate directly:
+# WHY VALIDATION CANNOT BE A CLOSED VOCABULARY, the one design point worth
+# reading twice. Of the five real variables only TWO validate directly:
 #
 #     SSH_AUTH_SOCK    /run/user/1000/gcr/ssh    the value itself
 #     WAYFIRE_SOCKET   /run/user/1000/wayfire-wayland-1-.socket  likewise
@@ -53,75 +49,69 @@
 #     DBUS_..._ADDRESS unix:path=/run/user/.../bus  its unix:path= field
 #     DISPLAY          :0                        /tmp/.X11-unix/X0
 #
-# VALIDATING DIRECTLY IS NOT THE SAME AS VALIDATING CHEAPLY, which the two
-# path-shaped ones disagree about: SSH_AUTH_SOCK stops at presence on purpose,
+# VALIDATING DIRECTLY IS NOT VALIDATING CHEAPLY, which the two path-shaped
+# ones disagree about: SSH_AUTH_SOCK stops at presence on purpose, while
 # WAYFIRE_SOCKET must CONNECT, because a wayfire socket is not removed when
-# its compositor exits and an agent's is. Read both hooks before copying
-# either.
+# its compositor exits and an agent's is. Read both before copying either.
 #
 # Three of five need a TRANSFORM before anything can be checked, and two of
-# those transforms need ANOTHER variable's resolved value. A vocabulary of
-# kinds (socket, file, dir) cannot express that. So every name is resolved
-# BEFORE any is validated, and the resolved set is exported to each hook under
-# a `MUX_RESOLVED_` prefix: that removes the ordering problem without numbering
-# or dependency declarations, and the prefix keeps a possibly-dead candidate
-# out of the hook's own environment.
+# those transforms need ANOTHER variable's resolved value, which a vocabulary
+# of kinds (socket, file, dir) cannot express. So every name is resolved
+# BEFORE any is validated, and the resolved set reaches each hook under a
+# `MUX_RESOLVED_` prefix: no numbering, no dependency declarations, and the
+# prefix keeps a possibly-dead candidate out of the hook's own environment.
 #
 # ---------------------------------------------------------------------------
 # THERE IS NO CACHE, and that is a decision rather than an omission.
 #
-# The standing rule for this package is that SESSIONS COME AND GO AND MUX
-# LIVES ON, and the numbers that follow from it are decisive here. Measured on
-# the box above:
+# The standing rule is SESSIONS COME AND GO AND MUX LIVES ON, and the numbers
+# are decisive. Measured on the box above:
 #
 #     tmux server started      22:14:22
 #     graphical session ENDED  22:30:32      <- sixteen minutes later
 #     a pane in it             next day
 #
 # THE SERVER OUTLIVED THE THING ITS POINTERS POINT AT BY NINETEEN HOURS, and
-# the dead session left its socket FILE behind, so a presence test still
+# the dead session left its socket FILE behind so a presence test still
 # answered yes. Any value cached at server start was stale within sixteen
 # minutes. A cache is precisely the thing that outlives the session that
-# filled it, so mux re-derives and re-validates every time instead. The hunt
-# costs about 5ms, which is not worth optimising into a staleness bug.
+# filled it, so mux re-derives and re-validates every time; the hunt costs
+# about 5ms, not worth optimising into a staleness bug.
 #
-# AND A PRESENCE TEST ON A HANDLE IS NOT A LIVENESS TEST, which this file
-# learned the hard way: an earlier repair validated WAYLAND_DISPLAY with
+# AND A PRESENCE TEST ON A HANDLE IS NOT A LIVENESS TEST, learned the hard way
+# here: an earlier repair validated WAYLAND_DISPLAY with
 # `[ -e "$XDG_RUNTIME_DIR/$v" ]` and it PASSED on a socket whose listener had
-# been gone for a day. A unix socket outlives its listener. That is why
-# validation is the hook's job and not a rule mux writes down: only the hook
-# knows that this one needs a connect.
+# been gone a day. A unix socket outlives its listener. Hence validation is
+# the hook's job rather than a rule mux writes down: only the hook knows that
+# this one needs a connect.
 
 # --- WHICH NAMES -----------------------------------------------------------
-# UNION WITH PER-NAME OVERRIDE, which is the overlay order layouts, themes and
-# the latch hooks already use: $MUX_DIR wins over $MUX_SHARE for the SAME name,
-# and a name present in only one of them still counts. So mux ships a working
-# set and a user can replace any one of them or add their own, without either
-# side having to know about the other.
+# UNION WITH PER-NAME OVERRIDE, the overlay order layouts, themes and the
+# latch hooks already use: $MUX_DIR wins over $MUX_SHARE for the SAME name,
+# and a name in only one of them still counts. So mux ships a working set and
+# a user replaces one or adds their own, neither side knowing about the other.
 #
-# SHIPPED ACTIVE, not as an unwired library, and this is the one place where
-# this package's "a shipped default that fails is worse than no default" rule
-# does NOT apply. That rule came from shipping a LOCATION (`scan ~/src 3`),
-# which is a claim about a particular machine and made `mux check` fail on
-# every box that keeps work elsewhere. A validator is not a location: on a box
-# with no ssh agent, `envhooks.d/SSH_AUTH_SOCK` finds nothing and mux does
-# nothing, which is silent and correct. Shipping them UNWIRED would instead
-# mean a fresh install still starts panes with no agent, which is the whole bug
-# this file exists for.
+# SHIPPED ACTIVE rather than as an unwired library, the one place where "a
+# shipped default that fails is worse than no default" does NOT apply. That
+# rule came from shipping a LOCATION (`scan ~/src 3`), a claim about a
+# particular machine, which made `mux check` fail on every box that keeps work
+# elsewhere. A validator is not a location: with no ssh agent,
+# `envhooks.d/SSH_AUTH_SOCK` finds nothing and mux does nothing, silently and
+# correctly. Shipping them UNWIRED would mean a fresh install still starts
+# panes with no agent, the whole bug this file exists for.
 #
-# KNOWN GAP, recorded rather than designed around: there is no way to opt OUT
-# of a shipped name. R3 asks for the set to be EXTENSIBLE and says nothing
-# about shrinking it, and it is hard to name a harm, since R9 below means a
-# session already holding a working value keeps it. If a reason appears, the
-# mechanism wants thinking about rather than guessing at now.
+# KNOWN GAP, recorded rather than designed around: no way to opt OUT of a
+# shipped name. R3 asks for the set to be EXTENSIBLE and says nothing about
+# shrinking it, and a harm is hard to name, since R9 below means a session
+# already holding a working value keeps it. If a reason appears, the mechanism
+# wants thinking about rather than guessing at now.
 mux_env_names() {
   for _end in "$MUX_DIR/envhooks.d" "$MUX_SHARE/envhooks.d" \
               "$MUX_DIR/envhooks.d/strip.d" "$MUX_SHARE/envhooks.d/strip.d"; do
     [ -d "$_end" ] || continue
     for _enf in "$_end"/*; do
       # `-f` is what keeps `strip.d` itself out of the name list: a
-      # directory is not a file, so the subdirectory cannot be mistaken for
-      # a variable called "strip.d".
+      # directory is not a file, so it cannot be read as a variable.
       [ -f "$_enf" ] || continue
       printf '%s\n' "${_enf##*/}"
     done
@@ -129,39 +119,38 @@ mux_env_names() {
 }
 
 # --- DECLARED REMOVAL: envhooks.d/strip.d/<VARNAME> ------------------------
-# THE USER'S DESIGN (2026-09-30), and the argument for it is not that it adds
-# a capability. Stripping was ALREADY possible: a validator that exits 1 makes
-# the value invalid, and invalid already means "do not write it, and clear it
+# THE USER'S DESIGN (2026-09-30), and the argument is not that it adds a
+# capability: stripping was ALREADY possible, since a validator exiting 1
+# makes the value invalid and invalid already means "do not write it, clear it
 # if present". Verified before this was built.
 #
-# WHAT IT ADDS IS THE DISTINCTION BETWEEN POLICY AND DIAGNOSIS, which matters
-# because of what mux does with each. A validator saying 1 means THIS VALUE IS
-# BROKEN, so mux acts and says so, loudly, every time, per R7. A deliberate
-# opt-out expressed that way would therefore announce `dropped WAYLAND_DISPLAY`
-# on every run forever, which is noise about a decision the human already made.
-# A declared strip is not a finding. Same shape as this package's older rule
-# that "I could not answer" and "the answer is no" are different claims.
+# WHAT IT ADDS IS POLICY VERSUS DIAGNOSIS, which matters because of what mux
+# does with each. A validator saying 1 means THIS VALUE IS BROKEN, so mux acts
+# and says so loudly, every time, per R7. A deliberate opt-out expressed that
+# way would announce `dropped WAYLAND_DISPLAY` on every run for ever, noise
+# about a decision the human already made. A declared strip is not a finding:
+# the same shape as "I could not answer" and "the answer is no" being
+# different claims.
 #
 # THE SAME SHAPE AS A VALIDATOR, deliberately: one file per variable, the
 # directory listing is the set, $MUX_DIR overrides $MUX_SHARE per name. Anyone
-# who understands envhooks.d understands this without being told.
+# who understands envhooks.d understands this untold.
 #
-# IT SEES THE VALUE, which is the half that makes it more than a list of names:
+# IT SEES THE VALUE, the half that makes it more than a list of names:
 #
 #     exit 0                              always; I manage this myself
 #     case $1 in /run/user/999/*) exit 0  only values from a dead runtime dir
 #                ;; *) exit 1 ;; esac
 #
-# 0 MEANS STRIP, because the hook answers "should this be removed?" and true is
-# yes. That is the opposite of the validator next door, where 1 means the value
-# is bad, and the asymmetry is deliberate: a file in `strip.d` whose answer of
-# "no" meant "strip it" would be a trap for whoever writes the second one.
+# 0 MEANS STRIP, because the hook answers "should this be removed?" and true
+# is yes. That is the opposite of the validator next door, where 1 means the
+# value is bad, and the asymmetry is deliberate: a `strip.d` file whose "no"
+# meant "strip it" would be a trap for whoever writes the second one.
 #
-# AND ANYTHING ELSE MEANS KEEP, which is the only safe direction for a hook
-# whose yes deletes data. A missing hook, one that errors, one that times out:
-# none of them has made a finding, and the three-answer discipline the
-# validators follow says a non-finding must not be acted on. Here that means
-# never deleting on doubt.
+# AND ANYTHING ELSE MEANS KEEP, the only safe direction for a hook whose yes
+# deletes data. A missing hook, one that errors, one that times out: none has
+# made a finding, and the validators' three-answer discipline says a
+# non-finding must not be acted on. Here, never delete on doubt.
 mux_env_strip_hook() {   # <VARNAME>
   for _esd in "$MUX_DIR/envhooks.d/strip.d" "$MUX_SHARE/envhooks.d/strip.d"; do
     if [ -f "$_esd/$1" ]; then printf '%s' "$_esd/$1"; return 0; fi
@@ -170,16 +159,16 @@ mux_env_strip_hook() {   # <VARNAME>
 }
 
 # True when this name/value pair is declared strippable. Bounded and with
-# stdin closed for the same reasons mux_env_validate is: the cost of a
-# user-supplied hook is unbounded and this runs on the path a human types most.
+# stdin closed for mux_env_validate's reasons: a user-supplied hook's cost is
+# unbounded and this runs on the path a human types most.
 mux_env_strips() {   # <VARNAME> <value> -> 0 strip, non-zero keep
   _esh=$(mux_env_strip_hook "$1") || return 1
   [ -x "$_esh" ] || return 1
   _est=$(mux_env_timeout)
-  # THE if/else IS THE RETURN VALUE: its status is the status of whichever
-  # branch ran, so there is nothing to test afterwards. Only an exact 0
-  # strips; 124 from `timeout`, 126/127 from an unrunnable hook and any other
-  # code all mean no finding was made, so the value is kept.
+  # THE if/else IS THE RETURN VALUE: whichever branch ran supplies the
+  # status, so there is nothing to test afterwards. Only an exact 0 strips;
+  # 124 from `timeout`, 126/127 from an unrunnable hook and anything else
+  # mean no finding was made, so the value is kept.
   if command -v timeout >/dev/null 2>&1; then
     timeout "$_est" "$_esh" "$2" >/dev/null 2>&1 </dev/null
   else
@@ -198,15 +187,15 @@ mux_env_hook() {   # <VARNAME>
 }
 
 # --- TIER 2: THE VALUE -----------------------------------------------------
-# THE SYSTEMD USER MANAGER FIRST, because it was right on both boxes including
-# the broken one, where the correct values were sitting one command away the
-# whole time while the tmux server, the window watcher and every pane were all
-# wrong. It is also the layer that OUTLIVES the graphical session and the tmux
-# server, which is what the no-cache argument above turns on.
+# THE SYSTEMD USER MANAGER FIRST, because it was right on both boxes
+# including the broken one, where the correct values sat one command away the
+# whole time while the tmux server, the window watcher and every pane were
+# wrong. It also OUTLIVES the graphical session and the tmux server, which is
+# what the no-cache argument above turns on.
 #
-# THEN THE CALLER'S OWN ENVIRONMENT, which covers a box with no user manager
-# at all: if the shell running mux has a working value, that is a better answer
-# than nothing. It is second because a long-lived shell can itself be stale.
+# THEN THE CALLER'S OWN ENVIRONMENT, covering a box with no user manager: if
+# the shell running mux has a working value that beats nothing. Second,
+# because a long-lived shell can itself be stale.
 #
 # ONE CALL FOR THE WHOLE SET, not one per name. Measured: the hunt is about
 # 5ms, and a naive one-read-per-variable cascade was 31ms.
@@ -214,8 +203,8 @@ mux_env_resolve() {   # -> VARNAME=value lines, for the names mux manages
   _erset=$(systemctl --user show-environment 2>/dev/null || true)
   mux_env_names | while IFS= read -r _ern; do
     [ -n "$_ern" ] || continue
-    # `-n` and a leading anchor, so SSH_AUTH_SOCK cannot be matched by
-    # something that merely ends with that name.
+    # Anchored, so SSH_AUTH_SOCK cannot be matched by a name merely
+    # ENDING with it.
     _erv=$(printf '%s\n' "$_erset" | sed -n "s/^$_ern=//p" | head -1)
     if [ -z "$_erv" ]; then
       # The caller's own environment, read without eval: a variable name is
@@ -234,38 +223,35 @@ mux_env_resolve() {   # -> VARNAME=value lines, for the names mux manages
 #     1        invalid      it is dead, do not write it
 #     other    UNDETERMINED pass the value through unchanged
 #
-# The same 0/1/78 shape latch's hooks already use, and for the same reason
-# recorded there: a hook that is MISSING, that ERRORS, or that RUNS OUT OF TIME
-# has made no finding, and reading that as "found it dead" is the very sin this
-# file exists to fix, committed by a different mechanism. "I could not answer"
-# and "the answer is no" are different claims.
+# latch's 0/1/78 shape, for the reason recorded there: a hook that is
+# MISSING, ERRORS, or RUNS OUT OF TIME has made no finding, and reading that
+# as "found it dead" is the very sin this file exists to fix, committed by a
+# different mechanism.
 #
-# NOTHING HERE MAY HANG, because this runs on the path a human types most. The
-# cost of a user-supplied validator is unbounded and not mux's to predict, and
+# NOTHING HERE MAY HANG, because this runs on the path a human types most. A
+# user-supplied validator's cost is unbounded and not mux's to predict, and
 # this is not theoretical: the session that produced this design killed a
-# background job that had been hung for FOURTEEN HOURS on a command blocking
-# for input on a stdin that never reached EOF. For a session launcher that is
-# the worst available failure, because the tool you reach for to fix things is
-# the one that will not start.
+# background job hung FOURTEEN HOURS on a command blocking for input on a
+# stdin that never reached EOF. For a session launcher that is the worst
+# available failure, since the tool you reach for to fix things is the one
+# that will not start.
 #
-# `< /dev/null` IS AS LOAD-BEARING AS THE TIMEOUT. A hook that reads stdin
-# would otherwise consume the caller's, and with no terminal it would block
-# forever in exactly the shape described above. The timeout bounds it; closing
-# stdin means it never starts.
+# `< /dev/null` IS AS LOAD-BEARING AS THE TIMEOUT. A hook reading stdin would
+# otherwise consume the caller's, and with no terminal block for ever in
+# exactly that shape. The timeout bounds it; closing stdin means it never
+# starts.
 #
-# THE BOUND IS A SEAM, environment then config then default, the same shape
-# latch's five seams use, because an unusual environment may be willing to pay
-# a second or two of startup for a validator with real work to do. Default 2s:
-# long enough for a connect to a local socket and short enough that a wedged
-# hook is not mistaken for a wedged mux.
+# THE BOUND IS A SEAM, environment then config then default, latch's shape,
+# because an unusual environment may pay a second or two of startup for a
+# validator with real work to do. Default 2s: long enough for a connect to a
+# local socket, short enough that a wedged hook is not a wedged mux.
 MUX_ENV_TIMEOUT_DEFAULT=2
 
-# The same three-layer read latch's `_seam` uses (environment, then
-# $MUX_DIR/config, then the default), spelled out here rather than shared
-# because latch's copy is a local function in a command and this is a lib. A
-# NON-NUMERIC value is treated as absent rather than passed to `timeout`,
-# which would otherwise fail per hook and turn every answer into
-# "undetermined": a config typo must not silently disable validation.
+# latch's `_seam` read (environment, $MUX_DIR/config, default), spelled out
+# here rather than shared because latch's copy is a local function in a
+# command and this is a lib. A NON-NUMERIC value is treated as ABSENT rather
+# than handed to `timeout`, which would fail per hook and turn every answer
+# into "undetermined": a config typo must not silently disable validation.
 mux_env_timeout() {
   _ett=${MUX_ENV_TIMEOUT:-}
   if [ -z "$_ett" ] && [ -r "$MUX_DIR/config" ]; then
@@ -278,13 +264,12 @@ mux_env_timeout() {
   esac
 }
 
-# Validate one already-resolved value. $2 is the value; the resolved set must
-# already be exported by the caller (see mux_env_plan).
+# Validate one already-resolved value. $2 is the value; the caller must have
+# exported the resolved set already (see mux_env_plan).
 #
-# NO `timeout` ON THE BOX IS NOT AN ERROR, it is one fewer guarantee: the hook
-# still runs and still answers. mux only ever calls `timeout` behind
-# `command -v`, because it is a harness dependency elsewhere in this package
-# and must not become a product one.
+# NO `timeout` ON THE BOX IS NOT AN ERROR, just one fewer guarantee: the hook
+# still runs and answers. mux only calls `timeout` behind `command -v`,
+# because it is a harness dependency here and must not become a product one.
 mux_env_validate() {   # <VARNAME> <value> -> 0 valid, 1 invalid, 2 undetermined
   _evh=$(mux_env_hook "$1") || return 2
   [ -x "$_evh" ] || return 2
@@ -295,8 +280,8 @@ mux_env_validate() {   # <VARNAME> <value> -> 0 valid, 1 invalid, 2 undetermined
     "$_evh" "$2" >/dev/null 2>&1 </dev/null
   fi
   _evr=$?
-  # `timeout` reports 124 for a hook that ran out of time, which is exactly
-  # "made no finding" and must not be read as invalid.
+  # `timeout` reports 124 for a hook that ran out of time, which is
+  # "made no finding" and must not read as invalid.
   case $_evr in
   0) return 0 ;;
   1) return 1 ;;
@@ -305,11 +290,11 @@ mux_env_validate() {   # <VARNAME> <value> -> 0 valid, 1 invalid, 2 undetermined
 }
 
 # --- THE PLAN --------------------------------------------------------------
-# Resolve everything, then validate everything, then say what to DO. Emitting
-# a plan rather than acting is what lets `mux check` report the same answer
-# this would apply, without applying it: R7 asks for a withheld value to be
-# visible, and a reporter that re-derives the decision separately is a second
-# implementation that can disagree with the first.
+# Resolve everything, validate everything, then say what to DO. Emitting a
+# plan rather than acting is what lets `mux check` report the same answer this
+# would apply without applying it: R7 asks for a withheld value to be visible,
+# and a reporter that re-derives the decision is a second implementation free
+# to disagree with the first.
 #
 # Lines are `<VERDICT> <VARNAME> <value>`, value possibly empty:
 #
@@ -318,17 +303,17 @@ mux_env_validate() {   # <VARNAME> <value> -> 0 valid, 1 invalid, 2 undetermined
 #     drop   NAME         resolved and INVALID: do not write, clear if present
 #     none   NAME         nothing resolved at all
 mux_env_plan() {
-  # EXPORTED BEFORE ANY VALIDATION, which is what removes the ordering
-  # problem: WAYLAND_DISPLAY's hook needs XDG_RUNTIME_DIR's resolved value,
-  # and neither hook has to declare that or be run in a particular order.
+  # EXPORTED BEFORE ANY VALIDATION, which removes the ordering problem:
+  # WAYLAND_DISPLAY's hook needs XDG_RUNTIME_DIR's resolved value, and
+  # neither has to declare it or run in a particular order.
   _epres=$(mux_env_resolve)
   printf '%s\n' "$_epres" | while IFS= read -r _epl; do
     [ -n "$_epl" ] || continue
     export "MUX_RESOLVED_${_epl%%=*}=${_epl#*=}"
   done
-  # A second pass, because the exports above happen in a subshell of the
-  # pipeline and would not reach the validation below. Read from a here-doc so
-  # a value containing whitespace survives, and so nothing is word-split.
+  # A second pass, because the exports above are in a pipeline subshell and
+  # would not reach the validation below. A here-doc, so a value containing
+  # whitespace survives and nothing is word-split.
   while IFS= read -r _epl; do
     [ -n "$_epl" ] || continue
     export "MUX_RESOLVED_${_epl%%=*}=${_epl#*=}"
@@ -339,29 +324,28 @@ EOF
   mux_env_names | while IFS= read -r _epn; do
     [ -n "$_epn" ] || continue
     _epv=$(printf '%s\n' "$_epres" | sed -n "s/^$_epn=//p" | head -1)
-    # STRIP IS ASKED FIRST, and about whichever value is in play. Here that is
-    # the RESOLVED one, deciding whether to WRITE it; mux_env_apply asks again
-    # about the SESSION's own value, deciding whether to REMOVE that. One
-    # question, two subjects, which is why the hook takes the value rather
-    # than only the name.
+    # STRIP IS ASKED FIRST, about whichever value is in play: here the
+    # RESOLVED one, deciding whether to WRITE it, while mux_env_apply asks
+    # again about the SESSION's own value, deciding whether to REMOVE that.
+    # One question, two subjects, which is why the hook takes the value and
+    # not only the name.
     #
     # ASKED EVEN WHEN NOTHING RESOLVED, because "mux, remove this" must work
-    # for a name that has no value to find: the whole point may be that the
+    # for a name with no value to find: the whole point may be that the
     # session holds something the login session does not.
     if mux_env_strips "$_epn" "$_epv"; then
       printf 'strip %s\n' "$_epn"; continue
     fi
     if [ -z "$_epv" ]; then printf 'none %s\n' "$_epn"; continue; fi
-    # `|| _epvr=$?` AND NOT A BARE CALL, which is not style: under `set -e`
-    # a command returning non-zero outside a condition context KILLS the
-    # shell, and this loop runs inside `$( )` in callers that all use
-    # `set -eu`. A bare call therefore TRUNCATED THE PLAN at the first
-    # INVALID name, silently, so every name after it alphabetically was never
-    # considered. Measured: four names without `set -e`, two with it.
+    # `|| _epvr=$?` AND NOT A BARE CALL, and not style: under `set -e` a
+    # command returning non-zero outside a condition context KILLS the
+    # shell, and this loop runs inside `$( )` in callers that all set -eu. A
+    # bare call TRUNCATED THE PLAN at the first INVALID name, silently, so
+    # every name after it alphabetically went unconsidered. Measured: four
+    # names without `set -e`, two with it.
     #
     # Caught by `mux check` reporting [OK] about a pointer it should have
-    # warned on, one day after that marker was added, which is the marker
-    # earning its keep rather than decorating the file.
+    # warned on, one day after that marker was added.
     _epvr=0
     mux_env_validate "$_epn" "$_epv" || _epvr=$?
     case $_epvr in
@@ -373,14 +357,13 @@ EOF
 }
 
 # --- APPLYING IT: ensure a VALID value, never replace a working one --------
-# R9, and it is not the same as "make every session agree". Converging every
-# session onto one answer would make it impossible to run two sessions with
-# deliberately DIFFERENT environments, and they would silently collapse into
-# each other. The four variables that prompted this are box-wide pointers,
-# identical for every session by nature, so nothing would break today; but the
-# set is extensible ON PURPOSE, and the first genuinely per-session variable
-# somebody adds would break. So the job is stated as: STOP A PANE STARTING
-# BROKEN, not enforce uniformity.
+# R9, and NOT "make every session agree". Converging every session onto one
+# answer makes two sessions with deliberately DIFFERENT environments
+# impossible: they collapse into each other, silently. The four variables that
+# prompted this are box-wide pointers, identical per session by nature, so
+# nothing would break today, but the set is extensible ON PURPOSE and the
+# first genuinely per-session variable somebody adds would. So the job is STOP
+# A PANE STARTING BROKEN, not enforce uniformity.
 #
 #     session has no value, or -NAME  -> set it      (the poisoned session)
 #     session's value VALIDATES       -> leave alone (someone meant that)
@@ -388,26 +371,23 @@ EOF
 #     session's value UNDETERMINED    -> leave alone (R5: no finding made)
 #
 # THE SESSION'S OWN VALUE IS VALIDATED TOO, not just the one mux resolved,
-# which is the half that makes the table above more than decoration. It also
-# means a `drop` in the plan does NOT automatically clear the session: the
-# login session's pointer can be dead while a particular session holds a
-# working one of its own.
+# which is what makes the table above more than decoration. It also means a
+# `drop` in the plan does NOT automatically clear the session: the login
+# session's pointer can be dead while one session holds a working one.
 #
 # `-u` AND NEVER `-r` when clearing. `-r` is tmux's REMOVAL marker, the very
-# `-NAME` that masks the global and started this whole investigation, so
-# clearing with it would reintroduce the bug in the name of fixing it.
-# Measured: `-u` clears cleanly.
+# `-NAME` that masks the global and started this investigation, so clearing
+# with it reintroduces the bug in the name of fixing it. `-u` clears cleanly.
 #
-# EVERY DECISION IS ANNOUNCED ON REQUEST, because R7 asks for a withheld or
-# removed value to be VISIBLE. Silence here would make this a SECOND silent
-# removal mechanism beside `update-environment`, which is exactly what made
-# the original fault cost a long session to find: everything reported healthy.
-# The caller decides where that goes; this function just says what it did.
-# `-n` REPORTS WITHOUT ACTING, and it has to live HERE rather than in the
-# caller. The first version had `mux update-env -n` print mux_env_plan
-# instead, and that was wrong in a way worth recording: the plan says what
-# RESOLVED and validated, while the decision to write also consults the
-# SESSION's existing value. So the dry run listed two names and the real run
+# EVERY DECISION IS ANNOUNCED ON REQUEST, per R7. Silence would make this a
+# SECOND silent removal mechanism beside `update-environment`, which is what
+# made the original fault cost a long session to find: everything reported
+# healthy. The caller decides where that goes; this says what it did.
+#
+# `-n` REPORTS WITHOUT ACTING, and has to live HERE rather than in the caller.
+# The first version had `mux update-env -n` print mux_env_plan, and the plan
+# says what RESOLVED and validated while the decision to write also consults
+# the SESSION's existing value: the dry run listed two names and the real run
 # changed three. A preview computed by a different code path from the action
 # is not a preview, and the comment claiming otherwise was the giveaway.
 mux_env_apply() {   # <session-or-empty> [-v|-n] -> what it changed/would
@@ -417,9 +397,9 @@ mux_env_apply() {   # <session-or-empty> [-v|-n] -> what it changed/would
   [ "$_eav" != -n ] || { _ean=1; _eav=-v; }
   mux_env_plan | while IFS=' ' read -r _eaverd _eaname _eaval; do
     [ -n "$_eaname" ] || continue
-    # What this session holds right now. tmux answers three ways and they are
-    # three different facts: `NAME=value`, `-NAME` (REMOVED, and the one that
-    # matters most), or an error for a name it has never heard of.
+    # What this session holds now. tmux answers three ways, and they are
+    # three different facts: `NAME=value`, `-NAME` (REMOVED, the one that
+    # matters most), or an error for a name it never heard of.
     if [ -n "$_eas" ]; then
       _eacur=$(tm show-environment -t "$_eas" "$_eaname" 2>/dev/null || true)
     else
@@ -430,10 +410,10 @@ mux_env_apply() {   # <session-or-empty> [-v|-n] -> what it changed/would
     *)            _eahave= ;;
     esac
 
-    # A DECLARED STRIP IS ANSWERED BEFORE VALIDITY, because it is a different
-    # kind of statement: not "is this good" but "I do not want this here".
-    # Asked about the SESSION's value, since that is what would be removed, so
-    # a conditional hook can strip one value and leave another.
+    # A DECLARED STRIP IS ANSWERED BEFORE VALIDITY, being a different kind
+    # of statement: not "is this good" but "I do not want this here". Asked
+    # about the SESSION's value, since that is what would be removed, so a
+    # conditional hook can strip one value and leave another.
     if [ "$_eaverd" = strip ] || \
        { [ -n "$_eahave" ] && mux_env_strips "$_eaname" "$_eahave"; }; then
       if [ -n "$_eahave" ]; then
@@ -444,10 +424,9 @@ mux_env_apply() {   # <session-or-empty> [-v|-n] -> what it changed/would
             tm set-environment -g -u "$_eaname" 2>/dev/null || true
           fi
         fi
-        # `stripped`, NOT `dropped`, and the caller depends on the difference:
-        # a dropped value is a FINDING and gets announced per R7, while a
-        # stripped one is the human's own policy and must not be reported as
-        # news on every run.
+        # `stripped`, NOT `dropped`, and the caller depends on it: a
+        # dropped value is a FINDING, announced per R7, where a stripped one
+        # is the human's own policy and is not news on every run.
         [ -z "$_eav" ] || printf 'stripped %s\n' "$_eaname"
       fi
       continue
@@ -455,10 +434,9 @@ mux_env_apply() {   # <session-or-empty> [-v|-n] -> what it changed/would
 
     if [ -n "$_eahave" ]; then
       # A value is already here. Judge THAT before touching anything.
-      # Guarded for the `set -e` reason given in mux_env_plan above, and this
-      # is the site where it mattered most: bin/mux calls this on every
-      # session build and attach, so a dead value here stopped the repair for
-      # every name after it.
+      # Guarded for mux_env_plan's `set -e` reason, and this is where it
+      # mattered most: bin/mux calls this on every session build and attach,
+      # so one dead value stopped the repair for every name after it.
       _eavr=0
       mux_env_validate "$_eaname" "$_eahave" || _eavr=$?
       case $_eavr in
@@ -481,7 +459,7 @@ mux_env_apply() {   # <session-or-empty> [-v|-n] -> what it changed/would
       fi
       [ -z "$_eav" ] || printf 'set %s\n' "$_eaname" ;;
     drop|none)
-      # Only worth saying, and only worth clearing, when something dead is
+      # Only worth clearing, and worth saying, when something dead is
       # actually here: an absent variable needs no announcement.
       if [ -n "$_eahave" ]; then
         if [ "$_ean" -eq 0 ]; then
@@ -500,52 +478,51 @@ mux_env_apply() {   # <session-or-empty> [-v|-n] -> what it changed/would
 # --- READINESS: has this box's environment arrived yet? --------------------
 # THE QUESTION A LATCH NEEDS ANSWERED AFTER A REBOOT. sshd answers seconds
 # after boot, so a latch reconnects and its remote `mux resume` rebuilds every
-# session while the graphical session is still starting. Measured on this box:
-# the sessions were rebuilt at 23:42:11 and the compositor started at 00:21:29,
-# 39 minutes later, so six of seven sessions held no display pointers and
-# their panes never could, since a process environment is fixed at exec.
+# session while the graphical session is still starting. Measured here: the
+# sessions were rebuilt at 23:42:11 and the compositor started at 00:21:29, 39
+# minutes later, so six of seven held no display pointers and their panes
+# never could, a process environment being fixed at exec.
 #
-# IT IS A RACE AND NOT A TIMING BUG: sshd coming up and the session
-# initialising are concurrent, so starting the session earlier changes the odds
-# and not the shape. The answer is to WAIT, which means something has to be
-# able to ASK.
+# A RACE AND NOT A TIMING BUG: sshd coming up and the session initialising are
+# concurrent, so starting the session earlier changes the odds and not the
+# shape. The answer is to WAIT, which means something has to be able to ASK.
 #
-# DECLARED, NEVER DETECTED, and this is the decision the whole design rests on.
-# mux must not learn what Wayland is, and it cannot know which pointers a given
-# box will ever hold: `envhooks.d` is the SHIPPED tree, identical everywhere,
-# so requiring all of it would make any machine that will never have a
-# WAYFIRE_SOCKET (a different compositor, a headless server, a CI runner) fail
-# readiness PERMANENTLY. So the caller passes the names it considers
-# load-bearing HERE, and with none passed this is free and answers yes.
+# DECLARED, NEVER DETECTED, the decision the whole design rests on. mux must
+# not learn what Wayland is, and cannot know which pointers a given box will
+# ever hold: `envhooks.d` is the SHIPPED tree, identical everywhere, so
+# requiring all of it would make any machine that will never have a
+# WAYFIRE_SOCKET (another compositor, a headless server, a CI runner) fail
+# readiness PERMANENTLY. The caller passes the names it considers load-bearing
+# HERE, and with none passed this is free and answers yes.
 #
 # THE NAME IS THE DECLARATION AND THE HOOK IS THE TEST (the user's design, and
-# it is what keeps this honest): a declared name is checked by running ITS OWN
-# hook, through the plan above, so there is no second copy of the liveness
-# question. Presence is not liveness is precisely why those hooks exist, and a
-# socket left behind by the previous graphical session is exactly the value
-# that would satisfy a presence test while being dead.
+# what keeps this honest): a declared name is checked by running ITS OWN hook
+# through the plan above, so there is no second copy of the liveness question.
+# Presence is not liveness is why those hooks exist, and a socket left behind
+# by the previous graphical session is exactly the value that satisfies a
+# presence test while being dead.
 #
-# `keep` COUNTS AS READY, which is the three-state contract answered for THIS
-# caller rather than by the hook's own certainty. A hook that cannot tell must
-# not park a latch in a backoff for ever: that is the error `et-probe` refuses
-# to make where `ssh-probe` makes the opposite call, and the deciding question
-# is always what the CALLER does with each state. Waiting costs you the box;
-# proceeding costs a pointer that may be stale, which is today's behaviour.
+# `keep` COUNTS AS READY, the three-state contract answered for THIS caller
+# rather than by the hook's own certainty. A hook that cannot tell must not
+# park a latch in a backoff for ever: the error `et-probe` refuses to make
+# where `ssh-probe` makes the opposite call, and the deciding question is
+# always what the CALLER does with each state. Waiting costs you the box;
+# proceeding costs a pointer that may be stale, today's behaviour.
 #
 # Sets MUX_ENV_UNREADY (names that are not) and MUX_ENV_UNMANAGED (names
-# nothing manages, which is a typo and is reported separately: its failure mode
-# is a full timeout on every host relatch, silently, so it must be loud at the
-# moment it is read rather than discovered after a reboot).
+# nothing manages, a typo, reported separately because its failure mode is a
+# silent full timeout on every host relatch, so it must be loud when read
+# rather than discovered after a reboot).
 #
-# RETURNS A CODE, so call it as `_rc=0; mux_env_ready $names || _rc=$?`. A bare
-# call under `set -e` takes the shell down, which is how the plan loop in this
-# very file was once truncated.
+# RETURNS A CODE, so call it `_rc=0; mux_env_ready $names || _rc=$?`. A bare
+# call under `set -e` takes the shell down, which is how this very file's plan
+# loop was once truncated.
 mux_env_ready() {       # <declared name>... -> 0 ready, 1 not, 2 unmanaged
   MUX_ENV_UNREADY=
   MUX_ENV_UNMANAGED=
-  # NOTHING DECLARED IS NOT A FAILURE, and the early return is also what keeps
-  # this off the cost of a plan (a systemctl call plus a hook per name) for
-  # every box that has not opted in.
+  # NOTHING DECLARED IS NOT A FAILURE, and the early return also keeps a
+  # plan's cost (a systemctl call plus a hook per name) off every box that
+  # has not opted in.
   [ "$#" -gt 0 ] || return 0
 
   _erdm=$(mux_env_names | tr '\n' ' ')
@@ -558,9 +535,8 @@ mux_env_ready() {       # <declared name>... -> 0 ready, 1 not, 2 unmanaged
   done
   [ -z "$MUX_ENV_UNMANAGED" ] || return 2
 
-  # ONE plan for the whole set, not one per name: it is a single systemctl
-  # read plus one hook per managed name, and asking per declared name would
-  # re-run all of it each time.
+  # ONE plan for the whole set: a single systemctl read plus one hook per
+  # managed name, where asking per declared name re-runs all of it.
   _erdp=$(mux_env_plan 2>/dev/null)
   for _erdn in "$@"; do
     [ -n "$_erdn" ] || continue

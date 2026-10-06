@@ -1,37 +1,34 @@
 #!/bin/sh
-# mux-window_lib: opening a WINDOW in an existing session. Sourced (functions
-# only); the two verbs that present it are `mux window` (human) and
-# `mux agent open` (machine).
+# mux-window_lib: opening a WINDOW in an existing session. Two verbs present
+# it: `mux window` (human) and `mux agent open` (machine).
 #
 # IT NEEDS `mux-class_lib` AND `mux-sessions_lib`, and says so rather than
-# relying on whoever sources first: that is how a standalone helper stops
-# being standalone, which this tree has already paid for once.
+# relying on whoever sources first, which is how a standalone helper stops
+# being standalone: paid for once already.
 #
-# WHY MUX OWNS THIS AT ALL, when it had no verb for it: without one, the layer
+# WHY MUX OWNS THIS AT ALL, having had no verb for it: without one the layer
 # above reimplements it. vicus already did, as its single documented exemption
-# from "never sidestep mux to reach tmux", and the copy was already wrong in
-# two ways a shared engine cannot be: it omitted `-d`, so every spawn SELECTED
-# the new window and yanked the human's view into a worker, and it set no
-# class marker of its own beyond the one R8 asked for. That is "reimplementing
-# it badly", which is R7's own stated reason for asking.
+# from "never sidestep mux to reach tmux", and that copy was wrong in two ways
+# a shared engine cannot be: it omitted `-d`, so every spawn SELECTED the new
+# window and yanked the human's view into a worker, and it set no class marker
+# beyond the one R8 asked for. "Reimplementing it badly" is R7's own stated
+# reason for asking.
 #
-# ONE ENGINE, TWO PRESENTERS, and the split is not cosmetic. They differ on
-# three axes, which is more than a flag's worth:
+# ONE ENGINE, TWO PRESENTERS, and not cosmetic: they differ on three axes,
+# which is more than a flag's worth:
 #
 #     human verb     create AND SWITCH   prose out      may prompt
 #     machine verb   create DETACHED     JSON always    never prompts
 #
 # FOCUS IS THE LOAD-BEARING ONE: a machine verb that steals the human's view
-# mid-turn is an interrupt nobody asked for, and it is the defect vicus's copy
-# actually had.
+# mid-turn is an interrupt nobody asked for, and the defect vicus's copy had.
 #
-# WHAT THIS DOES NOT DO, deliberately: it does not create a SESSION (that is
-# `mux go`, and one verb one job), it does not schedule or reap anything (that
-# is the orchestrator's lifecycle, which mux stays out of so it remains useful
-# with no orchestrator present), and it does not set `@mux-agent`. The last is
-# a different claim from either class: it says mux STARTED an agent here, and
-# a pane carrying it with no record draws the unwired plug forever. A spawner
-# that wants that says so itself.
+# WHAT THIS DOES NOT DO, deliberately: create a SESSION (that is `mux go`, one
+# verb one job); schedule or reap anything (the orchestrator's lifecycle, which
+# mux stays out of so it stays useful with no orchestrator present); or set
+# `@mux-agent`, which is a different claim from either class, saying mux
+# STARTED an agent here, and a pane carrying it with no record draws the
+# unwired plug for ever. A spawner wanting that says so itself.
 
 # mux_window_open: open one window and declare what it is for.
 #
@@ -45,26 +42,23 @@
 #     $8 SWITCH     1 to select the new window, anything else to stay put
 #
 # EIGHT POSITIONALS, ALL REQUIRED, PASS EMPTY FOR UNSET. Flags belong to the
-# VERBS, which is where a human or a caller composes them; an internal engine
-# with a fixed arity cannot be called with an argument it forgot, and a fixed
-# arity is also what keeps the two shellcheck versions this tree meets from
-# disagreeing about it.
+# VERBS, where a human or a caller composes them; an internal engine with a
+# fixed arity cannot be called with an argument it forgot, and the fixed arity
+# also keeps the two linter versions this tree meets from disagreeing about it.
 #
-# IT SETS VARIABLES AND PRINTS NOTHING: `$MUX_WIN_OUT` is `SESSION:INDEX` and
-# `$MUX_WIN_ID` the window's tmux id on success (the stable handle, where the
-# index is a recyclable slot), and `$MUX_WIN_ERR` is the reason on a refusal.
-# Returns 0 ok, 2
-# refused, 3 when the session is not known on that socket, which is mux's
-# existing cross-cutting code for that condition rather than a new one.
+# IT SETS VARIABLES AND PRINTS NOTHING. On success `$MUX_WIN_OUT` is
+# `SESSION:INDEX` and `$MUX_WIN_ID` the window's tmux id (the stable handle,
+# where the index is a recyclable slot); on a refusal `$MUX_WIN_ERR` is the
+# reason. Returns 0 ok, 2 refused, 3 session unknown on that socket, which is
+# mux's existing cross-cutting code for that condition and not a new one.
 #
-# NOT PRINTED, AND THAT IS FORCED RATHER THAN CHOSEN. A caller that wants both
-# an answer and a reason would write `_x=$(mux_window_open ...) || ...`, and a
-# command substitution is a SUBSHELL: the reason set inside it is gone by the
-# time the caller looks, so under `set -u` the refusal path dies on an unset
-# variable and prints nothing at all. Measured by doing it: `open` on a
-# missing session exited 2 with an empty document, on a surface whose first
-# promise is JSON on stdout including on failure. Same shape as the state
-# walk, which prints nothing for the same reason.
+# NOT PRINTED, AND THAT IS FORCED RATHER THAN CHOSEN. A caller wanting both an
+# answer and a reason would write `_x=$(mux_window_open ...) || ...`, and a
+# command substitution is a SUBSHELL: the reason set inside it is gone before
+# the caller looks, so under `set -u` the refusal path dies on an unset
+# variable and prints nothing. Measured by doing it: `open` on a missing
+# session exited 2 with an empty document, on a surface whose first promise is
+# JSON on stdout including on failure. Same shape as the state walk.
 mux_window_open() {
   MUX_WIN_OUT=
   MUX_WIN_ID=
@@ -75,18 +69,18 @@ mux_window_open() {
   [ -n "$_mwsess" ] || {
     MUX_WIN_ERR='no session named'; return 2; }
 
-  # THE WINDOW NAME OBEYS THE COLON RULE FOR THE SAME REASON A SESSION NAME
-  # DOES: the address grammar spends `:` on the window separator, so a window
-  # called `a:b` is unaddressable by the very grammar that would name it.
-  # Reusing the session helper rather than restating the rule, because a
-  # second copy of a reservation is how the two spellings diverge.
+  # THE WINDOW NAME OBEYS THE COLON RULE FOR A SESSION NAME'S REASON: the
+  # address grammar spends `:` on the window separator, so a window called
+  # `a:b` is unaddressable by the grammar that would name it. The session
+  # helper is reused rather than the rule restated, since a second copy of a
+  # reservation is how two spellings diverge.
   if [ -n "$_mwname" ] && ! mux_sess_name_clean "$_mwname"; then
     MUX_WIN_ERR="a window name may not contain a colon: $_mwname"
     return 2
   fi
-  # THE VOCABULARY LIVES IN `mux-class_lib`, which a caller sources: an
-  # empty value means "leave it undeclared" and is this function's own
-  # business, so only a non-empty one is put to the shared rule.
+  # THE VOCABULARY LIVES IN `mux-class_lib`, which a caller sources. An
+  # empty value means "leave it undeclared", this function's own business,
+  # so only a non-empty one is put to the shared rule.
   for _mwc in "$_mwctl" "$_mwattn"; do
     [ -z "$_mwc" ] && continue
     mux_class_valid "$_mwc" || {
@@ -94,35 +88,33 @@ mux_window_open() {
       return 2; }
   done
 
-  # THE SESSION MUST ALREADY EXIST, and this is checked rather than left to
-  # tmux: `new-window -t name` against an unknown target fails with tmux's own
-  # wording, which a caller would then have to pattern-match. `=` anchors the
-  # name exactly, or `api` would match `api-2`, the bug this codebase has
-  # shipped four times.
+  # THE SESSION MUST ALREADY EXIST, checked rather than left to tmux:
+  # `new-window -t name` against an unknown target fails in tmux's own
+  # wording, which a caller would have to pattern-match. `=` anchors the
+  # name, or `api` matches `api-2`, the bug this codebase has shipped four
+  # times.
   _mwt() { if [ -n "$_mwsock" ]; then tmux -L "$_mwsock" "$@"
     else tmux "$@"; fi; }
   _mwt has-session -t "=$_mwsess" 2>/dev/null || {
     MUX_WIN_ERR="no such session: $_mwsess"; return 3; }
 
-  # `-d` UNLESS ASKED, which is the whole machine/human difference and the
-  # defect vicus's own copy had: without it tmux SELECTS the new window, so a
-  # worker spawned into the session the human is working in drags their view
-  # with it.
+  # `-d` UNLESS ASKED: the whole machine/human difference, and the defect
+  # vicus's copy had. Without it tmux SELECTS the new window, so a worker
+  # spawned into the session the human is working in drags their view along.
   set -- new-window -t "=$_mwsess"
   [ "$_mwsw" = 1 ] || set -- "$@" -d
   [ -z "$_mwname" ] || set -- "$@" -n "$_mwname"
   [ -z "$_mwdir" ] || set -- "$@" -c "$_mwdir"
-  # THE WINDOW COMES BACK FROM THE CREATE ITSELF (`-P -F`), not from a
-  # follow-up query. A second round trip would be answering about "the current
-  # window", which is exactly what `-d` just declined to change, so it would
-  # name somebody else's window and do it plausibly.
+  # THE WINDOW COMES BACK FROM THE CREATE ITSELF (`-P -F`), not a follow-up
+  # query, which would answer about "the current window", exactly what `-d`
+  # just declined to change: it would name somebody else's window, plausibly.
   #
   # BOTH FIELDS, and the ID is the one that matters. An INDEX is a recyclable
-  # slot (measured: kill the window at index 2 and the next one created takes
-  # it), so a caller handed only an index has nothing stable to address the
-  # window it just made, and `--window` would send it back through `peers` to
-  # learn what the create already knew. A space separates them because
-  # neither an index nor a window id can contain one.
+  # slot (measured: kill the window at index 2 and the next created takes it),
+  # so a caller handed only an index has nothing stable to address what it
+  # just made, and `--window` would send it back through `peers` to learn what
+  # the create already knew. A space separates them because neither field can
+  # contain one.
   set -- "$@" -P -F '#{window_index} #{window_id}'
   [ -z "$_mwcmd" ] || set -- "$@" "$_mwcmd"
 
@@ -130,27 +122,26 @@ mux_window_open() {
     MUX_WIN_ERR="tmux refused to open a window in $_mwsess"; return 2; }
   _mwidx=${_mwpair%% *}
   _mwid=${_mwpair#* }
-  # BOTH FIELDS OR NEITHER. The format asks for two, so a one-field answer is
-  # an incoherent server rather than an older one, and accepting it would
+  # BOTH FIELDS OR NEITHER. The format asks for two, so a one-field answer
+  # is an incoherent server rather than an older one, and accepting it would
   # leave a FALLBACK target nothing can reach: an unkillable guard, which
-  # this package's own rule says to delete rather than test harder.
+  # this package's rule says to delete rather than test harder.
   [ -n "$_mwidx" ] && [ "$_mwid" != "$_mwpair" ] || {
     MUX_WIN_ERR="tmux opened a window and did not say which"; return 2; }
 
-  # THE CLASSES, ON THE WINDOW'S PANE, after it exists. A declaration by the
-  # creator about the pane it is creating, which is the one form that is not
-  # the laundering move: there is deliberately no way here to reclassify a
-  # pane somebody else made.
+  # THE CLASSES, ON THE WINDOW'S PANE, after it exists: a declaration by the
+  # creator about the pane it is creating, the one form that is not the
+  # laundering move. There is deliberately no way here to reclassify a pane
+  # somebody else made.
   for _mwp in control:"$_mwctl" attention:"$_mwattn"; do
     case $_mwp in
     *:) continue ;;
     esac
-    # TARGETED BY ID, never by index, because an index can renumber between
-    # the create and this write (`renumber-windows`, or a concurrent kill),
-    # and the declaration then lands on somebody else's pane. `-p` with a
-    # window target resolves that window's active pane, which for a window
-    # created one line ago is its only pane: measured, with the neighbouring
-    # window left untouched.
+    # TARGETED BY ID, never index: an index can renumber between the create
+    # and this write (`renumber-windows`, or a concurrent kill), and the
+    # declaration then lands on somebody else's pane. `-p` with a window
+    # target resolves that window's active pane, which for a window created
+    # one line ago is its only pane. Measured, neighbour untouched.
     _mwt set-option -p -t "$_mwid" \
       "@mux-${_mwp%%:*}" "${_mwp#*:}" 2>/dev/null || :
   done

@@ -1,47 +1,41 @@
 #!/bin/sh
 # mux-agent-announce_lib - WHICH state changes are worth interrupting a human
-# for, and what to say about them. Sourced by `mux agent stream`; functions
-# only, source it, do not run it.
+# for, and what to say about them. Sourced by `mux agent stream`.
 #
-# NEEDS `mux-json_lib` (for the escaper) AND `mux-agent-state_lib` (to resolve
-# a session's pane), and says so because relying on whoever sources first is
-# how a standalone helper stops being standalone: this file is not usable on
-# its own and a caller that forgets gets `mux_json_str: not found` on stderr
-# and a document with empty fields, which is a corrupt answer rather than a
-# refusal.
+# NEEDS `mux-json_lib` (the escaper) AND `mux-agent-state_lib` (to resolve a
+# session's pane), and says so because a caller that forgets gets
+# `mux_json_str: not found` on stderr and a document with empty fields: a
+# corrupt answer rather than a refusal.
 #
 # IT LIVES HERE BECAUSE THE STREAM RUNS BESIDE THE TMUX SERVER. Every fact the
-# decision needs (is this the pane you are looking at, what does the layout
-# say, whose attention is owed) is a property of a pane on THIS box at the
-# moment it changed, so the only process that can answer is one running here.
-# `mux-agent-state-emit` used to, which is why banners for a LATCHED session
-# appeared on the far machine where nobody was sitting: a hook cannot reach
-# the box the human is at, and that was never fixable from inside it.
+# decision needs (is this the pane you are looking at, whose attention is
+# owed) is a property of a pane on THIS box at the moment it changed, so the
+# only process that can answer is one running here, and a presenter reading
+# the far end of an ssh pipe cannot. `mux-agent-state-emit` used to decide,
+# which is why banners for a LATCHED session appeared on the far machine where
+# nobody was sitting: a hook cannot reach the box the human is at, and that
+# was never fixable from inside it.
 #
-# AND A LIB RATHER THAN A BLOCK INSIDE THE STREAM, so the policy can be
-# asserted directly instead of through a long-lived process that only speaks
-# on a timer. These rules carried ~200 lines of assertions when they lived in
-# emit; driving them through a loop would have made every one of them slow and
-# racy for no gain.
+# AND A LIB RATHER THAN A BLOCK INSIDE THE STREAM, so the policy is asserted
+# directly instead of through a long-lived process that only speaks on a
+# timer. These rules carried ~200 lines of assertions when they lived in emit,
+# and driving them through a loop would make every one slow and racy for no
+# gain.
 
 # _gate PARTITION SESSION -> 0 when a transition in this session is worth
 # ANNOUNCING to a human. EXACTLY the rules `mux-agent-state-emit` has always
 # applied, moved here rather than copied: emit no longer raises anything, so
 # this is the only place they live.
 #
-# AND THIS IS WHY IT IS HERE RATHER THAN IN THE DAEMON. All three facts are
-# properties of a pane on THIS box at THIS moment, and the stream runs beside
-# the tmux server by definition, so it can simply ask. A presenter reading the
-# far end of an ssh pipe cannot, and visibility is not something it could
-# reasonably guess: a latch IS the human's live view of a remote pane, so
-# "do not interrupt me about the pane I am staring at" is a real rule even
-# across a transport.
+# VISIBILITY IS A REAL RULE EVEN ACROSS A TRANSPORT, which is the half the
+# daemon could not have guessed: a latch IS the human's live view of a remote
+# pane, so "do not interrupt me about the pane I am staring at" still applies.
 #
-# THREE CALLS, NOT ONE JOINED FORMAT, deliberately: an unset tmux option
-# renders EMPTY, so a space-joined answer collapses its fields and shifts
-# every value after it, which is the bug the state record's own `-` marker
-# exists to prevent. This runs once per ANNOUNCEMENT, which is a human-scale
-# event, so three forks on that path buy obvious correctness cheaply.
+# THREE CALLS, NOT ONE JOINED FORMAT: an unset tmux option renders EMPTY, so a
+# space-joined answer collapses its fields and shifts every value after it,
+# the bug the state record's own `-` marker exists to prevent. This runs once
+# per ANNOUNCEMENT, a human-scale event, so three forks buy correctness
+# cheaply.
 mux_announce_gate() {
   _gp=$1 _gs=$2
   _gd=$(mux_agent_dir "$_gp")

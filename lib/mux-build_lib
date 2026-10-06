@@ -2,44 +2,42 @@
 # mux-build_lib - the session BUILD machinery: attach, the profile reader, and
 # the pane/window vocabulary that `go`, `new` and `resume` all share.
 #
-# EXTRACTED FROM bin/mux (2026-10-05), 312 lines, and the last and largest of
-# the breakup's slices. It is a SOURCED LIB for the same reason mux-why_lib
-# is, in its strongest form: these functions do not report on resolved state,
-# they ARE the build, so they read ten values the argument parser and the
-# resolution path above them have already computed:
+# EXTRACTED FROM bin/mux (2026-10-05), 312 lines, the largest of the
+# breakup's slices. SOURCED for mux-why_lib's reason in its strongest form:
+# these functions do not report on resolved state, they ARE the build, so
+# they read ten values the parser and the resolution path above them have
+# already computed:
 #
 #     name  root  part  sock       what to build, where, on which server
 #     bare  noattach  resume       the flags that change what a pane runs
 #     active_agent                 the agent descriptor for this session
 #     MUX_CFG_layout  MUX_DIR      the overlay the profile reader resolves in
 #
-# A separate process would have to re-derive every one of them, which means a
-# SECOND copy of the resolution `mux why` exists to explain, and the two would
-# disagree the first time either moved. Sourcing shares the shell, so the
-# contract is unchanged and the bodies moved verbatim.
+# A separate process would re-derive every one, which is a SECOND copy of the
+# resolution `mux why` exists to explain, and the two would disagree the first
+# time either moved. Sourcing shares the shell, so the contract is unchanged
+# and the bodies moved verbatim.
 #
 # AND THE CONTRACT IS TWO-WAY, which I had not written down until shellcheck
 # named the other half: `bottom_spec` ANSWERS in variables (`b_min`, `b_max`,
-# `b_cmd`), because POSIX sh cannot return three fields, so the build loop in
-# bin/mux reads what this file sets. Worth stating rather than leaving to be
-# discovered: a reader looking only at the inbound list would conclude the
-# lib is a pure consumer of the caller's state.
+# `b_cmd`), POSIX sh being unable to return three fields, so bin/mux's build
+# loop reads what this file sets. Worth stating, because a reader of the
+# inbound list alone would call this a pure consumer of the caller's state.
 #
-# AND IT ALSO NEEDS bin/mux's OWN FUNCTIONS: `tm` (the tmux wrapper carrying
-# the partition's `-L` socket, a second copy of which is the wrong-socket bug
-# this package has shipped three times), plus `mux_wire` and
-# `mux_env_ensure`. That alone settles the question: this cannot be a helper.
+# IT ALSO NEEDS bin/mux's OWN FUNCTIONS: `tm` (the tmux wrapper carrying the
+# partition's `-L` socket, a second copy of which is the wrong-socket bug this
+# package has shipped three times), plus `mux_wire` and `mux_env_ensure`. That
+# alone settles it: this cannot be a helper.
 #
 # SOURCED AT THE POINT THESE FUNCTIONS USED TO SIT, unconditionally rather
-# than per verb, and that is deliberate: a function is defined when the shell
+# than per verb, and deliberately: a function is defined when the shell
 # reaches it either way, so sourcing HERE makes availability identical to
-# before by construction, with no verb list to keep correct. The economy is
-# still real, because every verb that exits ABOVE that point never reads it:
-# `ls`, `reload`, `theme`, `why`, `edit` and `save`, plus every hot path,
-# which leaves at the early exec dispatch long before any of this.
+# before BY CONSTRUCTION, with no verb list to keep correct. The economy is
+# still real, since every verb exiting ABOVE that point never reads it (`ls`,
+# `reload`, `theme`, `why`, `edit`, `save`), as does every hot path, which
+# leaves at the early exec dispatch long before this.
 #
-# THE CALLER SOURCES THE DEPENDENCIES, because a sourced POSIX sh file sees
-# the CALLER's `$0` and so cannot resolve its own siblings:
+# THE CALLER SOURCES THE DEPENDENCIES (see bin/mux's lib loop for why):
 #
 #     from bin/mux       tm  mux_wire  mux_env_ensure
 #     mux-conf_lib       mux_conf_clean

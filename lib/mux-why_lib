@@ -1,28 +1,23 @@
 #!/bin/sh
 # mux-why_lib - `mux why`: where every resolved value came from.
 #
-# EXTRACTED FROM bin/mux (2026-10-05), 243 lines of the entry point, and the
-# only one of the breakup's slices that could NOT become an executed helper.
+# EXTRACTED FROM bin/mux (2026-10-05), 243 lines, and the only one of the
+# breakup's slices that could NOT become an executed helper.
 #
-# WHY A SOURCED LIB AND NOT libexec/mux-why. Everything here answers about
-# values bin/mux has ALREADY resolved: `base` (which costs a `git rev-parse`
-# and, for a path argument, an expand, a readlink, a directory check that
-# exits 1, and a profile-by-root lookup), the name the shared block derived,
-# and the whole MUX_CFG_* / MUX_CTX_* set. A separate process would have to
-# redo all of it, which means a SECOND copy of the resolution this verb's
-# entire job is to report on, and a second copy that drifts makes `mux why`
-# describe a session `mux go` would not build. Sourcing shares the shell, so
-# the globals contract below holds unchanged and there is nothing to keep in
-# step.
+# WHY SOURCED AND NOT libexec/mux-why. Everything here answers about values
+# bin/mux has ALREADY resolved: `base` (a `git rev-parse`, plus for a path
+# argument an expand, a readlink, a directory check that exits 1 and a
+# profile-by-root lookup), the name the shared block derived, and the whole
+# MUX_CFG_* / MUX_CTX_* set. A separate process would redo all of it, which is
+# a SECOND copy of the resolution this verb's entire job is to report on, and
+# a drifting copy makes `mux why` describe a session `mux go` would not build.
+# Sourcing shares the shell, so the globals contract below holds unchanged.
 #
-# AND IT IS SOURCED LAZILY, inside the `why` branch, for the reason bin/mux's
-# two existing lazy sources already state: the front end is parsed on every
-# invocation, `mux agent-render` runs per client every status-interval, and a
-# verb nobody called must not cost a lib.
+# LAZILY, inside the `why` branch, per bin/mux's dispatch rule: a verb nobody
+# called must not cost a lib.
 #
-# THE CALLER SOURCES THE DEPENDENCIES, because a sourced POSIX sh file sees
-# the CALLER's `$0` and so cannot resolve its own siblings. All five are ones
-# bin/mux already loads eagerly:
+# THE CALLER SOURCES THE DEPENDENCIES, and all five are ones bin/mux already
+# loads eagerly:
 #
 #     mux-conf_lib       mux_conf_clean
 #     mux-profiles_lib   mux_expand_tilde mux_fold_tilde mux_prof_by_root
@@ -32,9 +27,8 @@
 #     mux-scan_lib       mux_scan_near mux_scan_roots
 #     mux-sessions_lib   mux_sess_sanitise
 #
-# THE `_why_` PREFIX STAYS rather than becoming `_mux_why_`, which is this
-# tree's usual shape for a lib's privates. Moving these into a lib does not
-# change their namespace at all: sourcing loads them into the SAME shell they
+# THE `_why_` PREFIX STAYS rather than becoming `_mux_why_`, this tree's usual
+# shape for a lib's privates: sourcing loads these into the SAME shell they
 # already lived in, so they are exactly as private as before, and renaming
 # eight functions would have moved a mutation anchor and made the move's
 # differential about two things at once.

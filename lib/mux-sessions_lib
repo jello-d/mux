@@ -1,47 +1,44 @@
 #!/bin/sh
 # mux-sessions_lib - the SESSION SET: which sessions this partition had, so a
 # reboot is followed by `mux resume` and not by rebuilding five sessions by
-# hand. Sourced (functions only).
+# hand.
 #
-# STATE, not config, and not CACHE either. Never in $MUX_DIR and never in git:
-# which sessions are up is per-machine. But it must outlive a reboot, so not
-# /tmp, and it must outlive a CACHE CLEAR, which is the part that was wrong.
+# STATE, not config, and not CACHE either. Never in $MUX_DIR and never in git,
+# since which sessions are up is per-machine; it must outlive a reboot, so not
+# /tmp; and it must outlive a CACHE CLEAR, which is the part that was wrong.
 #
-# It lived under $MUX_CACHE (~/.cache/mux) until 0.38. The comment here reasoned
-# about cache versus /tmp and never about cache versus state, and ~/.cache is by
-# definition the directory anything may delete to reclaim space. NOTHING
-# REBUILDS THIS FILE: the set is accumulated one `mux go` at a time, so clearing
-# the cache silently destroyed the answer to "what was I working on", and the
-# only moment you would notice is the `mux resume` after a reboot, exactly
-# when you cannot reconstruct it.
-#
-# $MUX_STATE ($XDG_STATE_HOME/mux, i.e. ~/.local/state/mux) is the XDG home for
-# precisely this: durable, unreconstructible, not precious enough to be data.
-# The palette stamps and the discovery map stay in $MUX_CACHE, correctly: both
-# regenerate on demand, which is what makes them a cache.
+# It lived under $MUX_CACHE until 0.38, where the comment reasoned about cache
+# versus /tmp and never about cache versus state, and ~/.cache is by
+# definition what anything may delete to reclaim space. NOTHING REBUILDS THIS
+# FILE: the set accumulates one `mux go` at a time, so clearing the cache
+# silently destroyed the answer to "what was I working on", and the only
+# moment you would notice is the `mux resume` after a reboot, exactly when you
+# cannot reconstruct it. $MUX_STATE is the XDG home for precisely this:
+# durable, unreconstructible, not precious enough to be data. Palette stamps
+# and the discovery map stay in $MUX_CACHE, correctly, since both regenerate.
 #
 # Recorded AUTOMATICALLY, because the scenario is "the machine rebooted",
 # exactly the moment you did not think to save. Adding a session records it,
-# killing one removes it, `kill --all` clears the set. There is deliberately no
-# save verb: `mux save` already means "capture this session's shape into a
+# killing one removes it, `kill --all` clears the set. There is deliberately
+# no save verb: `mux save` already means "capture this session's shape into a
 # profile", and a second meaning would be one too many.
 #
-# ADDITIVE on create and SUBTRACTIVE on kill, NOT a snapshot of what is live. A
-# snapshot would be clobbered by the first `mux go` after a reboot (at which
-# point exactly one session is up), destroying the very record being rebuilt.
+# ADDITIVE on create and SUBTRACTIVE on kill, NOT a snapshot of what is live.
+# A snapshot would be clobbered by the first `mux go` after a reboot, when
+# exactly one session is up, destroying the record being rebuilt.
 #
-# Each line is NAME<TAB>ROOT. The root is not optional: the common session is a
-# bare `mux go` in a directory, which has no profile and no map entry, so the
-# name alone is not enough to rebuild it. Recording where it lived makes the set
-# an evidence source in its own right: `mux go <name>` can resolve through it
-# exactly as it resolves through a profile or the discovery map.
+# Each line is NAME<TAB>ROOT, and the root is not optional: the common session
+# is a bare `mux go` in a directory, with no profile and no map entry, so the
+# name alone cannot rebuild it. Recording where it lived also makes the set an
+# evidence source in its own right, so `mux go <name>` resolves through it
+# exactly as through a profile or the discovery map.
 #
 # Insertion-ordered, so a resume rebuilds in the order you first opened them.
-# THAT ORDER DOES NOT SAY WHERE TO LAND, and this file used to claim it did
+# THAT ORDER DOES NOT SAY WHERE TO LAND, though this file used to claim it did
 # ("lands you on the oldest, which is usually the one you think of as
 # primary"). Creation order has nothing to do with where you were: reported
 # live after a reboot, a latch came back on the oldest session while the human
-# had been working in the newest, so the message they typed went to the wrong
+# had been working in the newest, so the message they typed reached the wrong
 # agent. The landing spot is its own fact, recorded separately below.
 #
 # Keyed on the PARTITION, so each isolated namespace resumes only its own.
@@ -169,19 +166,19 @@ mux_sess_clear() {      # [key]
 }
 
 # --- the LANDING MARK: which session you were last on -----------------------
-# WHERE YOU WERE, which the set above cannot answer. It is insertion-ordered,
+# WHERE YOU WERE, which the set above cannot answer: it is insertion-ordered,
 # and the order you first opened things is not the order you care about them.
 #
-# STATE, not cache, by this package's own does-it-rebuild test: once the server
-# is gone NOTHING can reconstruct which session had the client, so losing this
-# file loses the answer at the exact moment it is asked, which is the `mux
-# resume` after a reboot. Same directory and the same partition key as the set,
-# because it is the same question's second half.
+# STATE, not cache, by the does-it-rebuild test: once the server is gone
+# NOTHING can reconstruct which session held the client, so losing this file
+# loses the answer at the exact moment it is asked, the `mux resume` after a
+# reboot. Same directory and partition key as the set, being the same
+# question's second half.
 #
-# A SIDECAR RATHER THAN A SIXTH FIELD on the set's lines, the call 0.49 already
-# made for the beat mark: the set is read by `cut`/`awk` in several programs and
-# widening a record format has cost this project a day before now. It is also a
-# different SHAPE: the set is a list, this is one value for the whole partition.
+# A SIDECAR RATHER THAN A SIXTH FIELD on the set's lines, the call 0.49 made
+# for the beat mark: the set is read by `cut`/`awk` in several programs and
+# widening a record format has cost this project a day. It is also a different
+# SHAPE, the set being a list where this is one value for the partition.
 #
 # ONE LINE, THE SESSION NAME, and only line 1 is ever read. A session name can
 # hold a space (which is why the set is tab-separated), so the whole line is

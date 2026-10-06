@@ -9,8 +9,7 @@
 # wrapper and carries the partition's `-L` socket, and a second copy of that
 # is the wrong-socket bug this package has shipped three times.
 #
-# THE CALLER SOURCES THE DEPENDENCIES, because a sourced POSIX sh file sees
-# the CALLER's `$0` and so cannot resolve its own siblings:
+# THE CALLER SOURCES THE DEPENDENCIES (see bin/mux's lib loop for why):
 #
 #     from bin/mux       tm
 #     mux-data_lib       mux_data_find mux_data_stems_line

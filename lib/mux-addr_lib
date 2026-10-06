@@ -10,11 +10,10 @@
 #     work::         the whole partition
 #
 # ONE CHARACTER, DOUBLED FOR THE RARE FIELD (the user's design, 2026-10-01),
-# and it is the only form that survives the measurement. A delimiter is
-# structural only if it CANNOT occur in the thing it separates, so every
-# candidate was put to tmux by creating `work<D>api` and reading the stored
-# name back. The answer DEPENDS ON THE TMUX VERSION, which is the part that
-# cost two wrong decisions before this one:
+# the only form that survives the measurement. A delimiter is structural only
+# if it CANNOT occur in the thing it separates, so every candidate was put to
+# tmux by creating `work<D>api` and reading the stored name back. The answer
+# DEPENDS ON THE TMUX VERSION, the part that cost two wrong decisions first:
 #
 #     tmux 3.4    structural: . :           verbatim: @ ~ % ^ + = , /
 #     tmux 3.6    structural: . :           verbatim: @ ~ % ^ + = , /
@@ -27,21 +26,20 @@
 # the other way, making `@ ~ ^ = /` structural, so a table from one version is
 # a table about that version and nothing more.
 #
-# SO THE SECOND FIELD SEPARATOR IS THE SAME CHARACTER, DOUBLED. `::` can never
-# arise from a name, because neither a partition (a DNS label) nor a session
-# may contain even ONE colon, so a doubled colon is unambiguous BY
-# CONSTRUCTION rather than by a version-dependent accident. Verified directly
-# as well: `work::api` is stored as `work__api`.
+# SO THE SECOND SEPARATOR IS THE SAME CHARACTER, DOUBLED. `::` can never arise
+# from a name, since neither a partition (a DNS label) nor a session may hold
+# even ONE colon, so it is unambiguous BY CONSTRUCTION rather than by a
+# version-dependent accident. Verified too: `work::api` stores as `work__api`.
 #
 # A BARE WORD IS A SESSION, the common case by a wide margin, and `api:2` is
 # BYTE-IDENTICAL to the window target tmux itself takes, which matters because
 # a user of mux types raw tmux targets too. The rare field pays the extra
-# character. That also removes the placeholder the old grammar needed: with
-# `::` carrying the partition, nothing has to be said to mean "not that".
+# character, and that also retires the placeholder the old grammar needed:
+# with `::` carrying the partition, nothing means "not that".
 #
-# `host:port` IS A DIFFERENT CONCERN and does not overlap: `mux latch
-# box:2222 work::api` answers two questions with two spellings, and the host
-# field is parsed before the target ever reaches here.
+# `host:port` IS A DIFFERENT CONCERN and does not overlap: `mux latch box:2222
+# work::api` answers two questions with two spellings, and the host field is
+# parsed before the target reaches here.
 
 # Parse one address into three variables. Deliberately NOT a printf of three
 # fields: a session name may contain a space, so any single-string answer needs

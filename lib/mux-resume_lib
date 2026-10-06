@@ -2,21 +2,18 @@
 # mux-resume_lib - `mux resume`: bring back a partition's sessions after a
 # reboot, and land on the one you were last using.
 #
-# EXTRACTED FROM bin/mux (2026-10-05), 211 lines, and the last of the verb
-# slices. A SOURCED LIB for the usual reason plus one specific to this verb:
-# it calls `mux_attach`, which is lib/mux-build_lib's, and `tm`, which is
-# bin/mux's own and carries the partition's `-L` socket. resume's whole job is
-# to REBUILD, so it is the heaviest consumer of the build machinery there is;
-# a separate process would have to carry both.
+# EXTRACTED FROM bin/mux (2026-10-05), 211 lines, the last of the verb slices.
+# SOURCED rather than its own command for a reason specific to this verb: it
+# calls `mux_attach` from lib/mux-build_lib and `tm` from bin/mux, which
+# carries the partition's `-L` socket. resume's whole job is to REBUILD, so it
+# is the heaviest consumer of the build machinery there is, and a separate
+# process would have to carry both.
 #
-# SOURCED LAZILY, inside the branch, the rule bin/mux's other verb branches
-# follow: the front end is parsed on every invocation and a verb nobody called
-# must not cost a lib. The build lib above it is unconditional for a different
-# and stated reason (its definitions have to sit exactly where they used to);
-# this one is a single verb with a single dispatch point.
+# LAZILY, inside the branch, per bin/mux's dispatch rule. The build lib above
+# it is unconditional for the stated reason that its definitions must sit
+# exactly where they used to; this is one verb with one dispatch point.
 #
-# THE CALLER SOURCES THE DEPENDENCIES, because a sourced POSIX sh file sees
-# the CALLER's `$0` and so cannot resolve its own siblings:
+# THE CALLER SOURCES THE DEPENDENCIES (see bin/mux's lib loop for why):
 #
 #     from bin/mux        tm
 #     mux-build_lib       mux_attach
@@ -27,19 +24,17 @@
 #                         mux_sess_root
 #
 # CALLER INPUTS: `part` (which partition), `rs_focus` (where to land),
-# `listing` (--list), `nowaitenv` (--no-wait-env) and `cmd`, plus the exit-code
-# and env-verdict constants bin/mux declares at the top (MUX_EX_NONAME,
-# MUX_EX_NOTREADY, MUX_ENV_UNMANAGED, MUX_ENV_UNREADY, _RS_NL, _self). All are
-# the parser's or the file's, and all are loud if absent under `set -u`.
-# The point of the session set: after a reboot, `mux resume` and the five
-# sessions you had are back. It acts on the CURRENT partition only and takes no
-# way to name another, if you want a different partition's sessions, you go to
-# that partition, which is what partitions are for.
-#
-# Each session is rebuilt by re-running the front end with --no-attach, so the
-# whole build path (profile resolution, layout, theme, agent) is reused exactly
-# rather than reimplemented here. Then we attach the first, which insertion
-# order makes the oldest, usually the one you think of as primary.
+# `listing` (--list), `nowaitenv` (--no-wait-env) and `cmd`, plus the
+# exit-code and env-verdict constants bin/mux declares at the top
+# (MUX_EX_NONAME, MUX_EX_NOTREADY, MUX_ENV_UNMANAGED, MUX_ENV_UNREADY,
+# _RS_NL, _self). All the parser's or the file's, and all loud if absent
+# under `set -u`.
+# THE POINT OF THE SESSION SET: after a reboot, `mux resume` and the five
+# sessions you had are back. It acts on the CURRENT partition only and offers
+# no way to name another: for a different partition's sessions you go to that
+# partition, which is what partitions are for. Where it LANDS is the landing
+# mark's question, not insertion order's (see _resume_landing).
+
 # Rebuild every recorded session that is not already up, counting outcomes
 # into rs_built / rs_up / rs_failed.
 #
@@ -87,24 +82,23 @@ EOF
 # Where to land: the session you were last on, else the first recorded one
 # that is actually up.
 #
-# THE FOCUS MARK FIRST, and it is the whole reason this function is not one
-# line. Insertion order is CREATION order, which says nothing about where you
-# were working, and resume used to land on the oldest entry that came back.
-# Found live rather than reasoned about: a box rebooted, latch reattached, and
-# the human came back on a session they had not touched in days, so the next
-# thing they typed was addressed to the wrong agent. The mark is written by the
-# client-session-changed hook (see `mux landing`), so it covers tmux's own
-# switches too, not just mux's verbs.
+# THE LANDING MARK FIRST, the whole reason this is not one line. Insertion
+# order is CREATION order, which says nothing about where you were working,
+# and resume used to land on the oldest entry that came back. Found live: a
+# box rebooted, latch reattached, and the human came back on a session they
+# had not touched in days, so the next thing they typed reached the wrong
+# agent. The mark is written by the client-session-changed hook (see `mux
+# landing`), so it covers tmux's own switches and not just mux's verbs.
 #
-# CHECKED FOR LIFE, NOT FOR MEMBERSHIP, and the order matters: this runs AFTER
-# the rebuild, so a marked session that was rebuildable is up by now, and one
-# whose root moved is not. Liveness answers both at once, which is why no
-# second test against the recorded set is needed (and a session made with raw
-# tmux is still a legitimate place to have been).
+# CHECKED FOR LIFE, NOT MEMBERSHIP, and the order matters: this runs AFTER the
+# rebuild, so a marked session that was rebuildable is up by now and one whose
+# root moved is not. Liveness answers both at once, so no second test against
+# the recorded set is needed, and a session made with raw tmux is still a
+# legitimate place to have been.
 #
-# ABSENT MARK IS TODAY'S BEHAVIOUR, which is what makes this safe to ship: a
+# ABSENT MARK IS THE OLD BEHAVIOUR, which is what makes this safe to ship: a
 # box upgrading mid-session, or one where nobody has switched since the server
-# started, falls through to the insertion-order rule unchanged.
+# started, falls through to insertion order unchanged.
 _resume_landing() {     # <recorded names> [key] -> a live session, or empty
   _rl=$(mux_landing_get "${2:-}")
   if [ -n "$_rl" ] && tm has-session -t "=$_rl" 2>/dev/null; then

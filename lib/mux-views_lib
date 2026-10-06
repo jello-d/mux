@@ -1,18 +1,18 @@
 #!/bin/sh
-# mux-views_lib - VIEW TENSION: what happens when two clients of different sizes
-# are attached to one tmux server. Sourced by mux-views (the verb and the status
-# chip); functions only.
+# mux-views_lib - VIEW TENSION: what happens when two clients of different
+# sizes are attached to one tmux server. Sourced by mux-views, which is both
+# the verb and the status chip.
 #
-# tmux sizes a window to ONE client, and which one is a server option. With more
-# than one client attached at different dimensions there is no size that suits
-# both, so something has to give, and by default what gives is stability: the
-# window follows whichever client touched it last, so cycling sessions drags
-# every window between two sizes and every mux layout is re-pinned each time.
-# That is the "why does it redraw when I switch" question this answers.
+# tmux sizes a window to ONE client, and which one is a server option. With
+# two clients attached at different dimensions no size suits both, so
+# something gives, and by default what gives is STABILITY: the window follows
+# whichever client touched it last, so cycling sessions drags every window
+# between two sizes and re-pins every mux layout each time. That is the "why
+# does it redraw when I switch" question this answers.
 #
-# It is a live, transient condition (it appears when a second client attaches
-# and vanishes when it leaves), which is why it belongs on the status bar and
-# not only in an audit you have to remember to run.
+# A live, transient condition, appearing when a second client attaches and
+# gone when it leaves, which is why it belongs on the status bar and not only
+# in an audit you have to remember to run.
 #
 # TWO INDEPENDENT FACTS, and conflating them is what makes this confusing:
 #
@@ -20,9 +20,8 @@
 #      being clipped, the one with dead space, or the one setting the size)
 #   2. What MODE is resolving it, and that is a choice, not fate.
 #
-# The modes are mux's names for tmux's window-size, because "latest / smallest
-# / largest" describes tmux's ALGORITHM while these describe the OUTCOME you
-# get:
+# The modes are mux's names for tmux's window-size: "latest / smallest /
+# largest" describes tmux's ALGORITHM, these describe the OUTCOME:
 #
 #   auto   (latest)    the window follows the last client to use it. Every view
 #                      is correct for whoever is looking, and the price is that
@@ -32,7 +31,7 @@
 #   ceil   (largest)   every window fits the LARGEST client. Stable, and the big
 #                      view is perfect; a smaller client sees a clipped window.
 #
-# No mode is correct in general. floor and ceil each buy stability with
+# No mode is correct in general: floor and ceil each buy stability with
 # something, and which something depends on whether the small client is a
 # forgotten ssh window or the one you are typing into.
 

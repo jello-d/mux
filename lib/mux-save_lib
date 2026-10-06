@@ -20,8 +20,7 @@
 # into its caller for a function. `is_shell` travels with it, being
 # emit_window's only consumer.
 #
-# THE CALLER SOURCES THE DEPENDENCIES, because a sourced POSIX sh file sees
-# the CALLER's `$0` and so cannot resolve its own siblings:
+# THE CALLER SOURCES THE DEPENDENCIES (see bin/mux's lib loop for why):
 #
 #     from bin/mux       tm
 #     mux-conf_lib       mux_conf_clean
@@ -96,10 +95,10 @@ emit_window() {
 }
 
 # --- save: snapshot the live session ---------------------------------------
-# Records the session the way everything else does: as a DEVIATION. It reads the
-# arrangement off the live session (window names, each pane's current command,
-# any full-width bottom from @mux-bottom) and then writes only what mux could
-# not have worked out for itself:
+# Records the session the way everything else does: as a DEVIATION. It reads
+# the arrangement off the live session (window names, each pane's current
+# command, any full-width bottom from @mux-bottom) and writes only what mux
+# could not have worked out for itself:
 #
 #   - the arrangement, as layouts/<name>.layout, unless it is byte-for-byte one
 #     that already exists: saving a session you never rearranged should not
@@ -111,6 +110,7 @@ emit_window() {
 # So `mux save` on an untouched session can correctly write NOTHING. Pane
 # commands are best-effort: review them. Runs inside a session; NAME defaults
 # to the session name.
+#
 # Shared state, in the order the steps below set it:
 #   _save_identify      sv_sess sv_name
 #   _save_capture       sv_tmp        (the arrangement, as directives)

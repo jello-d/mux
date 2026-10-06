@@ -11,8 +11,7 @@
 # THREE times (agent read/send, mux even, next-blocked), every time because
 # one answer was derived in two places.
 #
-# THE CALLER SOURCES THE DEPENDENCIES, because a sourced POSIX sh file sees
-# the CALLER's `$0` and so cannot resolve its own siblings:
+# THE CALLER SOURCES THE DEPENDENCIES (see bin/mux's lib loop for why):
 #
 #     from bin/mux       tm
 #     mux-data_lib       mux_data_find

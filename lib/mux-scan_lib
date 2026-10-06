@@ -1,7 +1,7 @@
 #!/bin/sh
 # mux-scan_lib - project DISCOVERY: a cached map from a session name to the
 # repository it lives in, so `mux go <name>` reaches a project you have never
-# configured and never have to cd to first. Sourced (functions only).
+# configured and never have to cd to first.
 #
 # The map is a CACHE, not config. It holds only derived facts, it is rewritten
 # wholesale, and deleting it loses nothing, which is what makes it safe to
@@ -46,22 +46,6 @@ mux_scan_roots() {
   done
 }
 
-# mux_scan_ignored PATH -> true when PATH matches an `ignore` pattern from the
-# resolved context ($MUX_CFG_ignore: repeatable `ignore PATTERN` keys, merged
-# exactly like `scan`).
-#
-# Two matching rules, and only two:
-#   - a pattern CONTAINING a slash is a glob against the whole absolute path
-#     (`*/vendor-repos/*`), for pruning one specific region of a tree;
-#   - a pattern with NO slash is matched against each path COMPONENT, so
-#     `ignore node_modules` and `ignore vendor` mean the obvious thing rather
-#     than silently matching nothing, which is the footgun a whole-path-only
-#     rule would ship with.
-#
-# DISCOVERY ONLY. An explicit `mux go ~/some/ignored/repo` still works: a path
-# you typed is evidence, and ignore governs what mux VOLUNTEERS, never what you
-# can ask for by name. Ignoring a path you then hand over verbatim would be mux
-# arguing with you.
 _mux_scan_pat_hit() {   # <abs path> <pattern>: one pattern, both rules
   # $2 is UNQUOTED on purpose in the two inner cases: it is a glob the
   # user wrote (`*/vendor/*`) and must be matched as one. Quoting it, as
@@ -85,6 +69,22 @@ _mux_scan_pat_hit() {   # <abs path> <pattern>: one pattern, both rules
   return 1
 }
 
+# mux_scan_ignored PATH -> true when PATH matches an `ignore` pattern from the
+# resolved context ($MUX_CFG_ignore: repeatable `ignore PATTERN` keys, merged
+# exactly like `scan`).
+#
+# Two matching rules, and only two (see _mux_scan_pat_hit):
+#   - a pattern CONTAINING a slash is a glob against the whole absolute path
+#     (`*/vendor-repos/*`), for pruning one region of a tree;
+#   - a pattern with NO slash is matched against each path COMPONENT, so
+#     `ignore node_modules` and `ignore vendor` mean the obvious thing rather
+#     than silently matching nothing, the footgun a whole-path-only rule
+#     would ship with.
+#
+# DISCOVERY ONLY. An explicit `mux go ~/some/ignored/repo` still works: a path
+# you typed is evidence, and ignore governs what mux VOLUNTEERS, never what
+# you can ask for by name. Ignoring a path you then hand over verbatim would
+# be mux arguing with you.
 mux_scan_ignored() {    # <abs path>
   [ -n "${MUX_CFG_ignore:-}" ] || return 1
   # Fed by a here-doc, NOT a pipe: a `while` behind a pipe runs in a

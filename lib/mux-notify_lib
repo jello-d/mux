@@ -2,93 +2,30 @@
 # mux-notify_lib - can anything on this desktop DISPLAY a notification?
 #
 # ONE FUNCTION, AND IT ONLY ASKS. mux does not raise notifications any more:
-# `mux-desktop-notifier` does, from the event stream, which is the only place
-# that can reach the box the human is sitting at. A hook raises on the box the
-# AGENT runs on, so every blocked LATCHED session spent years popping a toast
-# on a remote desktop; that is structural rather than a bug in the path, and
-# it was never fixable from inside mux core.
+# `mux-desktop-notifier` does, from the event stream, the only place that can
+# reach the box the human is sitting at. A hook raises on the box the AGENT
+# runs on, so every blocked LATCHED session spent years popping a toast on a
+# remote desktop: structural rather than a bug in the path, and never fixable
+# from inside mux core.
 #
-# SO `mux_notify_send` AND `mux_notify_close` ARE GONE, along with the
-# MUX_NOTIFY_SEND / MUX_NOTIFY_CLOSE seams. They had no caller left: a seam
-# nobody crosses is not a seam, and a platform-neutral promise mux cannot keep
-# is worse than no promise. The platform answer is a notifier of that
-# platform's own, fed by the same stream, which is what the split bought.
+# SO `mux_notify_send` AND `mux_notify_close` ARE GONE, with the
+# MUX_NOTIFY_SEND / MUX_NOTIFY_CLOSE seams. They had no caller left, and a
+# seam nobody crosses is not a seam, while a platform-neutral promise mux
+# cannot keep is worse than no promise. The platform answer is a notifier of
+# that platform's own, fed by the same stream, which is what the split bought.
 #
 # AND THE CLOSE WENT WITH THEM RATHER THAN STAYING AS A SHIM. Records written
 # by an older mux carry a real notification id, so for one turn per session
 # those paths could still have withdrawn a banner nothing else knows about.
 # That window is UNOBSERVABLE: nothing can say when the last such record has
-# been rewritten, so the shim would have sat here for ever, which is this
-# tree's own "a decision recorded only in prose silently does not happen".
-# The one-time cost is at most one stranded banner per session, and it is
-# bounded by design: urgency was always `normal` and never `critical`, so it
-# expires by itself. One timeout, once.
-#
-# Functions only; source it, do not run it.
+# been rewritten, so the shim would have sat here for ever, this tree's own "a
+# decision recorded only in prose silently does not happen". The one-time cost
+# is at most one stranded banner per session, bounded by design: urgency was
+# always `normal` and never `critical`, so it expires by itself.
 
-# mux_notify_daemon -> is anything actually able to DISPLAY a notification?
-#
-#     0  a daemon owns org.freedesktop.Notifications
-#     1  nobody owns it AND nothing would start: mux raises into the void
-#     2  cannot tell from here (no tool, or no session bus reachable)
-#     3  nobody owns it YET, but the name is D-BUS ACTIVATABLE
-#
-# THE FOURTH ANSWER IS THE COMMON STATE AFTER A BOOT, and leaving it out made
-# this check wrong in the opposite direction to the bug it fixed. Measured five
-# minutes after a reboot: `NameHasOwner` answered false, no mako was running,
-# and `org.freedesktop.Notifications` was in `ListActivatableNames` with mako
-# shipping `fr.emersion.mako.service`. So notifications worked perfectly and
-# the check said "NOTHING DISPLAYS them". FOR AN ACTIVATABLE NAME, "nobody
-# home" AND "nobody can ever come" ARE THE SAME `false`, and only the second
-# is worth warning about.
-#
-# WHY THIS EXISTS. `mux check` reported `[OK] notifications` on the strength of
-# `command -v notify-send`, and on this box that was a lie: the binary was
-# there and a real notification died with
-#
-#     Failed to show notification: GDBus.Error:...NoReply: Message recipient
-#     disconnected from message bus without replying
-#
-# because no daemon owned the name (mako was being activated and dying at
-# once on a stale WAYLAND_DISPLAY). A presence check saying OK about a box
-# that is fully installed and fully broken is the exact failure the marker
-# contract exists to prevent, so having it inside the file that DEFINES that
-# contract was the worst available place for it.
-#
-# READ-ONLY, AND THAT WAS MEASURED, not assumed, because `mux check` must
-# never be able to actuate what it inspects and a bus call is the obvious way
-# to break that. `NameHasOwner` and `GetNameOwner` DO NOT ACTIVATE a dormant
-# service: driven against `ca.desrt.dconf` (activatable, not running) both
-# answered and it was still absent a second later. Only a call to the service
-# ITSELF activates, which is why this asks the BUS about the name rather than
-# asking the daemon anything.
-#
-# `NameHasOwner` RATHER THAN `GetNameOwner`, because it answers with a clean
-# boolean where the other raises `NameHasNoOwner` as an ERROR. That matters
-# for the third answer: it lets "nobody home" be a parsed `false` instead of
-# an error string, so an error can mean the one thing left, which is that the
-# question could not be put at all.
-#
-# ASKING WHICH NAMES CAN BE ACTIVATED IS ALSO READ-ONLY, measured the same way
-# rather than assumed by analogy: driven against `ca.desrt.dconf` (activatable,
-# not running), `ListActivatableNames` answered and the name was still unowned
-# a second later. It asks the BUS for its own service list, so there is nothing
-# for it to start.
-#
-# AND THE MATCH IS QUOTE-EXACT, never a substring. All three tools quote each
-# name, which is what makes that possible, and it is necessary rather than
-# fastidious: this box also lists `org.gnome.Shell.Notifications`, so a
-# substring match would read a GNOME service as an answer about ours.
-#
-# THE THIRD ANSWER IS THE LOAD-BEARING ONE, and it is the lesson the
-# WAYLAND_DISPLAY hook cost: a probe run where it cannot see the desktop must
-# not report the desktop broken. `mux check` over ssh reaches no session bus,
-# so the query ERRORS, and calling that "nobody will display it" would be a
-# confident false finding about a machine that is fine.
-# _mux_bus_ask TOOL METHOD [ARG] -> prints the raw answer, non-zero if the
-# call could not be put. ONE caller for two questions, because the alternative
-# is a second three-arm case statement and three more chances for the two to
-# drift apart on a flag.
+# _mux_bus_ask TOOL METHOD [ARG] -> the raw answer, non-zero if the call could
+# not be put. ONE helper for two questions, because the alternative is a second
+# three-arm case and three more chances for the two to drift apart on a flag.
 _mux_bus_ask() {
   _bat=$1; _bam=$2; _baa=${3:-}
   case $_bat in
@@ -111,6 +48,63 @@ _mux_bus_ask() {
   "$@" 2>/dev/null
 }
 
+# mux_notify_daemon -> is anything actually able to DISPLAY a notification?
+#
+#     0  a daemon owns org.freedesktop.Notifications
+#     1  nobody owns it AND nothing would start: mux raises into the void
+#     2  cannot tell from here (no tool, or no session bus reachable)
+#     3  nobody owns it YET, but the name is D-BUS ACTIVATABLE
+#
+# THE FOURTH ANSWER IS THE COMMON STATE AFTER A BOOT, and omitting it made
+# this check wrong in the opposite direction to the bug it fixed. Measured
+# five minutes after a reboot: `NameHasOwner` answered false, no mako was
+# running, and `org.freedesktop.Notifications` was in `ListActivatableNames`
+# with mako shipping `fr.emersion.mako.service`. So notifications worked
+# perfectly and the check said "NOTHING DISPLAYS them". FOR AN ACTIVATABLE
+# NAME, "nobody home" AND "nobody can ever come" ARE THE SAME `false`, and
+# only the second is worth warning about.
+#
+# WHY THIS EXISTS. `mux check` reported `[OK] notifications` on the strength
+# of `command -v notify-send`, and that was a lie: the binary was there and a
+# real notification died with
+#
+#     Failed to show notification: GDBus.Error:...NoReply: Message recipient
+#     disconnected from message bus without replying
+#
+# because no daemon owned the name (mako was being activated and dying at
+# once on a stale WAYLAND_DISPLAY). A presence check saying OK about a box
+# that is fully installed and fully broken is the exact failure the marker
+# contract exists to prevent, so the file that DEFINES that contract was the
+# worst available place for it.
+#
+# READ-ONLY, AND MEASURED rather than assumed, because `mux check` must never
+# actuate what it inspects and a bus call is the obvious way to break that.
+# `NameHasOwner` and `GetNameOwner` DO NOT ACTIVATE a dormant service: driven
+# against `ca.desrt.dconf` (activatable, not running) both answered and it was
+# still absent a second later. Only a call to the service ITSELF activates,
+# which is why this asks the BUS about the name rather than asking the daemon.
+#
+# `NameHasOwner` RATHER THAN `GetNameOwner`, which answers with a clean
+# boolean where the other raises `NameHasNoOwner` as an ERROR. That is what
+# lets "nobody home" be a parsed `false` instead of an error string, so an
+# error can mean the one thing left: the question could not be put.
+#
+# ASKING WHICH NAMES CAN BE ACTIVATED IS ALSO READ-ONLY, measured the same way
+# rather than assumed by analogy: against `ca.desrt.dconf` again,
+# `ListActivatableNames` answered and the name was still unowned a second
+# later. It asks the BUS for its own service list, so there is nothing to
+# start.
+#
+# AND THE MATCH IS QUOTE-EXACT, never a substring. All three tools quote each
+# name, which is what makes that possible, and it is necessary: this box also
+# lists `org.gnome.Shell.Notifications`, so a substring match would read a
+# GNOME service as an answer about ours.
+#
+# THE THIRD ANSWER IS THE LOAD-BEARING ONE, the lesson the WAYLAND_DISPLAY
+# hook cost: a probe run where it cannot see the desktop must not report the
+# desktop broken. `mux check` over ssh reaches no session bus, so the query
+# ERRORS, and calling that "nobody will display it" would be a confident false
+# finding about a machine that is fine.
 mux_notify_daemon() {
   _ndn=org.freedesktop.Notifications
   for _ndt in gdbus busctl dbus-send; do

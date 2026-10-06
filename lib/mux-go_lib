@@ -2,9 +2,9 @@
 # mux-go_lib - the session BUILD FLOW: `mux go` and `mux new`, from "is it
 # already up" through two passes over the profile to the attach.
 #
-# EXTRACTED FROM bin/mux (2026-10-05), 581 lines, the last and largest slice
-# of the breakup. The nine phases and their boundaries are the commit before
-# this one; this file is the move, so that each half had its own differential.
+# EXTRACTED FROM bin/mux (2026-10-05), 581 lines, the largest slice of the
+# breakup. The nine phases and their boundaries are the commit before this
+# one, so each half got its own differential.
 #
 # NINE PHASES AND A DRIVER, in the order `mux_go` calls them:
 #
@@ -18,15 +18,14 @@
 #     _go_build          pass 2: build, now that everything holds
 #     _go_finish         theme, notify, land on a pane, attach
 #
-# TWO PASSES IS THE WHOLE DESIGN and the reason this cannot be flattened: a
-# profile is validated to exhaustion BEFORE anything is created, because a
-# session half-built from a profile with a typo in its fourth directive is
-# worse than a refusal. `_go_validate` creates nothing; `_go_build` refuses
-# nothing.
+# TWO PASSES IS THE WHOLE DESIGN, and why this cannot be flattened: a profile
+# is validated to exhaustion BEFORE anything is created, because a session
+# half-built from a profile with a typo in its fourth directive is worse than
+# a refusal. `_go_validate` creates nothing; `_go_build` refuses nothing.
 #
 # EVERY PHASE PASSES ITS WORK IN GLOBALS, which is what makes this a LIB and
-# not a helper: twenty of them come from the caller and the phases add a dozen
-# more between themselves. Nothing here is addressable from another process.
+# not a helper: twenty come from the caller and the phases add a dozen more
+# between themselves. Nothing here is addressable from another process.
 #
 #     from the parser    cmd name name_arg layout_arg layout part bypath
 #                        attach attachonly resume
@@ -37,14 +36,13 @@
 #
 # EACH PHASE ENDS `return 0`, load-bearing rather than tidy: several end in an
 # `&&` list that is FALSE in the common case, and a function called bare under
-# `set -e` then kills the front end SILENTLY. mux-args_lib shipped exactly
-# that bug for a minute the same day, after `mux_env_plan` and the unified
-# agent-state walk before it.
+# `set -e` then kills the front end SILENTLY. mux-args_lib shipped that bug
+# for a minute the same day, after `mux_env_plan` and the unified agent-state
+# walk before it.
 #
-# THE CALLER SOURCES THE DEPENDENCIES, because a sourced POSIX sh file sees
-# the CALLER's `$0` and so cannot resolve its own siblings. This is the
-# longest such list in the package, which is itself the argument that the flow
-# belongs with the front end rather than in a process of its own:
+# THE CALLER SOURCES THE DEPENDENCIES, and this is the longest such list in
+# the package, which is itself the argument that the flow belongs with the
+# front end rather than in a process of its own:
 #
 #     from bin/mux       tm  mux_wire  mux_env_ensure
 #     mux-build_lib      mux_attach  expand_profile  bottom_spec

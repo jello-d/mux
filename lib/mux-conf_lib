@@ -1,45 +1,34 @@
 #!/bin/sh
-# mux-conf_lib - the ONE comment/normalize rule for mux's line-directive config
-# (layouts, themes, agents). Sourced (functions only); every config PARSE site
-# runs its input through mux_conf_clean, so the rule lives in exactly one place
-# and cannot drift between layouts, themes, and agent profiles.
+# mux-conf_lib - the ONE comment/normalize rule for mux's line-directive
+# config (layouts, themes, agents). Every PARSE site runs its input through
+# mux_conf_clean, so the rule cannot drift between the three.
 #
-# mux_conf_clean: stdin -> clean directive lines. In order it
-#   - drops FULL-LINE comments (optional indent, then #),
-#   - strips INLINE comments: WHITESPACE then # to end of line. A hash that
-#     BEGINS a comment goes; a hash INSIDE a token stays, so `bg=#3f5f00` (no
-#     space before #) survives while `theme slate  # note` loses the note. The
-#     one casualty is a literal " #" inside a pane/bottom COMMAND (rare: use
-#     `pane sh -c '...'`, or avoid the space-hash),
-#   - trims trailing whitespace (so `theme slate ` is not the name "slate "),
-#     WHICH IS ALSO WHAT HANDLES A CRLF FILE saved by another editor. There
-#     used to be an explicit `s/\r$//` first, and it was redundant: POSIX
-#     `[:space:]` includes carriage return, so this rule already strips a
-#     trailing CR. Measured before removing it rather than argued: 4,680
-#     single-line inputs over the characters these rules care about, zero
-#     difference with and without, and every rule here is per-line (no `N`,
-#     no hold space) so single-line equivalence is total. It was also the one
-#     rule no mutation could kill, since dropping it changed nothing, which
-#     is this package's standing signal that a guard is redundant rather
-#     than untested. `test/mux-conf.t`'s `crlf` case still asserts the
-#     behaviour, and would catch a platform whose [:space:] disagreed,
-#   - drops the blank lines all of the above leaves behind.
-# ONE EXPRESSION PER LINE, IN A VARIABLE, rather than five `-e` flags on a
-# continued command, and that is a TESTABILITY decision rather than a style
-# one. Written as a continuation every rule but the last ended in a `\`, and
-# a corpus anchor cannot be a line continuation, so four of the five rules
-# here could not be individually killed: this lib has 21 consumers and had
-# zero mutation records, which is the gap the consumers' tests hide.
+# mux_conf_clean: stdin -> clean directive lines. In order:
+#   - drop FULL-LINE comments (optional indent, then #);
+#   - strip INLINE comments, WHITESPACE then # to end of line. A hash that
+#     BEGINS a comment goes, a hash inside a token stays, so `bg=#3f5f00`
+#     survives and `theme slate  # note` loses the note. The one casualty is
+#     a literal " #" in a pane/bottom COMMAND (rare: use `sh -c '...'`);
+#   - trim trailing whitespace, so `theme slate ` is not the name "slate ".
+#     THIS ALSO HANDLES A CRLF FILE, POSIX [:space:] including carriage
+#     return, so the explicit `s/\r$//` that used to lead was redundant:
+#     measured over 4,680 single-line inputs, zero difference, and every rule
+#     is per-line (no `N`, no hold space) so single-line equivalence is
+#     total. No mutation could kill it either, this package's signal for
+#     redundant rather than untested. test/mux-conf.t's `crlf` case still
+#     asserts the behaviour, and would catch a platform that disagreed;
+#   - drop the blank lines the above leaves behind.
 #
-# Same answer 0.72 reached for latch's `untrusted` reason and 2026-10-05 for
-# the bottom split: when a guard cannot be expressed as a record, that is a
-# fact about the code's SHAPE. sed takes a newline-separated script, so the
-# five lines below are the five rules, each its own anchor, with no extra
-# process and no behaviour change (verified against the old form over the
-# whole of test/mux-conf.t's input set).
+# ONE EXPRESSION PER LINE, IN A VARIABLE, for TESTABILITY. As a continued
+# command every rule but the last ended in `\`, and a corpus anchor cannot be
+# a line continuation, so four of five were individually unkillable: 21
+# consumers, zero records, the gap the consumers' tests hide. A guard that
+# cannot be a record is usually a fact about the code's SHAPE (0.72 reached
+# the same answer for latch's `untrusted`). sed takes a newline-separated
+# script: one process, no behaviour change, five anchors.
 #
 # The lines sit at column 0 because they are sed's script, not shell: leading
-# whitespace inside this string would be data sed reads as part of a command.
+# whitespace would be data sed reads as part of a command.
 mux_conf_clean() {
   _cc_script='/^[[:space:]]*#/d
 s/[[:space:]]#.*$//

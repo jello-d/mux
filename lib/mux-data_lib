@@ -1,7 +1,6 @@
 #!/bin/sh
 # mux-data_lib - the ONE $MUX_DIR-over-$MUX_SHARE resolver for mux's package
-# data: layouts, shapes, colour themes, agent profiles. Sourced (functions
-# only); source it, do not run it.
+# data: layouts, shapes, colour themes, agent profiles.
 #
 # The documented rule, in one place: a READ checks the user overlay $MUX_DIR
 # first and falls back to the shipped defaults in $MUX_SHARE, so `include

@@ -1,6 +1,6 @@
 #!/bin/sh
 # mux-profiles_lib - the profile TABLE: $MUX_DIR/profiles, one line per session
-# that deviates from what mux would derive. Sourced (functions only).
+# that deviates from what mux would derive.
 #
 #   # NAME      key=value ...
 #   api         theme=cyan
@@ -193,9 +193,8 @@ mux_prof_drop() {       # <name>
 # questions. Duplicating them would have been two answers about one profile
 # table, which is what this lib exists to prevent.
 #
-# TWO OF THEM NEED A LIB THIS ONE DOES NOT SOURCE, and the caller supplies it,
-# which is the convention everywhere here (no lib sources another: a sourced
-# POSIX sh file sees the CALLER'S $0, so it cannot locate a sibling):
+# TWO OF THEM NEED A LIB THIS ONE DOES NOT SOURCE, and the caller supplies
+# it, as everywhere here:
 #
 #   mux_prof_find       needs mux-data_lib      (mux_data_find)
 #   mux_prof_partition  needs mux-context_lib   (_mux_ctx_file)

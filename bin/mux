@@ -295,9 +295,12 @@ fi
 # fallback here, unlike mux_conf_clean above: a normalizer has a safe degraded
 # mode, a data resolver has none (it would silently resolve nothing), so a
 # missing lib is a broken install and says so.
-# mux-resolve_lib LAST of these: it calls into mux-data_lib, mux-scan_lib and
-# mux-sessions_lib, and declares that in its own header. No lib sources
-# another here, so the order in this list is the dependency.
+# NO LIB SOURCES ANOTHER, so the order in this list IS the dependency graph,
+# and every lib declares what it needs in its own header for a caller to
+# supply. The reason is a fact about the language rather than a house rule: a
+# sourced POSIX sh file sees the CALLER'S `$0` (measured in dash, bash and
+# ksh), so it cannot locate a sibling to source. mux-resolve_lib comes LAST
+# because it calls into mux-data_lib, mux-scan_lib and mux-sessions_lib.
 for _l in mux-paths_lib mux-data_lib mux-profiles_lib mux-scan_lib \
     mux-sessions_lib mux-class_lib mux-log_lib mux-resolve_lib; do
   [ -r "$MUX_LIB/$_l" ] || {

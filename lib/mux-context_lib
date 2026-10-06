@@ -1,13 +1,11 @@
 #!/bin/sh
-# mux-context_lib: the mux CONTEXT seam. Sourced (functions only).
+# mux-context_lib: the mux CONTEXT seam.
 #
-# NEEDS mux-conf_lib, and the caller must source it FIRST. Nothing in this
-# tree has a lib source another lib, so a dependency is declared here and met
-# by whoever loads us; relying on who happens to source first is how a
-# standalone helper stops being standalone.
+# NEEDS mux-conf_lib, and the caller must source it FIRST. Relying on who
+# happens to source first is how a standalone helper stops being standalone.
 #
 # mux core knows nothing about any particular notion of "context" (a
-# work/personal split, a k8s namespace, a git host, ...). It asks an OPTIONAL
+# work/personal split, a k8s namespace, a git host). It asks an OPTIONAL
 # command for ONE WORD and decides everything else itself.
 #
 #   context   a named situation, identified by a TOKEN.
@@ -20,12 +18,12 @@
 #
 #     context-command   severance current
 #
-# It prints one line: a token. Empty output or a non-zero exit means `global`.
+# It prints one line, a token; empty output or a non-zero exit means `global`.
 # No sockets, no styles, no themes, no path classification: the integrator
-# reports IDENTITY, mux decides presentation and isolation. That is deliberate:
-# the previous contract made the integrator supply a tmux style string for the
-# banner (so a missing style silently removed a safety reminder) while
-# withholding the one structural fact mux needed.
+# reports IDENTITY and mux decides presentation and isolation. The previous
+# contract had the integrator supply a tmux style string for the banner, so a
+# missing style silently removed a safety reminder, while withholding the one
+# structural fact mux needed.
 #
 # SETTINGS resolve in three levels, merged in order, last wins per key:
 #

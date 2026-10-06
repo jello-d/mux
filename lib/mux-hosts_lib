@@ -1,5 +1,5 @@
 #!/bin/sh
-# mux-hosts_lib - WHICH COLOUR IDENTIFIES A HOST. Sourced (functions only).
+# mux-hosts_lib - WHICH COLOUR IDENTIFIES A HOST.
 #
 # Two consumers now, which is why it is a lib: `mux style` paints the status
 # chip with it, and `mux host-color` hands it to the tray indicator, so a

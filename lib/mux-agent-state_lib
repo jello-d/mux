@@ -1,40 +1,39 @@
 #!/bin/sh
-# mux-agent-state_lib - shared reader for per-pane agent state (see
+# mux-agent-state_lib - shared reader for per-pane agent state (written by
 # mux-agent-state-emit). Sourced by mux-agent-state-render (the status strip)
-# AND by the
-# mux front end (the session picker and `mux ls`), so the state ranking and the
-# state GLYPHS live in ONE place, so the bar and the picker cannot drift apart.
-# Functions and glyph constants only; source it, do not run it.
+# AND by the mux front end (the session picker and `mux ls`), so the state
+# ranking and the state GLYPHS live in ONE place and the bar and the picker
+# cannot drift apart.
 #
 # State lives in per-pane files under $XDG_RUNTIME_DIR/mux/agent-state/<ns>, a
-# each: "state window pane epoch notif SESSION" (see mux-agent-state-emit). The
-# session comes LAST so a name containing a space reads back whole in one
-# `read`; this comment said the old order long after the code changed, which is
-# the same asserted-vs-actual drift that let a notification overwrite the
-# session name with the window index. The namespace <ns> is the tmux socket
-# basename, so a work bar never shows personal agents and vice versa.
+# line each: "state window pane epoch notif SESSION". The session comes LAST
+# so a name containing a space reads back whole in one `read`; this comment
+# said the old order long after the code changed, the same asserted-vs-actual
+# drift that let a notification overwrite the session name with the window
+# index. The namespace <ns> is the tmux socket basename, so a work bar never
+# shows personal agents and vice versa.
 
-# Width-2 glyphs, so a caller that aligns columns (the strip) holds line. This
-# is the single source of the state->glyph mapping; the strip's colour STYLES
-# stay in mux-agent-state-render, which owns the bar's look.
+# Width-2 glyphs, so a caller aligning columns (the strip) holds line. The
+# single source of the state->glyph mapping; the strip's colour STYLES stay in
+# mux-agent-state-render, which owns the bar's look.
 MUX_GLYPH_BLOCKED='⚠️' ; MUX_GLYPH_WORKING='🧠' ; MUX_GLYPH_IDLE='✅'
 MUX_GLYPH_NONE='⚫'    ; MUX_GLYPH_UNKNOWN='❓'
 # HUMMING: the turn ENDED and something it started is still running. A GEAR
 # because `🧠` is the agent thinking and this is machinery still turning: the
-# agent is done, the work is not. `done` was the misleading word, and `✅` was
-# the misleading glyph, for a session whose background job is still going.
+# agent is done, the work is not. For a session whose background job is still
+# going, `done` was the misleading word and `✅` the misleading glyph.
 MUX_GLYPH_HUMMING='⚙️'
 # UNWIRED: mux STARTED an agent in this session and has never heard from it.
-# A PLUG, not a question mark, because the answer is not unknown: it is that
-# nothing is connected. `❓` already means something else and rarer (a state
-# word this mux cannot draw, which only a newer mux across a transport
-# produces), and conflating the common actionable case with the exotic one
-# would waste the only glyph a newcomer will ever need to look up.
+# A PLUG, not a question mark, because the answer is not unknown: nothing is
+# connected. `❓` already means something rarer (a state word this mux cannot
+# draw, which only a newer mux across a transport produces), and conflating
+# the common actionable case with the exotic one wastes the only glyph a
+# newcomer will ever need to look up.
 #
-# THIS IS THE FIRST-RUN FAILURE. Install mux, start a session, and every chip
-# reads `⚫`, which is also what a plain shell looks like, so nothing says
-# the hooks were never wired and the reasonable conclusion is that mux does not
-# work. It is not a state an agent can emit and never appears in a record.
+# THIS IS THE FIRST-RUN FAILURE: install mux, start a session, and every chip
+# reads `⚫`, which is also what a plain shell looks like, so nothing says the
+# hooks were never wired and the reasonable conclusion is that mux is broken.
+# Not a state an agent can emit, and never in a record.
 MUX_GLYPH_UNWIRED='🔌'
 
 # A literal newline, as a constant: the one delimiter a session name cannot
@@ -51,38 +50,36 @@ mux_agent_dir() {
   if [ -z "$_ns" ]; then
     # `global` is the baseline PARTITION. It used to be `default`,
     # the old tmux socket basename, which stopped existing when the
-    # personal partition took a name: a stale default that made
-    # every headless reader silently see nothing. Callers inside
-    # tmux still get theirs from $TMUX.
+    # personal partition took a name: a stale default that made every
+    # headless reader silently see nothing.
     _ns=global
     [ -n "${TMUX:-}" ] && { _ns=${TMUX%%,*}; _ns=${_ns##*/}; }
   fi
-  # NAMESPACED UNDER `mux/`, per the fleet install-placement rule (ruled
-  # 2026-10-01). It used to sit at `$XDG_RUNTIME_DIR/agent-state`, directly
-  # beside `at-spi`, `bus`, `dbus-1`, `dconf`, `doc` and `gcr`, under a
-  # GENERIC name any other agent tool could claim. Every other location mux
-  # owns was already namespaced; this was the one that was not.
+  # NAMESPACED UNDER `mux/`, per the fleet install-placement rule
+  # (2026-10-01). It used to sit at `$XDG_RUNTIME_DIR/agent-state`, beside
+  # `at-spi`, `bus`, `dbus-1`, `dconf`, `doc` and `gcr`, under a GENERIC name
+  # any other agent tool could claim. Every other location mux owns was
+  # already namespaced; this was the one that was not.
   _ad=$_rt/mux/agent-state/$_ns
 
   # THIS FUNCTION DERIVES A PATH AND TOUCHES NOTHING. It briefly adopted the
-  # old directory from here, and that was wrong twice over; the adoption
-  # lives in `setup.sh` now (`_adopt_runtime_state`), which is the only moment
-  # that is atomic with the writer switching over. Do not put it back:
+  # old directory from here, wrong twice over; the adoption is in `setup.sh`
+  # (`_adopt_runtime_state`), the only moment atomic with the writer switching
+  # over. Do not put it back:
   #
   # A READER THAT MIGRATES TAKES A SNAPSHOT. Eleven of this function's twelve
-  # callers are read-only, so the FIRST of them to run copied the old
-  # directory, the still-deployed old writer carried on updating the original
-  # for another 32 minutes, and when the install finally moved the writer over
-  # the frozen copy became authoritative. Measured on northgate the day it
-  # shipped: a session reading `working` with an epoch 51 minutes stale, every
-  # beat refreshing it, and NO transition ever logged, because there was
-  # nothing left to transition from. That is the inversion this package calls
-  # worse than a stale idle, since a session that looks busy is one you
-  # deliberately leave alone.
+  # callers are read-only, so the FIRST to run copied the old directory, the
+  # still-deployed old writer carried on updating the original for another 32
+  # minutes, and when the install moved the writer over, the frozen copy
+  # became authoritative. Measured on northgate the day it shipped: a session
+  # reading `working` with an epoch 51 minutes stale, every beat refreshing
+  # it, and NO transition ever logged, because there was nothing left to
+  # transition from. The inversion this package calls worse than a stale idle,
+  # since a session that looks busy is one you deliberately leave alone.
   #
   # AND A COPY CANNOT BE JUDGED AFTERWARDS: a beat refreshes mtime without
   # advancing the epoch, so the snapshot had the NEWER mtime and the staler
-  # content, and no timestamp rule can tell the two apart.
+  # content, and no timestamp rule tells the two apart.
   printf '%s' "$_ad"
 }
 
@@ -91,22 +88,21 @@ mux_agent_rank() {
   case $1 in
   blocked) echo 4 ;;
   working) echo 3 ;;
-  # BETWEEN working AND idle, which is the whole claim the word makes: more
-  # going on than `idle`, less than a turn in progress. The numbers are
-  # deliberately not a contract (mux-agent-rank.t asserts the ORDER and says
-  # why pinning `blocked = 3` would be wrong), which is what made inserting a
-  # rank here a one-line change rather than a renumbering everyone must agree
-  # on.
+  # BETWEEN working AND idle, the whole claim the word makes: more going on
+  # than `idle`, less than a turn in progress. The numbers are deliberately
+  # not a contract (mux-agent-rank.t asserts the ORDER, and says why pinning
+  # `blocked = 3` would be wrong), which is what made inserting a rank here a
+  # one-line change rather than a renumbering everyone must agree on.
   humming) echo 2 ;;
   idle)    echo 1 ;;
   *)       echo 0 ;;
   esac
 }
 
-# mux_agent_state DIR SESSION -> "STATE EPOCH": the most-urgent live agent state
-# for SESSION (blocked > working > idle) and the epoch that state began, or a
+# mux_agent_state DIR SESSION -> "STATE EPOCH": the most-urgent live agent
+# state for SESSION (blocked > working > idle) and the epoch it began, or a
 # lone space when the session has no tracked agent. A session may hold several
-# agent panes; the worst one wins (and carries its epoch), so nothing is hidden.
+# agent panes; the worst wins and carries its epoch, so nothing is hidden.
 mux_agent_state() {
   mux_agent_state_skip "$1" "$2" ""
 }
@@ -115,101 +111,59 @@ mux_agent_state() {
 # whose PANE appears in SKIP (a space-separated list of pane ids).
 #
 # WHY THE EXCLUSION IS A PARAMETER AND NOT A RULE IN HERE: the panes a caller
-# wants to ignore are the ones whose `@mux-attention` is not the human's, and
-# that is a tmux OPTION. This lib reads FILES and makes no tmux calls at all,
+# ignores are the ones whose `@mux-attention` is not the human's, and that is
+# a tmux OPTION, while this lib reads FILES and makes no tmux calls at all,
 # which is what lets `mux agent-summary` answer headless with no server
-# anywhere. So the caller asks tmux (in a query it is already making) and
+# anywhere. So the caller asks tmux, in a query it is already making, and
 # passes the answer down.
 #
-# AND IT MUST NOT BE THE DEFAULT, which is the 0.60 `--attached` call again:
-# the HUMAN surfaces filter (the strip, the notification path,
-# `next-blocked`), and the MACHINE surface does not, because a supervisor
-# polling `mux agent peers` specifically wants to see its own workers. A
-# filter in the shared enumerator would delete that promise for every caller
-# at once.
+# AND IT MUST NOT BE THE DEFAULT, the 0.60 `--attached` call again: the HUMAN
+# surfaces filter (the strip, the notification path, `next-blocked`) and the
+# MACHINE surface does not, because a supervisor polling `mux agent peers`
+# wants to see its own workers. A filter in the shared enumerator would delete
+# that promise for every caller at once.
 #
 # TWO ENTRY POINTS, ONE WALK, ONE RANKING. `mux_agent_state` is a wrapper
-# rather than this function gaining an optional third argument, because the
-# two shellcheck versions this tree meets (0.9.0 on ubuntu-latest, which is
-# what CI runs, and 0.11 here) disagree about a function that references an
-# argument some callers omit. Both of these are always called with their full
-# arity, so neither rule set has anything to say.
+# rather than an optional third argument here, because the two linter versions
+# this tree meets (0.9.0 on ubuntu-latest, which CI runs, and 0.11 here)
+# disagree about a function referencing an argument some callers omit. Both
+# are always called with full arity, so neither rule set has anything to say.
 #
-# AND THAT PARAGRAPH COST A RED SUITE: a comment whose FIRST WORD is
-# `shellcheck` is read as a DIRECTIVE, so the sentence above used to fail to
-# parse (SC1073) and took the whole file's linting with it.
+# AND THAT PARAGRAPH COST A RED SUITE: a comment whose FIRST WORD is the
+# linter's name is read as a DIRECTIVE, so the sentence above failed to parse
+# (SC1073) and took the whole file's linting with it.
 mux_agent_state_skip() {
   _mux_agent_walk "$1" "$2" "$3" ""
   printf '%s %s' "$_best" "$_bestep"
 }
 
 # mux_agent_state_win DIR SESSION WINDOW -> the same answer for ONE window of
-# that session. `mux agent peers` reports per window, because a worker is a
+# that session. `mux agent peers` reports per window because a worker is a
 # WINDOW in the session it serves: collapsing a session to its worst agent
-# cannot say whether THIS worker is live, which vicus tried and rejected for
-# exactly that reason.
+# cannot say whether THIS worker is live, which vicus tried and rejected.
 mux_agent_state_win() {
   _mux_agent_walk "$1" "$2" "" "$3"
   printf '%s %s' "$_best" "$_bestep"
 }
 
 # mux_agent_pane DIR SESSION -> the pane id of the record that SPEAKS for that
-# session, or empty. The same walk and the same ranking: a session with
-# several agent panes reports its worst, and this is the pane that worst state
-# came from, which is the one a caller wanting to READ it means.
+# session, or empty. Same walk, same ranking: a session with several agent
+# panes reports its worst, and this is the pane that state came from, which is
+# the one a caller wanting to READ it means.
 mux_agent_pane() {      # <dir> <session>
   _mux_agent_walk "$1" "$2" "" ""
   printf '%s' "$_bestpane"
 }
 
 # mux_agent_pane_win DIR SESSION WINDOW -> the pane that speaks for ONE
-# window, the counterpart of mux_agent_state_win. `peers` needs it to look up
-# that window's control class, and it is an entry point rather than a reach
-# into the walk for the reason the walk's own comment gives: a caller choosing
-# which fields to parse is what went wrong the first time.
+# window, the counterpart of mux_agent_state_win. `peers` needs it for that
+# window's control class. An entry point rather than a reach into the walk,
+# for the reason the walk's own comment gives.
 mux_agent_pane_win() {  # <dir> <session> <window>
   _mux_agent_walk "$1" "$2" "" "$3"
   printf '%s' "$_bestpane"
 }
 
-# _mux_agent_walk DIR SESSION SKIP WINDOW -> the worst live record matching
-# SESSION, leaving its state in $_best, its epoch in $_bestep and its pane in
-# $_bestpane. SKIP is a space-separated pane list to ignore; WINDOW, when
-# non-empty, restricts the walk to one window index. Both empty is the plain
-# question.
-#
-# ONE WALK, FOUR ENTRY POINTS, and that is a correction rather than the
-# original design. This file used to carry the walk TWICE, once for the state
-# and once for the pane, with a comment explaining that the duplication was
-# forced: appending a field to `mux_agent_state`'s answer would silently turn
-# the epoch into "EPOCH PANE" for the seven callers parsing it as
-# `${_se%% *}` and `${_se#* }`. That reasoning was right about the ANSWER and
-# wrong about the implementation: the fix is for the walk to leave its result
-# in variables and for each entry point to print only what it owes. The
-# published shapes are byte-identical; the second copy is gone.
-#
-# A LEADING FUNCTION NAME WITH `_`, because this one is internal: the four
-# above are the surface, and a caller reaching past them would be choosing
-# which fields to parse, which is the thing that went wrong before.
-# mux_agent_humming RECORDFILE -> 0 when that pane's record carries a HUMMING
-# sidecar with at least one pid still alive.
-#
-# A SIDECAR, NOT A SIXTH FIELD, which is the call 0.49 already made for the
-# beat mark and for the same reason: the record is read by a single `read -r`
-# in several programs and widening it has cost this package a day before.
-#
-# AND THE RECORD STILL SAYS `idle`, which is the design rather than an
-# accident. The sidecar holds PIDS, so the state is RE-DERIVED on every read
-# and clears itself the moment the last job exits: nothing fires when a
-# background job ends (the agent is idle and may be waiting for hours), so a
-# stored word would be stale with nothing to correct it, which is the mirror
-# of the bug this exists to fix. It also degrades the safe way: a reader that
-# knows nothing of the sidecar reports `idle`, which UNDER-reports rather than
-# claiming an urgency that is not there.
-#
-# `kill -0` RATHER THAN `/proc`, because the liveness half must work where the
-# detection half does not: only Linux can attribute a process to a pane, but
-# any reader anywhere may be handed a sidecar across a transport.
 # mux_agent_hum_scan ROOTPID SELFPID -> one pid per line: work under this pane
 # that is still running, excluding the caller and anything it spawned. ROOTPID
 # is the pane's own process (tmux's `#{pane_pid}`), so attribution is
@@ -225,11 +179,11 @@ mux_agent_pane_win() {  # <dir> <session> <window>
 # keeps the two shellcheck versions this tree meets from disagreeing about an
 # optional parameter.
 #
-# WORK THE AGENT STILL HOLDS, which is the whole rule, and it comes from the
-# agent rather than from mux. Claude Code reports a background task exactly
-# while it owns a handle to it, and MEASURED, that handle is visible in the
-# process tree: a `run_in_background` task keeps its TOOL SHELL ALIVE as a
-# child of the agent for the task's whole life.
+# WORK THE AGENT STILL HOLDS is the whole rule, and it comes from the agent
+# rather than from mux. Claude Code reports a background task exactly while it
+# owns a handle to it, and MEASURED, that handle is visible in the process
+# tree: a `run_in_background` task keeps its TOOL SHELL ALIVE as a child of
+# the agent for the task's whole life.
 #
 #     tracked background task   bash(ppid=agent) -> the job      DESCENDANT
 #     a daemon started long ago ppid 1, its own session          not a child
@@ -237,33 +191,31 @@ mux_agent_pane_win() {  # <dir> <session> <window>
 # So "is it still under this pane" answers the same question the agent answers
 # for itself, and the two surfaces cannot disagree about what is running.
 #
-# THIS REPLACED AN ENVIRON SEARCH, and the note it replaces was measured on
-# the wrong case. It said a job "RE-PARENTS TO INIT, so children of the agent
-# misses exactly the case this exists for". True of `cmd &` inside a
-# FOREGROUND tool call, which orphans; false of a tracked task, which does
-# not. Keying on `TMUX`+`TMUX_PANE` in the environment therefore found every
-# process that had EVER passed through this pane, including services the agent
-# launched days ago and will never wait for. Measured live: a session read
-# `humming` for 44 hours over a watcher started by an agent that is still
-# running, which is the report that found this.
+# THIS REPLACED AN ENVIRON SEARCH whose note was measured on the wrong case.
+# It said a job "RE-PARENTS TO INIT, so children of the agent misses exactly
+# the case this exists for": true of `cmd &` inside a FOREGROUND tool call,
+# which orphans, and false of a tracked task, which does not. Keying on
+# `TMUX`+`TMUX_PANE` in the environment therefore found every process that had
+# EVER passed through this pane, including services the agent launched days
+# ago and will never wait for. Measured live: a session read `humming` for 44
+# hours over a watcher started by an agent that is still running.
 #
-# THE LIMIT IS THE OTHER HALF OF THAT, and it is deliberate: an orphaned
-# `cmd &` is invisible here, because nothing holds it. The agent cannot see it
-# either (no handle, no output, nothing to wait for), so mux staying quiet
-# agrees with the only thing that could have told us. Over-reporting is the
-# worse direction: it is unbounded in TIME, since nothing ever clears it.
+# THE LIMIT IS THE OTHER HALF, and deliberate: an orphaned `cmd &` is
+# invisible here, because nothing holds it. The agent cannot see it either (no
+# handle, no output, nothing to wait for), so mux staying quiet agrees with
+# the only thing that could have told us. Over-reporting is worse, being
+# unbounded in TIME since nothing ever clears it.
 #
-# ONE PASS FOR THE PPID TABLE, then a walk down from the root. `/proc/PID/stat`
-# carries the pid in field 1, so the FILENAME is never needed and `cat` can
-# tolerate a process exiting mid-glob; naming the files to awk makes a vanished
-# one FATAL and would silently answer "no work" on a busy box. The comm field
-# is parenthesised and may contain spaces, so ppid is read after stripping
-# through the last `) ` (measured: a process called `we (ird) nam` makes the
-# naive `$4` answer `1`).
+# ONE PASS FOR THE PPID TABLE, then a walk down from the root.
+# `/proc/PID/stat` carries the pid in field 1, so the FILENAME is never needed
+# and `cat` tolerates a process exiting mid-glob; naming the files to awk
+# makes a vanished one FATAL and would silently answer "no work" on a busy
+# box. The comm field is parenthesised and may contain spaces, so ppid is read
+# after stripping through the last `) ` (measured: a process called
+# `we (ird) nam` makes the naive `$4` answer `1`).
 #
-# LINUX ONLY, and it degrades the safe way: without /proc nothing is found, no
-# sidecar is written, and the state stays `idle`. Under-reporting beats
-# claiming activity that cannot be confirmed.
+# LINUX ONLY, degrading the safe way: without /proc nothing is found, no
+# sidecar is written, and the state stays `idle`.
 mux_agent_hum_scan() {
   _hroot=${1:-} _hself=${2:-}
   case ${_hroot:-} in ''|*[!0-9]*) return 0 ;; esac
@@ -273,19 +225,18 @@ mux_agent_hum_scan() {
   # with no test at all. Same shape as MUX_STYLE_PROC.
   _hproc=${MUX_HUM_PROC:-/proc}
   [ -d "$_hproc" ] || return 0
-  # EVERY QUESTION IS ASKED OF THE ONE SNAPSHOT, which is a correctness
-  # requirement and not a saving. The first version re-read `/proc/PID/status`
-  # per candidate to decide whether it was the scan's own machinery, and the
+  # EVERY QUESTION IS ASKED OF THE ONE SNAPSHOT, a correctness requirement
+  # and not a saving. The first version re-read `/proc/PID/status` per
+  # candidate to decide whether it was the scan's own machinery, and the
   # scan's forks (the `cat`, the awk, the substitution subshell) are alive
-  # when the table is built and GONE a moment later: the ancestry read then
+  # when the table is built and GONE a moment later: the ancestry read
   # answered nothing, so they could not be attributed and were reported AS
   # WORK. Measured: three phantom pids per run, reproducibly. A snapshot
   # cannot race itself, so the walk reads the table and never /proc again.
   #
-  # TWO EXCLUSIONS, and both are the same self-match trap this package has
-  # recorded in several shapes: anything on our own chain UP (the agent and
-  # the pane's shell sit on it, and neither is work) and anything DOWN from
-  # us (the scan's own forks).
+  # TWO EXCLUSIONS, both the same self-match trap this package has recorded
+  # in several shapes: anything on our own chain UP (the agent and the pane's
+  # shell sit on it, and neither is work) and anything DOWN from us.
   cat "$_hproc"/[0-9]*/stat 2>/dev/null | awk -v r="$_hroot" -v me="$_hself" '
     { _s = $0; sub(/^.*\) /, "", _s); split(_s, _f, " "); par[$1] = _f[2] }
     END {
@@ -308,6 +259,24 @@ mux_agent_hum_scan() {
     }'
 }
 
+# mux_agent_humming RECORDFILE -> 0 when that pane's record carries a HUMMING
+# sidecar with at least one pid still alive.
+#
+# A SIDECAR, NOT A SIXTH FIELD, the call 0.49 already made for the beat mark
+# and for its reason: the record is read by a single `read -r` in several
+# programs, and widening it has cost this package a day.
+#
+# AND THE RECORD STILL SAYS `idle`, by design. The sidecar holds PIDS, so the
+# state is RE-DERIVED on every read and clears itself the moment the last job
+# exits. Nothing fires when a background job ends (the agent is idle and may
+# wait for hours), so a stored word would be stale with nothing to correct it,
+# the mirror of the bug this exists to fix. It also degrades the safe way: a
+# reader that knows nothing of the sidecar reports `idle`, UNDER-reporting
+# rather than claiming an urgency that is not there.
+#
+# `kill -0` RATHER THAN `/proc`, because the liveness half must work where the
+# detection half does not: only Linux can attribute a process to a pane, but
+# any reader anywhere may be handed a sidecar across a transport.
 mux_agent_humming() {   # <record file>
   [ -f "$1.hum" ] || return 1
   while read -r _hp _hrest; do
@@ -317,6 +286,24 @@ mux_agent_humming() {   # <record file>
   return 1
 }
 
+# _mux_agent_walk DIR SESSION SKIP WINDOW -> the worst live record matching
+# SESSION, leaving its state in $_best, its epoch in $_bestep and its pane in
+# $_bestpane. SKIP is a space-separated pane list to ignore; WINDOW, when
+# non-empty, restricts the walk to one window index. Both empty is the plain
+# question.
+#
+# ONE WALK, FOUR ENTRY POINTS, and a correction rather than the original
+# design. This file used to carry the walk TWICE, once for the state and once
+# for the pane, with a comment calling the duplication forced: appending a
+# field to `mux_agent_state`'s answer would silently turn the epoch into
+# "EPOCH PANE" for the seven callers parsing it as `${_se%% *}` and
+# `${_se#* }`. Right about the ANSWER, wrong about the implementation: the
+# walk leaves its result in variables and each entry point prints only what it
+# owes. The published shapes are byte-identical; the second copy is gone.
+#
+# A `_` NAME BECAUSE THIS ONE IS INTERNAL. The four entry points are the
+# surface, and a caller reaching past them would be choosing which fields to
+# parse, which is what went wrong before.
 _mux_agent_walk() {
   _awdir=$1 _awsess=$2 _awskip=$3 _awwin=$4
   _best= _bestep= _bestpane= _br=-1
@@ -328,34 +315,33 @@ _mux_agent_walk() {
     [ "$_ss" = "$_awsess" ] || continue
     case " $_awskip " in *" $_p "*) continue ;; esac
     [ -z "$_awwin" ] || [ "$_w" = "$_awwin" ] || continue
-    # `idle` PLUS LIVE BACKGROUND WORK IS `humming`. Only over idle: over
-    # `working` it is noise (of course things are running) and over `blocked`
-    # a human is needed either way and blocked outranks it. The same shape the
-    # beat mark has, which also only means anything over an idle record.
+    # `idle` PLUS LIVE BACKGROUND WORK IS `humming`, and only over idle:
+    # over `working` it is noise (of course things are running), and over
+    # `blocked` a human is needed either way and blocked outranks it. The
+    # beat mark's shape, which also only means anything over an idle record.
     if [ "$_st" = idle ] && mux_agent_humming "$_f"; then _st=humming; fi
     _r=$(mux_agent_rank "$_st")
-    # AN `if`, NOT AN `&&` LIST, AND THAT IS NOT STYLE. This loop is the LAST
-    # command in the function, so with `&&` the function's exit status is the
-    # comparison's: a final record that does NOT win leaves it non-zero, and
-    # the four entry points call this as a bare command, so `set -e` in a
-    # caller kills the shell before the `printf` that answers. Inside `$( )`
-    # that is silent: the substitution simply comes back EMPTY and the session
-    # reads as having no agent.
+    # AN `if`, NOT AN `&&` LIST, and not style. This loop is the LAST command
+    # in the function, so with `&&` the function's status is the comparison's:
+    # a final record that does NOT win leaves it non-zero, and the four entry
+    # points call this bare, so `set -e` in a caller kills the shell before
+    # the `printf` that answers. Inside `$( )` that is silent: the
+    # substitution comes back EMPTY and the session reads as having no agent.
     #
-    # MEASURED, by doing it: the unified walk shipped with `&&` and
-    # `mux-agent-rank.t` went red on `blocked should beat idle` with the walk
-    # having computed `blocked` perfectly. It is the same defect this package
-    # fixed in `mux_env_plan` and `mux_env_apply` hours earlier, which is the
-    # argument for the idiom rather than the vigilance.
+    # MEASURED BY DOING IT: the unified walk shipped with `&&` and
+    # `mux-agent-rank.t` went red on `blocked should beat idle` while the walk
+    # had computed `blocked` perfectly. Same defect fixed in `mux_env_plan`
+    # and `mux_env_apply` hours earlier, which is the argument for the idiom
+    # rather than the vigilance.
     if [ "$_r" -gt "$_br" ]; then
       _br=$_r; _best=$_st; _bestep=$_e; _bestpane=$_p
     fi
   done
 }
 
-# mux_agent_windows DIR SESSION -> the distinct WINDOW indexes that session has
-# a record in, one per line, lowest first. The enumerator `peers` needs to
-# report per window, and the counterpart of mux_agent_sessions.
+# mux_agent_windows DIR SESSION -> the distinct WINDOW indexes that session
+# has a record in, one per line, lowest first. What `peers` needs to report
+# per window, and the counterpart of mux_agent_sessions.
 mux_agent_windows() {   # <dir> <session>
   [ -d "$1" ] || return 0
   _awsd=$1 _awss=$2
@@ -367,18 +353,16 @@ mux_agent_windows() {   # <dir> <session>
   done | LC_ALL=C sort -n -u
 }
 
-# mux_agent_sessions DIR -> the distinct sessions with a tracked agent, ONE PER
-# LINE. Newline separated because a session name may contain a space but never a
-# newline (tmux escapes one in its -F output), so joining with spaces would let
-# `my project` dedup against its own words and then be counted twice, as `my`
-# and `project`.
+# mux_agent_sessions DIR -> the distinct sessions with a tracked agent, ONE
+# PER LINE. Newline separated because a session name may contain a space but
+# never a newline (tmux escapes one in its -F output), so joining with spaces
+# would let `my project` dedup against its own words and be counted twice, as
+# `my` and `project`.
 #
-# Centralised because it was already written twice (in
-# mux-agent-state-summary and
-# in mux-agent-doctor), and a third copy was about to be written for
-# mux-agent-state-list. Every copy has to independently remember that the
-# session is
-# the LAST field.
+# Centralised because it was already written twice (mux-agent-state-summary
+# and mux-agent-doctor) with a third about to go into
+# mux-agent-state-list, and every copy has to independently remember that the
+# session is the LAST field.
 mux_agent_sessions() {  # DIR
   _asd=$1
   [ -d "$_asd" ] || return 0
@@ -410,8 +394,8 @@ mux_agent_glyph() {
   esac
 }
 
-# mux_agent_state_glyph DIR SESSION -> just the state glyph for SESSION, for
-# callers that want the glyph and not the epoch (the picker and `mux ls`).
+# mux_agent_state_glyph DIR SESSION -> the state glyph alone, for callers that
+# want it without the epoch (the picker and `mux ls`).
 mux_agent_state_glyph() {
   _sg=$(mux_agent_state "$1" "$2")
   mux_agent_glyph "${_sg%% *}"

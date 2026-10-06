@@ -5,16 +5,15 @@
 # EXTRACTED FROM bin/mux (2026-10-05), 123 lines, and the boundary is decided
 # by a fact about POSIX sh rather than by taste: WHAT CAN BE A FUNCTION.
 #
-#   the option LOOP stays in bin/mux    it SHIFTS the script's own argv, and a
-#                                       function's `shift` moves the
+#   the option LOOP stays in bin/mux    it SHIFTS the script's own argv, and
+#                                       a function's `shift` moves the
 #                                       function's positionals, never the
 #                                       caller's. (A sourced file CAN shift
-#                                       the caller's argv, measured; a lib
-#                                       whose body is top-level logic
+#                                       the caller's argv, measured, but a
+#                                       lib whose body is top-level logic
 #                                       mutating its caller is a shape
-#                                       nothing else in this tree has, and
-#                                       not one to invent on the way to a
-#                                       release.)
+#                                       nothing else here has, and not one
+#                                       to invent on the way to a release.)
 #   the VALIDATION moves                it reads `$#` and the flag variables
 #                                       and nothing else positional, so the
 #                                       count is one argument and the rest
@@ -29,19 +28,19 @@
 # exec shim over libexec/mux-help) and the flag variables, both of which are
 # the caller's by construction.
 #
-# WHY THE FLAG GATES ARE TEN NEAR-IDENTICAL BLOCKS and not a table: they are
-# today, and that is the next simplification rather than this one. Collapsing
-# them would be a behaviour-preserving transform of the most load-bearing
-# block mux has, in the same commit that moves it, and their messages are
-# asserted in nine test cases and scraped by `test/mux-args.t`'s gate audit.
-# One change at a time.
+# WHY THE FLAG GATES ARE TEN NEAR-IDENTICAL BLOCKS and not a table: that is
+# the next simplification rather than this one. Collapsing them would be a
+# behaviour-preserving transform of the most load-bearing block mux has, in
+# the same commit that moves it, and their messages are asserted in nine test
+# cases and scraped by `test/mux-args.t`'s gate audit. One change at a time.
 #
-# GUARDED BEFORE IT MOVED, which is the order that made the move provable:
-# this block had five assertions and no mutation records until the commits
-# immediately before this one. Four mechanisms are pinned now (an option is
-# an option wherever it sits, the arity table, `-h` exits zero, a partition
-# name is validated) plus the gate audit, which found two flags that parsed
-# and were silently ignored.
+# GUARDED BEFORE IT MOVED, the order that made the move provable: this block
+# had five assertions and no mutation records until the commits immediately
+# before. Four mechanisms are pinned now (an option is an option wherever it
+# sits, the arity table, `-h` exits zero, a partition name is validated) plus
+# the gate audit, which found two flags that parsed and were silently
+# ignored.
+
 # ONE DISABLE FOR THE WHOLE FUNCTION rather than nine identical ones at the
 # nine gates: every flag variable below is a CALLER INPUT the option loop in
 # bin/mux set, which is exactly what the contract above documents, so nine

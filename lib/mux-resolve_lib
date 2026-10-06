@@ -1,39 +1,35 @@
 #!/bin/sh
-# mux-resolve_lib: how mux turns a NAME into a project. Sourced (functions
-# only).
+# mux-resolve_lib: how mux turns a NAME into a project.
 #
-# THE SHARED SURFACE BETWEEN `go` AND `why`, which is the whole reason this is
-# a lib. `_typed_roots`'s own comment already said so in bin/mux ("`go` and
-# `why` share this ON PURPOSE") and recorded what it cost when they did not:
-# `why` derived a typed name's root as the CURRENT DIRECTORY, consulting
-# neither source, so `mux why NAME` cheerfully described a session `go` would
-# have flatly refused to build. An explanation that contradicts the thing it
-# explains is worse than none.
+# THE SHARED SURFACE BETWEEN `go` AND `why`, which is the whole reason it is a
+# lib. `_typed_roots`'s comment already said so in bin/mux ("`go` and `why`
+# share this ON PURPOSE") and recorded what it cost when they did not: `why`
+# derived a typed name's root as the CURRENT DIRECTORY, consulting neither
+# source, so `mux why NAME` described a session `go` would have refused to
+# build. An explanation that contradicts the thing it explains is worse than
+# none.
 #
-# EXTRACTED FROM bin/mux (2026-10-05) as the precursor to moving `why` out of
-# it. Not for size: `why` cannot leave until these can be reached from a
-# second file, and nothing else about `why` is hard.
+# EXTRACTED FROM bin/mux (2026-10-05) as the precursor to moving `why` out,
+# not for size: `why` cannot leave until these are reachable from a second
+# file, and nothing else about `why` is hard.
 #
-# NEEDS THREE LIBS, and the CALLER sources them, which is the convention
-# throughout (no lib sources another: a sourced POSIX sh file sees the
-# CALLER'S $0, measured in dash, bash and ksh, so it cannot locate a sibling):
+# NEEDS THREE LIBS, which the CALLER sources, as everything here does:
 #
 #   mux_resolve_hash_theme   needs mux-data_lib       (mux_data_stems)
 #   mux_resolve_map_lookup   needs mux-scan_lib       (mux_scan_lookup/_build)
 #   mux_resolve_typed_roots  needs mux-sessions_lib   (mux_sess_root)
 #
 # AND THE PARTITION IS AN ARGUMENT NOW, not a global. In bin/mux these two
-# read `$part`, the entry point's own resolved partition, which is exactly the
-# coupling that keeps code from moving: a lib that reaches for a caller's
-# variable works in one file and silently answers about nothing anywhere else.
-# The same correction `mux_ctx_mine` needed about "the caller" this week,
-# applied to a value instead of a position.
-# The PROJECT a bare invocation refers to: the git toplevel if we are in a
-# repo, else the current directory. The ONE derivation, used for both the
-# default session NAME and the default root, so `mux new` writes a layout under
-# exactly the name `mux go` will later look for. They used to disagree: new
-# took the cwd basename and go the git toplevel basename, so a `mux new` run
-# anywhere but a repo's top level wrote a layout go could never find.
+# read `$part`, the entry point's own resolved partition, which is the
+# coupling that keeps code from moving: a lib reaching for a caller's variable
+# works in one file and silently answers about nothing anywhere else. The
+# correction `mux_ctx_mine` needed about "the caller", applied to a value.
+# The PROJECT a bare invocation refers to: the git toplevel in a repo, else
+# the current directory. The ONE derivation, used for both the default session
+# NAME and the default root, so `mux new` writes a layout under exactly the
+# name `mux go` will look for. They used to disagree, new taking the cwd
+# basename and go the git toplevel basename, so a `mux new` anywhere but a
+# repo's top level wrote a layout go could never find.
 mux_resolve_project_base() {   # [dir]
   if [ -n "${1:-}" ]; then
     ( cd "$1" 2>/dev/null \
@@ -53,10 +49,10 @@ mux_resolve_is_path() {   # <arg>
   return 1
 }
 
-# The scan map for this context, self-correcting: entries whose path has since
-# vanished are dropped (a moved repo must read as a MISS, not as a hit that
-# fails later at build), and a miss rebuilds the map once and asks again. Those
-# two checks are the whole staleness story: no TTL, no timer.
+# The scan map for this context, self-correcting: entries whose path has
+# vanished are dropped (a moved repo must read as a MISS, not a hit that fails
+# later at build), and a miss rebuilds the map once and asks again. Those two
+# checks are the whole staleness story: no TTL, no timer.
 # -> matching project paths, one per line
 mux_resolve_map_lookup() {   # <name> <partition>
   # GUARDED IN THE FUNCTION'S OWN SHELL, not with `${2:?}` inside a command
