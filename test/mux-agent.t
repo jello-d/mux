@@ -295,6 +295,14 @@ eq all-widens "$(jq 'len(d["partitions"])')" 2
 # --partition SELECTS one that is not mine, and is the flag the skill
 # documents and the verb did not parse at all.
 WATCHED=global run status --partition work --any; unset WATCHED
+# STATUS BEFORE PAYLOAD, AND THIS IS THE FILE'S FIRST USE OF THE FLAG. The
+# option loop is SHARED by status and peers, so a mutation removing the
+# `--partition` arm answers `{"status":"usage"}` here, and every payload
+# index below raises inside the helper: the kill then reads "the answer did
+# not parse: Traceback" and names nothing. The same guard exists at peers'
+# first use and was put there alone, which the full corpus caught twice,
+# because that one does not run first.
+eq part-status "$(jq 'd["status"]')" ok
 eq part-selects "$(jq 'len(d["partitions"])')" 1
 eq part-is-named "$(jq 'd["partitions"][0]["partition"]')" work
 # `run` captures the status into $RC, so `$?` here reads the WRAPPER and is 0
@@ -414,7 +422,7 @@ eq peers-headless-state \
 # is null rather than the default. `dead` records pane %7, which is in no
 # window of the live listing.
 CLASS2=agent run peers --partition work; unset CLASS2
-# STATUS BEFORE PAYLOAD, at the FIRST use of the flag. This is the rule the
+# STATUS BEFORE PAYLOAD, at peers' first use of the flag. This is the rule the
 # contract gives a consumer, and it is what makes a failure legible: a mutation
 # that removed the `--partition` arm answers `{"status":"usage"}` (valid JSON
 # with no `peers` key), so every assertion below raises inside the helper and
@@ -479,6 +487,12 @@ eq read-pane "$(jq 'd["pane"]')" %1
 # resolver was replaced by a constant and nothing noticed.
 _read bravo
 eq read-pane-other "$(jq 'd["pane"]')" %2
+# NOT WHAT THE `tm` MUTATION REACHES, and that is worth saying: the default
+# socket holds no records, so `read-rc` above fails first and carries the
+# record. This asserts the ASK rather than the outcome, which is the half that
+# survives a wrong server giving a PLAUSIBLE answer, and no one-line mutation
+# produces that. Kept unrecorded rather than deleted: the wrong-socket bug has
+# shipped three times here, every time answering something believable.
 grep -q 'CAPTURED -L ' "$CAPLOG" \
   || fail "read captured from the DEFAULT tmux socket, not the
 partition's: $(cat "$CAPLOG")"

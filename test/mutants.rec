@@ -296,7 +296,7 @@ f libexec/mux-latch
 t mux-latch
 -   if [ -n "$PROBE" ]; then
 +   if true; then
-m with no probe configured latch
+m the probe turned off latch should just attempt
 
 = latch-c-word-splits
 f libexec/mux-latch
@@ -1669,12 +1669,12 @@ t mux-agent
 +               true
 m peers-clamped
 
-= agent-peers-ignores-the-partition
+= agent-partition-arm-removed
 f libexec/mux-agent
 t mux-agent
 -     --partition)
 +     --ignored)
-m peers-part-status
+m part-status: got
 
 = agent-peers-all-is-one-partition
 f libexec/mux-agent
@@ -1793,7 +1793,7 @@ f libexec/mux-agent
 t mux-agent
 -   tmux -L "${_rp:-global}" "$@"
 +   tmux "$@"
-m DEFAULT tmux socket
+m read-rc: got
 
 = agent-send-human-gate-removed
 f libexec/mux-agent
@@ -1978,7 +1978,7 @@ f setup.sh
 t setup
 -   [ -e "$_bin/mux-desktop-notifier" ] || return 0
 +   :
-m fired with no
+m the notice fired with no
 
 = undo-foreign-record-is-refused
 f libexec/mux-undo-pane
@@ -2552,7 +2552,7 @@ t mux-check
 # the one that keeps `false` OUT of the cannot-tell answer.
 -       *false*) ;;
 +       *false*) continue ;;
-m NOBODY owns the notification
+m a missing notifier was not reported
 
 = check-notify-daemon-unasked-is-broken
 f libexec/mux-check
@@ -2771,7 +2771,7 @@ t setup
 # argument for the verb; the corpus found the coupling by killing through it.
 -   printf 'config\t%s\n'  "${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/$PKG}"
 +   printf 'config\t%s\n'  "$HOME/.config/$PKG"
-m did not NAME the config root it left behind
+m did not name the config root it left behind
 
 = paths-drops-a-root
 f setup.sh

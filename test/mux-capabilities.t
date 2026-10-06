@@ -147,7 +147,21 @@ _main=$(awk '/^[[:space:]]*case \$cmd in$/,/^[[:space:]]*esac$/' \
     "$HERE/bin/mux" \
   | grep -oE '^[[:space:]]*[a-z|-]+\)' \
   | tr -d ' \t)' | tr '|' '\n')
-_dispatched=$(printf '%s\n%s\n' "$_early" "$_main" | grep . | LC_ALL=C sort -u)
+# AND A THIRD MECHANISM, which the breakup created and nothing noticed. Once
+# each verb's body moved to a lib, most of them stopped being `case` arms and
+# became `if [ "$cmd" = X ]` tests, so the main block holds ONE arm today and
+# this guard was blind to ELEVEN verbs including go's neighbours: edit, help,
+# kill, ls, new, reload, rename, resume, save, theme, why. Found by a mutation
+# deleting `rename internal` from the manifest and nothing noticing, which is
+# the only thing that could have seen it: the count floor below did not fire,
+# because the loss was verbs never ARRIVING rather than a scrape going empty.
+_ifs=$(grep -oE '^if \[ "\$cmd" = [a-z-]+ \]' "$HERE/bin/mux" \
+  | awk '{gsub(/"/,"",$5); print $5}')
+[ -n "$_ifs" ] || fail "no if-dispatched verbs discovered in bin/mux. Either
+every verb became a case arm again (check, and delete this) or the pattern
+has stopped matching and eleven verbs are unaudited."
+_dispatched=$(printf '%s\n%s\n%s\n' "$_early" "$_main" "$_ifs" \
+  | grep . | LC_ALL=C sort -u)
 
 [ -n "$_dispatched" ] || fail "no verbs were discovered from bin/mux; the
 dispatch-table scrape is broken and this guard is proving nothing"

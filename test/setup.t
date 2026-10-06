@@ -152,8 +152,15 @@ esac
 # SILENT WITH NO INDICATOR INSTALLED, first, because an optional sub-package
 # must not make the core install noisy for everyone who does not use it.
 run install >"$T/out" 2>&1 || fail "reinstall errored"
-grep -q 'tray indicator' "$T/out" && fail "the indicator notice fired with no
-indicator installed; an optional sub-package must stay silent:
+# THE SAME PHRASE THE POSITIVE CASE BELOW LOOKS FOR, deliberately: this one
+# asserts its ABSENCE and that one its presence, so they cannot disagree about
+# what the notice says. It used to grep `tray indicator`, which the
+# desktop-notifier rename deleted from the product, so the assertion could
+# never fire and the guard was unkillable. The sweep renamed the value and the
+# test kept pinning the old one, which this package already records happening
+# in the other direction, to the historical tray Id.
+grep -q 'desktop notifier differs' "$T/out" && fail "the notice fired with no
+notifier installed; an optional sub-package must stay silent:
 $(cat "$T/out")"
 
 # ... and said when one IS installed and does not match. The drift verdict is
@@ -434,14 +441,39 @@ fi
 # Keeping config, state and cache is right: a session set and a log are not
 # the package's to delete. Saying NOTHING about them is not, because
 # "uninstalled" then reads as "gone" while they sit on disk.
-run uninstall >"$T/uout" 2>&1 || fail "uninstall errored"
+# MUX_DIR IS SET FOR THIS ONE, and that is what makes the assertion below
+# able to fail. With only HOME pinned, the DERIVED root and a hardcoded
+# `$HOME/.config/$PKG` are the SAME STRING, so a mutation replacing one with
+# the other is invisible: the fixture's value coincides with the constant,
+# which this package records as a test that proves nothing. The rule being
+# asserted is "uninstall reports the root it was ASKED about", so the case has
+# to ask for one.
+# `env` AND NOT `run`: setup.sh REFUSES a `NAME=value` argument (it is an
+# environment variable, and an installer that ignored one would install
+# somewhere else while reporting success), and `MUX_DIR=x run ...` is the
+# unspecified prefix-a-function shape test/lint.t forbids.
+# AND IT HAS TO EXIST, because uninstall only names a root it is actually
+# leaving behind. An empty one would make the assertion below vacuous again
+# for a different reason.
+mkdir -p "$T/conf-un"; : >"$T/conf-un/profiles"
+env PREFIX="$T" XDG_BIN_HOME="$T/bin" XDG_DATA_HOME="$T/share" NO_COLOR=1 \
+  XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" MUX_DIR="$T/conf-un" \
+  sh "$HERE/setup.sh" uninstall >"$T/uout" 2>&1 \
+  || fail "uninstall errored"
 [ -e "$T/bin/mux" ] && fail "bin/mux link not removed"
 [ -e "$T/libexec/mux" ] && fail "libexec/mux link not removed"
 [ -e "$T/share/mux" ] && fail "the payload tree was not removed"
 grep -qi 'KEPT your own files' "$T/uout" \
   || fail "uninstall said nothing about what it kept: $(cat "$T/uout")"
-grep -q 'config' "$T/uout" \
-  || fail "uninstall did not NAME the config root it left behind:
+# THE PATH, NOT THE WORD. This used to be `grep -q 'config'`, which matches
+# the LABEL the uninstall prints in its own format string, so it could never
+# fail whatever root was reported: a mutation hardcoding the root to
+# `$HOME/.config/$PKG` sailed past it and was caught four hundred lines later
+# by the `paths` verb instead. A vacuous assertion reads as coverage.
+grep -qF "$T/conf-un" "$T/uout" \
+  || fail "uninstall did not name the config root it left behind. It must
+report the root it was ASKED about, since a user told to delete it by hand
+will delete whatever path this prints:
 $(cat "$T/uout")"
 
 # --- THE CONFIG ROOT CARRIES A README NAMING EVERY LOCATION ---------------
