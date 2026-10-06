@@ -175,7 +175,7 @@ _go_pick_profile() {
 _go_resolve_name() {
   # A DERIVED name that collides with a profile meaning somewhere ELSE. Exactly
   # the live-session guard one step earlier: a name mux picked FOR you must not
-  # silently resolve to a different place. Standing in ~/src/manifest and
+  # silently resolve to a different place. Standing in ~/src/work and
   # getting a session rooted at ~/src/work/PlatformOS (because the
   # directory's basename happens to match an unrelated profile) is a surprise,
   # not a service. A name you TYPED is still trusted, since looking a profile up

@@ -1176,9 +1176,9 @@ _rc=$(latch box proj)
 #
 # THE TARGET IS IN THE FILE BECAUSE THE FILENAME CANNOT HOLD IT. The name is
 # sanitised through `tr -c`, so a host and partition collapse into one name and
-# reader can tell that from a host genuinely called `northwood_work`. A tray item
-# polling the wrong hostname would draw `unknown` forever with nothing on screen
-# to say why.
+# reader can tell that from a host genuinely called `northwood_work`. A tray
+# item polling the wrong hostname would draw `unknown` forever with nothing
+# on screen to say why.
 MAXT=1 _rc=$(latch hostwith 'part::')
 _lk=$T/run/mux-latch/hostwith_part.lock
 [ ! -e "$_lk" ] || fail "the lock outlived the run: the trap must remove it on

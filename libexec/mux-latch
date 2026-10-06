@@ -509,10 +509,10 @@ fi
 #
 # THREE LINES: the pid, the TARGET verbatim, then the SESSION (empty when none
 # was named). The target is written because the FILENAME CANNOT CARRY IT: it
-# is sanitised through `tr -c`, so `northwood:work` becomes `northwood_work` and a
-# reader cannot tell that from a host genuinely called `northwood_work`. A reader
-# wanting the host takes everything before the first colon and the partition
-# everything after it, which is the target grammar's own rule.
+# is sanitised through `tr -c`, so `northwood:work` becomes `northwood_work`
+# and a reader cannot tell that from a host genuinely called `northwood_work`.
+# A reader wanting the host takes everything before the first colon and the
+# partition everything after it, which is the target grammar's own rule.
 #
 # THE SESSION IS A THIRD LINE RATHER THAN PART OF LINE 2, so every existing
 # reader is untouched: `latched()` in the indicator reads two lines and asks

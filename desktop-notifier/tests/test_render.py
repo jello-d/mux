@@ -464,19 +464,32 @@ class MarkOnTheTile(unittest.TestCase):
         pair's screen-vs-prompt: when a feature reaches the output through more
         than one path, assert each path.
 
-        Sampled at the left edge, mid-height, which is inside the strip and
-        beside the middle letter rather than on it. Without a mark that pixel
-        is the state's FRAME; with one it is the strip.
+        COUNTED, NOT PROBED AT ONE PIXEL. This used to sample [1, s//2] and
+        call it "inside the strip and beside the middle letter rather than on
+        it", which was true of the three letters the fixture happened to use
+        and of nothing else: with a wider middle capital that pixel is the
+        GLYPH, so the assertion failed while the strip was not only present
+        but wider. A fixture whose value is load-bearing in a way the
+        assertion does not state is this suite's recurring trap.
+        The strip has its own ink, which the letters do not use, so counting
+        it still isolates the strip from the letters, which is the property
+        the two-guards split exists for. Verified mark-independent from `III`
+        to `WWW`: 0 pixels unmarked, 72 upwards for any mark.
         """
         from mux_desktop_notifier.render import _MARK_BACK, _tile
         pair = parse_pair("#ffffff #005f87")
+
+        def strip_ink(tile, s):
+            px = tile.load()
+            return sum(1 for y in range(s) for x in range(s)
+                       if px[x, y] == _MARK_BACK)
+
         for s in (22, 32, 48):
-            marked = _tile("working", 2, s, True, pair, "NWD").load()
-            plain = _tile("working", 2, s, True, pair).load()
-            self.assertEqual(marked[1, s // 2], _MARK_BACK,
-                             f"{s}px: no strip behind the mark")
-            self.assertNotEqual(plain[1, s // 2], _MARK_BACK,
-                                f"{s}px: the UNMARKED tile already has one")
+            marked = strip_ink(_tile("working", 2, s, True, pair, "NWD"), s)
+            plain = strip_ink(_tile("working", 2, s, True, pair), s)
+            self.assertGreater(marked, 0, f"{s}px: no strip behind the mark")
+            self.assertEqual(plain, 0,
+                             f"{s}px: the UNMARKED tile already has one")
 
     def test_the_mark_is_sized_by_HEIGHT_not_width(self):
         """The one choice that made it legible. Fitting the glyph to a narrow

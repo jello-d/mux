@@ -177,8 +177,9 @@ fails path-missing "not a directory" "$T/elsewhere" go "$T/no/such/dir"
 
 # --- ORPHANED MAPS ARE PRUNED, LIVE ONES ARE NOT ----------------------
 # mux made these files and nothing ever removed one: `projects.default` sat on
-# northwood for weeks after the partition it indexed stopped existing. The oracle
-# is mux_ctx_partitions, which already answers which partitions mux knows of.
+# northwood for weeks after the partition it indexed stopped existing. The
+# oracle is mux_ctx_partitions, which already answers which partitions mux
+# knows of.
 #
 # The LIVE map is the assertion that matters: a prune that deleted everything
 # would pass any count-based check, and it would delete the map the very call

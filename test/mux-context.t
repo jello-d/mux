@@ -60,7 +60,7 @@ eq builtin-no-label "$MUX_CFG_label" ""
 for _bad in '../etc' 'Work' 'has space' '-lead' 'trail-' 'a/b'; do
   mux_ctx_valid "$_bad" && fail "validator accepted [$_bad]"
 done
-for _good in manifest a acme-2 x9; do
+for _good in platform a acme-2 x9; do
   mux_ctx_valid "$_good" || fail "validator rejected [$_good]"
 done
 # An invalid token is an ERROR, not a quiet fall back to global.
@@ -103,13 +103,13 @@ eq lonely-unknown "$MUX_CTX_UNKNOWN" 1
 eq lonely-scan "$MUX_CFG_scan" ""
 
 # --- partition file supplies the settings ----------------------------------
-printf 'label Manifest\ntheme orange\nscan %s/w 3\n' "$T" \
-  >"$MUX_DIR/partitions/work.partition"
-cc 'echo manifest'
+printf 'label Platform\ntheme orange\nscan %s/w 3\n' "$T" \
+  >"$MUX_DIR/partitions/platform.partition"
+cc 'echo platform'
 mux_ctx_resolve || fail "resolve failed with a partition file"
-eq part-token "$MUX_CTX_TOKEN" manifest
-eq part-part  "$MUX_CTX_PARTITION" manifest
-eq part-label "$MUX_CFG_label" Manifest
+eq part-token "$MUX_CTX_TOKEN" platform
+eq part-part  "$MUX_CTX_PARTITION" platform
+eq part-label "$MUX_CFG_label" Platform
 eq part-theme "$MUX_CFG_theme" orange
 eq part-scan  "$MUX_CFG_scan" "$T/w 3"
 eq part-known "$MUX_CTX_UNKNOWN" 0
@@ -163,7 +163,7 @@ eq bare-cmd "$MUX_CTX_TOKEN" bare
 
 # --- the socket is derived, and global is an ordinary name -----------------
 eq socket-derived "$(mux_ctx_socket global)" global
-eq socket-named "$(mux_ctx_socket manifest)" manifest
+eq socket-named "$(mux_ctx_socket platform)" platform
 
 # --- every partition is discoverable, for reload and palette sync ----------
 _p=$(mux_ctx_partitions | tr '\n' ' ')
@@ -171,7 +171,7 @@ case $_p in
   *global*) ;; *) fail "partitions omitted global: [$_p]" ;;
 esac
 case $_p in
-  *manifest*) ;; *) fail "partitions omitted manifest: [$_p]" ;;
+  *platform*) ;; *) fail "partitions omitted platform: [$_p]" ;;
 esac
 
 # --- A COMMENT IN THE CONFIG IS A COMMENT HERE TOO -------------------------

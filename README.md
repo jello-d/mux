@@ -558,9 +558,9 @@ learn. Drop-in files have owners: an integrator installs
 
 ```
 # $MUX_DIR/partitions/work.partition
-label   Manifest
+label   WORK
 theme   orange
-scan    ~/src/manifest 3
+scan    ~/src/work 3
 ignore  */vendor-repos/*
 ```
 
