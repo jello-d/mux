@@ -1222,522 +1222,585 @@ if [ "$cmd" = resume ]; then
   mux_resume
 fi
 
-# Already running: attach. A live session needs no layout, so this comes before
-# any layout resolution. The claude flag shapes a session only as it is built,
-# so say so on a resume rather than pretending to honour it on an attach.
-if tm has-session -t "=$name" 2>/dev/null; then
-  # Two projects whose basename is the same derive the same name, and
-  # attaching the wrong one is silent: you land in a live session that
-  # looks right and is rooted somewhere else entirely. tmux knows where it
-  # was started (#{session_path}), so compare before attaching.
+_go_attach_live() {
+  # Already running: attach. A live session needs no layout, so this comes
+  # before any layout resolution. The claude flag shapes a session only as it is
+  # built, so say so on a resume rather than pretending to honour it on an
+  # attach.
+  if tm has-session -t "=$name" 2>/dev/null; then
+    # Two projects whose basename is the same derive the same name, and
+    # attaching the wrong one is silent: you land in a live session that
+    # looks right and is rooted somewhere else entirely. tmux knows where it
+    # was started (#{session_path}), so compare before attaching.
+    #
+    # Only when the name was DERIVED. A name you typed is a name you meant,
+    # and looking a session up by it is what a name argument is for; the
+    # guard exists for the case where mux picked the name, not you.
+    if [ -z "$name_arg" ] && [ "$attach" -eq 0 ]; then
+      # Read via list-sessions rather than `display-message -t
+      # "=$name"`: display-message takes a PANE target, where the
+      # exact-match `=` prefix yields nothing and session_path comes
+      # back EMPTY. Matched on the whole rest of the line, so a root
+      # containing a space still compares correctly.
+      _live=$(tm list-sessions -F '#{session_name} #{session_path}' \
+        2>/dev/null \
+        | awk -v n="$name" \
+            '$1==n{sub(/^[^ ]* /,""); print; exit}')
+      # Only when we actually got one. `readlink -f ""` resolves to
+      # the CWD, which would equal the side we are comparing against
+      # and quietly disable this whole guard.
+      # Resolved on both sides, so a symlinked home does not read
+      # as a mismatch.
+      _lr=$(readlink -f -- "${_live:-/}" 2>/dev/null \
+        || printf '%s' "$_live")
+      _hr=$(readlink -f -- "$base" 2>/dev/null \
+        || printf '%s' "$base")
+      if [ -n "$_live" ] && [ "$_lr" != "$_hr" ]; then
+        echo "mux: '$name' is live at" \
+          "$(mux_fold_tilde "$_live"), but you are" \
+          "in $(mux_fold_tilde "$base")" >&2
+        echo "mux:   attach it anyway: mux go $name" \
+          "--attach" >&2
+        echo "mux:   or name this one: mux new <name>" >&2
+        exit 1
+      fi
+    fi
+    [ "$resume" -eq 1 ] && \
+      echo "mux: $name already up; --resume applies only at" \
+        "build" >&2
+    mux_attach
+    exit 0          # reached only under --no-attach; otherwise exec'd away
+  fi
+  return 0
+}
+
+_go_attach_only() {
+  # --attach-only: the session is NOT live, and that is the whole answer. Sited
+  # here, immediately after the attach branch above, so it cannot be reached by
+  # a live session and cannot be sidestepped by any later resolution.
   #
-  # Only when the name was DERIVED. A name you typed is a name you meant,
-  # and looking a session up by it is what a name argument is for; the
-  # guard exists for the case where mux picked the name, not you.
-  if [ -z "$name_arg" ] && [ "$attach" -eq 0 ]; then
-    # Read via list-sessions rather than `display-message -t
-    # "=$name"`: display-message takes a PANE target, where the
-    # exact-match `=` prefix yields nothing and session_path comes
-    # back EMPTY. Matched on the whole rest of the line, so a root
-    # containing a space still compares correctly.
-    _live=$(tm list-sessions -F '#{session_name} #{session_path}' \
-      2>/dev/null \
-      | awk -v n="$name" \
-          '$1==n{sub(/^[^ ]* /,""); print; exit}')
-    # Only when we actually got one. `readlink -f ""` resolves to
-    # the CWD, which would equal the side we are comparing against
-    # and quietly disable this whole guard.
-    # Resolved on both sides, so a symlinked home does not read
-    # as a mismatch.
-    _lr=$(readlink -f -- "${_live:-/}" 2>/dev/null \
-      || printf '%s' "$_live")
-    _hr=$(readlink -f -- "$base" 2>/dev/null \
-      || printf '%s' "$base")
-    if [ -n "$_live" ] && [ "$_lr" != "$_hr" ]; then
-      echo "mux: '$name' is live at" \
-        "$(mux_fold_tilde "$_live"), but you are" \
-        "in $(mux_fold_tilde "$base")" >&2
-      echo "mux:   attach it anyway: mux go $name" \
-        "--attach" >&2
-      echo "mux:   or name this one: mux new <name>" >&2
-      exit 1
-    fi
-  fi
-  [ "$resume" -eq 1 ] && \
-    echo "mux: $name already up; --resume applies only at" \
-      "build" >&2
-  mux_attach
-  exit 0          # reached only under --no-attach; otherwise exec'd away
-fi
-
-# --attach-only: the session is NOT live, and that is the whole answer. Sited
-# here, immediately after the attach branch above, so it cannot be reached by a
-# live session and cannot be sidestepped by any later resolution.
-#
-# WHO ASKS FOR THIS: `mux latch`, on every attempt after the first. A reattach
-# that finds nothing means the far side rebooted, and building a fresh empty
-# session where the work was is the worst available answer, so latch needs a
-# form that REFUSES. The message is matched by latch's classifier, which turns
-# it into the `gone` state, so the wording is a contract and not decoration.
-if [ "$attachonly" -eq 1 ]; then
-  echo "mux: no such session: $name" >&2
-  echo "mux:   --attach-only will not create one" >&2
-  exit "$MUX_EX_NONAME"
-fi
-
-# Building a new session: resolve the blueprint. An explicit PROFILE positional
-# wins and must exist (a typo is an error, never a silent fallback); else a
-# per-project <name>.profile if there is one.
-#
-# With NEITHER, mux builds from its own defaults rather than demanding a file:
-# the shipped layouts/default arrangement, rooted at the project, themed by the
-# global default. That is the whole point of the profile/layout split: a
-# profile records a DEVIATION, so needing none is the normal case, and a fresh
-# install with an empty $MUX_DIR runs `mux go` with nothing configured at all.
-# /dev/null stands in as the empty profile so one code path serves both.
-profile=
-prow=
-if [ -n "$layout_arg" ]; then
-  # An explicit PROFILE positional wins and must exist: a typo here is
-  # an error, never a silent fallback. It may name a row or a breakout.
-  profile=$(mux_prof_find "$layout_arg")
-  if [ -z "$profile" ]; then
-    mux_prof_has "$layout_arg" && prow=$layout_arg
-    [ -n "$prow" ] || {
-      echo "mux: no profile: $layout_arg" >&2; exit 1; }
-  fi
-else
-  # A BREAKOUT file wins over a row of the same name. Promotion is meant
-  # to delete the row, so a surviving one is stale, and the file is the
-  # thing you deliberately promoted. `mux check` reports the pair as
-  # drift rather than leaving it to precedence.
-  profile=$(mux_prof_find "$name")
-  if [ -z "$profile" ] && mux_prof_has "$name"; then prow=$name; fi
-fi
-case $profile in *.layout)
-  echo "mux: $profile is a pre-rename layout file; rename it to" \
-    "${profile%.layout}.profile (see: mux check)" >&2 ;;
-esac
-
-# Does anything we found already declare a root? If so the map is irrelevant.
-hasroot=0
-if [ -n "$prow" ] && [ -n "$(mux_prof_get "$prow" root)" ]; then hasroot=1; fi
-if [ -n "$profile" ] \
-   && grep -qE '^[[:space:]]*root[[:space:]]' "$profile" 2>/dev/null; then
-  hasroot=1
-fi
-
-# A DERIVED name that collides with a profile meaning somewhere ELSE. Exactly
-# the live-session guard one step earlier: a name mux picked FOR you must not
-# silently resolve to a different place. Standing in ~/src/manifest and getting
-# a session rooted at ~/src/work/PlatformOS (because the directory's
-# basename happens to match an unrelated profile) is a surprise, not a
-# service. A name you TYPED is still trusted, since looking a profile up by
-# name is what a name argument is for.
-if [ -z "$name_arg" ] && [ "$cmd" != new ] && [ "$bypath" -eq 0 ]; then
-  _cr=$(_profile_root "$name")
-  if [ -n "$_cr" ]; then
-    _crx=$(readlink -f -- "$(mux_expand_tilde "$_cr")" \
-      2>/dev/null || true)
-    _bsx=$(readlink -f -- "$base" 2>/dev/null \
-      || printf '%s' "$base")
-    if [ -n "$_crx" ] && [ "$_crx" != "$_bsx" ]; then
-      echo "mux: '$name' already means" \
-        "$(mux_fold_tilde "$_cr")," \
-        "but you are in $(mux_fold_tilde "$base")" >&2
-      echo "mux:   that project:     mux go $name" >&2
-      echo "mux:   this one, named:  mux new <name>" >&2
-      exit 1
-    fi
-  fi
-fi
-
-# A TYPED name means "that project", not "wherever I happen to be standing", so
-# its root comes from the discovery map. Bare `mux go` never gets here: the
-# directory is the answer, and there was no name to have mistyped.
-if [ -n "$name_arg" ] && [ "$bypath" -eq 0 ] && [ "$cmd" != new ] \
-   && [ "$hasroot" -eq 0 ]; then
-  # The session set first, then the map: the precedence lives in
-  # mux_resolve_typed_roots, which `mux why` reads too so the two cannot drift.
-  hits=$(mux_resolve_typed_roots "$name" "$part" | cut -f2)
-  nhit=$(printf '%s\n' "$hits" | grep -c . || true)
-  if [ "$nhit" -eq 1 ]; then
-    base=$hits
-  elif [ "$nhit" -gt 1 ]; then
-    echo "mux: '$name' is ambiguous ($nhit projects share it):" >&2
-    printf '%s\n' "$hits" | sed 's/^/         /' >&2
-    echo "mux: name one of them:  cd <dir> && mux new <alias>" >&2
-    exit 1
-  elif [ -z "$prow$profile" ]; then
-    # Step 5: nothing knows this name, so "new session" and "typo"
-    # are indistinguishable. Refuse, and hand over both fixes.
-    echo "mux: nothing known as '$name'" >&2
-    if [ -z "$(mux_scan_roots)" ]; then
-      # "I never looked" is a different failure from "I
-      # looked and did not find it", and suggesting a typo
-      # correction when discovery is off is misleading.
-      echo "mux:   discovery is off for partition" \
-        "'$MUX_CTX_PARTITION' (no scan roots)" >&2
-      echo "mux:   configure one: a 'scan <dir>' line in" \
-        "partitions/$MUX_CTX_PARTITION.partition" >&2
-    else
-      near=$(mux_scan_near "$name" "$MUX_CTX_PARTITION" \
-        | tr '\n' ' ')
-      [ -n "$near" ] && \
-        echo "mux:   did you mean:      $near" >&2
-    fi
-    echo "mux:   or create it here:  mux new $name" >&2
+  # WHO ASKS FOR THIS: `mux latch`, on every attempt after the first. A reattach
+  # that finds nothing means the far side rebooted, and building a fresh empty
+  # session where the work was is the worst available answer, so latch needs a
+  # form that REFUSES. The message is matched by latch's classifier, which turns
+  # it into the `gone` state, so the wording is a contract and not decoration.
+  if [ "$attachonly" -eq 1 ]; then
+    echo "mux: no such session: $name" >&2
+    echo "mux:   --attach-only will not create one" >&2
     exit "$MUX_EX_NONAME"
   fi
-fi
+  return 0
+}
 
-# A row is materialised as the same `key value` stream a breakout file holds,
-# so there is one parse path below whichever form the profile was stored in.
-plabel=$profile
-if [ -n "$prow" ]; then
-  profile=$(mktemp) || { echo "mux: mktemp failed" >&2; exit 1; }
-  mux_prof_directives "$prow" >"$profile" || exit 1
-  plabel="$(mux_prof_file) [$prow]"
-fi
-: "${profile:=/dev/null}"
-: "${plabel:=$profile}"
-
-# Flatten includes into one directive stream, then parse it TWICE: first to
-# resolve the session-wide root/theme and validate the whole shape (touching
-# no tmux state), then to build. A malformed layout (or a missing or cyclic
-# include), fails before any session exists, never leaving a half-built one,
-# and root/theme are position-independent (last one wins).
-flat=$(mktemp) || { echo "mux: mktemp failed" >&2; exit 1; }
-trap 'rm -f "$flat"' EXIT
-expand_profile "$profile" "$plabel" >"$flat"
-
-# Pass 1: resolve root (default the project; a leading ~ expands) and theme,
-# each last-wins across the profile, and validate structure. window/pane/bottom
-# are checked only here; the build pass trusts what got through. `layout` never
-# reaches this stream: expand_profile consumed it to pick the layout file.
-root=$base
-want_theme=
-want_notify=
-want_agent=
-v_win=0
-v_panes=0
-v_bottom=0
-while read -r verb rest; do
-  case $verb in
-  root)
-    root=$(expand_tilde "$rest")
-    [ -d "$root" ] || {
-      echo "mux: root not a dir: $root" >&2
-      exit 1
-    }
-    ;;
-  theme)
-    want_theme=$rest
-    ;;
-  agent)
-    want_agent=$rest
-    ;;
-  notify)
-    case $rest in
-    always|away) want_notify=$rest ;;
-    *)
-      echo "mux: 'notify' wants always|away: $rest" >&2
-      exit 1 ;;
-    esac
-    ;;
-  window)
-    v_win=1
-    v_panes=0
-    v_bottom=0
-    ;;
-  pane)
-    [ "$v_win" -eq 1 ] || {
-      echo "mux: 'pane' before 'window' in $profile" >&2
-      exit 1
-    }
-    # even-horizontal at build would flatten a bottom pane back
-    # into the row, so refuse the order that would wreck it.
-    [ "$v_bottom" -eq 0 ] || {
-      echo "mux: 'pane' after 'bottom' in $profile" >&2
-      exit 1
-    }
-    v_panes=$((v_panes + 1))
-    ;;
-  control|attention)
-    # TWO MARKERS, ONE GRAMMAR, and the directive name IS the option suffix
-    # (`control` -> `@mux-control`), so a third pane class costs one word
-    # here. SHARING THE ARM IS NOT FUSING THE CONCEPTS: they answer different
-    # questions and are read by different consumers (`control` by the send
-    # gate, `attention` by the strip, the notification path and
-    # `next-blocked`), which is the whole point of their being two. They
-    # merely happen to take the same three words today. If one ever gains a
-    # value the other must not, split this arm; nothing else here couples
-    # them.
-    #
-    # QUALIFIES THE PANE JUST DECLARED, which is the shape `bottom` already
-    # uses, because `pane`'s argument is the COMMAND and a modifier cannot
-    # ride it without colliding with an arbitrary command line.
-    #
-    # WHY MUX WRITES THIS AT ALL, when `libexec/mux-agent` reads it and
-    # nothing wrote it before: the send policy's whole vocabulary is
-    # `control:agent`, and with no producer that grant was unreachable, so a
-    # root-owned line nobody could satisfy. A seam nobody can cross for you
-    # is not a seam, it is a gap, which is the argument `mux setup claude`
-    # already makes about another program's config.
-    #
-    # A DECLARATION, NEVER AN INVENTION. The creator of a pane says what the
-    # pane is for; mux records it and classifies nothing on its own. That is
-    # also the line that keeps this safe: there is deliberately no way here
-    # to reclassify a pane somebody else created.
-    [ "$v_panes" -gt 0 ] || {
-      echo "mux: '$verb' with no pane in $profile" >&2
-      exit 1
-    }
-    # REFUSED AFTER `bottom` for the same reason `pane` is: the builder
-    # qualifies the pane it last created, and after a bottom that is no
-    # longer the pane a reader of this file would expect. Silently marking
-    # the wrong pane is the failure this package keeps paying for.
-    [ "$v_bottom" -eq 0 ] || {
-      echo "mux: '$verb' after 'bottom' in $profile" >&2
-      exit 1
-    }
-    # THE VOCABULARY LIVES IN `mux-class_lib` NOW, with its ORDERING, because
-    # `mux agent class` needs the direction and three copies of a word list
-    # with a direction attached is how the three disagree. `mux-agent`'s
-    # `agent|hybrid` is still NOT a shorter spelling of it: that is the
-    # narrower set a POLICY may grant, since `human` is refused before the
-    # policy file is read at all.
-    mux_class_valid "$rest" || {
-      echo "mux: '$verb' wants human|agent|hybrid: $rest" >&2
-      exit 1; }
-    ;;
-  bottom)
-    [ "$v_panes" -gt 0 ] || {
-      echo "mux: 'bottom' with no pane in $profile" >&2
-      exit 1
-    }
-    [ "$v_bottom" -eq 0 ] || {
-      echo "mux: two 'bottom' in one window in $profile" >&2
-      exit 1
-    }
-    bottom_spec "$rest" || exit 1
-    v_bottom=1
-    ;;
-  include)
-    echo "mux: 'include' was replaced by 'layout <name>' in a" \
-      "profile: $profile" >&2
-    echo "mux: convert it:  mux-migrate-profiles" >&2
-    exit 1
-    ;;
-  *)
-    echo "mux: unknown directive: $verb in $profile" >&2
-    exit 1
-    ;;
-  esac
-done <"$flat"
-
-# $plabel, not $layout: nothing ever assigned `layout`, so under set -u
-# this error path aborted with "layout: parameter not set" instead of
-# saying which profile was empty: a broken message on an error path,
-# which is where a clear one matters most.
-[ "$v_win" -eq 1 ] || {
-  echo "mux: empty layout: $plabel" >&2; exit 1; }
-
-# An explicit `theme` overrides the per-mode default (cosmetic; mux-style
-# resolves the default otherwise). Validate before building, so a typo fails
-# with a clear message rather than mux-style erroring on every status tick.
-# Validate against the FRAGMENT FILE, not the loaded @theme-* option: on a cold
-# socket the server (and its options) does not exist until pass 2 builds it, so
-# an option check would spuriously reject every theme on the first `mux go`
-# after boot/kill-all. The file is the source of truth, and its presence
-# guarantees mux-themes load will push @theme-<name>-* at server start.
-if [ -n "$want_theme" ]; then
-  [ -n "$(mux_data_find themes "$want_theme" .theme)" ] || {
-    echo "mux: unknown theme: $want_theme" \
-      "(see: mux help colors)" >&2
-    exit 1
-  }
-fi
-
-# The session's agent (for `pane agent`): the layout's `agent` directive, else
-# claude. Validate the profile exists here so a typo fails at build with a clear
-# message, not later as an empty pane command.
-if [ -n "$want_agent" ]; then
-  [ -n "$(_find_agent "$want_agent")" ] || {
-    echo "mux: unknown agent: $want_agent" \
-      "(see: mux help agents)" >&2
-    exit 1
-  }
-fi
-# The context's agent, then mux's built-in. `agent` is a documented context
-# key; it did nothing until now, which is the asserted-vs-actual drift this
-# project exists to avoid.
-active_agent=${want_agent:-${MUX_CFG_agent:-claude}}
-
-# No `theme` in the profile: derive one from the session name, when
-# the resolved context says to (`derive hash`). A profile that pins a colour
-# still wins; this only fills the gap that used to send every unconfigured
-# session to the same default, which is what made pinning a colour the single
-# most common reason to write a profile at all.
-if [ -z "$want_theme" ]; then
-  if [ -n "$MUX_CFG_theme" ]; then
-    want_theme=$MUX_CFG_theme          # a context said so
-  elif [ "${MUX_CFG_derive:-hash}" = hash ]; then
-    want_theme=$(mux_resolve_hash_theme "$name")  # nobody did; derive one
+_go_pick_profile() {
+  # Building a new session: resolve the blueprint. An explicit PROFILE
+  # positional wins and must exist (a typo is an error, never a silent
+  # fallback); else a per-project <name>.profile if there is one.
+  #
+  # With NEITHER, mux builds from its own defaults rather than demanding a file:
+  # the shipped layouts/default arrangement, rooted at the project, themed by
+  # the global default. That is the whole point of the profile/layout split: a
+  # profile records a DEVIATION, so needing none is the normal case, and a fresh
+  # install with an empty $MUX_DIR runs `mux go` with nothing configured at all.
+  # /dev/null stands in as the empty profile so one code path serves both.
+  profile=
+  prow=
+  if [ -n "$layout_arg" ]; then
+    # An explicit PROFILE positional wins and must exist: a typo here is
+    # an error, never a silent fallback. It may name a row or a breakout.
+    profile=$(mux_prof_find "$layout_arg")
+    if [ -z "$profile" ]; then
+      mux_prof_has "$layout_arg" && prow=$layout_arg
+      [ -n "$prow" ] || {
+        echo "mux: no profile: $layout_arg" >&2; exit 1; }
+    fi
   else
-    want_theme=$MUX_THEME_FALLBACK
+    # A BREAKOUT file wins over a row of the same name. Promotion is meant
+    # to delete the row, so a surviving one is stale, and the file is the
+    # thing you deliberately promoted. `mux check` reports the pair as
+    # drift rather than leaving it to precedence.
+    profile=$(mux_prof_find "$name")
+    if [ -z "$profile" ] && mux_prof_has "$name"; then prow=$name; fi
   fi
-fi
-
-# Pass 2: build. Everything is validated, so this only executes; using the
-# now-final root for every pane's -c, wherever root sat in the source.
-# The geometry a session is BUILT at (`-x W -y H`, or empty with no
-# terminal to ask) lives in lib/mux-build_lib with the rest of the build,
-# sourced below. Its header carries the rescale story that made it exist.
-_geom=$(_session_geometry)
-
-have_session=0
-firstwin=
-firstpane=
-agentwin=
-agentpane=
-win=
-paneseen=0
-# bottom_spec ANSWERS in b_min/b_max/b_cmd, because POSIX sh cannot return
-# three fields; its arm below reads all three. See mux-build_lib's header.
-# shellcheck disable=SC2154
-while read -r verb rest; do
-  case $verb in
-  window)
-    if [ "$have_session" -eq 0 ]; then
-      # shellcheck disable=SC2086
-      tm new-session -d $_geom -s "$name" -n "$rest" \
-        -c "$root"
-      have_session=1
-      # AFTER the create, not before: this is the call that brings the
-      # server into existence, and the wiring probe deliberately does
-      # not. Everything built below (the layout, the theme, the agent
-      # panes) then runs against a server that has mux's hooks.
-      mux_wire || true
-      # AND THE ENVIRONMENT, before anything is built in the session:
-      # the agent panes below inherit it, and a pane environment is
-      # fixed at exec, so after the build is too late for them.
-      mux_env_ensure "$name" || true
-      win=$(tm display-message -p -t "$name:" \
-        '#{window_index}')
-      firstwin=$win
-      firstpane=$(tm display-message -p -t "$name:" \
-        '#{pane_id}')
-    else
-      tm new-window -a -t "$name:" -n "$rest" -c "$root"
-      win=$(tm display-message -p -t "$name:" \
-        '#{window_index}')
-    fi
-    paneseen=0
-    ;;
-  pane)
-    # Run the command AS the pane's process, never typed in, so it
-    # cannot race shell startup. The first pane reuses the shell the
-    # window opened with (respawn); the rest are fresh splits.
-    proc=$(pane_process "$rest")
-    if [ "$paneseen" -gt 0 ]; then
-      tm split-window -h -t "$name:$win" -c "$root" "$proc"
-      tm select-layout -t "$name:$win" even-horizontal
-      thispane=$(tm display-message -p -t "$name:$win" \
-        '#{pane_id}')
-    else
-      tm respawn-pane -k -t "$name:$win" -c "$root" "$proc"
-      thispane=$(tm display-message -p -t "$name:$win" \
-        '#{pane_id}')
-    fi
-    # Remember the FIRST agent pane, so the session opens ON the
-    # agent: it is the pane you came to look at, and landing left of
-    # it cost a keystroke on every single launch. A `pane <name>`
-    # that names an agent counts too. Falls back to the first pane
-    # when a layout has no agent at all.
-    _isagent=0
-    case $rest in
-    agent) _isagent=1 ;;
-    *) [ -n "$(_find_agent "${rest%% *}")" ] && _isagent=1 ;;
-    esac
-    if [ "$_isagent" -eq 1 ]; then
-      # Marked on the PANE, the same way a bottom pane carries
-      # @mux-bottom. Without it `mux save` cannot tell the
-      # agent pane from any other: it reads the running
-      # command, and an agent that has exited (or was never
-      # installed) just looks like a shell, so a round trip
-      # would quietly turn `pane agent` into a bare `pane`.
-      tm set-option -p -t "$thispane" @mux-agent 1
-      [ -n "$agentpane" ] || { agentwin=$win
-        agentpane=$thispane; }
-    fi
-    paneseen=$((paneseen + 1))
-    ;;
-  control|attention)
-    # THE VALIDATOR ABOVE READS THE SAME `$flat` AND RUNS FIRST, so a pane
-    # precedes this and the value is one of the three. Re-checking here would
-    # be a second guard for one condition, which makes NEITHER killable: this
-    # package has measured that twice and deleted the redundant half both
-    # times.
-    tm set-option -p -t "$thispane" "@mux-$verb" "$rest"
-    ;;
-  bottom)
-    # N pins the height; MIN-MAX tracks the window between those
-    # bounds. Either way the size is recorded on the pane and
-    # re-applied by mux-pin, because tmux rescales panes
-    # proportionally on resize and would otherwise inflate this one
-    # well past its split height.
-    bottom_spec "$rest" || exit 1
-    # -f spans the full window width, so the new pane sits under
-    # every pane above rather than splitting only the active one. A
-    # command runs as the pane's process; with none it is a shell.
-    bproc=
-    [ -n "$b_cmd" ] && bproc=$(pane_process "$b_cmd")
-    # THE TWO ARMS WRAP DIFFERENTLY ON PURPOSE, and this is not a style
-    # choice to harmonise away: wrapped identically they were the SAME LINE
-    # TWICE, each ending in a continuation, so the height that reaches tmux
-    # could not be a mutation anchor at all (the corpus refuses a target
-    # that is ambiguous OR a line continuation, and this was both). The
-    # `else` arm is one line now, which is what `bottom-built-at-the-min`
-    # anchors on.
-    #
-    # THE COLLAPSE WAS THE OTHER OPTION AND WAS REFUSED. `set -- -v -f -l
-    # "$b_max" ...` then one call reads better and is MEASURABLY safe today
-    # (nothing after this loop reads the script's positionals), but it
-    # mutates the SCRIPT's `$@` from the middle of the build path to buy a
-    # local convenience, and "nothing reads them later" is a whole-file
-    # property that rots the first time somebody appends a line.
-    if [ -n "$bproc" ]; then
-      tm split-window -v -f -l "$b_max" -t "$name:$win" \
-        -c "$root" "$bproc"
-    else
-      tm split-window -v -f -l "$b_max" -t "$name:$win" -c "$root"
-    fi
-    bpane=$(tm display-message -p -t "$name:$win" '#{pane_id}')
-    tm set-option -p -t "$bpane" @mux-bottom "$b_min-$b_max"
-    ;;
+  case $profile in *.layout)
+    echo "mux: $profile is a pre-rename layout file; rename it to" \
+      "${profile%.layout}.profile (see: mux check)" >&2 ;;
   esac
-done <"$flat"
 
-rm -f "$flat"
-trap - EXIT
+  # Does anything we found already declare a root? If so the map is irrelevant.
+  hasroot=0
+  if [ -n "$prow" ] && [ -n "$(mux_prof_get "$prow" root)" ]; then hasroot=1; fi
+  if [ -n "$profile" ] \
+     && grep -qE '^[[:space:]]*root[[:space:]]' "$profile" 2>/dev/null; then
+    hasroot=1
+  fi
+  return 0
+}
 
-# Apply the validated theme now that the session exists.
-[ -n "$want_theme" ] && tm set-option -t "$name" @mux-theme "$want_theme"
+_go_resolve_name() {
+  # A DERIVED name that collides with a profile meaning somewhere ELSE. Exactly
+  # the live-session guard one step earlier: a name mux picked FOR you must not
+  # silently resolve to a different place. Standing in ~/src/manifest and
+  # getting a session rooted at ~/src/work/PlatformOS (because the
+  # directory's basename happens to match an unrelated profile) is a surprise,
+  # not a service. A name you TYPED is still trusted, since looking a profile up
+  # by name is what a name argument is for.
+  if [ -z "$name_arg" ] && [ "$cmd" != new ] && [ "$bypath" -eq 0 ]; then
+    _cr=$(_profile_root "$name")
+    if [ -n "$_cr" ]; then
+      _crx=$(readlink -f -- "$(mux_expand_tilde "$_cr")" \
+        2>/dev/null || true)
+      _bsx=$(readlink -f -- "$base" 2>/dev/null \
+        || printf '%s' "$base")
+      if [ -n "$_crx" ] && [ "$_crx" != "$_bsx" ]; then
+        echo "mux: '$name' already means" \
+          "$(mux_fold_tilde "$_cr")," \
+          "but you are in $(mux_fold_tilde "$base")" >&2
+        echo "mux:   that project:     mux go $name" >&2
+        echo "mux:   this one, named:  mux new <name>" >&2
+        exit 1
+      fi
+    fi
+  fi
 
-# `notify always` fires the agent notification even while you are looking at the
-# pane; `away` (also the default when unset) suppresses it then. Read by
-# mux-agent-state-emit as @mux-notify-always.
-if [ "$want_notify" = always ]; then
-  tm set-option -t "$name" @mux-notify-always 1
-elif [ "$want_notify" = away ]; then
-  tm set-option -t "$name" @mux-notify-always 0
-fi
+  # A TYPED name means "that project", not "wherever I happen to be standing",
+  # so its root comes from the discovery map. Bare `mux go` never gets here: the
+  # directory is the answer, and there was no name to have mistyped.
+  if [ -n "$name_arg" ] && [ "$bypath" -eq 0 ] && [ "$cmd" != new ] \
+     && [ "$hasroot" -eq 0 ]; then
+    # The session set first, then the map: the precedence lives in
+    # mux_resolve_typed_roots, which `mux why` reads too so the two cannot
+    # drift.
+    hits=$(mux_resolve_typed_roots "$name" "$part" | cut -f2)
+    nhit=$(printf '%s\n' "$hits" | grep -c . || true)
+    if [ "$nhit" -eq 1 ]; then
+      base=$hits
+    elif [ "$nhit" -gt 1 ]; then
+      echo "mux: '$name' is ambiguous ($nhit projects share it):" >&2
+      printf '%s\n' "$hits" | sed 's/^/         /' >&2
+      echo "mux: name one of them:  cd <dir> && mux new <alias>" >&2
+      exit 1
+    elif [ -z "$prow$profile" ]; then
+      # Step 5: nothing knows this name, so "new session" and "typo"
+      # are indistinguishable. Refuse, and hand over both fixes.
+      echo "mux: nothing known as '$name'" >&2
+      if [ -z "$(mux_scan_roots)" ]; then
+        # "I never looked" is a different failure from "I
+        # looked and did not find it", and suggesting a typo
+        # correction when discovery is off is misleading.
+        echo "mux:   discovery is off for partition" \
+          "'$MUX_CTX_PARTITION' (no scan roots)" >&2
+        echo "mux:   configure one: a 'scan <dir>' line in" \
+          "partitions/$MUX_CTX_PARTITION.partition" >&2
+      else
+        near=$(mux_scan_near "$name" "$MUX_CTX_PARTITION" \
+          | tr '\n' ' ')
+        [ -n "$near" ] && \
+          echo "mux:   did you mean:      $near" >&2
+      fi
+      echo "mux:   or create it here:  mux new $name" >&2
+      exit "$MUX_EX_NONAME"
+    fi
+  fi
+  return 0
+}
 
-# Land on the agent pane if the layout has one, else the first pane (by id, so
-# base-index is irrelevant). Selecting the agent's WINDOW too, since an agent in
-# a later window is still the thing you opened the session for.
-tm select-window -t "$name:${agentwin:-$firstwin}"
-tm select-pane -t "${agentpane:-$firstpane}"
+_go_flatten() {
+  # A row is materialised as the same `key value` stream a breakout file holds,
+  # so there is one parse path below whichever form the profile was stored in.
+  plabel=$profile
+  if [ -n "$prow" ]; then
+    profile=$(mktemp) || { echo "mux: mktemp failed" >&2; exit 1; }
+    mux_prof_directives "$prow" >"$profile" || exit 1
+    plabel="$(mux_prof_file) [$prow]"
+  fi
+  : "${profile:=/dev/null}"
+  : "${plabel:=$profile}"
 
-mux_attach
+  # Flatten includes into one directive stream, then parse it TWICE: first to
+  # resolve the session-wide root/theme and validate the whole shape (touching
+  # no tmux state), then to build. A malformed layout (or a missing or cyclic
+  # include), fails before any session exists, never leaving a half-built one,
+  # and root/theme are position-independent (last one wins).
+  flat=$(mktemp) || { echo "mux: mktemp failed" >&2; exit 1; }
+  trap 'rm -f "$flat"' EXIT
+  expand_profile "$profile" "$plabel" >"$flat"
+  return 0
+}
+
+_go_validate() {
+  # Pass 1: resolve root (default the project; a leading ~ expands) and theme,
+  # each last-wins across the profile, and validate structure.
+  # window/pane/bottom are checked only here; the build pass trusts what got
+  # through. `layout` never reaches this stream: expand_profile consumed it to
+  # pick the layout file.
+  root=$base
+  want_theme=
+  want_notify=
+  want_agent=
+  v_win=0
+  v_panes=0
+  v_bottom=0
+  while read -r verb rest; do
+    case $verb in
+    root)
+      root=$(expand_tilde "$rest")
+      [ -d "$root" ] || {
+        echo "mux: root not a dir: $root" >&2
+        exit 1
+      }
+      ;;
+    theme)
+      want_theme=$rest
+      ;;
+    agent)
+      want_agent=$rest
+      ;;
+    notify)
+      case $rest in
+      always|away) want_notify=$rest ;;
+      *)
+        echo "mux: 'notify' wants always|away: $rest" >&2
+        exit 1 ;;
+      esac
+      ;;
+    window)
+      v_win=1
+      v_panes=0
+      v_bottom=0
+      ;;
+    pane)
+      [ "$v_win" -eq 1 ] || {
+        echo "mux: 'pane' before 'window' in $profile" >&2
+        exit 1
+      }
+      # even-horizontal at build would flatten a bottom pane back
+      # into the row, so refuse the order that would wreck it.
+      [ "$v_bottom" -eq 0 ] || {
+        echo "mux: 'pane' after 'bottom' in $profile" >&2
+        exit 1
+      }
+      v_panes=$((v_panes + 1))
+      ;;
+    control|attention)
+      # TWO MARKERS, ONE GRAMMAR, and the directive name IS the option suffix
+      # (`control` -> `@mux-control`), so a third pane class costs one word
+      # here. SHARING THE ARM IS NOT FUSING THE CONCEPTS: they answer different
+      # questions and are read by different consumers (`control` by the send
+      # gate, `attention` by the strip, the notification path and
+      # `next-blocked`), which is the whole point of their being two. They
+      # merely happen to take the same three words today. If one ever gains a
+      # value the other must not, split this arm; nothing else here couples
+      # them.
+      #
+      # QUALIFIES THE PANE JUST DECLARED, which is the shape `bottom` already
+      # uses, because `pane`'s argument is the COMMAND and a modifier cannot
+      # ride it without colliding with an arbitrary command line.
+      #
+      # WHY MUX WRITES THIS AT ALL, when `libexec/mux-agent` reads it and
+      # nothing wrote it before: the send policy's whole vocabulary is
+      # `control:agent`, and with no producer that grant was unreachable, so a
+      # root-owned line nobody could satisfy. A seam nobody can cross for you
+      # is not a seam, it is a gap, which is the argument `mux setup claude`
+      # already makes about another program's config.
+      #
+      # A DECLARATION, NEVER AN INVENTION. The creator of a pane says what the
+      # pane is for; mux records it and classifies nothing on its own. That is
+      # also the line that keeps this safe: there is deliberately no way here
+      # to reclassify a pane somebody else created.
+      [ "$v_panes" -gt 0 ] || {
+        echo "mux: '$verb' with no pane in $profile" >&2
+        exit 1
+      }
+      # REFUSED AFTER `bottom` for the same reason `pane` is: the builder
+      # qualifies the pane it last created, and after a bottom that is no
+      # longer the pane a reader of this file would expect. Silently marking
+      # the wrong pane is the failure this package keeps paying for.
+      [ "$v_bottom" -eq 0 ] || {
+        echo "mux: '$verb' after 'bottom' in $profile" >&2
+        exit 1
+      }
+      # THE VOCABULARY LIVES IN `mux-class_lib` NOW, with its ORDERING, because
+      # `mux agent class` needs the direction and three copies of a word list
+      # with a direction attached is how the three disagree. `mux-agent`'s
+      # `agent|hybrid` is still NOT a shorter spelling of it: that is the
+      # narrower set a POLICY may grant, since `human` is refused before the
+      # policy file is read at all.
+      mux_class_valid "$rest" || {
+        echo "mux: '$verb' wants human|agent|hybrid: $rest" >&2
+        exit 1; }
+      ;;
+    bottom)
+      [ "$v_panes" -gt 0 ] || {
+        echo "mux: 'bottom' with no pane in $profile" >&2
+        exit 1
+      }
+      [ "$v_bottom" -eq 0 ] || {
+        echo "mux: two 'bottom' in one window in $profile" >&2
+        exit 1
+      }
+      bottom_spec "$rest" || exit 1
+      v_bottom=1
+      ;;
+    include)
+      echo "mux: 'include' was replaced by 'layout <name>' in a" \
+        "profile: $profile" >&2
+      echo "mux: convert it:  mux-migrate-profiles" >&2
+      exit 1
+      ;;
+    *)
+      echo "mux: unknown directive: $verb in $profile" >&2
+      exit 1
+      ;;
+    esac
+  done <"$flat"
+
+  # $plabel, not $layout: nothing ever assigned `layout`, so under set -u
+  # this error path aborted with "layout: parameter not set" instead of
+  # saying which profile was empty: a broken message on an error path,
+  # which is where a clear one matters most.
+  [ "$v_win" -eq 1 ] || {
+    echo "mux: empty layout: $plabel" >&2; exit 1; }
+  return 0
+}
+
+_go_settle() {
+  # An explicit `theme` overrides the per-mode default (cosmetic; mux-style
+  # resolves the default otherwise). Validate before building, so a typo fails
+  # with a clear message rather than mux-style erroring on every status tick.
+  # Validate against the FRAGMENT FILE, not the loaded @theme-* option: on a
+  # cold socket the server (and its options) does not exist until pass 2 builds
+  # it, so an option check would spuriously reject every theme on the first `mux
+  # go` after boot/kill-all. The file is the source of truth, and its presence
+  # guarantees mux-themes load will push @theme-<name>-* at server start.
+  if [ -n "$want_theme" ]; then
+    [ -n "$(mux_data_find themes "$want_theme" .theme)" ] || {
+      echo "mux: unknown theme: $want_theme" \
+        "(see: mux help colors)" >&2
+      exit 1
+    }
+  fi
+
+  # The session's agent (for `pane agent`): the layout's `agent` directive, else
+  # claude. Validate the profile exists here so a typo fails at build with a
+  # clear message, not later as an empty pane command.
+  if [ -n "$want_agent" ]; then
+    [ -n "$(_find_agent "$want_agent")" ] || {
+      echo "mux: unknown agent: $want_agent" \
+        "(see: mux help agents)" >&2
+      exit 1
+    }
+  fi
+  # The context's agent, then mux's built-in. `agent` is a documented context
+  # key; it did nothing until now, which is the asserted-vs-actual drift this
+  # project exists to avoid.
+  active_agent=${want_agent:-${MUX_CFG_agent:-claude}}
+
+  # No `theme` in the profile: derive one from the session name, when
+  # the resolved context says to (`derive hash`). A profile that pins a colour
+  # still wins; this only fills the gap that used to send every unconfigured
+  # session to the same default, which is what made pinning a colour the single
+  # most common reason to write a profile at all.
+  if [ -z "$want_theme" ]; then
+    if [ -n "$MUX_CFG_theme" ]; then
+      want_theme=$MUX_CFG_theme          # a context said so
+    elif [ "${MUX_CFG_derive:-hash}" = hash ]; then
+      want_theme=$(mux_resolve_hash_theme "$name")  # nobody did; derive one
+    else
+      want_theme=$MUX_THEME_FALLBACK
+    fi
+  fi
+  return 0
+}
+
+_go_build() {
+  # Pass 2: build. Everything is validated, so this only executes; using the
+  # now-final root for every pane's -c, wherever root sat in the source.
+  # The geometry a session is BUILT at (`-x W -y H`, or empty with no
+  # terminal to ask) lives in lib/mux-build_lib with the rest of the build,
+  # sourced below. Its header carries the rescale story that made it exist.
+  _geom=$(_session_geometry)
+
+  have_session=0
+  firstwin=
+  firstpane=
+  agentwin=
+  agentpane=
+  win=
+  paneseen=0
+  # bottom_spec ANSWERS in b_min/b_max/b_cmd, because POSIX sh cannot return
+  # three fields; its arm below reads all three. See mux-build_lib's header.
+  # shellcheck disable=SC2154
+  while read -r verb rest; do
+    case $verb in
+    window)
+      if [ "$have_session" -eq 0 ]; then
+        # shellcheck disable=SC2086
+        tm new-session -d $_geom -s "$name" -n "$rest" \
+          -c "$root"
+        have_session=1
+        # AFTER the create, not before: this is the call that brings the
+        # server into existence, and the wiring probe deliberately does
+        # not. Everything built below (the layout, the theme, the agent
+        # panes) then runs against a server that has mux's hooks.
+        mux_wire || true
+        # AND THE ENVIRONMENT, before anything is built in the session:
+        # the agent panes below inherit it, and a pane environment is
+        # fixed at exec, so after the build is too late for them.
+        mux_env_ensure "$name" || true
+        win=$(tm display-message -p -t "$name:" \
+          '#{window_index}')
+        firstwin=$win
+        firstpane=$(tm display-message -p -t "$name:" \
+          '#{pane_id}')
+      else
+        tm new-window -a -t "$name:" -n "$rest" -c "$root"
+        win=$(tm display-message -p -t "$name:" \
+          '#{window_index}')
+      fi
+      paneseen=0
+      ;;
+    pane)
+      # Run the command AS the pane's process, never typed in, so it
+      # cannot race shell startup. The first pane reuses the shell the
+      # window opened with (respawn); the rest are fresh splits.
+      proc=$(pane_process "$rest")
+      if [ "$paneseen" -gt 0 ]; then
+        tm split-window -h -t "$name:$win" -c "$root" "$proc"
+        tm select-layout -t "$name:$win" even-horizontal
+        thispane=$(tm display-message -p -t "$name:$win" \
+          '#{pane_id}')
+      else
+        tm respawn-pane -k -t "$name:$win" -c "$root" "$proc"
+        thispane=$(tm display-message -p -t "$name:$win" \
+          '#{pane_id}')
+      fi
+      # Remember the FIRST agent pane, so the session opens ON the
+      # agent: it is the pane you came to look at, and landing left of
+      # it cost a keystroke on every single launch. A `pane <name>`
+      # that names an agent counts too. Falls back to the first pane
+      # when a layout has no agent at all.
+      _isagent=0
+      case $rest in
+      agent) _isagent=1 ;;
+      *) [ -n "$(_find_agent "${rest%% *}")" ] && _isagent=1 ;;
+      esac
+      if [ "$_isagent" -eq 1 ]; then
+        # Marked on the PANE, the same way a bottom pane carries
+        # @mux-bottom. Without it `mux save` cannot tell the
+        # agent pane from any other: it reads the running
+        # command, and an agent that has exited (or was never
+        # installed) just looks like a shell, so a round trip
+        # would quietly turn `pane agent` into a bare `pane`.
+        tm set-option -p -t "$thispane" @mux-agent 1
+        [ -n "$agentpane" ] || { agentwin=$win
+          agentpane=$thispane; }
+      fi
+      paneseen=$((paneseen + 1))
+      ;;
+    control|attention)
+      # THE VALIDATOR ABOVE READS THE SAME `$flat` AND RUNS FIRST, so a pane
+      # precedes this and the value is one of the three. Re-checking here would
+      # be a second guard for one condition, which makes NEITHER killable: this
+      # package has measured that twice and deleted the redundant half both
+      # times.
+      tm set-option -p -t "$thispane" "@mux-$verb" "$rest"
+      ;;
+    bottom)
+      # N pins the height; MIN-MAX tracks the window between those
+      # bounds. Either way the size is recorded on the pane and
+      # re-applied by mux-pin, because tmux rescales panes
+      # proportionally on resize and would otherwise inflate this one
+      # well past its split height.
+      bottom_spec "$rest" || exit 1
+      # -f spans the full window width, so the new pane sits under
+      # every pane above rather than splitting only the active one. A
+      # command runs as the pane's process; with none it is a shell.
+      bproc=
+      [ -n "$b_cmd" ] && bproc=$(pane_process "$b_cmd")
+      # THE TWO ARMS WRAP DIFFERENTLY ON PURPOSE, and this is not a style
+      # choice to harmonise away: wrapped identically they were the SAME LINE
+      # TWICE, each ending in a continuation, so the height that reaches tmux
+      # could not be a mutation anchor at all (the corpus refuses a target
+      # that is ambiguous OR a line continuation, and this was both). The
+      # `else` arm is one line now, which is what `bottom-built-at-the-min`
+      # anchors on.
+      #
+      # THE COLLAPSE WAS THE OTHER OPTION AND WAS REFUSED. `set -- -v -f -l
+      # "$b_max" ...` then one call reads better and is MEASURABLY safe today
+      # (nothing after this loop reads the script's positionals), but it
+      # mutates the SCRIPT's `$@` from the middle of the build path to buy a
+      # local convenience, and "nothing reads them later" is a whole-file
+      # property that rots the first time somebody appends a line.
+      if [ -n "$bproc" ]; then
+        tm split-window -v -f -l "$b_max" -t "$name:$win" \
+          -c "$root" "$bproc"
+      else
+        tm split-window -v -f -l "$b_max" -t "$name:$win" -c "$root"
+      fi
+      bpane=$(tm display-message -p -t "$name:$win" '#{pane_id}')
+      tm set-option -p -t "$bpane" @mux-bottom "$b_min-$b_max"
+      ;;
+    esac
+  done <"$flat"
+
+  rm -f "$flat"
+  trap - EXIT
+  return 0
+}
+
+_go_finish() {
+  # Apply the validated theme now that the session exists.
+  [ -n "$want_theme" ] && tm set-option -t "$name" @mux-theme "$want_theme"
+
+  # `notify always` fires the agent notification even while you are looking at
+  # the pane; `away` (also the default when unset) suppresses it then. Read by
+  # mux-agent-state-emit as @mux-notify-always.
+  if [ "$want_notify" = always ]; then
+    tm set-option -t "$name" @mux-notify-always 1
+  elif [ "$want_notify" = away ]; then
+    tm set-option -t "$name" @mux-notify-always 0
+  fi
+
+  # Land on the agent pane if the layout has one, else the first pane (by id, so
+  # base-index is irrelevant). Selecting the agent's WINDOW too, since an agent
+  # in a later window is still the thing you opened the session for.
+  tm select-window -t "$name:${agentwin:-$firstwin}"
+  tm select-pane -t "${agentpane:-$firstpane}"
+
+  mux_attach
+  return 0
+}
+
+# --- go / attach: the session build flow, in phases -----------------------
+# NINE PHASES AND A DRIVER, converted from 511 lines of inline top-level
+# code (2026-10-05). Every value they pass each other is a GLOBAL, exactly as
+# it was when this was straight-line code, which is what makes the conversion
+# behaviour-preserving rather than a redesign: the phases were already
+# separated by blank lines and an introducing comment, and the boundaries are
+# those, not invented ones.
+#
+# WHY FUNCTIONS AT ALL, since the file reads perfectly well as a sequence:
+# this slice is the last of the breakup, and a lib cannot be a slab of
+# top-level logic that mutates its caller (the shape refused for the option
+# loop an hour ago). Functions are the precondition for the move, so they
+# come first and on their own, with their own differential.
+#
+# EACH PHASE ENDS `return 0` and that is load-bearing rather than tidy:
+# several end in an `&&` list or a test that is FALSE in the common case, and
+# a function called bare under `set -e` then kills the front end SILENTLY.
+# That bug shipped in mux-args_lib for about a minute today and twice before
+# that, so the rule is mechanical now: a phase that answers nothing says so.
+mux_go() {
+  _go_attach_live
+  _go_attach_only
+  _go_pick_profile
+  _go_resolve_name
+  _go_flatten
+  _go_validate
+  _go_settle
+  _go_build
+  _go_finish
+}
+
+mux_go

@@ -322,8 +322,8 @@ m config error (exit 2)
 = attach-only-creates-anyway
 f bin/mux
 t mux-attach-only
-- if [ "$attachonly" -eq 1 ]; then
-+ if false; then
+-   if [ "$attachonly" -eq 1 ]; then
++   if false; then
 m on a dead session must say
 
 = latch-negotiation-not-cached
@@ -2936,8 +2936,8 @@ t mux-pane-class
 # root-owned line nobody could satisfy. With this gone it is unreachable
 # again, and silently, because a pane with no option reads as `human`, which
 # is a REFUSAL and therefore looks like the policy working.
--     tm set-option -p -t "$thispane" "@mux-$verb" "$rest"
-+     :
+-       tm set-option -p -t "$thispane" "@mux-$verb" "$rest"
++       :
 m there was no @mux-control call at all
 
 = control-class-marks-the-wrong-pane
@@ -2949,8 +2949,8 @@ t mux-pane-class
 # mutation is one word. A fixture answering `%1` to every pane_id query
 # could not tell these apart, which is why this file's stub counts panes
 # rather than queries.
--     tm set-option -p -t "$thispane" "@mux-$verb" "$rest"
-+     tm set-option -p -t "$firstpane" "@mux-$verb" "$rest"
+-       tm set-option -p -t "$thispane" "@mux-$verb" "$rest"
++       tm set-option -p -t "$firstpane" "@mux-$verb" "$rest"
 m the class landed on the wrong pane
 
 = control-class-accepts-any-word
@@ -2988,8 +2988,8 @@ t mux-pane-class
 # actually wrote; hardcoding either directive sends the reader to the wrong
 # one, which is the whole cost of merging them and the reason this is
 # guarded rather than trusted.
--       echo "mux: '$verb' with no pane in $profile" >&2
-+       echo "mux: 'control' with no pane in $profile" >&2
+-         echo "mux: '$verb' with no pane in $profile" >&2
++         echo "mux: 'control' with no pane in $profile" >&2
 m 'attention' with no pane
 
 = attention-class-lost-on-save
@@ -4009,14 +4009,14 @@ m did not carry the window size
 = bottom-built-at-the-min
 f bin/mux
 t mux-default-layout
--       tm split-window -v -f -l "$b_max" -t "$name:$win" -c "$root"
-+       tm split-window -v -f -l "$b_min" -t "$name:$win" -c "$root"
+-         tm split-window -v -f -l "$b_max" -t "$name:$win" -c "$root"
++         tm split-window -v -f -l "$b_min" -t "$name:$win" -c "$root"
 m not built at the spec's MAX
 = bottom-command-dropped
 f bin/mux
 t mux-profile
--         -c "$root" "$bproc"
-+         -c "$root"
+-           -c "$root" "$bproc"
++           -c "$root"
 m command never reached tmux
 = conf-full-line-comments-kept
 f lib/mux-conf_lib
