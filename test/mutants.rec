@@ -809,14 +809,14 @@ t mux-latch
 m drew escape sequences into a
 
 = resume-rebuild-not-logged
-f bin/mux
+f lib/mux-resume_lib
 t mux-resume
 -     && mux_log resume "rebuilt$rs_builtn ($rs_up already up)"
 +     && true
 m rebuild wrote nothing to the log
 
 = resume-failure-not-logged
-f bin/mux
+f lib/mux-resume_lib
 t mux-resume
 -     mux_log resume "could NOT build:$(printf '%s' "$rs_failed" \
 +     true "$(printf '%s' "$rs_failed" \
@@ -1263,14 +1263,14 @@ t mux-resume
 m an unknown partition should exit 3
 
 = resume-focus-check-removed
-f bin/mux
+f lib/mux-resume_lib
 t mux-resume
 -      && ! mux_sess_has "$rs_focus" "$rs_key"; then
 +      && false; then
 m an unknown focus session should exit 3
 
 = resume-focus-checked-after-the-rebuild
-f bin/mux
+f lib/mux-resume_lib
 t mux-resume
 -     printf '%s\n' "$rs_set" | sed 's/^/mux:   /' >&2
 +     _resume_rebuild "$rs_key" "$rs_set"
@@ -3255,7 +3255,7 @@ m accepted a socket with NO LISTENER
 # agent. The fixture makes the oldest (bravo) and the marked one
 # (delta) DIFFERENT, or neither of these could be killed.
 = resume-lands-on-oldest-not-last-active
-f bin/mux
+f lib/mux-resume_lib
 t mux-resume
 -   _rl=$(mux_landing_get "${2:-}")
 +   _rl=
@@ -3265,7 +3265,7 @@ m session last active: the mark said delta
 # whose root moved, or a session killed from raw tmux, is still in the
 # file; attaching to it would fail where falling through cannot.
 = resume-landing-not-checked-for-life
-f bin/mux
+f lib/mux-resume_lib
 t mux-resume
 -   if [ -n "$_rl" ] && tm has-session -t "=$_rl" 2>/dev/null; then
 +   if [ -n "$_rl" ]; then
@@ -3302,7 +3302,7 @@ m recording must be silent, printed
 # stalls every NETWORK relatch for ever, which is the case the fixture
 # with a live server covers.
 = resume-gate-ignores-whether-a-server-exists
-f bin/mux
+f lib/mux-resume_lib
 t mux-resume
 -   if [ "$nowaitenv" -eq 0 ] && ! tm list-sessions >/dev/null 2>&1 \
 +   if [ "$nowaitenv" -eq 0 ] && true \
@@ -3312,7 +3312,7 @@ m NETWORK relatch (server already up) must not wait
 # not arrived bakes the absence into every pane, which nothing can
 # repair afterwards, since a process environment is fixed at exec.
 = resume-rebuilds-before-the-environment-arrives
-f bin/mux
+f lib/mux-resume_lib
 t mux-resume
 -     if [ "$rs_erc" -eq 1 ]; then
 +     if false; then
@@ -3321,7 +3321,7 @@ m exit 4 (not ready, try again)
 # A declared name nothing manages is a TYPO, and its only symptom is a
 # wait that never ends after the next reboot, so it is loud at once.
 = resume-unmanaged-env-ready-name-accepted
-f bin/mux
+f lib/mux-resume_lib
 t mux-resume
 -     if [ "$rs_erc" -eq 2 ]; then
 +     if false; then
