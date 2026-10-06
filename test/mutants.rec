@@ -4058,3 +4058,30 @@ t mux-args
 -     echo "mux: --no-wait-env is only for resume" >&2; usage; } ;;
 +     : ; } ;;
 m nowaitenv-gate
+= args-verb-stops-the-option-loop
+f bin/mux
+t mux-args
+-     *)  if [ -n "$cmd" ]; then break; fi
++     *)  if [ -n "$cmd" ]; then break; fi; break
+m force-after
+
+= args-resume-arity-off-by-one
+f bin/mux
+t mux-args
+-   resume) [ "$#" -le 2 ] || {
++   resume) [ "$#" -le 3 ] || {
+m resume-arity
+
+= args-help-exits-two
+f bin/mux
+t mux-args
+-     -h|--help)    usage 0 ;;
++     -h|--help)    usage ;;
+m help-long
+
+= args-partition-name-unvalidated
+f bin/mux
+t mux-args
+-     echo "mux: not a partition name: $rs_want" >&2; usage; }
++     : ; }
+m resume-badname

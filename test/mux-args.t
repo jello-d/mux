@@ -86,6 +86,18 @@ grep -q '^lay ' "$T/conf/profiles" || fail "positional: no row for lay"
 # positionally, never by guessing which of the words names one.
 no resume-arity  "resume [PARTITION [SESSION]]" resume a b c
 no resume-part   "no such partition"            resume nosuchpartition::
+# A SYNTACTICALLY INVALID name is a different refusal from an UNKNOWN one, and
+# the case above cannot tell them apart: `nosuchpartition` is a perfectly legal
+# DNS label, so it reaches `mux_ctx_valid` and passes, and the refusal comes
+# from the known-set check further down. Measured while guarding the parser: a
+# mutation that deleted the VALIDATION entirely left this file green.
+#
+# A partition name becomes a socket NAME and a state DIRECTORY, so the
+# validation is an identity guard rather than input hygiene: on a
+# case-insensitive filesystem `Work` and `work` are two partitions to mux and
+# one directory to the OS, which is why the validator enumerates its
+# characters instead of using a range.
+no resume-badname "not a partition name" resume 'Bad Name::'
 no resume-flag   "--resume is only for go"   resume --resume
 no resume-flag2  "--resume is only for go"   new --resume lay5
 no list-gate     "--list is only for resume" kill --list lay4
