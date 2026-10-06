@@ -71,6 +71,52 @@ _rc=0; _o=$(mux setup claude </dev/null 2>&1) || _rc=$?
 [ "$_rc" != 0 ] || fail "it edited $SET without --yes and without a terminal"
 [ -e "$SET" ] && fail "a refused run still wrote $SET"
 
+# --- AND AT A TERMINAL IT ASKS, AND TAKES NO FOR AN ANSWER ---------------
+# THE PROMPT HAD NEVER RUN. Every case here is on a pipe, which is the no-tty
+# refusal above, so the interactive branch of the one verb that writes
+# somebody else's config was reachable by no test at all. A pty is the only
+# way in, the same device `mux help palette`, `mux sane` and latch's wait
+# spinner need.
+#
+# ANSWERING `n` IS THE HALF THAT MATTERS. A prompt that asks and then applies
+# regardless is worse than no prompt: the human has been told they had a
+# choice. So this asserts the file is UNTOUCHED, not merely that something was
+# printed, because a message proves only that a message was printed.
+if [ -n "$T_PTY" ]; then
+  _ask=$T/ask.log
+  # THE ANSWER GOES THROUGH THE PTY, not through a redirect: `< file` replaces
+  # stdin, so `[ -t 0 ]` is false and the verb takes the no-tty REFUSAL
+  # instead of ever prompting. Cost one confusing run, and it is the whole
+  # reason this case needs a pty rather than a pipe.
+  # THE COMMAND RECORDS ITS OWN STATUS, because `script` does not propagate
+  # the child's without GNU's `-e` and this suite must not key on a userland.
+  # Reading it from the typescript's COMMAND_EXIT_CODE would be the same
+  # mistake one layer over.
+  printf 'n\n' | t_pty "$_ask" "env -u MUX_SHARE CLAUDE_CONFIG_DIR=$CDIR \
+$HERE/bin/mux setup claude; printf %s \$? >$T/rc" >/dev/null 2>&1 || true
+  _rc=$(cat "$T/rc" 2>/dev/null || echo 0)
+  case $(cat "$_ask") in *'[y/N]'*) ;;
+    *) fail "at a terminal, setup must ASK before editing somebody else's
+config: [$(cat "$_ask")]" ;;
+  esac
+  [ ! -e "$SET" ] || fail "answering 'n' at the prompt WROTE $SET anyway,
+which is worse than never asking: the human was told they had a choice"
+  # NON-ZERO TOO, and asserted separately because they are different bugs: a
+  # declined run that exits 0 tells a caller the wiring is in place.
+  [ "$_rc" != 0 ] \
+    || fail "answering 'n' exited 0, so anything scripting this verb reads a
+decline as a successful wiring"
+  # ... and `y` applies, or the prompt would be a refusal wearing a question.
+  printf 'y\n' | t_pty "$T/ask2.log" "env -u MUX_SHARE \
+CLAUDE_CONFIG_DIR=$CDIR $HERE/bin/mux setup claude" >/dev/null 2>&1 || true
+  [ -e "$SET" ] || fail "answering 'y' at the prompt did not apply, so the
+question has only one answer and the verb is unusable interactively"
+  rm -f "$SET"
+else
+  printf 'note %s: no usable script(1), so the consent PROMPT is unchecked\n' \
+    "$_name"
+fi
+
 # --- applying, into a file that already has content ----------------------
 # The pre-existing hook and the unrelated key are the point of this fixture.
 cat >"$SET" <<'EOF'

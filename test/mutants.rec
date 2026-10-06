@@ -4505,3 +4505,38 @@ t mux-host-color
 - _h=${1:-$(mux_host_name)}
 + _h=${1:-}
 m must answer for THIS host
+
+= setup-dry-run-writes-anyway
+f libexec/mux-setup
+t mux-setup
+- [ "$_dry" -eq 0 ] || exit "$MUX_EC_OK"
++ [ "$_dry" -eq 1 ] || exit "$MUX_EC_OK"
+m dry-run failed: mux: setup: would add
+
+= setup-empty-event-table-is-accepted
+f libexec/mux-setup
+t mux-setup
+- [ -n "$_events" ] || _die "cannot read the event table from mux-agent-hook"
++ [ -z "$_events" ] || _die "cannot read the event table from mux-agent-hook"
+m cannot read the event table
+
+= setup-answers-no-as-yes
+f libexec/mux-setup
+t mux-setup
+-     *) echo "mux: setup: nothing changed" >&2; exit "$MUX_EC_FAIL" ;;
++     *) ;;
+m answering 'n' at the prompt WROTE
+
+= setup-never-asks
+f libexec/mux-setup
+t mux-setup
+-   printf 'apply this to %s? [y/N] ' "$_settings" >&2
++   :  printf 'apply this to %s? [y/N] ' "$_settings" >&2
+m must ASK before editing
+
+= setup-refuses-a-yes
+f libexec/mux-setup
+t mux-setup
+-     y|Y|yes|YES) ;;
++     y|Y|yes|YES) exit 1 ;;
+m answering 'y' at the prompt did not apply
