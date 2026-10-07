@@ -753,8 +753,42 @@ class PartitionLetter(unittest.TestCase):
                     f"{st} {s}px: something other than the partition letter "
                     "is drawn in _PART_INK, so counting it proves nothing")
 
+    @staticmethod
+    def _cap_frac(tile, s):
+        """The DRAWN letter's height as a fraction of the tile.
+
+        MEASURED, NOT COUNTED, and the difference is portability. This used to
+        be a floor on the glyph's INK, which is face-dependent: the same cap
+        height in a lighter face paints roughly half the pixels. On the macOS
+        runner, where none of render.py's font paths exists, the letter drew 13
+        pixels against a floor of 17 and the test failed about a tile that was
+        perfectly legible. Measured across both faces:
+
+            ink at 22/32/48      DejaVu bold   19  65  202
+                                 fallback      13  31  116
+
+        No single ink floor can pass the lighter face at the shipped 0.46 cap
+        AND still fail the 0.30 cap that was reported as too small from a live
+        tray: at 32px the window is 27..31 wide. HEIGHT has no such problem,
+        because `_cap_font` targets a cap height and both faces hit it:
+
+            height/tile at 0.46  DejaVu  .409 .406 .438
+                                 fallbk  .455 .438 .458
+            height/tile at 0.30  DejaVu  .227 .250 .271
+                                 fallbk  .000 .281 .292
+
+        So 0.35 separates them with 0.11 of margin on both sides, in both
+        faces. GENERALISES: when an assertion's threshold has to be retuned per
+        font, it is measuring the font and not the design.
+        """
+        from mux_desktop_notifier.render import _PART_INK
+        px = tile.convert("RGBA").load()
+        ys = [y for y in range(s) for x in range(s)
+              if px[x, y] == _PART_INK]
+        return 0.0 if not ys else (max(ys) - min(ys) + 1) / s
+
     def test_the_letter_IS_BIG_ENOUGH_TO_READ(self):
-        """A floor on the glyph's own ink, at every size and every state.
+        """A floor on how TALL the drawn glyph is, at every size and state.
 
         0.30 of the tile shipped in the cursor slot and was reported as too
         small from a live tray, which is the failure this holds down: a letter
@@ -763,14 +797,13 @@ class PartitionLetter(unittest.TestCase):
         """
         from mux_desktop_notifier.render import _tile
         for s in (22, 32, 48):
-            floor = max(12, int(s * 0.8))
             for st in STATES:
-                got = self._ink(_tile(st, 9, s, True, part="B"))
+                got = self._cap_frac(_tile(st, 9, s, True, part="B"), s)
                 self.assertGreaterEqual(
-                    got, floor,
-                    f"{st} {s}px: only {got} pixels of the letter are drawn "
-                    f"(want {floor}). Either it is not drawn at all, or it is "
-                    "too small to read at the size a tray actually draws.")
+                    got, 0.35,
+                    f"{st} {s}px: the letter is only {got:.3f} of the tile "
+                    "high (want 0.35). Either it is not drawn at all, or it "
+                    "is too small to read at the size a tray actually draws.")
 
     def test_THE_BADGE_DOES_NOT_EAT_IT(self):
         """A state that draws a badge keeps EVERY pixel of its letter.

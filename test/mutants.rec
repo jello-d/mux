@@ -1007,8 +1007,8 @@ m test_a_pid_owned_by_SOMEONE_ELSE_counts_as_alive
 = indicator-no-font-fallback
 f desktop-notifier/mux_desktop_notifier/render.py
 t mux-desktop-notifier
--     return ImageFont.load_default()
-+     raise OSError('no font')
+-         return ImageFont.load_default(size=px)
++         raise OSError('no font')
 m test_a_TILE_STILL_RENDERS_with_no_fonts_at_all
 
 = rank-blocked-demoted

@@ -171,8 +171,15 @@ _TINT = 0.14       # how much state hue bleeds into the near-black screen
 _HOST_TINT = 0.55
 _TRACK = 0.28      # inter-digit tracking to pull, e.g., "12" tighter
 
+# EVERY PATH HERE IS LINUX, which is what the macOS runner found out: none of
+# them exists there, so both lists fell through to the fallback in `_font`.
+# The macOS entries come after, so a box with DejaVu is unaffected and draws
+# exactly as it always has; a Mac gets a real system face rather than the
+# embedded fallback, which is a nicety on top of a fallback that now scales.
 _SANS = ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-         "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf")
+         "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+         "/System/Library/Fonts/Supplemental/Arial.ttf",
+         "/System/Library/Fonts/Helvetica.ttc")
 # Condensed and bold: capitals have to fit a narrow strip, and weight is what
 # keeps them readable at 32px.
 #
@@ -185,18 +192,44 @@ _SANS = ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
 # 20 to 17 at 48. That is the whole difference between a partition letter at
 # full size on a marked tile and one squeezed back to where it was reported
 # as too small to read.
+# The macOS entries keep the same preference order the Linux ones state:
+# condensed first, then bold, because the strip is sized from the widest glyph.
+# A `.ttc` collection is deliberately last: `truetype()` takes face 0 from one,
+# which is the REGULAR weight, so it is a worse answer than a bold `.ttf` and a
+# better one than no face at all.
 _COND = ("/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf",
          "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf")
+         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+         "/System/Library/Fonts/Supplemental/Arial Narrow Bold.ttf",
+         "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+         "/System/Library/Fonts/HelveticaNeue.ttc")
 
 
 def _font(paths, px):
+    """The first of `paths` that loads at `px`, else a font that still SCALES.
+
+    THE FALLBACK HAD TO BE SIZED, and the old bare `load_default()` is why the
+    tray was unreadable on macOS. That returns a fixed ~8px bitmap face which
+    IGNORES `px`, so `_cap_font`'s downward search measured the same 8px at
+    every step and settled there: measured on the macOS runner, a cap height
+    of 8 where a 48px tile wants 16, and a partition letter that drew ZERO
+    pixels at 22px. Not a crash, just an icon nobody can read, which is the
+    exact failure 0.47 spent a release fixing.
+
+    `load_default(size=)` is Pillow >= 10.1 and returns a real embedded
+    TrueType, so the search works again; older Pillow keeps the bitmap, which
+    is no worse than before. Guarded on TypeError because `requires-python`
+    and `Pillow>=9` both still allow the older one.
+    """
     for p in paths:
         try:
             return ImageFont.truetype(p, px)
         except OSError:
             continue
-    return ImageFont.load_default()
+    try:
+        return ImageFont.load_default(size=px)
+    except TypeError:                                   # pragma: no cover
+        return ImageFont.load_default()
 
 
 def _darker(c, f):
