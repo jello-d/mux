@@ -62,7 +62,12 @@ _seams=$(
   # space, so splitting the scrape on words is exactly right; $_SHIPPED is a
   # deliberately split file list
   for _v in $(grep -rhoE 'MUX_[A-Z_]+' $_SHIPPED 2>/dev/null | sort -u); do
-    case $_v in MUX_RESOLVED_*) continue ;; esac
+    # `(pat)`, because this `case` is inside a `$( )` and bash 3.2 finds the
+    # end of a substitution by COUNTING PARENTHESES: an unparenthesised
+    # pattern's closing `)` closes the substitution early and the `;;` is then
+    # a syntax error. macOS /bin/sh IS bash 3.2, so this file did not parse
+    # there at all and died with no verdict. test/lint.t catches the class.
+    case $_v in (MUX_RESOLVED_*) continue ;; esac
     # read with a fallback at least once
     # shellcheck disable=SC2086
     grep -qE "\\\$\{$_v:-" $_SHIPPED 2>/dev/null || continue
