@@ -362,10 +362,10 @@ class Mark(unittest.TestCase):
 
     def test_an_item_starts_unmarked(self):
         """One host is the common case, so it is also the default."""
-        self.assertIsNone(self.sni.Indicator(label="northwood")._mark)
+        self.assertIsNone(self.sni.Tile(label="northwood")._mark)
 
     def test_setting_a_mark_changes_the_pixels(self):
-        i = self.sni.Indicator(label="northwood")
+        i = self.sni.Tile(label="northwood")
         before = i._pixmap
         i.set_mark("NWD")
         self.assertNotEqual(before, i._pixmap)
@@ -373,7 +373,7 @@ class Mark(unittest.TestCase):
     def test_clearing_it_returns_the_original(self):
         """Detaching from your last remote must give back exactly the
         single-host tile, not a near-miss of it."""
-        i = self.sni.Indicator(label="northwood")
+        i = self.sni.Tile(label="northwood")
         before = i._pixmap
         i.set_mark("NWD")
         i.set_mark(None)
@@ -382,7 +382,7 @@ class Mark(unittest.TestCase):
     def test_an_unchanged_mark_does_not_repaint(self):
         """The discovery loop calls this every tick. Repainting regardless
         would emit NewIcon at the poll rate and churn the tray for nothing."""
-        i = self.sni.Indicator(label="northwood")
+        i = self.sni.Tile(label="northwood")
         i.set_mark("NWD")
         first = i._pixmap
         i.set_mark("NWD")
@@ -393,7 +393,7 @@ class Mark(unittest.TestCase):
         point: comparing only the mark makes the no-repaint shortcut pin a
         host to the first colour it was ever drawn with, so a reshuffle would
         be invisible until something unrelated forced a repaint."""
-        i = self.sni.Indicator(label="northwood")
+        i = self.sni.Tile(label="northwood")
         i.set_mark("NWD", 0)
         first = i._pixmap
         i.set_mark("NWD", 2)
@@ -402,7 +402,7 @@ class Mark(unittest.TestCase):
     def test_the_ink_reaches_the_icon(self):
         """Two items, same letters, different slots. Storing the ink and never
         passing it to the renderer would leave every host one colour."""
-        a, b = (self.sni.Indicator(label="x") for _ in range(2))
+        a, b = (self.sni.Tile(label="x") for _ in range(2))
         a.set_mark("NWD", 0)
         b.set_mark("NWD", 1)
         self.assertNotEqual(a._pixmap, b._pixmap)
@@ -792,38 +792,36 @@ class Identity(unittest.TestCase):
     def test_id_carries_the_label_and_keeps_the_prefix(self):
         """The `mux-` prefix keeps a bar's existing tray `order` working, and
         the suffix makes the id self-describing on the bus."""
-        self.assertEqual(self.sni.Indicator(label="northwood").Id,
+        self.assertEqual(self.sni.Tile(label="northwood").ident(),
                          "mux-northwood")
 
     def test_unlabelled_keeps_the_historical_id(self):
-        self.assertEqual(self.sni.Indicator().Id, "mux-indicator")
+        self.assertEqual(self.sni.Tile().ident(), "mux-indicator")
 
     def test_tooltip_title_names_the_HOST(self):
-        tip = self.sni.Indicator(label="northwood").ToolTip
-        self.assertEqual(tip[2], "mux @ northwood")
+        title, _body = self.sni.Tile(label="northwood").tooltip()
+        self.assertEqual(title, "mux @ northwood")
 
     def test_two_labels_never_share_an_id(self):
         """Two items with one id is a tray that cannot tell them apart."""
-        a = self.sni.Indicator(label="northwood").Id
-        b = self.sni.Indicator(label="northgate").Id
+        a = self.sni.Tile(label="northwood").ident()
+        b = self.sni.Tile(label="northgate").ident()
         self.assertNotEqual(a, b)
 
     def test_unknown_tooltip_says_it_cannot_reach_the_host(self):
         """Not "all sessions idle", which is what the count-is-None branch would
         otherwise say: a calm sentence about a host we cannot see."""
-        i = self.sni.Indicator(state="unknown", count=None, label="northwood")
-        self.assertIn("cannot reach", i.ToolTip[3])
+        i = self.sni.Tile(state="unknown", count=None, label="northwood")
+        self.assertIn("cannot reach", i.tooltip()[1])
 
     def test_unknown_is_not_NeedsAttention(self):
         """Only `blocked` earns attention. An unreachable host is not an
         agent waiting on you, and escalating it would cry wolf on every
         network blip."""
-        i = self.sni.Indicator(state="unknown", label="h")
-        self.assertEqual(i.Status, "Active")
+        i = self.sni.Tile(state="unknown", label="h")
+        self.assertEqual(i.status(), "Active")
 
 
-if __name__ == "__main__":                              # pragma: no cover
-    unittest.main()
 
 
 class Reconcile(unittest.TestCase):
@@ -957,15 +955,15 @@ class TraySort(unittest.TestCase):
     def test_the_item_reports_it_through_Id(self):
         """Separate from item_id: the pure function can be perfect while the
         property ignores it, and Id is what a tray host actually reads."""
-        loc = self.sni.Indicator(label="northwood", local=True)
-        rem = self.sni.Indicator(label="northwood")
-        self.assertEqual(loc.Id, "mux--northwood")
-        self.assertEqual(rem.Id, "mux-northwood")
+        loc = self.sni.Tile(label="northwood", local=True)
+        rem = self.sni.Tile(label="northwood")
+        self.assertEqual(loc.ident(), "mux--northwood")
+        self.assertEqual(rem.ident(), "mux-northwood")
 
     def test_an_item_is_remote_unless_told_otherwise(self):
         """The default must not hand the sort prefix to a remote host, which
         would put a random box first and defeat the whole thing."""
-        self.assertFalse(self.sni.Indicator(label="rover")._local)
+        self.assertFalse(self.sni.Tile(label="rover")._local)
 
 
 class Watch(unittest.TestCase):
@@ -1080,52 +1078,6 @@ class Watch(unittest.TestCase):
         self.assertEqual(item.calls, [("blocked", 9)])
 
 
-class Pixmap(unittest.TestCase):
-    """What a tray host actually reads to draw the icon."""
-
-    def setUp(self):
-        self.sni = _fresh()
-
-    def test_IconPixmap_is_the_current_render(self):
-        i = self.sni.Indicator(label="northwood")
-        self.assertEqual(i.IconPixmap, i._pixmap)
-        self.assertTrue(i.IconPixmap, "the item exposed an EMPTY pixmap")
-
-    def test_it_FOLLOWS_a_state_change(self):
-        """The property must read the live attribute, not a copy taken at
-        construction: that would freeze every icon at `none` forever."""
-        i = self.sni.Indicator(label="northwood")
-        before = i.IconPixmap
-        i._state, i._count = "blocked", 4
-        i._paint()
-        self.assertNotEqual(before, i.IconPixmap)
-
-    def test_the_ATTENTION_pixmap_is_the_same_image(self):
-        """A host in NeedsAttention reads AttentionIconPixmap instead. Serving
-        an empty one there is how a blocked item goes blank at exactly the
-        moment it matters most."""
-        i = self.sni.Indicator(state="blocked", count=2, label="northwood")
-        self.assertEqual(i.AttentionIconPixmap, i.IconPixmap)
-        self.assertTrue(i.AttentionIconPixmap)
-
-    def test_no_icon_NAME_is_advertised(self):
-        """We ship pixmaps, not themed icon names. A non-empty name would make
-        a host look for a theme icon that does not exist and draw nothing."""
-        i = self.sni.Indicator(label="northwood")
-        self.assertEqual(i.IconName, "")
-        self.assertEqual(i.AttentionIconName, "")
-        self.assertEqual(i.OverlayIconName, "")
-
-    def test_the_category_is_ApplicationStatus(self):
-        self.assertEqual(self.sni.Indicator().Category, "ApplicationStatus")
-
-    def test_it_does_NOT_advertise_a_menu(self):
-        """There is no dbusmenu yet, so ItemIsMenu must stay false or a host
-        will introspect a Menu property that is not there and left-click will
-        stop reaching Activate."""
-        self.assertFalse(self.sni.Indicator().ItemIsMenu)
-
-
 class Entry(unittest.TestCase):
     """__main__: the daemon's front door, previously 0% covered."""
 
@@ -1171,7 +1123,7 @@ class Blink(unittest.TestCase):
     """
 
     def _item(self, sni, **kw):
-        return sni.Indicator(label="northwood", **kw)
+        return sni.Tile(label="northwood", **kw)
 
     def test_set_updates_the_state_and_repaints(self):
         sni = _fresh(MUX_DESKTOP_NOTIFIER_BLINK="1",
@@ -1195,10 +1147,10 @@ class Blink(unittest.TestCase):
         async def go():
             i = self._item(sni)
             i.set("blocked", 1)
-            self.assertEqual(i.Status, "NeedsAttention")
+            self.assertEqual(i.status(), "NeedsAttention")
             i._blink.cancel()
             i.set("idle", None)
-            self.assertEqual(i.Status, "Active")
+            self.assertEqual(i.status(), "Active")
             i._blink.cancel()
         asyncio.run(go())
 
@@ -1822,3 +1774,7 @@ class Ignored(unittest.TestCase):
         sni = _fresh()
         with self.assertRaises(SystemExit):
             sni.flags(["--ignore"])
+
+
+if __name__ == "__main__":                              # pragma: no cover
+    unittest.main()

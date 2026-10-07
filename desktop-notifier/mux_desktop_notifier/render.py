@@ -616,6 +616,23 @@ def _to_argb(img):
     return bytes(out)
 
 
+def tile(state, count, size, cursor=True, host=None, mark=None, ink=None,
+         part=None):
+    """ONE RENDERED TILE, as a Pillow image, for a presenter that does not want
+    packed ARGB.
+
+    THE PUBLIC NAME FOR `_tile`, and the reason is the second platform: SNI
+    takes `a(iiay)` so `icon_pixmap` below converts, while a macOS status item
+    wants a PNG and an `NSImage`. Both are the SAME PIXELS, which is what keeps
+    every visual decision in this file and out of the backends; a presenter
+    that re-derived any of them would be a second opinion about what mux looks
+    like.
+
+    The arguments are `icon_pixmap`'s, minus the size LIST: a caller wanting
+    one image knows which size it wants."""
+    return _tile(state, count, size, cursor, host, mark, ink, part)
+
+
 def icon_pixmap(state, count, sizes=(22, 32, 48), cursor=True, host=None,
                 mark=None, ink=None, part=None):
     """SNI IconPixmap for a state + count. idle/none draw no badge. cursor=False

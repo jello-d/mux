@@ -970,7 +970,7 @@ t mux-desktop-notifier
 m test_the_OVERRIDE_wins_over_the_source
 
 = indicator-advertises-a-menu-it-lacks
-f desktop-notifier/mux_desktop_notifier/sni.py
+f desktop-notifier/mux_desktop_notifier/backend_dbus.py
 t mux-desktop-notifier
 -         return False
 +         return True

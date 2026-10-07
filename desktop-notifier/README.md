@@ -405,5 +405,54 @@ on one connection resolve to the same object and you get the same item twice).
 Verified against a live waybar.
 
 Left-click activating `mux next-blocked` is live (see **Clicking an item**).
-Next: a per-session menu on right-click. The visual identity lives entirely in
-`render.py`, the D-Bus plumbing in `sni.py`, the source list in `sources.py`.
+Next: a per-session menu on right-click.
+
+## Where the platform lives
+
+One file. `backend_dbus.py` is the only module that imports `dbus_next`;
+everything else runs on a machine with no bus at all. That is enforced by the
+tests rather than asserted here: with `dbus_next` hidden, 293 tests run, 10
+skip and none fail, and the 10 are the StatusNotifierItem wire surface.
+
+    render.py    every pixel, on every platform. `tile()` returns a Pillow
+                 image; `icon_pixmap()` packs the same pixels into SNI's ARGB
+    sources.py   discovery, transports, the latch locks, the `%p` grammar
+    slots.py     the sticky per-host colour slots
+    sni.py       which items should exist, and what each should show
+                 (`Tile`), plus the supervisor that keeps the set live
+    backend_*.py the presenter
+
+A presenter owes exactly three things, and `sni._backend()` is the only place
+one is named:
+
+    session_bus()                        -> a connection, or whatever the
+                                            platform's toaster needs
+    toaster(bus, enabled)                -> .announce / .withdraw / .sync
+    export(index, tile, activate)        -> handle, with .close()
+
+`export` wires the tile's two callbacks (`on_icon`, `on_status`) to whatever
+tells the desktop to repaint, and `close()` withdraws the item. On D-Bus a
+withdrawal IS a disconnect, because the SNI spec has no unregister; another
+platform will mean something else by it, which is why the supervisor only ever
+calls `close()`.
+
+### A macOS presenter, and the two things that need a Mac to settle
+
+The shared half above is already portable and `pip install` resolves there
+(`dbus-next` carries a `sys_platform == 'linux'` marker). What is missing is a
+`backend_appkit.py` implementing those three functions over
+`NSStatusItem` plus `UNUserNotificationCenter`, a launchd agent in place of
+the systemd unit, and PyObjC as a macOS-only dependency.
+
+Two questions cannot be answered honestly without the hardware, so they are
+written down rather than guessed:
+
+- **The run loop.** AppKit wants the main thread and its own loop; this daemon
+  is asyncio. Whether they can be made to coexist (an `NSRunLoop` pumped from
+  a task, or asyncio driven from a CFRunLoop observer) decides the shape of
+  the whole backend.
+- **Withdrawal.** `Toaster` keeps an id per banner so a finished turn closes
+  the one it raised, which is four rules' worth of behaviour.
+  `osascript -e 'display notification'` returns no id at all, and
+  `UNUserNotificationCenter` generally wants a signed bundle. That has to be
+  designed, not ported.

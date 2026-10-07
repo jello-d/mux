@@ -1,40 +1,42 @@
-"""The StatusNotifierItem D-Bus service (org.kde.StatusNotifierItem).
+"""The supervisor: which items should exist, and what each one should show.
 
-Exports ONE TRAY ITEM PER SOURCE and updates each live: on a state/count change
-it re-renders the owned pixmap and emits NewIcon/NewStatus so the host (waybar's
-tray, or any DE's) repaints. State comes from each source's command (normally
-`mux agent-summary`: the aggregate worst state + count across that host's
-sessions), polled on a timer. A manual override file takes precedence when
-present, for testing without live sessions.
+PLATFORM-FREE, AND THAT IS A TESTED PROPERTY rather than an aspiration. One
+tray item per (host, partition), updated live: on a state/count change the
+owned pixmap is re-rendered and the presenter is told to repaint. State comes
+from each host's `mux agent stream`, with a poll as the downgrade path, and a
+manual override file takes precedence when present for testing without live
+sessions.
 
-N ITEMS FROM ONE PROCESS, and it has to be a CONNECTION EACH. A single
-connection can own several bus names, but `RegisterStatusNotifierItem` takes a
-service NAME and nothing else (the watcher then looks for /StatusNotifierItem
-on it), so two names on one connection resolve to the same exported object and
-you get the same item twice. Measured against a live waybar: two connections
-from one pid registered as two items and drew as two. The `-1` in
-`org.kde.StatusNotifierItem-<pid>-1` is a per-process item INDEX, so the naming
-convention anticipated exactly this.
+THE PRESENTER IS BEHIND `_backend()` and is the only platform-specific thing
+in the package: it owes `session_bus()`, `toaster(bus, enabled)` and
+`export(index, tile, activate) -> handle`. `backend_dbus` is the
+StatusNotifierItem one; a macOS presenter is a sibling of that file and
+touches nothing here. The split was measured, not assumed: with dbus_next
+absent, 147 of this package's 289 tests used to error, because the only way to
+reach any decision was to construct a `ServiceInterface` subclass.
 
-EACH SOURCE POLLS INDEPENDENTLY. One task per item rather than a gather, so a
-host that is slow to answer delays only its own icon. A shared round would make
+SOME SNI VOCABULARY STAYS HERE ON PURPOSE: `item_bus_name`, `item_id`,
+`wants_reregister` and the watcher paths are pure string knowledge about a
+naming convention, with no import behind them, so keeping them on this side is
+what lets their rules be asserted where there is no bus. A presenter that
+cannot use them simply does not.
+
+EACH HOST STREAMS INDEPENDENTLY. One feed per host rather than a gather, so a
+box that is slow to answer delays only its own icon. A shared round would make
 every host as slow as the worst one, which over ssh is the normal case.
 """
 import asyncio
 import json
 import os
 import shlex
-# SIGKILL by NAME, not the `signal` module: dbus_next.service exports a `signal`
-# DECORATOR (imported below) which shadows it, so `signal.SIGKILL` raises
-# AttributeError. That is not caught by the OSError/ProcessLookupError guard at
-# the call site, so it would have escaped _query, killed that host's poll task,
-# and frozen its icon: on the TIMEOUT path, meaning it would only ever have
-# fired the moment a host became unreachable.
+# SIGKILL by NAME, which this file no longer strictly needs and keeps anyway:
+# the hazard was that `dbus_next.service` exports a `signal` DECORATOR, so a
+# module-level `import signal` beside it made `signal.SIGKILL` raise
+# AttributeError on the TIMEOUT path only, i.e. for the first time at the exact
+# moment a host became unreachable. The decorator left with the presenter, so
+# the collision now lives in backend_dbus.py; importing the constant by name is
+# immune either way and costs nothing.
 from signal import SIGKILL
-
-from dbus_next import BusType, PropertyAccess
-from dbus_next.aio import MessageBus
-from dbus_next.service import ServiceInterface, dbus_property, method, signal
 
 from .render import MARK_PALETTE, host_mark, icon_pixmap, parse_pair
 from .slots import Slots
@@ -100,10 +102,33 @@ BLINK_N = int(os.environ.get("MUX_DESKTOP_NOTIFIER_BLINK", "5"))
 BLINK_MS = int(os.environ.get("MUX_DESKTOP_NOTIFIER_BLINK_MS", "250"))
 
 
-class Indicator(ServiceInterface):
+class Tile:
+    """WHAT ONE TRAY ITEM BELIEVES, with no transport under it.
+
+    Everything here answers "what should this item show": the state, the
+    count, the host identity, the overlay, the blink schedule and the words a
+    tooltip uses. None of it knows what a bus is, which is the point: a
+    platform backend wraps one of these and publishes it, so a second platform
+    is an ADDITION rather than a fork of the decisions.
+
+    IT WAS MEASURED, NOT ASSUMED. With dbus_next absent, 147 of this package's
+    289 tests errored, because the only way to reach any of this was to
+    construct a `ServiceInterface` subclass. The 80%-shared figure in the
+    sizing note was about LINES; the tests told a worse story, and they are
+    what says whether a Mac can run the shared half.
+
+    THE TWO CALLBACKS ARE THE WHOLE SEAM. A repaint has to reach the tray host
+    somehow, and `on_icon`/`on_status` are how, set by whichever backend
+    exports this tile. They default to doing nothing so a bare Tile is
+    constructible and assertable, which is what makes the decisions testable
+    on a platform that has no tray at all.
+    """
+
     def __init__(self, state="none", count=None, label=None, host=None,
                  local=False, part=None):
-        super().__init__("org.kde.StatusNotifierItem")
+        # Set by the backend that exports this tile; no-ops until then.
+        self.on_icon = lambda: None
+        self.on_status = lambda _status: None
         # The label names the host this item speaks for. None keeps the old
         # unlabelled identity, which is what the existing tests construct.
         self._label = label
@@ -134,14 +159,41 @@ class Indicator(ServiceInterface):
         self._pixmap = icon_pixmap(state, count, host=host, part=part)
         self._blink = None
 
-    def _status(self):
+    def status(self):
         return "NeedsAttention" if self._state == "blocked" else "Active"
+
+    # --- what a presenter asks for, all of it platform-free ---------------
+    @property
+    def label(self):
+        return self._label
+
+    @property
+    def pixmap(self):
+        return self._pixmap
+
+    def ident(self):
+        return item_id(self._label, self._local)
+
+    def title(self):
+        return f"mux @ {self._label}" if self._label else "mux"
+
+    def tooltip(self):
+        # The TITLE carries the host, because with several items in a tray
+        # "mux" alone identifies nothing: the one thing you want on hover is
+        # WHICH machine this is.
+        if self._state == "unknown":
+            body = "cannot reach this host"
+        elif self._count is None:
+            body = "all sessions idle"
+        else:
+            body = f"{self._count} session(s): {self._state}"
+        return self.title(), body
 
     def _paint(self, cursor=True):
         self._pixmap = icon_pixmap(self._state, self._count, cursor=cursor,
                                    host=self._host, mark=self._mark,
                                    ink=self._ink, part=self._part)
-        self.NewIcon()
+        self.on_icon()
 
     def set_mark(self, mark, ink=None, part=None):
         """Show or hide the overlay: the host mark, its palette slot, and the
@@ -167,7 +219,7 @@ class Indicator(ServiceInterface):
         the cursor a few frames to catch the eye."""
         self._state, self._count = state, count
         self._paint()
-        self.NewStatus(self._status())
+        self.on_status(self.status())
         if self._blink is not None:
             self._blink.cancel()
         self._blink = asyncio.ensure_future(self._do_blink())
@@ -184,93 +236,6 @@ class Indicator(ServiceInterface):
         except asyncio.CancelledError:
             self._paint(cursor=True)
             raise
-
-    @dbus_property(access=PropertyAccess.READ)
-    def Category(self) -> "s":
-        return "ApplicationStatus"
-
-    @dbus_property(access=PropertyAccess.READ)
-    def Id(self) -> "s":
-        return item_id(self._label, self._local)
-
-    @dbus_property(access=PropertyAccess.READ)
-    def Title(self) -> "s":
-        return f"mux @ {self._label}" if self._label else "mux"
-
-    @dbus_property(access=PropertyAccess.READ)
-    def Status(self) -> "s":
-        return self._status()
-
-    @dbus_property(access=PropertyAccess.READ)
-    def IconName(self) -> "s":
-        return ""
-
-    @dbus_property(access=PropertyAccess.READ)
-    def IconPixmap(self) -> "a(iiay)":
-        return self._pixmap
-
-    @dbus_property(access=PropertyAccess.READ)
-    def OverlayIconName(self) -> "s":
-        return ""
-
-    @dbus_property(access=PropertyAccess.READ)
-    def AttentionIconName(self) -> "s":
-        return ""
-
-    @dbus_property(access=PropertyAccess.READ)
-    def AttentionIconPixmap(self) -> "a(iiay)":
-        return self._pixmap
-
-    @dbus_property(access=PropertyAccess.READ)
-    def ToolTip(self) -> "(sa(iiay)ss)":
-        # The TITLE carries the host, because with several items in a tray
-        # "mux" alone identifies nothing: the one thing you want on hover is
-        # WHICH machine this is.
-        if self._state == "unknown":
-            body = "cannot reach this host"
-        elif self._count is None:
-            body = "all sessions idle"
-        else:
-            body = f"{self._count} session(s): {self._state}"
-        title = f"mux @ {self._label}" if self._label else "mux"
-        return ["", [], title, body]
-
-    @dbus_property(access=PropertyAccess.READ)
-    def ItemIsMenu(self) -> "b":
-        # No dbusmenu yet -> left-click Activate is the whole interaction. The
-        # per-session menu (com.canonical.dbusmenu) is a later feature; until
-        # then we advertise no Menu property so a host doesn't introspect one.
-        return False
-
-    @method()
-    def Activate(self, x: "i", y: "i"):
-        """Left click: jump that host to whatever has been waiting longest.
-
-        FIRE AND FORGET. Activate is a D-Bus method and the tray host is
-        waiting on it, so anything that touches the network has to be handed
-        to the loop rather than awaited here: an unreachable box would
-        otherwise hang the bar, which is precisely the failure this whole
-        feature exists to make visible.
-        """
-        print(f"mux-desktop-notifier: activate "
-                  f"{self._label or 'local'}", flush=True)
-        asyncio.ensure_future(activate(self._label))
-
-    @method()
-    def SecondaryActivate(self, x: "i", y: "i"):
-        print(f"mux-desktop-notifier: SecondaryActivate at {x},{y}", flush=True)
-
-    @method()
-    def Scroll(self, delta: "i", orientation: "s"):
-        print(f"mux-desktop-notifier: Scroll {delta} {orientation}", flush=True)
-
-    @signal()
-    def NewIcon(self):
-        pass
-
-    @signal()
-    def NewStatus(self, status) -> "s":
-        return status
 
 
 def _parse(text):
@@ -1245,16 +1210,38 @@ async def _watch(item, feed, part=None, label=""):
         await feed.changed()
 
 
-async def _publish(index, label, feed, part=None):
-    """One connection, one bus name, one item, one watch task.
+def _backend():
+    """WHICH PRESENTER THIS PLATFORM HAS, resolved once and cached.
 
-    A CONNECTION EACH is not a style choice: see the module docstring. The bus
-    name index is 1-based to match the convention every other SNI producer uses.
+    THE ONLY PLACE A PLATFORM IS NAMED. A backend owes three things and
+    nothing else: `session_bus()`, `toaster(bus, enabled)` and
+    `export(index, tile, activate) -> handle`, where the handle answers
+    `close()`. Everything above this line decides WHAT to show and works on a
+    machine with no bus, which is the property that makes a macOS presenter a
+    sibling of backend_dbus rather than a fork of this file.
+
+    IMPORTED LAZILY, and that is load-bearing rather than tidy: backend_dbus
+    is the one module that needs dbus_next, so importing it at the top would
+    put that dependency back on every reader of this file and take the 147
+    tests with it.
+    """
+    global _BACKEND
+    if _BACKEND is None:
+        from . import backend_dbus
+        _BACKEND = backend_dbus
+    return _BACKEND
+
+
+_BACKEND = None
+
+
+async def _publish(index, label, feed, part=None):
+    """One tile, published by whatever presenter this platform has, plus the
+    watch task that feeds it.
 
     The item's poll is not its own any more: it reads `feed`, which its whole
     HOST shares, so two partitions on one box cost one query rather than two.
     """
-    bus = await MessageBus(bus_type=BusType.SESSION).connect()
     # Before the export, so the FIRST pixmap a tray host reads already carries
     # the host colour. Painting neutral and then correcting it would make every
     # item visibly change colour a moment after the bar appeared.
@@ -1266,47 +1253,11 @@ async def _publish(index, label, feed, part=None):
     if host is None and label:
         print(f"mux-desktop-notifier: {label} has no usable colour pair "
               f"(drawing host-neutral)", flush=True)
-    item = Indicator(label=label, host=host,
-                     local=(host_of(label) == local_label()))
-    bus.export(ITEM_PATH, item)
-    name = item_bus_name(os.getpid(), index)
-    await bus.request_name(name)
-
-    async def register():
-        try:
-            intro = await bus.introspect(WATCHER, WATCHER_PATH)
-            obj = bus.get_proxy_object(WATCHER, WATCHER_PATH, intro)
-            w = obj.get_interface(WATCHER)
-            await w.call_register_status_notifier_item(name)
-            print(f"mux-desktop-notifier: + {label} ({name})", flush=True)
-        except Exception as e:
-            print(f"mux-desktop-notifier: register failed for {label}: {e}",
-                  flush=True)
-
-    # (Re)register whenever the tray watcher (waybar) appears, so a `wb restart`
-    # or a late-starting bar never leaves us invisible. Per connection, because
-    # each name has to re-announce itself.
-    di = await bus.introspect("org.freedesktop.DBus", "/org/freedesktop/DBus")
-    dobj = bus.get_proxy_object("org.freedesktop.DBus",
-                                "/org/freedesktop/DBus", di)
-    dbus = dobj.get_interface("org.freedesktop.DBus")
-
-    def on_owner(n, old, new):
-        if wants_reregister(n, new):
-            asyncio.get_event_loop().create_task(register())
-    dbus.on_name_owner_changed(on_owner)
-
-    try:
-        owner = await dbus.call_get_name_owner(WATCHER)
-    except Exception:
-        owner = ""
-    if owner:
-        await register()
-    else:
-        print(f"mux-desktop-notifier: {label} waiting for the tray watcher",
-              flush=True)
-    task = asyncio.create_task(_watch(item, feed, part, label))
-    return bus, task, item
+    tile = Tile(label=label, host=host, part=part,
+                local=(host_of(label) == local_label()))
+    handle = await _backend().export(index, tile, activate)
+    task = asyncio.create_task(_watch(tile, feed, part, label))
+    return handle, task, tile
 
 
 async def _supervise():
@@ -1339,8 +1290,8 @@ async def _supervise():
     # notification ids: a per-host one would lose them on every reconnect and
     # leave banners nobody can withdraw. `TOASTS` off makes it inert rather
     # than absent, so nothing downstream needs to know.
-    _toast_bus = await MessageBus(bus_type=BusType.SESSION).connect()
-    _toaster = Toaster(_toast_bus, enabled=TOASTS)
+    _toast_bus = await _backend().session_bus()
+    _toaster = _backend().toaster(_toast_bus, enabled=TOASTS)
     _local = sources.local_label()
 
     async def _present(feed):
@@ -1407,12 +1358,9 @@ async def _supervise():
             announced = True
 
         for label in drop:
-            bus, task, _item = live.pop(label)
+            handle, task, _item = live.pop(label)
             task.cancel()
-            try:
-                bus.disconnect()
-            except Exception:
-                pass
+            handle.close()
             # The reason is no longer always a latch: an item also goes
             # when its partition stops being reported, and when a host
             # gains a second one and every key on it is rewritten.
@@ -1433,7 +1381,7 @@ async def _supervise():
         # the newcomer blank until the next pass: the one item you are
         # looking at precisely because it just appeared.
         plan = mark_plan(live, local_label(), _slots)
-        for _label, (_b, _t, _item) in live.items():
+        for _label, (_h, _t, _item) in live.items():
             _mk, _ink = plan[_label]
             _item.set_mark(_mk, _ink, want[_label][2] if _label in want
                            else None)
