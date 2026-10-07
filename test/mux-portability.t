@@ -184,14 +184,23 @@ fi
 # clean today and the point is that it stays that way.
 # COMMENTS ARE EXCLUDED, or this check fails on the prose explaining it, and
 # a note saying "BSD has no `xargs -r`" is the opposite of a violation.
-_gnuisms='grep[^|]*-[a-zA-Z]*P |sed -i|stat -c|date -r |date -d |ps --'
+_gnuisms='grep[^|]*-[a-zA-Z]*P |sed -i|stat -c|date -r |date -d '
+# `ps --` IS ANCHORED ON A NON-LETTER, or it matches the tail of any word
+# ending in `ps`: `caps --all` in test/mux-capabilities.t reads as a GNU `ps`
+# otherwise. Same class as the `/bin/env` pattern matching every shebang.
+_gnuisms=$_gnuisms'|(^|[^a-z])ps --'
 _gnuisms=$_gnuisms'|pgrep |xargs -r|realpath |nproc'
 # SHELL FILES ONLY, by shebang, the same way test/lint.t picks its corpus.
 # Documentation is not shipped code: share/skills/mux-agent/AGENTS.md documents
 # `timed-out` and a `-t` flag, and a word in prose is not a call.
 _shipped=$T/shipped
 : >"$_shipped"
-find "$HERE/bin" "$HERE/libexec" "$HERE/share" -type f 2>/dev/null \
+# `lib` IS IN THIS LIST BECAUSE THE FHS SWEEP CREATED IT. Twenty sourced files
+# moved out of libexec and this directory list was not swept with them, so every
+# shared lib went unaudited while the floor below still passed comfortably on
+# bin+libexec+share. A floor is a vacuity guard and not a completeness one: it
+# catches a scrape going EMPTY, never a directory that never arrived.
+find "$HERE/bin" "$HERE/lib" "$HERE/libexec" "$HERE/share" -type f 2>/dev/null \
   | while IFS= read -r _f; do
     case $_f in
       *.md|*.py|*.theme|*.layout|*.partition|*.agent|*.yaml)
@@ -202,7 +211,7 @@ find "$HERE/bin" "$HERE/libexec" "$HERE/share" -type f 2>/dev/null \
     esac
   done >>"$_shipped"
 printf '%s\n' "$HERE/setup.sh" >>"$_shipped"
-[ "$(grep -c . "$_shipped")" -ge 20 ] || fail "only $(grep -c . "$_shipped")
+[ "$(grep -c . "$_shipped")" -ge 70 ] || fail "only $(grep -c . "$_shipped")
 shipped shell files found; the discovery is broken and the audit below would
 pass vacuously"
 
@@ -214,6 +223,56 @@ _hits=$(grep -nE "$_gnuisms" $(cat "$_shipped") 2>/dev/null \
 [ -z "$_hits" ] || fail "GNU-only construct(s) in shipped code, which a BSD
 userland does not have:
 $_hits"
+
+# --- AND THE SUITE ITSELF, because the macOS runner executes it -----------
+# THE AUDIT ABOVE ASKS ABOUT SHIPPED CODE, which is the right question for a
+# USER and the wrong one for CI: the runner runs test/ too, so a GNU-only call
+# in a fixture turns the whole job red while every box here stays green. That
+# is not hypothetical. `sed -i 's/x/y/' f` went into
+# test/mux-migrate-profiles.t and broke macOS for three commits, because BSD
+# sed takes a MANDATORY extension argument there, reads the EXPRESSION as the
+# suffix and the FILE as the script. Unguarded under `set -e`, so the file
+# exited with NO VERDICT, which is the hardest failure to read from a log.
+#
+# A LINE CARRYING `||` IS EXEMPT, and that is the whole policy: a fallback is
+# how a test legitimately reaches for a GNU tool (`nproc || getconf` in
+# test/run, `grep -nP || grep` in test/mux-config-sample.t). What is refused
+# is the UNGUARDED call, which is the shape that cannot degrade.
+_tsuite=$T/tsuite
+: >"$_tsuite"
+for _f in "$HERE"/test/*; do
+  case $_f in
+    # conventions.t is VENDORED byte-identical from shared-notes, so a finding
+    # there is not this repo's to fix; this file's own pattern strings are data.
+    */conventions.t|*/mux-portability.t) continue ;;
+    *.exempt|*.rec) continue ;;
+  esac
+  [ -f "$_f" ] || continue
+  printf '%s\n' "$_f" >>"$_tsuite"
+done
+[ "$(grep -c . "$_tsuite")" -ge 60 ] || fail "only $(grep -c . "$_tsuite") test
+files found; the discovery is broken and the audit below would pass vacuously"
+
+# shellcheck disable=SC2046,SC2013   # one path per line, this repo's own files
+_thits=$(grep -nE "$_gnuisms" $(cat "$_tsuite") 2>/dev/null \
+  | grep -vE '^[^:]*:[0-9]*: *#' | grep -v '||' || true)
+[ -z "$_thits" ] || fail "GNU-only construct(s) in the SUITE, unguarded, so
+the macOS runner fails where this box passes. Add a \`||\` fallback or use a
+portable form (for in-place edits: write to \$T and \`mv\`):
+$_thits"
+
+# AND THE DETECTOR IS PROVEN, not trusted, because a pattern that stopped
+# matching would report a clean suite for ever. The planted violation is the
+# exact shape that shipped.
+printf 'sed -i %ss/a/b/%s f\n' "'" "'" >"$T/planted.t"
+grep -qE "$_gnuisms" "$T/planted.t" \
+  || fail "the GNU-ism pattern no longer matches a bare \`sed -i\`, so the
+audit above proves nothing"
+printf 'nproc 2>/dev/null || getconf _NPROCESSORS_ONLN\n' >"$T/guarded.t"
+if grep -nE "$_gnuisms" "$T/guarded.t" | grep -qv '||'; then
+  fail "a GUARDED fallback is being refused, so the audit would force every
+test off a GNU tool it already degrades from correctly"
+fi
 
 # `timeout` IS GNU AND IS ALLOWED, guarded. It has no BSD equivalent and mux
 # uses it only as a backstop, so the rule is that any shipped file reaching for
