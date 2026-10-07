@@ -1,9 +1,17 @@
 [project]
 name = "mux-desktop-notifier"
 version = "0.0.1"
-description = "Optional SNI tray indicator for mux agent-session state"
+description = "Optional desktop presenter for mux agent-session state"
 requires-python = ">=3.8"
-dependencies = ["dbus-next>=0.2.3", "Pillow>=9"]
+# Pillow EVERYWHERE, dbus-next ONLY WHERE THERE IS A BUS. render.py owns every
+# pixel on every platform, so Pillow is not optional; dbus_next is imported by
+# exactly one module (backend_dbus.py), so a platform with no D-Bus should not
+# be made to carry it. The marker is what lets a macOS presenter be an
+# ADDITION: `pip install` there resolves, and the shared half imports.
+dependencies = [
+  "Pillow>=9",
+  "dbus-next>=0.2.3; sys_platform == 'linux'",
+]
 
 [project.scripts]
 mux-desktop-notifier = "mux_desktop_notifier.__main__:main"

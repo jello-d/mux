@@ -72,17 +72,28 @@ jobs:
           command -v sha256sum >/dev/null 2>&1 \
             && echo "hash: sha256sum" || echo "hash: no sha256sum (BSD)"
 
-      # The tray's Python tests need dbus-next and Pillow, and they SKIP cleanly
-      # without them. Installed on Linux only: the indicator is a freedesktop
-      # StatusNotifierItem, so macOS is not its platform yet, and a green macOS
-      # run that included them would be claiming coverage mux does not have.
-      - name: indicator deps (Linux only)
-        if: runner.os == 'Linux'
+      # The notifier's Python tests, on BOTH platforms now.
+      #
+      # IT USED TO BE LINUX ONLY, and the reason given was that the tray is a
+      # freedesktop StatusNotifierItem so macOS is not its platform. That was
+      # true of the PRESENTER and false of the package: `render` owns every
+      # pixel, `sources` every transport, and `sni.Tile` every decision about
+      # what an item shows, none of which is D-Bus. Measured before the split:
+      # 147 of 289 tests errored with dbus_next absent, because the only way
+      # to reach any of that was to construct a ServiceInterface subclass.
+      # After it: 0 errors and 10 skips, so this step buys real coverage of
+      # the shared half on the platform we want a second presenter for.
+      #
+      # `pip install .` RATHER THAN A HAND-WRITTEN DEP LIST, so the marker in
+      # pyproject.toml is what decides: dbus-next on Linux, not on macOS. A
+      # literal `install dbus-next Pillow` here would quietly re-couple the
+      # two and the marker would never be exercised.
+      - name: notifier deps
         run: |
           set -eu
           python3 -m venv "$HOME/.venvs/mux-desktop-notifier"
           "$HOME/.venvs/mux-desktop-notifier/bin/pip" \
-            install -q dbus-next Pillow
+            install -q ./desktop-notifier
 
       - name: suite
         # `setup.sh test` is the one entry point a consumer uses, so CI runs

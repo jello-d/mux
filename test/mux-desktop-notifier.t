@@ -16,9 +16,18 @@
 # being run.
 #
 # IT SKIPS RATHER THAN FAILS when the deps are absent, matching test/lint.t
-# (no shellcheck) and test/mux-sane.t (no script). dbus-next and Pillow are
-# optional extras for an optional component; a box that never installed the
-# tray must not have a red suite because of it.
+# (no shellcheck) and test/mux-sane.t (no script). They are optional extras for
+# an optional component; a box that never installed the notifier must not have
+# a red suite because of it.
+#
+# PILLOW IS WHAT GATES THIS FILE, NOT dbus-next, and that is the whole point of
+# the backend split. `render` owns every pixel, `sources` every transport and
+# `sni.Tile` every decision about what a tray item shows, none of which is
+# D-Bus; only `backend_dbus` needs dbus_next, and its own tests skip themselves
+# when it is absent. Asking for dbus_next here would have skipped the entire
+# 283-test shared half on any platform without a bus, which is precisely the
+# platform a second presenter is being built for. Measured: with dbus_next
+# hidden, 293 ran, 10 skipped, 0 failed.
 set -eu
 _name=mux-desktop-notifier
 . "$(dirname "$0")/harness_lib"
@@ -26,7 +35,7 @@ _name=mux-desktop-notifier
 IND=$HERE/desktop-notifier
 [ -d "$IND/tests" ] || fail "desktop-notifier/tests is missing"
 
-# A python that can import the deps. The venv setup.sh builds is the usual one;
+# A python that can import Pillow. The venv setup.sh builds is the usual one;
 # a system python with them installed works too. Checked by IMPORTING rather
 # than by looking for a venv directory, since a half-built venv is exactly the
 # case that should skip rather than fail confusingly.
@@ -44,13 +53,13 @@ for _c in "${MUX_DESKTOP_NOTIFIER_VENV:-$_vnew}/bin/python" \
     "$HOME_REAL/.venvs/mux-desktop-notifier/bin/python" \
     python3 python; do
   command -v "$_c" >/dev/null 2>&1 || [ -x "$_c" ] || continue
-  if "$_c" -c 'import dbus_next, PIL' >/dev/null 2>&1; then
+  if "$_c" -c 'import PIL' >/dev/null 2>&1; then
     _py=$_c
     break
   fi
 done
 [ -n "$_py" ] || {
-  printf 'skip %s (no python with dbus-next + Pillow)\n' "$_name"
+  printf 'skip %s (no python with Pillow)\n' "$_name"
   exit 0; }
 
 # -t . so `from mux_desktop_notifier...` resolves against the package.
@@ -60,8 +69,12 @@ if ( cd "$IND" && "$_py" -m unittest discover -s tests -t . ) \
   _n=$(sed -n 's/^Ran \([0-9]*\) test.*/\1/p' "$_out" | tail -1)
   # A run that asserted NOTHING is a failure, the same rule the rest of the
   # suite applies to itself: an empty discover exits 0 and looks like a pass.
-  [ -n "$_n" ] && [ "$_n" -ge 45 ] || fail "only ${_n:-0} python test(s)
-ran, and there were 52 when this was last raised. A discover that matches
+  # THE FLOOR TRACKS REALITY, or it stops being able to detect the loss it
+  # exists to detect: it sat at 45 while 289 were running, which would have
+  # waved through losing five sixths of them. Skipped tests COUNT as run, so
+  # one number serves both platforms (293 here, 293 with dbus_next hidden).
+  [ -n "$_n" ] && [ "$_n" -ge 280 ] || fail "only ${_n:-0} python test(s)
+ran, and there were 293 when this was last raised. A discover that matches
 nothing exits 0, so a rename or a broken import reads exactly like a clean run."
   printf 'ok   %s (%s python tests, %s)\n' "$_name" "$_n" \
     "$(basename "$(dirname "$(dirname "$_py")")")"
