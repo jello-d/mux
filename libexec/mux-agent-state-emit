@@ -6,6 +6,20 @@
 # noise into the model context.
 set -eu
 
+# THE EXIT CODES FIRST, ABOVE ANYTHING THAT CAN EXIT. They used to be sourced
+# below the argument loop, so every usage path here referenced an UNSET
+# MUX_EC_USAGE: the message printed and the script then died on `set -u`.
+# Linux hid it, because dash's own fatal-error status is 2 and so is
+# MUX_EC_USAGE, which is the value the test asserts; macOS /bin/sh is bash and
+# exits 1, which is what finally showed it. A coincidence that makes a test
+# pass is worse than a failure.
+_libexec=$(dirname "$0")
+_lib=$_libexec/../lib
+[ -r "$_lib/mux-exit_lib" ] \
+  || { echo "mux: $_lib/mux-exit_lib missing" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$_lib/mux-exit_lib"
+
 # STATE, plus an optional --beat. Parsed rather than taken as $1 so a
 # hook can pass them in either order.
 state= _beat= _src= _unless_working=
@@ -52,13 +66,6 @@ done
 # No tmux pane means nothing to track. Exit clean so the hook never fails.
 [ -n "${TMUX_PANE:-}" ] || exit "$MUX_EC_OK"
 
-# Sibling libs in this script's own (colocated) libexec dir.
-_libexec=$(dirname "$0")
-_lib=$_libexec/../lib
-[ -r "$_lib/mux-exit_lib" ] \
-  || { echo "mux: $_lib/mux-exit_lib missing" >&2; exit 1; }
-# shellcheck source=/dev/null
-. "$_lib/mux-exit_lib"
 . "$_lib/mux-agent-state_lib"
 # NOT mux-notify_lib, and the absence is the point: this file raised banners
 # until the desktop notifier took them over, and the source outlived the

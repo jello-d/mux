@@ -159,9 +159,14 @@ MUX_LIB=${_self%/*}/../lib
 # THE EXIT CODES, before anything that can exit. A lib rather than five lines
 # here because every helper needs the same names; no fallback, because a
 # missing one leaves `exit "$MUX_EC_FAIL"` unset under `set -u`.
-[ -r "$MUX_LIB/mux-exit_lib" ] || {
-  echo "mux: $MUX_LIB/mux-exit_lib missing (incomplete install)" >&2
-  exit "$MUX_EC_FAIL"; }
+#
+# AND THIS GUARD CANNOT USE THE LIB IT IS CHECKING FOR, which is why the exit
+# is a LITERAL and shares its line with the name: that is exactly the shape
+# test/lint.t exempts. It said `exit "$MUX_EC_FAIL"` before, so the one path
+# that reports the exit codes missing was the one path that referenced them
+# while they did not exist, and died on `set -u` after printing.
+[ -r "$MUX_LIB/mux-exit_lib" ] \
+  || { echo "mux: $MUX_LIB/mux-exit_lib missing" >&2; exit 1; }
 # shellcheck source=/dev/null
 . "$MUX_LIB/mux-exit_lib"
 # Package DATA, the shipped defaults (themes, agents, shapes, the default
