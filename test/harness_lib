@@ -403,6 +403,91 @@ t_pty() {   # <typescript-file> <command string>
   esac
 }
 
+# --- a pty that also ANSWERS ------------------------------------------------
+# t_pty is for output: give a command a terminal and read what it drew. This
+# one is for INPUT, where `script(1)` cannot be relied on at all.
+#
+# WHY NOT `printf y | t_pty`, WHICH IS WHAT THIS REPLACES. Forwarding the
+# harness's own stdin into the pty is nowhere in script's contract, and the two
+# userlands do not agree: `mux setup`'s consent prompt read EOF on macOS, took
+# the decline branch, and failed with "answering 'y' did not apply" while every
+# other pty case passed. The likeliest mechanism is BSD script tearing the pty
+# down when ITS stdin reaches EOF, which `printf 'y\n' |` triggers at once.
+#
+# AND THE OTHER PIPED CASE PASSED VACUOUSLY, which is why this took a while to
+# see: `mux scan --init` does `read -r _want || _want=` and then falls back to
+# the offered default, so EOF and Enter are INDISTINGUISHABLE there. Its green
+# line said nothing about whether input arrives. `y` is the only answer that
+# cannot be faked by silence, so mux-setup was the only test that could tell.
+#
+# SO THE PTY IS OURS. twenty lines of stdlib python behave identically on both
+# userlands, where `script` is two tools with one name. Returns 127 when there
+# is no python3, which callers already treat as "skip the prompt case".
+#
+# T_PTY_IN IS THE GUARD CALLERS TEST, and it is deliberately NOT T_PTY: these
+# two helpers have different dependencies now, so a case that needs an answer
+# must not be gated on whether `script` exists. Getting that wrong gives the
+# worst available outcome, a confusing FAILURE on a box with script and no
+# python3, where the honest answer is a skip.
+t_pty_in_detect() {
+  T_PTY_IN=
+  command -v python3 >/dev/null 2>&1 && T_PTY_IN=py
+  return 0
+}
+t_pty_in_detect
+
+t_pty_in() {   # <typescript-file> <answer> <command string>
+  [ -n "$T_PTY_IN" ] || return 127
+  T_PTY_OUT=$1 T_PTY_ANS=$2 T_PTY_CMD=$3
+  export T_PTY_OUT T_PTY_ANS T_PTY_CMD
+  # The script is quoted, so the shell expands nothing in it; everything it
+  # needs arrives through the environment rather than through quoting.
+  python3 - <<'T_PTY_IN_PY'
+import os
+import pty
+import select
+import subprocess
+import sys
+
+out = os.environ["T_PTY_OUT"]
+ans = os.environ["T_PTY_ANS"]
+cmd = os.environ["T_PTY_CMD"]
+
+master, slave = pty.openpty()
+# The slave is the child's stdin AND stdout, so `[ -t 0 ]` is true and
+# anything it draws comes back on the same fd, which is what a typescript is.
+proc = subprocess.Popen(["/bin/sh", "-c", cmd], stdin=slave, stdout=slave,
+                        stderr=slave, close_fds=True)
+os.close(slave)
+if ans:
+    os.write(master, ans.encode())
+
+buf = b""
+while True:
+    try:
+        ready, _, _ = select.select([master], [], [], 20)
+    except OSError:                     # the master went away with the child
+        break
+    if not ready:                       # bounded, so a wedged child cannot
+        proc.kill()                     # hang the suite the way a bare
+        break                           # `wait` would
+    try:
+        chunk = os.read(master, 4096)
+    except OSError:                     # EIO on Linux once the child exits
+        break
+    if not chunk:
+        break
+    buf += chunk
+
+os.close(master)
+rc = proc.wait()
+with open(out, "wb") as fh:
+    fh.write(buf)
+# The child's status, which `script` does not propagate without GNU's -e.
+sys.exit(rc)
+T_PTY_IN_PY
+}
+
 # --- a scratch INSTALL PREFIX, for asserting about mux's own libs -----------
 # bin/mux self-locates from `$0` and has no path env seam, by design, so the
 # only way to give it a different lib tree is to stand it in one. bin/ and

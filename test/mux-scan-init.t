@@ -162,19 +162,38 @@ for a directory that does not exist"
 # --- AND THE INTERACTIVE PATH, where a terminal exists ------------------
 # The only case that needs a pty: pressing Enter takes the offered default.
 # Skipped rather than failed without one, the same as every other pty case here.
-if [ -n "$T_PTY" ]; then
+if [ -n "$T_PTY_IN" ]; then
   MD=$T/c4
-  printf '\n' | t_pty /dev/null \
-    "env -u MUX_SHARE -u TMUX HOME=$H MUX_DIR=$MD MUX_CACHE=$T/cache \
-MUX_STATE=$T/state $HERE/bin/mux scan --init" >"$T/out" 2>&1 || true
+  t_pty_in "$T/out" '
+' "env -u MUX_SHARE -u TMUX HOME=$H MUX_DIR=$MD MUX_CACHE=$T/cache \
+MUX_STATE=$T/state $HERE/bin/mux scan --init" >/dev/null 2>&1 || true
   grep -q 'where do you keep your projects' "$T/out" \
     || fail "no prompt appeared on a terminal: $(cat "$T/out")"
   grep -qE "^scan[[:space:]]+$H/src 3\$" "$MD/partitions/global.partition" \
     2>/dev/null || fail "pressing Enter did not accept the offered default:
 $(cat "$MD/partitions/global.partition" 2>/dev/null)
 output was: $(cat "$T/out")"
+
+  # AND A TYPED ANSWER, because the case above cannot fail for the reason it
+  # names. `read -r _want || _want=` falls back to the default, so EOF and
+  # Enter are INDISTINGUISHABLE: that assertion passes whether the keystroke
+  # arrived or nothing did. It read green on macOS all the way through three
+  # commits where input provably never reached a prompt, which is how a
+  # vacuous pass earns its reputation. Only an answer the default cannot
+  # produce proves the prompt is wired to anything.
+  MD2=$T/c5
+  mkdir -p "$H/elsewhere"
+  t_pty_in "$T/out2" "$H/elsewhere
+" "env -u MUX_SHARE -u TMUX HOME=$H MUX_DIR=$MD2 MUX_CACHE=$T/cache \
+MUX_STATE=$T/state $HERE/bin/mux scan --init" >/dev/null 2>&1 || true
+  grep -qE "^scan[[:space:]]+$H/elsewhere 3\$" \
+    "$MD2/partitions/global.partition" 2>/dev/null \
+    || fail "a TYPED root was not what got recorded, so the prompt either
+never received it or ignored it:
+$(cat "$MD2/partitions/global.partition" 2>/dev/null)
+the pty saw: $(cat "$T/out2" 2>/dev/null)"
 else
-  printf 'note: %s skipped the prompt case (no usable script(1))\n' "$_name" >&2
+  printf 'note: %s skipped the prompt case (no python3)\n' "$_name" >&2
 fi
 
 pass

@@ -82,19 +82,22 @@ _rc=0; _o=$(mux setup claude </dev/null 2>&1) || _rc=$?
 # regardless is worse than no prompt: the human has been told they had a
 # choice. So this asserts the file is UNTOUCHED, not merely that something was
 # printed, because a message proves only that a message was printed.
-if [ -n "$T_PTY" ]; then
+if [ -n "$T_PTY_IN" ]; then
   _ask=$T/ask.log
   # THE ANSWER GOES THROUGH THE PTY, not through a redirect: `< file` replaces
   # stdin, so `[ -t 0 ]` is false and the verb takes the no-tty REFUSAL
   # instead of ever prompting. Cost one confusing run, and it is the whole
   # reason this case needs a pty rather than a pipe.
-  # THE COMMAND RECORDS ITS OWN STATUS, because `script` does not propagate
-  # the child's without GNU's `-e` and this suite must not key on a userland.
-  # Reading it from the typescript's COMMAND_EXIT_CODE would be the same
-  # mistake one layer over.
-  printf 'n\n' | t_pty "$_ask" "env -u MUX_SHARE CLAUDE_CONFIG_DIR=$CDIR \
-$HERE/bin/mux setup claude; printf %s \$? >$T/rc" >/dev/null 2>&1 || true
-  _rc=$(cat "$T/rc" 2>/dev/null || echo 0)
+  #
+  # AND `t_pty_in` RATHER THAN `printf y | t_pty`, which is what this used to
+  # be and what failed on macOS for three commits. Forwarding the harness's
+  # own stdin into the pty is nowhere in script(1)'s contract and the two
+  # userlands disagree; t_pty_in owns the pty, so both platforms answer the
+  # same way. It also returns the child's status directly, where `script`
+  # propagates none without GNU's `-e`.
+  t_pty_in "$_ask" 'n
+' "env -u MUX_SHARE CLAUDE_CONFIG_DIR=$CDIR \
+$HERE/bin/mux setup claude" >/dev/null 2>&1 && _rc=0 || _rc=$?
   case $(cat "$_ask") in *'[y/N]'*) ;;
     *) fail "at a terminal, setup must ASK before editing somebody else's
 config: [$(cat "$_ask")]" ;;
@@ -107,13 +110,21 @@ which is worse than never asking: the human was told they had a choice"
     || fail "answering 'n' exited 0, so anything scripting this verb reads a
 decline as a successful wiring"
   # ... and `y` applies, or the prompt would be a refusal wearing a question.
-  printf 'y\n' | t_pty "$T/ask2.log" "env -u MUX_SHARE \
-CLAUDE_CONFIG_DIR=$CDIR $HERE/bin/mux setup claude" >/dev/null 2>&1 || true
+  t_pty_in "$T/ask2.log" 'y
+' "env -u MUX_SHARE \
+CLAUDE_CONFIG_DIR=$CDIR $HERE/bin/mux setup claude" >/dev/null 2>&1 \
+    && _yrc=0 || _yrc=$?
+  # THE ASSERTION CARRIES ITS EVIDENCE. This failed on the macOS runner for
+  # three commits saying only that the file was absent, which cannot separate
+  # "the answer never arrived" from "it arrived and the apply failed". The
+  # typescript holds both the prompt and whatever the verb said next.
   [ -e "$SET" ] || fail "answering 'y' at the prompt did not apply, so the
-question has only one answer and the verb is unusable interactively"
+question has only one answer and the verb is unusable interactively.
+rc was $_yrc; the pty saw:
+$(sed 's/^/  /' "$T/ask2.log" 2>/dev/null)"
   rm -f "$SET"
 else
-  printf 'note %s: no usable script(1), so the consent PROMPT is unchecked\n' \
+  printf 'note %s: no python3, so the consent PROMPT is unchecked\n' \
     "$_name"
 fi
 
