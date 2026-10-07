@@ -65,7 +65,13 @@ retired file still shadows the row that replaced it"
 # pass must not re-convert a name whose row already exists, which would
 # overwrite edits made since.
 printf 'theme cyan\nagent claude\n' >"$CONF/api.layout"
-sed -i 's/theme=cyan/theme=green/' "$CONF/profiles"
+# TEMP-AND-MV, NOT `sed -i`: BSD sed takes a MANDATORY extension argument
+# there, so `sed -i 's/x/y/' f` reads the EXPRESSION as the suffix and `f` as
+# the script. It dies with `invalid command code`, and because that is an
+# unguarded call under `set -e` the file exits with NO VERDICT, which is how
+# this broke the macOS runner while every box here stayed green.
+sed 's/theme=cyan/theme=green/' "$CONF/profiles" >"$T/prof.ed"
+mv "$T/prof.ed" "$CONF/profiles"
 _o=$(mig --apply)
 has "$_o" "skip  api: already migrated" second-run-skips
 eq second-run-kept-edit "$(row api)" "theme=green agent=claude"
