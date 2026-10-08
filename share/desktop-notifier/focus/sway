@@ -1,0 +1,41 @@
+#!/bin/sh
+# focus/sway - raise a window by title under sway.
+#
+# An ACTIVATE hook; see focus/kitty for the contract and for the `[host]`
+# title mux emits.
+#
+#     desktop-notifier-activate   sway
+#
+# SWAY'S CRITERIA TAKE A REGEX, so the brackets are ESCAPED here where
+# focus/wmctrl leaves them literal: the same anchor, spelled for a different
+# matcher. `title=` is matched against the whole title, unanchored, which is
+# what makes a trailing `[host]` findable.
+#
+# i3 IS NOT THIS HOOK even though `i3-msg` speaks the same criteria syntax,
+# and the reason is the guard rather than the command: SWAYSOCK is how this
+# knows sway is the compositor in front of you, and on i3 it is unset while
+# I3SOCK is not. An i3 user is better served by focus/wmctrl, which reaches
+# every X11 window manager at once. Copy this and swap the two names if you
+# would rather have the precise form.
+#
+# NOT VERIFIED AGAINST A RUNNING sway. `swaymsg` is installed on this fleet
+# (the greeter runs sway) and the command form is checked to parse, but there
+# has been no sway session to raise a window in: the criteria syntax comes
+# from sway(5). Bounded and loud if wrong, like every hook here.
+set -eu
+
+_me=focus/sway
+_label=${1:-}
+[ -n "$_label" ] || { echo "usage: $_me LABEL" >&2; exit 78; }
+# BEFORE THE TOOL, for focus/wayfire's reason: swaymsg is installed on plenty
+# of boxes that are not running sway right now, and on those the socket is
+# the fact that matters.
+[ -n "${SWAYSOCK:-}" ] || {
+  echo "$_me: SWAYSOCK unset, so sway is not the live compositor" >&2
+  exit 78; }
+command -v swaymsg >/dev/null 2>&1 || {
+  echo "$_me: swaymsg is not on PATH" >&2; exit 78; }
+
+swaymsg "[title=\"\\[$_label\\]\"] focus" >/dev/null 2>&1 || {
+  echo "$_me: could not focus a window titled '$_label'" >&2
+  exit 78; }

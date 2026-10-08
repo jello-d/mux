@@ -263,23 +263,45 @@ def share_dir():
     return cand if os.path.isdir(cand) else None
 
 
-def hook_path(value):
+def hook_path(value, kind):
     """A hook NAME resolved to a path: the user's overlay, then the shipped
-    one, else left alone for PATH to answer.
+    one, else left alone for PATH to answer. KIND is the seam, `focus` or
+    `toast`, and names the subdirectory searched.
 
     IT EXISTED FOR latch AND NOT HERE, which made the shipped samples
     unreachable: `desktop-notifier-activate focus-kitty` is what config.sample
-    documents, `focus-kitty` is NOT on PATH, and it installs under
+    documented, that name is NOT on PATH, and it installs under
     `$MUX_SHARE/desktop-notifier/`. So the one spelling the documentation
-    teaches could not resolve, and the click reported "failed to start"
-    naming a file the user can see on disk. Advice that cannot come true, in
-    the form of a sample nobody could name.
+    taught could not resolve, and the click reported "failed to start" naming
+    a file the user can see on disk.
+
+    KIND IS A PARAMETER BECAUSE ONE DIRECTORY HELD TWO CONTRACTS, which is a
+    different defect and a worse one, because both halves "work". Flat and
+    prefix-named, `desktop-notifier-toast focus-kitty` resolved a real
+    executable and ran it with a toast's five arguments, and
+    `desktop-notifier-activate toast-pango` ran a banner composer with a tray
+    label: the first exits non-zero so the toast falls back to the built-in
+    wording, the second prints to stdout and the click reports success having
+    focused nothing. The seam KEY and the file PREFIX encoded the same fact
+    twice, so they could disagree. A subdirectory removes that by
+    construction rather than by validating it, and the caller always knows
+    which seam it is resolving, so the kind is no new fact to carry.
+
+    SO THE NAMES INSIDE ARE BARE: `focus/kitty`, never `focus/focus-kitty`,
+    which writes the kind twice and is the doubled shape `conventions.t`
+    rule 10 refuses for packages. The config key carries it instead:
+    `desktop-notifier-activate kitty`.
 
     THE SAME THREE CASES AS latch's `_hook`, deliberately, so a reader who
     knows one knows the other: a value containing `/` is a literal path and
     is never searched for, `none` disables the seam, and anything else is a
     bare name resolved overlay-first. Only the leading WORD is resolved, so a
     hook may carry arguments.
+
+    A CONSEQUENCE WORTH KNOWING, because it looks like it should work:
+    `focus/kitty` as a VALUE contains a slash, so it is taken as a literal
+    relative path and never searched for. The kind is implicit in the key and
+    is not spelled in the value.
     """
     if not value:
         return value
@@ -292,7 +314,7 @@ def hook_path(value):
     for base in (_mux_dir(), share_dir()):
         if not base:
             continue
-        cand = os.path.join(base, "desktop-notifier", name)
+        cand = os.path.join(base, "desktop-notifier", kind, name)
         if os.access(cand, os.X_OK):
             return cand + rest
     return value
@@ -315,7 +337,7 @@ def toast_hook():
     format that joins summary and body on one row.
     """
     return hook_path(os.environ.get("MUX_DESKTOP_NOTIFIER_TOAST")
-                     or _conf("desktop-notifier-toast"))
+                     or _conf("desktop-notifier-toast"), "toast")
 
 
 def remote_argv(host, template=None, cmd=None, port=None):

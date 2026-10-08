@@ -1,0 +1,34 @@
+#!/bin/sh
+# focus/wayfire - raise a window by title under wayfire.
+#
+# An ACTIVATE hook; see focus/kitty for the contract, for the `[host]` title
+# mux emits, and for why this is a hook rather than something mux does.
+#
+#     desktop-notifier-activate   wayfire
+#
+# TERMINAL-NEUTRAL where focus/kitty is not: it asks the COMPOSITOR to raise
+# whatever window carries the title, so it works for any terminal. It needs
+# wayfire's IPC socket, which is a plugin you must enable, so the two trade
+# different requirements, which is the point of shipping both.
+#
+# NOT VERIFIED AGAINST A RUNNING wf-msg. The socket half is real and is
+# checked on a live wayfire here; `wf-msg` itself is not packaged on this
+# fleet, so the command FORM comes from wayfire's IPC documentation rather
+# than from a run. The cost of its being wrong is bounded and loud: exit 78
+# with the message below, and the click has already switched the session.
+set -eu
+
+_me=focus/wayfire
+_label=${1:-}
+[ -n "$_label" ] || { echo "usage: $_me LABEL" >&2; exit 78; }
+# CHECKED BEFORE THE TOOL, because wf-msg being present tells you nothing
+# about the ipc plugin being enabled, and that is the usual missing half.
+[ -n "${WAYFIRE_SOCKET:-}" ] || {
+  echo "$_me: WAYFIRE_SOCKET unset (enable the ipc plugin)" >&2
+  exit 78; }
+command -v wf-msg >/dev/null 2>&1 || {
+  echo "$_me: wf-msg is not on PATH" >&2; exit 78; }
+
+wf-msg focus-window "title:\\[$_label\\]" 2>/dev/null || {
+  echo "$_me: could not focus a window titled '$_label'" >&2
+  exit 78; }

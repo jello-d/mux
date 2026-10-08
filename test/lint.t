@@ -639,11 +639,22 @@ fi
 # Every shipped hook must be EXECUTABLE. A hook that is present and unrunnable
 # resolves by name, then fails to run, and latch reports the state it could not
 # determine rather than the install that is broken.
-for _h in "$HERE"/share/latch/* "$HERE"/share/desktop-notifier/*; do
-  [ -e "$_h" ] || continue
+# FOUND WITH `find`, NOT A GLOB, because share/desktop-notifier/ holds a
+# directory per SEAM now (focus/ and toast/) and `[ -x ]` is TRUE of a
+# directory: a single-level glob would have iterated two directories, passed
+# both, and checked no hook at all. That is this tree's selector-shrink trap,
+# whose tell is a count that moves while nothing fails, so the count is
+# printed below.
+_hx=0
+for _h in $(find "$HERE/share/latch" "$HERE/share/desktop-notifier" \
+    -type f 2>/dev/null | sort); do
+  _hx=$((_hx + 1))
   [ -x "$_h" ] || fail "$(basename "$_h") is not executable;
 a hook that cannot run is a hook latch resolves and then cannot use"
 done
+[ "$_hx" -ge 8 ] || fail "only $_hx shipped hooks were checked for the
+executable bit, which is fewer than the tree has carried since the focus and
+toast directories split: the selector has stopped seeing them"
 
 # THE MODE IS AUTHORITATIVE IN libexec/, and asserted in BOTH directions. mux
 # had it both ways before this: four of fifteen sourced libs were 775 and the

@@ -217,23 +217,49 @@
 # interprets markup in it, is the DAEMON's choice. mako reads Pango in the
 # body and not in the summary; dunst differs; a macOS presenter has no Pango
 # at all. mux emits text that reads correctly everywhere and leaves styling
-# to you. `toast-pango` in $MUX_SHARE/desktop-notifier/ is a worked example
-# (a dim, normal-weight host on the title row) and documents the one line of
-# daemon config it REQUIRES: without that line its empty host row renders as a
-# blank one. So the question that picks a hook is whether your daemon's format
-# is configurable (mako and dunst, yes; swaync, GNOME Shell, plasma and
-# xfce4-notifyd, no), and where it is not the answer is to leave this unset.
+# to you.
+#
+# A BARE NAME RESOLVES IN $MUX_SHARE/desktop-notifier/toast/, and your own
+# copy in $MUX_DIR/desktop-notifier/toast/ wins over a shipped one of the
+# same name. The kind lives in this KEY, so it is not spelled in the value: a
+# value with a `/` in it is taken as a literal path.
+#
+# TWO SHIP, AND ONE QUESTION PICKS BETWEEN THEM: can you configure your
+# daemon's format?
+#
+#   pango   yes (mako, dunst). A dim, normal-weight host on the TITLE row,
+#           which needs one line of daemon config and says which in its
+#           header. Without that line it renders a blank row.
+#   dim     no (swaync, GNOME Shell, plasma, xfce4-notifyd). The host on its
+#           own row instead, dim, and no daemon config at all.
+#
+# Leave it unset for a daemon with no markup: mux's own wording is already
+# two correct rows there.
 #
 # Default: unset, so the wording is mux's own and carries no markup.
-#desktop-notifier-toast   toast-pango
+#desktop-notifier-toast   pango
 
 # desktop-notifier-activate HOOK
 #
 # Run locally after a tray click has switched that host's client, handed the
 # item's LABEL. Clicking switches the session; RAISING the window that shows
 # it means knowing about a compositor, and mux manages sessions inside
-# terminals with no opinion about where a terminal sits. Samples in
-# $MUX_SHARE/desktop-notifier/.
+# terminals with no opinion about where a terminal sits.
+#
+# A BARE NAME RESOLVES IN $MUX_SHARE/desktop-notifier/focus/, overlaid from
+# $MUX_DIR the same way. Pick the one named after what you run:
+#
+#   kitty       any compositor, via kitty remote control
+#   sway        sway
+#   hyprland    Hyprland
+#   niri        niri (needs jq)
+#   wayfire     wayfire, with its ipc plugin enabled
+#   wmctrl      every X11 window manager at once, via EWMH
+#
+# NOT SHIPPED, because there is nothing supported to call: GNOME Shell and
+# KDE under Wayland expose no window-raise IPC. Each hook names what it
+# needs and what it was verified against; all exit 78 when they cannot
+# answer, which the notifier reports rather than swallowing.
 #
 # Default: unset, so the click does only the part mux owns.
-#desktop-notifier-activate   focus-kitty
+#desktop-notifier-activate   kitty

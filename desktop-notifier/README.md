@@ -26,8 +26,13 @@ mux manages sessions inside terminals with no opinion about where a terminal
 sits. So it is a seam, unset by default:
 
 ```
-desktop-notifier-activate   focus-kitty
+desktop-notifier-activate   kitty
 ```
+
+A bare name resolves in `$MUX_SHARE/desktop-notifier/**focus**/`, and your own
+copy in `$MUX_DIR/desktop-notifier/focus/` wins over a shipped one of the same
+name. **The kind is the directory, so it is not in the value**: a value
+containing a `/` is taken as a literal path and never searched for.
 
 The hook is handed the **label** (the host's short name) as its **one and
 only** argument, and runs *after* the switch so the window already shows the
@@ -45,18 +50,42 @@ and `host_short` is the **tmux server's** hostname, so a latched session
 advertises the *remote's* name in the terminal sitting in front of you. The
 samples match `[label]` with the brackets, because the bare name would also
 match a session called `northwood` or a path in the title.
-Two samples ship in `share/desktop-notifier/`, trading different requirements:
+Six ship in `share/desktop-notifier/focus/`. Pick the one named after what you
+run:
 
-- `focus-kitty`: kitty remote control (needs `allow_remote_control`),
-  matches on the window title
-- `focus-wayfire`: asks the compositor instead, so it is terminal-neutral,
-  but needs wayfire's IPC plugin
+| name | reaches | needs |
+| --- | --- | --- |
+| `kitty` | any compositor, via the terminal | `allow_remote_control` set |
+| `sway` | sway | `swaymsg`, `SWAYSOCK` |
+| `hyprland` | Hyprland | `hyprctl` |
+| `niri` | niri | `niri`, and `jq` to read its window list |
+| `wayfire` | wayfire | `wf-msg`, and the ipc plugin enabled |
+| `wmctrl` | **every X11 window manager**, via EWMH | `wmctrl`, `DISPLAY` |
 
-Both are *samples*: the title match is the part most likely to need changing
-for your setup, and every mechanism in them is yours to replace. They follow
-the same contract as latch's hooks (0 done, 78 cannot tell) and the
-indicator reports a non-zero exit rather than swallowing it, so a
-misconfigured hook says so instead of doing nothing.
+`wmctrl` is the widest per line, because X11 standardised this twenty years
+ago: one file reaches i3, bspwm, openbox, awesome, xfwm, Mutter-on-X11 and
+KWin-on-X11 without knowing which it is talking to. Every Wayland compositor
+needs its own hook because each has its own IPC. Note that on a Wayland
+session `DISPLAY` is usually set for XWayland's benefit, so `wmctrl` will run
+and will only ever see X11 clients: if your terminal is a native Wayland one,
+use the hook named after your compositor.
+
+**GNOME Shell and KDE under Wayland ship no hook**, because neither exposes a
+supported window-raise IPC. That is a gap stated rather than papered over with
+something that does not work.
+
+The three matchers take the `[label]` anchor three different ways, which is the
+thing to copy carefully if you write your own: escaped for a regex (`sway`,
+`hyprland`), literal for a substring match (`wmctrl`), and matched inside the
+hook for `niri`, whose focus action takes a window id rather than a title.
+
+Each hook's header says what it was **verified against**, because a hook whose
+mechanism was read rather than run is a different thing: `kitty` and the
+wayfire socket check are exercised live here, and the rest come from their
+compositors' documentation. All follow the same contract as latch's hooks
+(0 done, 78 cannot tell), and the notifier reports a non-zero exit rather than
+swallowing it, so a misconfigured hook says so instead of doing nothing. The
+cost of one being wrong is bounded: the click has already switched the session.
 
 ## Wording the banner yourself
 
@@ -74,8 +103,12 @@ seam to anyone who wants their own, the same line it already draws for a
 terminal emulator and a compositor:
 
 ```
-desktop-notifier-toast   toast-pango
+desktop-notifier-toast   pango
 ```
+
+A bare name resolves in `$MUX_SHARE/desktop-notifier/**toast**/`, overlaid from
+`$MUX_DIR` the same way as the focus hooks, and for the same reason the kind is
+the directory rather than part of the value.
 
 The hook is handed `KIND SESSION HOST PARTITION LOCALITY` and prints the
 **summary on its first line and the body on every line after it**. One stream,
@@ -84,8 +117,19 @@ hook knows the daemon it is writing for. mux falls back to its own wording on
 every failure there is (no hook, will not start, non-zero, hangs, prints
 nothing), so a mistake costs styling and never the notification.
 
-`toast-pango` ships as a worked example: a dim, normal-weight host sitting on
-the **title row**, with the body underneath.
+**Two ship, and one question picks between them: can you configure your
+daemon's format?**
+
+| name | for | host goes | daemon config |
+| --- | --- | --- | --- |
+| `pango` | mako, dunst | on the **title row** | one line, required |
+| `dim` | swaync, GNOME Shell, plasma, xfce4 | on its **own row** | none |
+
+Leave it unset for a daemon with no markup at all: mux's own wording is
+already two correct rows there.
+
+`pango` puts a dim, normal-weight host on the **title row**, with the body
+underneath.
 
 ```
 Claude finished: api (on northgate)     <- bold, then dim and normal weight
@@ -113,10 +157,28 @@ one on your own box. So each half is wrong alone, in opposite directions: the
 format with no hook puts the whole banner on one row, the hook with no format
 adds an empty one.
 
-**The one question that picks a hook is whether your daemon's format is
-configurable.** mako and dunst, yes; swaync, GNOME Shell, plasma and
-xfce4-notifyd, no. Where it is not, leave the hook unset: mux's own wording is
-already two correct rows there, and a dim grey is not worth a blank row.
+Which is what `dim` is for. It never emits an empty line, so it needs no
+format change, and it spends a whole row on the host rather than the title's
+spare width:
+
+```
+Claude needs you: api        <- the summary, as your daemon styles it
+(on northgate)               <- dim, and only when there is a host
+permission or input          <- the body
+```
+
+**So the first body line is positional in one hook and not the other**, which
+is the one rule a reader will try to harmonise and must not. `pango` always
+prints three lines, the middle empty when there is no host, because under a
+joining format that first line *is* the title row and a two-line answer would
+put the message there. `dim` varies instead: three lines remote, two local,
+and never an empty one. Same contract, opposite constraint, which is why there
+are two files rather than a flag.
+
+`dim` is not verified against any of the four daemons it is for (none is
+installed here). What *is* verified is the shape: the line split is asserted,
+and the markup was rendered with `pango-view`, which is the same Pango those
+daemons use.
 
 Note the asymmetry inside it, which is the thing most likely to look like a
 bug: the **host is escaped and the session is not**. Only the body is parsed,

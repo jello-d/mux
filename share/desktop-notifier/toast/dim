@@ -1,0 +1,92 @@
+#!/bin/sh
+# toast/dim - a quiet HOST on its own row, for a Pango daemon whose format
+# you CANNOT configure (swaync, GNOME Shell, plasma, xfce4-notifyd).
+#
+#   dim KIND SESSION HOST PARTITION LOCALITY
+#
+# Prints the SUMMARY on the first line and the BODY on every line after it.
+# mux falls back to its own wording on any failure, so a mistake here costs
+# styling and never the notification.
+#
+#     desktop-notifier-toast   dim
+#
+# AND NOTHING ELSE: no daemon config, which is the whole reason it exists.
+# toast/pango moves the title/body break out of the daemon's format and into
+# the hook, which buys a host on the title row and REQUIRES a format line to
+# put the break back. Most daemons do not let you set one, and against a
+# default `%s\n%b` pango's empty first body line renders as a BLANK ROW
+# (measured with pango-view at Sans 11: 83px against 62px, one line taller).
+# This hook never emits one.
+#
+# SO THE FIRST BODY LINE IS NOT POSITIONAL HERE, and that is the one rule
+# that differs between the two files. pango always prints THREE lines, the
+# middle empty when there is no host, because under a joining format the
+# body's first line IS the title row and a two-line answer would put the
+# message there. Under a `\n` format there is no such slot, so this one
+# varies: three lines remote, two local. Same contract, opposite constraint,
+# and neither hook's shape is right for the other's daemon.
+#
+#     Claude needs you: api        <- the summary, as the daemon styles it
+#     (on northgate)               <- dim, and only when there is a host
+#     permission or input          <- the body
+#
+# THE HOST IS MARKUP AND THE SUMMARY IS NOT, for the reason pango's header
+# gives at length: a daemon that does not parse the summary would print the
+# tags literally, and every daemon this hook is for parses the body.
+#
+# NOT VERIFIED AGAINST swaync, GNOME Shell, plasma OR xfce4-notifyd. None is
+# installed on this fleet. What IS verified is the shape: the line split is
+# asserted in test/mux-toast-hooks.t, and the rendering of the markup was
+# measured with pango-view, which is the same Pango the daemons use. What is
+# read rather than run is the claim that each of those four parses markup in
+# the body. If one does not, it prints the span literally, which is ugly and
+# is not a lost notification.
+set -eu
+
+_kind=${1:-finished}
+_sess=${2:-?}
+_host=${3:-}
+_part=${4:-}
+_loc=${5:-local}
+
+# A GREY RATHER THAN AN ALPHA, because a notification's background is the
+# daemon's and an alpha over an unknown colour is unpredictable.
+_DIM=${MUX_TOAST_DIM:-#8a8a8a}
+
+case $_kind in
+  (blocked) _sum="Claude needs you: $_sess"; _body="permission or input" ;;
+  (*)       _sum="Claude finished: $_sess";  _body="your turn" ;;
+esac
+
+# ESCAPED IN THE BODY ONLY, and the asymmetry is the point rather than an
+# oversight. The body IS parsed as markup, so a host or partition holding `&`
+# or `<` would not merely look wrong, it would make the daemon refuse to
+# parse the banner and draw nothing. The SUMMARY is not parsed, so escaping
+# the session name there would print `a&amp;b` at somebody whose session is
+# called `a&b`.
+esc() { printf '%s' "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'; }
+
+# THE PARTITION RIDES WITH THE HOST, not with the body as pango does it,
+# because here they share a row and together they are the address of the
+# thing asking for you. `global` is the baseline every box has, so naming it
+# would add a word that never varies.
+_addr=
+if [ "$_loc" = remote ] && [ -n "$_host" ]; then
+  _addr="(on $(esc "$_host")"
+  if [ -n "$_part" ] && [ "$_part" != global ]; then
+    _addr="$_addr [$(esc "$_part")]"
+  fi
+  _addr="$_addr)"
+elif [ -n "$_part" ] && [ "$_part" != global ]; then
+  # A LOCAL BANNER NAMES NO HOST, the same rule the built-in wording follows,
+  # but a non-baseline partition is still worth a row: two partitions on one
+  # box otherwise produce identical banners.
+  _addr="[$(esc "$_part")]"
+fi
+
+if [ -n "$_addr" ]; then
+  printf '%s\n<span foreground="%s">%s</span>\n%s\n' \
+    "$_sum" "$_DIM" "$_addr" "$_body"
+else
+  printf '%s\n%s\n' "$_sum" "$_body"
+fi

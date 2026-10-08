@@ -211,7 +211,7 @@ touching your files. They live in the payload:
 
   $_pay/share/envhooks.d/        per session pointer mux can validate
   $_pay/share/latch/             per transport: auth, probe, classify
-  $_pay/share/desktop-notifier/  focus-* for a click, toast-* for a banner
+  $_pay/share/desktop-notifier/  focus/ for a click, toast/ for a banner
   $_pay/share/themes/            colour themes
   $_pay/share/agents/            agent profiles
   $_pay/share/layouts/           the layouts mux starts you with

@@ -4591,39 +4591,39 @@ t mux-migrate-profiles
 m split-row: got
 
 = focus-kitty-matches-an-unanchored-title
-f share/desktop-notifier/focus-kitty
+f share/desktop-notifier/focus/kitty
 t mux-focus-hooks
 - kitten @ focus-window --match "title:\\[$_label\\]" 2>/dev/null || {
 + kitten @ focus-window --match "title:$_label" 2>/dev/null || {
 m kitty-argv: got
 
 = focus-kitty-acts-with-no-label
-f share/desktop-notifier/focus-kitty
+f share/desktop-notifier/focus/kitty
 t mux-focus-hooks
-- [ -n "$_label" ] || { echo "usage: focus-kitty LABEL" >&2; exit 78; }
-+ [ -z "$_label" ] || { echo "usage: focus-kitty LABEL" >&2; exit 78; }
-m no-label-focus-kitty: got
+- [ -n "$_label" ] || { echo "usage: $_me LABEL" >&2; exit 78; }
++ [ -z "$_label" ] || { echo "usage: $_me LABEL" >&2; exit 78; }
+m no-label-kitty: got
 
 = focus-kitty-skips-the-tool-check
-f share/desktop-notifier/focus-kitty
+f share/desktop-notifier/focus/kitty
 t mux-focus-hooks
 - command -v kitten >/dev/null 2>&1 || {
 + true >/dev/null 2>&1 || {
 m kitten is not on PATH
 
 = focus-wayfire-matches-an-unanchored-title
-f share/desktop-notifier/focus-wayfire
+f share/desktop-notifier/focus/wayfire
 t mux-focus-hooks
 - wf-msg focus-window "title:\\[$_label\\]" 2>/dev/null || {
 + wf-msg focus-window "title:$_label" 2>/dev/null || {
 m wayfire-argv: got
 
 = focus-wayfire-skips-the-socket-check
-f share/desktop-notifier/focus-wayfire
+f share/desktop-notifier/focus/wayfire
 t mux-focus-hooks
 - [ -n "${WAYFIRE_SOCKET:-}" ] || {
 + [ -z "${WAYFIRE_SOCKET:-}" ] || {
-m missing-wfmsg-names-it
+m missing-wf-msg-names-it
 
 = demo-agent-writes-state-directly
 f share/demo/fake-agent
@@ -4673,3 +4673,52 @@ t mux-config-roots
 -   themes/               colour themes, yours or overriding a shipped one
 +                         colour themes, yours or overriding a shipped one
 m never names them, so a user cannot discover the overlay
+
+= focus-sway-anchor-unescaped
+f share/desktop-notifier/focus/sway
+t mux-focus-hooks
+- swaymsg "[title=\"\\[$_label\\]\"] focus" >/dev/null 2>&1 || {
++ swaymsg "[title=\"$_label\"] focus" >/dev/null 2>&1 || {
+m sway-argv: got
+
+= focus-wmctrl-anchor-escaped
+f share/desktop-notifier/focus/wmctrl
+t mux-focus-hooks
+- wmctrl -a "[$_label]" >/dev/null 2>&1 || {
++ wmctrl -a "\\[$_label\\]" >/dev/null 2>&1 || {
+m wmctrl-argv: got
+
+= focus-hyprland-trusts-its-exit-code
+f share/desktop-notifier/focus/hyprland
+t mux-focus-hooks
+-   (ok*) ;;
++   (*) ;;
+m hypr-exit-0-but-failed: got
+
+= focus-niri-focuses-a-wrong-window
+f share/desktop-notifier/focus/niri
+t mux-focus-hooks
+- niri msg action focus-window --id "$_id" >/dev/null 2>&1 || {
++ niri msg action focus-window --id 0 >/dev/null 2>&1 || {
+m niri-focuses-the-id
+
+= focus-niri-anchor-unbracketed
+f share/desktop-notifier/focus/niri
+t mux-focus-hooks
+- _anchor="[$_label]"
++ _anchor="$_label"
+m niri-anchor
+
+= toast-dim-emits-a-blank-row
+f share/desktop-notifier/toast/dim
+t mux-toast-hooks
+-   printf '%s\n%s\n' "$_sum" "$_body"
++   printf '%s\n\n%s\n' "$_sum" "$_body"
+m emitted an EMPTY line
+
+= toast-dim-names-the-baseline-partition
+f share/desktop-notifier/toast/dim
+t mux-toast-hooks
+- elif [ -n "$_part" ] && [ "$_part" != global ]; then
++ elif [ -n "$_part" ] && [ "$_part" != nosuchpart ]; then
+m dim-local-lines: got

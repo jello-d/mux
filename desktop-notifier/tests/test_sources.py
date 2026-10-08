@@ -408,8 +408,8 @@ class ActivateSeam(unittest.TestCase):
         self.assertIsNone(sources.activate_hook())
 
     def test_the_config_key_is_read(self):
-        self._conf("desktop-notifier-activate focus-kitty\n")
-        self.assertEqual(sources.activate_hook(), "focus-kitty")
+        self._conf("desktop-notifier-activate kitty\n")
+        self.assertEqual(sources.activate_hook(), "kitty")
 
     def test_env_beats_config(self):
         self._conf("desktop-notifier-activate from-the-config\n")
@@ -633,15 +633,19 @@ class HookResolution(unittest.TestCase):
     """Turning a hook NAME into something exec can find.
 
     IT WAS MISSING, AND THE SAMPLES WERE THEREFORE UNREACHABLE. config.sample
-    documents `desktop-notifier-activate focus-kitty`; that bare name is NOT
+    documented `desktop-notifier-activate focus-kitty`; that bare name is NOT
     on PATH and installs under `$MUX_SHARE/desktop-notifier/`, so the one
-    spelling the documentation teaches could not resolve and the click
+    spelling the documentation taught could not resolve and the click
     reported "failed to start" about a file the user can see on disk. latch
     has had this resolver since 0.31; the notifier never did.
 
     THE SAME THREE CASES AS latch's `_hook`, so a reader who knows one knows
     the other: a `/` makes it a literal path, `none` disables the seam, and a
     bare name is resolved overlay-first.
+
+    AND A KIND, which latch's does not have, because one directory held two
+    contracts: see test_a_SEAM_cannot_resolve_the_OTHER_seams_hook below for
+    what that cost.
     """
 
     def setUp(self):
@@ -660,8 +664,8 @@ class HookResolution(unittest.TestCase):
             else:
                 os.environ[k] = v
 
-    def _hook(self, base, name="toast-x"):
-        d = os.path.join(self.root, base, "desktop-notifier")
+    def _hook(self, base, name="x", kind="toast"):
+        d = os.path.join(self.root, base, "desktop-notifier", kind)
         os.makedirs(d, exist_ok=True)
         p = os.path.join(d, name)
         with open(p, "w") as fh:
@@ -673,7 +677,7 @@ class HookResolution(unittest.TestCase):
         want = self._hook("share")
         os.environ["MUX_DIR"] = os.path.join(self.root, "conf")
         os.environ["MUX_SHARE"] = os.path.join(self.root, "share")
-        self.assertEqual(sources.hook_path("toast-x"), want)
+        self.assertEqual(sources.hook_path("x", "toast"), want)
 
     def test_the_USER_OVERLAY_wins(self):
         """$MUX_DIR before $MUX_SHARE, the same order layouts, themes and
@@ -683,7 +687,7 @@ class HookResolution(unittest.TestCase):
         mine = self._hook("conf")
         os.environ["MUX_DIR"] = os.path.join(self.root, "conf")
         os.environ["MUX_SHARE"] = os.path.join(self.root, "share")
-        self.assertEqual(sources.hook_path("toast-x"), mine)
+        self.assertEqual(sources.hook_path("x", "toast"), mine)
 
     def test_ARGUMENTS_survive_the_resolution(self):
         """Only the leading WORD is a path. A hook carrying flags is a
@@ -692,42 +696,77 @@ class HookResolution(unittest.TestCase):
         want = self._hook("share")
         os.environ["MUX_DIR"] = os.path.join(self.root, "conf")
         os.environ["MUX_SHARE"] = os.path.join(self.root, "share")
-        self.assertEqual(sources.hook_path("toast-x --dim #333"),
+        self.assertEqual(sources.hook_path("x --dim #333", "toast"),
                          want + " --dim #333")
 
     def test_a_PATH_is_taken_literally(self):
         """Anything with a `/` is the caller being explicit, and searching
         for it would silently prefer a same-named sample."""
         os.environ["MUX_SHARE"] = os.path.join(self.root, "share")
-        self._hook("share", name="toast-x")
-        self.assertEqual(sources.hook_path("/usr/local/bin/toast-x"),
-                         "/usr/local/bin/toast-x")
+        self._hook("share", name="x")
+        self.assertEqual(sources.hook_path("/usr/local/bin/x", "toast"),
+                         "/usr/local/bin/x")
 
     def test_none_DISABLES_the_seam(self):
         """The one spelling for "I do not want one", the same word
         `mux capabilities` uses for a declared absence and latch for a seam
         turned off. Without it an empty value reads as UNSET and falls back
         to the default instead."""
-        self.assertIsNone(sources.hook_path("none"))
+        self.assertIsNone(sources.hook_path("none", "toast"))
 
     def test_an_UNRESOLVABLE_name_is_left_for_PATH(self):
         """Not an error here: the value may name something on PATH, and
         refusing it would break a hook that is simply installed elsewhere.
         Failing to exec is reported by the caller, with the name in it."""
         os.environ["MUX_SHARE"] = os.path.join(self.root, "share")
-        os.makedirs(os.path.join(self.root, "share", "desktop-notifier"),
-                    exist_ok=True)
-        self.assertEqual(sources.hook_path("nosuchhook"), "nosuchhook")
+        os.makedirs(
+            os.path.join(self.root, "share", "desktop-notifier", "toast"),
+            exist_ok=True)
+        self.assertEqual(sources.hook_path("nosuchhook", "toast"), "nosuchhook")
+
+    def test_a_SEAM_cannot_resolve_the_OTHER_seams_hook(self):
+        """THE REASON `kind` IS A PARAMETER, and it is a defect rather than a
+        tidy-up. Flat and prefix-named, one directory held two contracts, so
+        `desktop-notifier-toast focus-kitty` resolved a real executable and
+        ran it with a toast's five arguments, while
+        `desktop-notifier-activate toast-pango` ran a banner composer with a
+        tray label. Both "work": the first exits non-zero so the toast falls
+        back to the built-in wording, the second prints to stdout and the
+        click reports success having focused nothing.
+
+        The seam KEY and the file PREFIX encoded the same fact twice, so they
+        could disagree. A subdirectory removes that by construction, and
+        asserting it needs BOTH directions: a name resolving where it should
+        proves nothing about the name it must NOT reach.
+        """
+        want = self._hook("share", name="kitty", kind="focus")
+        os.environ["MUX_SHARE"] = os.path.join(self.root, "share")
+        self.assertEqual(sources.hook_path("kitty", "focus"), want)
+        # The same name under the toast seam must fall through to PATH rather
+        # than finding the focus hook sitting next door.
+        self.assertEqual(sources.hook_path("kitty", "toast"), "kitty")
+
+    def test_a_KIND_in_the_VALUE_is_a_literal_path(self):
+        """Worth pinning because it looks like it should work: the kind lives
+        in the config KEY, so `focus/kitty` as a VALUE contains a slash and
+        is taken as a relative path, never searched for. A reader who writes
+        it gets "failed to start" naming that path, which is at least the
+        truth about what was attempted.
+        """
+        self._hook("share", name="kitty", kind="focus")
+        os.environ["MUX_SHARE"] = os.path.join(self.root, "share")
+        self.assertEqual(sources.hook_path("focus/kitty", "focus"),
+                         "focus/kitty")
 
     def test_a_NON_EXECUTABLE_file_is_not_resolved(self):
         """Present and unrunnable is not a hook. Resolving it would turn a
         forgotten chmod into "failed to start" naming a path that exists,
         which reads as mux being wrong about its own tree."""
-        d = os.path.join(self.root, "share", "desktop-notifier")
+        d = os.path.join(self.root, "share", "desktop-notifier", "toast")
         os.makedirs(d, exist_ok=True)
-        p = os.path.join(d, "toast-x")
+        p = os.path.join(d, "x")
         with open(p, "w") as fh:
             fh.write("#!/bin/sh\n")
         os.chmod(p, 0o644)
         os.environ["MUX_SHARE"] = os.path.join(self.root, "share")
-        self.assertEqual(sources.hook_path("toast-x"), "toast-x")
+        self.assertEqual(sources.hook_path("x", "toast"), "x")

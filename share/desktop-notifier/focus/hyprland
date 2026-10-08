@@ -1,0 +1,47 @@
+#!/bin/sh
+# focus/hyprland - raise a window by title under Hyprland.
+#
+# An ACTIVATE hook; see focus/kitty for the contract and for the `[host]`
+# title mux emits.
+#
+#     desktop-notifier-activate   hyprland
+#
+# THE EXIT CODE IS NOT THE ANSWER HERE, which is the one thing that makes
+# this hook longer than its neighbours. `hyprctl dispatch` exits 0 and
+# reports the outcome in its OUTPUT: a dispatch that matched nothing still
+# succeeds as a process. That is the shape latch already paid for twice, once
+# with `ssh -V` and once with `et` exiting 0 on its own usage errors, both of
+# which reported a session that never existed. So the output is interrogated
+# before it is believed, and only a literal `ok` counts.
+#
+# A REGEX, ANCHORED BOTH ENDS, because Hyprland's `title:` matcher is a full
+# match rather than a search: `^.*\[host\].*$` is how a trailing `[host]`
+# becomes findable. The brackets are escaped for the same reason as sway's.
+#
+# NOT VERIFIED AGAINST A RUNNING Hyprland. `hyprctl` is not packaged on this
+# fleet, so both the dispatcher name and the `ok` convention come from
+# Hyprland's documentation rather than from a run. If the `ok` test is what
+# is wrong, this hook reports "could not focus" about a raise that worked,
+# which is the safe direction: the click has already switched the session.
+set -eu
+
+_me=focus/hyprland
+_label=${1:-}
+[ -n "$_label" ] || { echo "usage: $_me LABEL" >&2; exit 78; }
+[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] || {
+  echo "$_me: HYPRLAND_INSTANCE_SIGNATURE unset, so Hyprland is not the
+live compositor" >&2
+  exit 78; }
+command -v hyprctl >/dev/null 2>&1 || {
+  echo "$_me: hyprctl is not on PATH" >&2; exit 78; }
+
+# CAPTURED, WITH NO PIPE BETWEEN THE COMMAND AND ITS STATUS, which is this
+# tree's most repeated measurement mistake: `cmd | grep` reports grep's
+# status. Both streams, because hyprctl's refusals do not all pick the same
+# one and the string is what is being read either way.
+_out=$(hyprctl dispatch focuswindow "title:^.*\\[$_label\\].*$" 2>&1) || :
+case $_out in
+  (ok*) ;;
+  (*) echo "$_me: could not focus a window titled '$_label': $_out" >&2
+      exit 78 ;;
+esac

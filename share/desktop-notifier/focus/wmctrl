@@ -1,0 +1,41 @@
+#!/bin/sh
+# focus/wmctrl - raise a window by title on X11, whatever the window manager.
+#
+# An ACTIVATE hook; see focus/kitty for the contract and for the `[host]`
+# title mux emits.
+#
+#     desktop-notifier-activate   wmctrl
+#
+# THE WIDEST COVERAGE PER LINE IN THIS DIRECTORY, which is why it is here
+# rather than a hook per window manager: wmctrl talks EWMH, so one file
+# reaches i3, bspwm, openbox, awesome, xfwm, Mutter-on-X11 and KWin-on-X11
+# without knowing which of them it is talking to. Every Wayland compositor
+# needs its own hook because each has its own IPC; X11 standardised this
+# twenty years ago and the standard still works.
+#
+# ALSO COVERS XWayland AND THAT IS A TRAP, so it is worth saying plainly: on
+# a Wayland session `DISPLAY` is usually set for XWayland's benefit, so this
+# hook will happily run and will only ever see X11 clients. If your terminal
+# is a native Wayland one, it is invisible here and the right hook is the one
+# named after your compositor. The guard below cannot tell the two apart,
+# because from inside X11 there is nothing to see.
+#
+# NO REGEX, AND NO ESCAPING, which is the difference from sway's and
+# Hyprland's: `wmctrl -a` matches a SUBSTRING of the title, so the brackets
+# mux emits are literal characters and carry the anchoring for free.
+#
+# NOT VERIFIED AGAINST A RUNNING X SERVER. `wmctrl` is not packaged on this
+# fleet and there is no X session here, so the flag and its substring
+# semantics come from wmctrl(1) rather than from a run.
+set -eu
+
+_me=focus/wmctrl
+_label=${1:-}
+[ -n "$_label" ] || { echo "usage: $_me LABEL" >&2; exit 78; }
+[ -n "${DISPLAY:-}" ] || {
+  echo "$_me: DISPLAY unset, so there is no X server to ask" >&2; exit 78; }
+command -v wmctrl >/dev/null 2>&1 || {
+  echo "$_me: wmctrl is not on PATH" >&2; exit 78; }
+
+wmctrl -a "[$_label]" >/dev/null 2>&1 || {
+  echo "$_me: no X11 window titled '$_label'" >&2; exit 78; }

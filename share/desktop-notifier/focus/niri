@@ -1,0 +1,62 @@
+#!/bin/sh
+# focus/niri - raise a window by title under niri.
+#
+# An ACTIVATE hook; see focus/kitty for the contract and for the `[host]`
+# title mux emits.
+#
+#     desktop-notifier-activate   niri
+#
+# TWO STEPS, WHERE EVERY OTHER HOOK HERE TAKES ONE, and that is a fact about
+# niri rather than a choice: its focus action takes a window ID and there is
+# no match-by-title dispatcher to hand the anchor to. So the title is matched
+# HERE, against the window list, and only an id crosses into niri.
+#
+# WHICH MAKES jq A DEPENDENCY, uniquely in this directory. The human-readable
+# `niri msg windows` output would need no tool and is the wrong thing to
+# parse: a text layout is free to change between releases where a documented
+# JSON field is a contract, and this package has a rule about string-matching
+# another tool's prose. Not having jq is answered as 78, naming it.
+#
+# THE FILTER IS DEFENSIVE ON PURPOSE. `.title // ""` tolerates a window with
+# no title, and selecting into a list and taking `[0]` tolerates two matches
+# rather than erroring on them. If a future niri renames the field, the
+# filter yields nothing and this reports "no niri window titled ...", which
+# is the safe direction: wrong, and loud, and the click has already switched
+# the session.
+#
+# NOT VERIFIED AGAINST A RUNNING niri. It is not packaged on this fleet, so
+# the subcommands AND the two field names come from niri's documentation
+# rather than from a run. This is the least-verified hook in the directory
+# and the header says so rather than implying otherwise.
+set -eu
+
+_me=focus/niri
+_label=${1:-}
+[ -n "$_label" ] || { echo "usage: $_me LABEL" >&2; exit 78; }
+[ -n "${NIRI_SOCKET:-}" ] || {
+  echo "$_me: NIRI_SOCKET unset, so niri is not the live compositor" >&2
+  exit 78; }
+command -v niri >/dev/null 2>&1 || {
+  echo "$_me: niri is not on PATH" >&2; exit 78; }
+command -v jq >/dev/null 2>&1 || {
+  echo "$_me: jq is not on PATH, and this hook needs it to read niri's
+window list (see the header)" >&2; exit 78; }
+
+# NO PIPE BETWEEN THE COMMAND AND ITS STATUS: captured first, so a niri that
+# cannot answer is told apart from one that answers an empty list.
+_wins=$(niri msg --json windows 2>/dev/null) || {
+  echo "$_me: niri would not list its windows" >&2; exit 78; }
+
+# THE ANCHOR IN A VARIABLE, because `[label]` with its brackets is the fact
+# this whole directory turns on and it was buried in a continued line, which
+# nothing in the mutation corpus can take as a target. Naming it makes the
+# rule assertable and reads better than finding it mid-pipeline.
+_anchor="[$_label]"
+_id=$(printf '%s' "$_wins" | jq -r --arg l "$_anchor" \
+  '[.[] | select((.title // "") | contains($l))][0].id // empty' \
+  2>/dev/null) || :
+[ -n "$_id" ] || {
+  echo "$_me: no niri window titled '$_label'" >&2; exit 78; }
+
+niri msg action focus-window --id "$_id" >/dev/null 2>&1 || {
+  echo "$_me: could not focus niri window $_id" >&2; exit 78; }

@@ -1,7 +1,8 @@
 #!/bin/sh
-# toast-pango - a banner whose HOST is quiet, for a Pango daemon (mako, dunst).
+# toast/pango - a banner whose HOST is quiet, for a Pango daemon whose
+# format you can CONFIGURE (mako, dunst).
 #
-#   toast-pango KIND SESSION HOST PARTITION LOCALITY
+#   pango KIND SESSION HOST PARTITION LOCALITY
 #
 # Prints the SUMMARY on the first line and the BODY on every line after it.
 # mux falls back to its own wording on any failure, so a mistake here costs
@@ -13,7 +14,12 @@
 # at all. mux emits text that reads correctly everywhere and leaves styling
 # here, the same line it draws for a terminal emulator and a compositor.
 #
-# IT REQUIRES ONE LINE OF DAEMON CONFIG. For mako:
+# WIRE IT BY ITS BARE NAME, because the directory it sits in is the seam:
+#
+#     desktop-notifier-toast   pango
+#
+# IT ALSO REQUIRES ONE LINE OF DAEMON CONFIG, which is what picks it over
+# toast/dim beside it. For mako:
 #
 #     [app-name="mux"]
 #     format=<big><b>%s</b></big> %b
@@ -37,9 +43,12 @@
 #
 # SO THE ONE QUESTION THAT PICKS A HOOK IS WHETHER YOUR DAEMON'S FORMAT IS
 # CONFIGURABLE. mako and dunst, yes; swaync, GNOME Shell, plasma and
-# xfce4-notifyd, no. Where it is not, leave this unset: mux's own wording is
-# already two correct rows there, and the only thing this would buy is a dim
-# grey, which is not worth a blank row.
+# xfce4-notifyd, no. Where it is not, `toast/dim` beside this one is the
+# answer: it never emits an empty line, so it needs no format change, and it
+# spends a row on the host rather than the title's spare width. The toast
+# directory is short for this reason. It is indexed by what a DAEMON can do,
+# where focus/ is indexed by which compositor you run, so a distribution is
+# not the question on either side.
 #
 # THE HOST IS MARKUP AND THE REST IS NOT, because only the body is parsed:
 # putting a span in the summary would print the tags literally.

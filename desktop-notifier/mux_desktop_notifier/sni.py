@@ -1069,11 +1069,15 @@ async def activate(label):
         # host name with a space an injection rather than an argument.
         args = [host or me] + ([part] if part else [])
         # RESOLVED, because the samples are not on PATH. config.sample
-        # documents `desktop-notifier-activate focus-kitty`, and that bare
-        # name installs under $MUX_SHARE/desktop-notifier/, so exec could
+        # documents `desktop-notifier-activate kitty`, and that bare name
+        # installs under $MUX_SHARE/desktop-notifier/focus/, so exec could
         # never find it and the click reported "failed to start" about a file
         # sitting on disk. `none` disables the seam and answers None here.
-        _h = hook_path(hook)
+        #
+        # `focus`, SO A FOCUS VALUE CANNOT RESOLVE A TOAST HOOK: the seam is
+        # the directory, and a banner composer handed a tray label would
+        # print to stdout and report success having raised nothing.
+        _h = hook_path(hook, "focus")
         if _h:
             await _fire(shlex.split(_h) + args, f"focus {label or me}")
 
