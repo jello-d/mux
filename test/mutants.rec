@@ -4666,3 +4666,10 @@ t mux-desktop-notifier
 -         if os.access(cand, os.X_OK):
 +         if False:
 m test_a_bare_name_resolves_against_the_SHIPPED_tree
+
+= readme-omits-an-overlay-directory
+f setup.sh
+t mux-config-roots
+-   themes/               colour themes, yours or overriding a shipped one
++                         colour themes, yours or overriding a shipped one
+m never names them, so a user cannot discover the overlay

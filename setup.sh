@@ -193,24 +193,35 @@ WHAT GOES IN HERE
                         hook moved.
   partitions/           one <name>.partition per partition
   layouts/              saved layouts (mux save writes here)
-  profiles, profiles.d/ per-project settings
+  profiles              per-project settings, one row each
+  profiles.d/           the heavier per-project form, <name>.profile
   hosts                 per-host colours, if you pin any
+  themes/               colour themes, yours or overriding a shipped one
+  agents/               agent profiles: what a pane's agent looks like
   envhooks.d/           your environment validators (see below)
   latch/                your own transport hooks, overriding the shipped ones
+  desktop-notifier/     your focus and banner hooks, same (see below)
 
 THE SHIPPED DEFAULTS ARE NOT MISSING
 ====================================
 
-mux ships four environment validators and several latch hooks. They are NOT
-copied here, because this directory is yours and an upgrade must be able to
-replace a default without touching your files. They live in the payload:
+mux ships hooks and themes of its own. They are NOT copied here, because this
+directory is yours and an upgrade must be able to replace a default without
+touching your files. They live in the payload:
 
-  $_pay/share/envhooks.d/
-  $_pay/share/latch/
+  $_pay/share/envhooks.d/        per session pointer mux can validate
+  $_pay/share/latch/             per transport: auth, probe, classify
+  $_pay/share/desktop-notifier/  focus-* for a click, toast-* for a banner
+  $_pay/share/themes/            colour themes
+  $_pay/share/agents/            agent profiles
+  $_pay/share/layouts/           the layouts mux starts you with
+  $_pay/share/partitions/        the baseline partition
 
-To override one, put a file of the same name in envhooks.d/ or latch/ here;
-to add one, use a name mux does not ship. Run \`mux check\` to see what mux
-actually resolved.
+To override one, put a file of the SAME NAME in the matching directory here;
+to add one, use a name mux does not ship. No count is given above on purpose,
+because a number here is a second copy of a fact that can drift: run
+\`mux check\` to see what mux actually resolved, and \`ls\` those paths for
+what is on offer.
 
 A NOTE ON EDITS
 ===============
