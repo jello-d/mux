@@ -627,3 +627,107 @@ class Port(unittest.TestCase):
         self.assertIn("2222", got["box"], f"the poll lost the port: {got}")
         got = dict(sources.streams(self.d))
         self.assertIn("2222", got["box"], f"the stream lost the port: {got}")
+
+
+class HookResolution(unittest.TestCase):
+    """Turning a hook NAME into something exec can find.
+
+    IT WAS MISSING, AND THE SAMPLES WERE THEREFORE UNREACHABLE. config.sample
+    documents `desktop-notifier-activate focus-kitty`; that bare name is NOT
+    on PATH and installs under `$MUX_SHARE/desktop-notifier/`, so the one
+    spelling the documentation teaches could not resolve and the click
+    reported "failed to start" about a file the user can see on disk. latch
+    has had this resolver since 0.31; the notifier never did.
+
+    THE SAME THREE CASES AS latch's `_hook`, so a reader who knows one knows
+    the other: a `/` makes it a literal path, `none` disables the seam, and a
+    bare name is resolved overlay-first.
+    """
+
+    def setUp(self):
+        self._t = tempfile.TemporaryDirectory()
+        self.addCleanup(self._t.cleanup)
+        self.root = self._t.name
+        self._env = {}
+        for k in ("MUX_DIR", "MUX_SHARE"):
+            self._env[k] = os.environ.get(k)
+        self.addCleanup(self._restore)
+
+    def _restore(self):
+        for k, v in self._env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+    def _hook(self, base, name="toast-x"):
+        d = os.path.join(self.root, base, "desktop-notifier")
+        os.makedirs(d, exist_ok=True)
+        p = os.path.join(d, name)
+        with open(p, "w") as fh:
+            fh.write("#!/bin/sh\nexit 0\n")
+        os.chmod(p, 0o755)
+        return p
+
+    def test_a_bare_name_resolves_against_the_SHIPPED_tree(self):
+        want = self._hook("share")
+        os.environ["MUX_DIR"] = os.path.join(self.root, "conf")
+        os.environ["MUX_SHARE"] = os.path.join(self.root, "share")
+        self.assertEqual(sources.hook_path("toast-x"), want)
+
+    def test_the_USER_OVERLAY_wins(self):
+        """$MUX_DIR before $MUX_SHARE, the same order layouts, themes and
+        latch's hooks already use: a shipped sample is a starting point and
+        the user's copy of it has to be reachable by the same name."""
+        self._hook("share")
+        mine = self._hook("conf")
+        os.environ["MUX_DIR"] = os.path.join(self.root, "conf")
+        os.environ["MUX_SHARE"] = os.path.join(self.root, "share")
+        self.assertEqual(sources.hook_path("toast-x"), mine)
+
+    def test_ARGUMENTS_survive_the_resolution(self):
+        """Only the leading WORD is a path. A hook carrying flags is a
+        command line in config, and resolving the whole string would look
+        for a file whose name contains a space."""
+        want = self._hook("share")
+        os.environ["MUX_DIR"] = os.path.join(self.root, "conf")
+        os.environ["MUX_SHARE"] = os.path.join(self.root, "share")
+        self.assertEqual(sources.hook_path("toast-x --dim #333"),
+                         want + " --dim #333")
+
+    def test_a_PATH_is_taken_literally(self):
+        """Anything with a `/` is the caller being explicit, and searching
+        for it would silently prefer a same-named sample."""
+        os.environ["MUX_SHARE"] = os.path.join(self.root, "share")
+        self._hook("share", name="toast-x")
+        self.assertEqual(sources.hook_path("/usr/local/bin/toast-x"),
+                         "/usr/local/bin/toast-x")
+
+    def test_none_DISABLES_the_seam(self):
+        """The one spelling for "I do not want one", the same word
+        `mux capabilities` uses for a declared absence and latch for a seam
+        turned off. Without it an empty value reads as UNSET and falls back
+        to the default instead."""
+        self.assertIsNone(sources.hook_path("none"))
+
+    def test_an_UNRESOLVABLE_name_is_left_for_PATH(self):
+        """Not an error here: the value may name something on PATH, and
+        refusing it would break a hook that is simply installed elsewhere.
+        Failing to exec is reported by the caller, with the name in it."""
+        os.environ["MUX_SHARE"] = os.path.join(self.root, "share")
+        os.makedirs(os.path.join(self.root, "share", "desktop-notifier"),
+                    exist_ok=True)
+        self.assertEqual(sources.hook_path("nosuchhook"), "nosuchhook")
+
+    def test_a_NON_EXECUTABLE_file_is_not_resolved(self):
+        """Present and unrunnable is not a hook. Resolving it would turn a
+        forgotten chmod into "failed to start" naming a path that exists,
+        which reads as mux being wrong about its own tree."""
+        d = os.path.join(self.root, "share", "desktop-notifier")
+        os.makedirs(d, exist_ok=True)
+        p = os.path.join(d, "toast-x")
+        with open(p, "w") as fh:
+            fh.write("#!/bin/sh\n")
+        os.chmod(p, 0o644)
+        os.environ["MUX_SHARE"] = os.path.join(self.root, "share")
+        self.assertEqual(sources.hook_path("toast-x"), "toast-x")

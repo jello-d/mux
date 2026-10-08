@@ -58,6 +58,60 @@ the same contract as latch's hooks (0 done, 78 cannot tell) and the
 indicator reports a non-zero exit rather than swallowing it, so a
 misconfigured hook says so instead of doing nothing.
 
+## Wording the banner yourself
+
+The toasts ship deliberately plain:
+
+```
+Claude finished: api (on northgate)     <- the title
+your turn                               <- the body
+```
+
+**Styling is the daemon's, not mux's.** mako interprets Pango markup in the
+*body* and never in the summary; dunst differs; a macOS presenter will have no
+Pango at all. So mux emits text that reads correctly everywhere and offers a
+seam to anyone who wants their own, the same line it already draws for a
+terminal emulator and a compositor:
+
+```
+desktop-notifier-toast   toast-pango
+```
+
+The hook is handed `KIND SESSION HOST PARTITION LOCALITY` and prints the
+**summary on its first line and the body on every line after it**. One stream,
+split once, because where the line break goes *is* the layout and only the
+hook knows the daemon it is writing for. mux falls back to its own wording on
+every failure there is (no hook, will not start, non-zero, hangs, prints
+nothing), so a mistake costs styling and never the notification.
+
+`toast-pango` ships as a worked example: a dim, normal-weight host sitting on
+the **title row**, with the body underneath.
+
+```
+Claude finished: api (on northgate)     <- bold, then dim and normal weight
+your turn
+```
+
+It pairs with one line of daemon config, and without that line it still reads
+correctly, just on two rows. For mako:
+
+```
+[app-name="mux"]
+format=<big><b>%s</b></big> %b
+```
+
+A space where mako's default has `\n`: the break between the title and the
+rest then comes from the hook's own newline rather than from the format, which
+is what puts the host on the title row and leaves the body its own. That is
+also why the hook always prints three lines, the middle one empty when there
+is no host to name.
+
+Note the asymmetry inside it, which is the thing most likely to look like a
+bug: the **host is escaped and the session is not**. Only the body is parsed,
+so an unescaped `&` there makes the daemon refuse the banner and draw nothing,
+while escaping the summary would print `a&amp;b` at somebody whose session is
+called `a&b`.
+
 ## Install
 
 One command, all userspace (no sudo):

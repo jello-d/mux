@@ -206,6 +206,24 @@
 # Default: mux.demo
 #desktop-notifier-ignore   mux.demo
 
+# desktop-notifier-toast HOOK
+#
+# Compose the banner yourself. The hook is handed
+# `KIND SESSION HOST PARTITION LOCALITY` and prints the SUMMARY on its first
+# line and the BODY on every line after it; mux falls back to its own wording
+# on any failure, so a mistake costs styling and never the notification.
+#
+# WHY IT IS A SEAM: which field a notification daemon renders, and whether it
+# interprets markup in it, is the DAEMON's choice. mako reads Pango in the
+# body and not in the summary; dunst differs; a macOS presenter has no Pango
+# at all. mux emits text that reads correctly everywhere and leaves styling
+# to you. `toast-pango` in $MUX_SHARE/desktop-notifier/ is a worked example
+# (a dim, normal-weight host on the title row) and documents the one line of
+# daemon config it pairs with.
+#
+# Default: unset, so the wording is mux's own and carries no markup.
+#desktop-notifier-toast   toast-pango
+
 # desktop-notifier-activate HOOK
 #
 # Run locally after a tray click has switched that host's client, handed the

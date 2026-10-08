@@ -1485,6 +1485,106 @@ class StreamingFeed(unittest.TestCase):
         self.assertIsNone(f.rows, "an unreachable host must read unknown")
 
 
+class ToastHook(unittest.TestCase):
+    """The seam that lets somebody else write the banner.
+
+    IT EXISTS BECAUSE STYLING IS THE DAEMON'S, NOT MUX'S. mako reads Pango in
+    the body and not in the summary, dunst differs, and a macOS presenter will
+    have no Pango at all, so mux ships wording that reads correctly everywhere
+    and offers this to anyone who wants their own. Shipping markup as the
+    default would make the daemon mako-specific in exactly the way kitty's
+    OSC 99 was rejected for.
+
+    EVERY CASE HERE IS A FALLBACK except the first, and that is the design:
+    a styling preference must never cost somebody the notification, which is
+    the whole signal this daemon exists to carry.
+    """
+
+    def _hook(self, body):
+        import os
+        import stat
+        p = os.path.join(self._d, "hook")
+        with open(p, "w") as fh:
+            fh.write("#!/bin/sh\n" + body + "\n")
+        os.chmod(p, os.stat(p).st_mode | stat.S_IXUSR)
+        return p
+
+    def setUp(self):
+        import tempfile
+        self._t = tempfile.TemporaryDirectory()
+        self._d = self._t.name
+        self.addCleanup(self._t.cleanup)
+
+    def _compose(self, hook, **kw):
+        import os
+        old = os.environ.get("MUX_DESKTOP_NOTIFIER_TOAST")
+        if hook is None:
+            os.environ.pop("MUX_DESKTOP_NOTIFIER_TOAST", None)
+        else:
+            os.environ["MUX_DESKTOP_NOTIFIER_TOAST"] = hook
+        try:
+            sni = _fresh()
+            t = sni.Toaster(None)
+            kw.setdefault("host", "northgate")
+            kw.setdefault("part", "global")
+            kw.setdefault("session", "api")
+            kw.setdefault("kind", "finished")
+            kw.setdefault("local", False)
+            return asyncio.run(t.compose(**kw))
+        finally:
+            if old is None:
+                os.environ.pop("MUX_DESKTOP_NOTIFIER_TOAST", None)
+            else:
+                os.environ["MUX_DESKTOP_NOTIFIER_TOAST"] = old
+
+    def test_the_FIRST_line_is_the_summary_and_the_rest_is_the_body(self):
+        """ONE STREAM, SPLIT ONCE, which is what lets a hook put the line
+        break where it wants. A two-field protocol would have kept that
+        decision in mux, where the daemon's layout is not known: the case
+        this exists for joins summary and body on ONE row, so the break has
+        to come from the hook's own newline."""
+        s, b = self._compose(self._hook("printf 'TITLE\nfirst\nsecond\n'"))
+        self.assertEqual(s, "TITLE")
+        self.assertEqual(b, "first\nsecond")
+
+    def test_an_EMPTY_first_body_line_survives(self):
+        """The local path of the shipped sample: no host to name, so the
+        body's first line is empty and the daemon's format puts the real body
+        on the next row. Stripping it would silently re-join the two."""
+        s, b = self._compose(self._hook("printf 'TITLE\n\nyour turn\n'"))
+        self.assertEqual((s, b), ("TITLE", "\nyour turn"))
+
+    def test_NO_HOOK_is_the_built_in_wording(self):
+        s, b = self._compose(None)
+        self.assertEqual(s, "Claude finished: api (on northgate)")
+        self.assertEqual(b, "your turn")
+
+    def test_a_hook_that_FAILS_falls_back(self):
+        s, _b = self._compose(self._hook("echo nope >&2; exit 3"))
+        self.assertEqual(s, "Claude finished: api (on northgate)")
+
+    def test_a_hook_that_prints_NOTHING_falls_back(self):
+        """Exit 0 and silence is the quietest way to break this, and it would
+        otherwise publish a banner with an empty title."""
+        s, _b = self._compose(self._hook("exit 0"))
+        self.assertEqual(s, "Claude finished: api (on northgate)")
+
+    def test_a_hook_that_DOES_NOT_EXIST_falls_back(self):
+        s, _b = self._compose("/nonexistent/toast-hook")
+        self.assertEqual(s, "Claude finished: api (on northgate)")
+
+    def test_the_hook_is_told_everything_it_needs(self):
+        """argv, asserted as a whole: kind, session, host, partition and
+        locality. A hook that cannot tell local from remote would name this
+        box in every banner, which is the noise the built-in avoids."""
+        s, _b = self._compose(self._hook('printf "%s\n" "$*"'),
+                              host="northgate", part="work",
+                              session="api", kind="blocked", local=False)
+        self.assertEqual(s, "blocked api northgate work remote")
+        s, _b = self._compose(self._hook('printf "%s\n" "$*"'), local=True)
+        self.assertEqual(s, "finished api northgate global local")
+
+
 class Toasts(unittest.TestCase):
     """The daemon raises every banner now, local and remote alike.
 

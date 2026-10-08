@@ -1230,8 +1230,8 @@ m test_the_hook_RUNS_AFTER_and_is_given_the_label
 = indicator-click-shells-the-hook
 f desktop-notifier/mux_desktop_notifier/sni.py
 t mux-desktop-notifier
--         await _fire(shlex.split(hook) + args, f"focus {label or me}")
-+         await _fire(["sh", "-c", hook] + args, "focus")
+-             await _fire(shlex.split(_h) + args, f"focus {label or me}")
++             await _fire(["sh", "-c", _h] + args, f"focus {label or me}")
 m test_the_hook_is_SPLIT_not_shelled
 
 = even-headless-wrong-socket
@@ -4645,3 +4645,24 @@ t mux-desktop-notifier
 -             summary = f"{summary} (on {host})"
 +             body = f"{body} (on {host})"
 m test_a_REMOTE_banner_names_the_host
+
+= toast-hook-body-loses-its-line-breaks
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
+-         return lines[0], "\n".join(lines[1:])
++         return lines[0], " ".join(lines[1:])
+m test_an_EMPTY_first_body_line_survives
+
+= toast-hook-failure-is-published-anyway
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
+-         if proc.returncode != 0 or not out.strip():
++         if False:
+m test_a_hook_that_prints_NOTHING_falls_back
+
+= hook-path-skips-the-overlay
+f desktop-notifier/mux_desktop_notifier/sources.py
+t mux-desktop-notifier
+-         if os.access(cand, os.X_OK):
++         if False:
+m test_a_bare_name_resolves_against_the_SHIPPED_tree

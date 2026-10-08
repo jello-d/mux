@@ -1,0 +1,76 @@
+#!/bin/sh
+# toast-pango - a banner whose HOST is quiet, for a Pango daemon (mako, dunst).
+#
+#   toast-pango KIND SESSION HOST PARTITION LOCALITY
+#
+# Prints the SUMMARY on the first line and the BODY on every line after it.
+# mux falls back to its own wording on any failure, so a mistake here costs
+# styling and never the notification.
+#
+# WHY A HOOK AND NOT THE DEFAULT. Which field a daemon renders, and whether it
+# interprets markup in it, is the DAEMON's choice. mako reads Pango in the body
+# and NOT in the summary; dunst differs; a macOS presenter will have no Pango
+# at all. mux emits text that reads correctly everywhere and leaves styling
+# here, the same line it draws for a terminal emulator and a compositor.
+#
+# IT PAIRS WITH ONE LINE OF DAEMON CONFIG, and without that line it still reads
+# correctly, just on two rows. For mako:
+#
+#     [app-name="mux"]
+#     format=<big><b>%s</b></big> %b
+#
+# A SPACE RATHER THAN mako's DEFAULT `\n`, and that is the whole trick: the
+# break between the title and the rest then comes from THIS script's own
+# newline instead of from the format, so the host sits on the title row and
+# the body still gets its own. Rendered:
+#
+#     Claude finished: api (on northgate)      <- bold, then dim and normal
+#     your turn                                <- the body, as usual
+#
+# THE HOST IS MARKUP AND THE REST IS NOT, because only the body is parsed:
+# putting a span in the summary would print the tags literally.
+set -eu
+
+_kind=${1:-finished}
+_sess=${2:-?}
+_host=${3:-}
+_part=${4:-}
+_loc=${5:-local}
+
+# The dim is a GREY rather than an alpha, because a notification's background
+# is the daemon's and an alpha over an unknown colour is unpredictable.
+_DIM=${MUX_TOAST_DIM:-#8a8a8a}
+
+case $_kind in
+  (blocked) _sum="Claude needs you: $_sess"; _body="permission or input" ;;
+  (*)       _sum="Claude finished: $_sess";  _body="your turn" ;;
+esac
+
+# ESCAPED IN THE BODY ONLY, and the asymmetry is the point rather than an
+# oversight. The body IS parsed as markup, so a host or partition holding `&`
+# or `<` would not merely look wrong, it would make the daemon refuse to parse
+# the banner and draw nothing. The SUMMARY is not parsed, which is this whole
+# file's premise, so escaping the session name there would print `a&amp;b` at
+# somebody who called their session `a&b`.
+esc() { printf '%s' "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'; }
+
+# A LOCAL BANNER NAMES NO HOST, the same rule the built-in wording follows:
+# saying "on this-box" every time is noise on the common path.
+if [ "$_loc" = remote ] && [ -n "$_host" ]; then
+  _tail="<span foreground=\"$_DIM\">(on $(esc "$_host"))</span>"
+else
+  _tail=
+fi
+
+# THE PARTITION, only when there is one worth naming. `global` is the baseline
+# every box has, so printing it would add a word that never varies.
+if [ -n "$_part" ] && [ "$_part" != global ]; then
+  _body="$_body <span foreground=\"$_DIM\">[$(esc "$_part")]</span>"
+fi
+
+# THREE LINES, AND THE MIDDLE ONE IS EMPTY ON THE LOCAL PATH. The body's
+# FIRST line is what the format joins to the title, so the host goes there
+# alone and the real body follows on its own row. Locally that first line is
+# empty, which renders as a trailing space after the title and then the break:
+# exactly the two-row shape a host-less banner should have.
+printf '%s\n%s\n%s\n' "$_sum" "$_tail" "$_body"

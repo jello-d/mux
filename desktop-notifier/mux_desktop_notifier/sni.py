@@ -41,9 +41,9 @@ from signal import SIGKILL
 from .render import MARK_PALETTE, host_mark, icon_pixmap, parse_pair
 from .slots import Slots
 from . import sources
-from .sources import (activate_cmd, activate_hook, load as load_sources,
-                      streams as load_streams,
-                      local_label, remote_argv, valid_partition)
+from .sources import (activate_cmd, activate_hook, hook_path,
+                      load as load_sources, streams as load_streams,
+                      local_label, remote_argv, toast_hook, valid_partition)
 
 WATCHER = "org.kde.StatusNotifierWatcher"
 WATCHER_PATH = "/StatusNotifierWatcher"
@@ -580,12 +580,54 @@ class Toaster:
             summary = f"{summary} (on {host})"
         return summary, body
 
+    async def compose(self, host, part, session, kind, local):
+        """The banner, from the hook if one is configured, else built in.
+
+        FALLS BACK RATHER THAN FAILING, on every error there is: no hook, a
+        hook that will not start, one that exits non-zero, one that hangs,
+        one that prints nothing. A styling preference must never cost
+        somebody the notification itself, which is the whole signal.
+
+        ONE STREAM, SPLIT ONCE: the first line is the summary and everything
+        after it is the body. That is what lets a hook decide where the line
+        break goes, which is the entire point for a daemon format that joins
+        summary and body on one row; a two-field protocol would have put that
+        decision back here, where the daemon's layout is not known.
+        """
+        hook = toast_hook()
+        if not hook:
+            return self.text(host, session, kind, local)
+        argv = shlex.split(hook) + [kind, session, host or "", part or "",
+                                    "local" if local else "remote"]
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *argv, stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE, start_new_session=True)
+            out, err = await asyncio.wait_for(proc.communicate(), TIMEOUT)
+        except asyncio.TimeoutError:
+            await _reap(proc)
+            print(f"mux-desktop-notifier: toast hook timed out", flush=True)
+            return self.text(host, session, kind, local)
+        except OSError as e:
+            print(f"mux-desktop-notifier: toast hook failed: {e}", flush=True)
+            return self.text(host, session, kind, local)
+        if proc.returncode != 0 or not out.strip():
+            # SAID, not swallowed: a hook that is quietly ignored reads as
+            # the seam not working, which is the complaint it exists to fix.
+            _m = (err or b"").decode("utf-8", "replace").strip().splitlines()
+            print(f"mux-desktop-notifier: toast hook exited "
+                  f"{proc.returncode}{': ' + _m[-1] if _m else ''}; "
+                  "using the built-in wording", flush=True)
+            return self.text(host, session, kind, local)
+        lines = out.decode("utf-8", "replace").rstrip("\n").split("\n")
+        return lines[0], "\n".join(lines[1:])
+
     async def announce(self, host, part, session, kind, local=True):
         """Raise one, replacing any we already hold for that session."""
         if not self._enabled:
             return None
         key = (host, part, session)
-        summary, body = self.text(host, session, kind, local)
+        summary, body = await self.compose(host, part, session, kind, local)
         try:
             iface = await self._notifications()
             # REPLACING our own previous id rather than stacking: a session
@@ -1026,7 +1068,14 @@ async def activate(label):
         # line in config, not a script, and handing it to `sh -c` would make a
         # host name with a space an injection rather than an argument.
         args = [host or me] + ([part] if part else [])
-        await _fire(shlex.split(hook) + args, f"focus {label or me}")
+        # RESOLVED, because the samples are not on PATH. config.sample
+        # documents `desktop-notifier-activate focus-kitty`, and that bare
+        # name installs under $MUX_SHARE/desktop-notifier/, so exec could
+        # never find it and the click reported "failed to start" about a file
+        # sitting on disk. `none` disables the seam and answers None here.
+        _h = hook_path(hook)
+        if _h:
+            await _fire(shlex.split(_h) + args, f"focus {label or me}")
 
 
 async def _fire(argv, what):

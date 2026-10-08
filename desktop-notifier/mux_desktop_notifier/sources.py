@@ -31,6 +31,7 @@ specifies the shape of the answer, never the mechanism.
 import os
 import re
 import shlex
+import shutil
 import socket
 
 # The comment rule is mux_conf_clean's, deliberately: a FULL-LINE comment goes,
@@ -235,6 +236,86 @@ def activate_hook():
     """
     return (os.environ.get("MUX_DESKTOP_NOTIFIER_ACTIVATE")
             or _conf("desktop-notifier-activate"))
+
+
+def share_dir():
+    """The shipped `share/` tree, or None.
+
+    `$MUX_SHARE` when it names a real directory, else DERIVED from the `mux`
+    on PATH exactly the way bin/mux locates its own siblings: resolve the
+    symlink, and share is the sibling of bin under the same prefix.
+
+    THE DAEMON IS NOT STARTED BY mux, which is why deriving is necessary at
+    all: it is a --user unit with a PATH and nothing else, so it inherits no
+    MUX_SHARE and has to find the tree the same way its own installer laid it
+    out.
+    """
+    env = os.environ.get("MUX_SHARE")
+    if env and os.path.isdir(env):
+        return os.path.normpath(env)
+    exe = shutil.which(os.environ.get("MUX_BIN", "mux"))
+    if not exe:
+        return None
+    root = os.path.dirname(os.path.dirname(os.path.realpath(exe)))
+    # NORMALISED, so a resolved hook reads as a path rather than as
+    # `.../bin/../share/...` in every log line and failure message.
+    cand = os.path.normpath(os.path.join(root, "share"))
+    return cand if os.path.isdir(cand) else None
+
+
+def hook_path(value):
+    """A hook NAME resolved to a path: the user's overlay, then the shipped
+    one, else left alone for PATH to answer.
+
+    IT EXISTED FOR latch AND NOT HERE, which made the shipped samples
+    unreachable: `desktop-notifier-activate focus-kitty` is what config.sample
+    documents, `focus-kitty` is NOT on PATH, and it installs under
+    `$MUX_SHARE/desktop-notifier/`. So the one spelling the documentation
+    teaches could not resolve, and the click reported "failed to start"
+    naming a file the user can see on disk. Advice that cannot come true, in
+    the form of a sample nobody could name.
+
+    THE SAME THREE CASES AS latch's `_hook`, deliberately, so a reader who
+    knows one knows the other: a value containing `/` is a literal path and
+    is never searched for, `none` disables the seam, and anything else is a
+    bare name resolved overlay-first. Only the leading WORD is resolved, so a
+    hook may carry arguments.
+    """
+    if not value:
+        return value
+    if value == "none":
+        return None
+    name = value.split(" ", 1)[0]
+    rest = value[len(name):]
+    if "/" in name:
+        return value
+    for base in (_mux_dir(), share_dir()):
+        if not base:
+            continue
+        cand = os.path.join(base, "desktop-notifier", name)
+        if os.access(cand, os.X_OK):
+            return cand + rest
+    return value
+
+
+def toast_hook():
+    """What composes a banner, or None for the built-in wording.
+
+    UNSET BY DEFAULT, AND THE DEFAULT IS DELIBERATELY PLAIN. Which field a
+    notification daemon renders, and whether it interprets markup in it, is
+    the DAEMON's choice: mako reads Pango in the body and not in the summary,
+    dunst differs, a macOS presenter will have no Pango at all. So mux emits
+    text that reads correctly everywhere and offers this seam to anyone who
+    wants their own. Styling shipped as the default would make the daemon
+    mako-specific in exactly the way kitty's OSC 99 was rejected for.
+
+    THE CONTRACT IS ONE STREAM, SPLIT ONCE: the hook prints the SUMMARY on
+    the first line and the BODY on every line after it. That is what lets a
+    hook put the line break where it wants, which is the whole point for a
+    format that joins summary and body on one row.
+    """
+    return hook_path(os.environ.get("MUX_DESKTOP_NOTIFIER_TOAST")
+                     or _conf("desktop-notifier-toast"))
 
 
 def remote_argv(host, template=None, cmd=None, port=None):
