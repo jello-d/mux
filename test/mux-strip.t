@@ -58,8 +58,17 @@ st %2 working delta
 # bravo and charlie have no agent at all: the fold candidates.
 
 # render CURRENT BUDGET -> the strip, tmux format escapes and all.
+# A PRIVATE TMPDIR FOR EVERY RENDER, so the leak assertion below can be about
+# the render and nothing else. It used to count entries in the SHARED $TMPDIR
+# before and after, which is a claim about the whole machine: `test/run` is
+# PARALLEL and every other test's `mktemp -d` creates a directory in there, so
+# any file one of them made during the window tripped it. It passed on timing
+# alone and went red on ubuntu the moment an unrelated commit made two other
+# tests slower. A global-state assertion in a concurrent suite is measuring
+# the scheduler.
+mkdir -p "$T/tmpprobe"
 render() {
-  env -u TMUX -u TMUX_PANE XDG_RUNTIME_DIR="$T/run" \
+  env -u TMUX -u TMUX_PANE XDG_RUNTIME_DIR="$T/run" TMPDIR="$T/tmpprobe" \
     MUX_STRIP_WIDTH="$2" PATH="$T/bin:$PATH" \
     "$HERE/libexec/mux-agent-state-render" "$1" testclient 2>/dev/null
 }
@@ -329,15 +338,16 @@ render delta 400 >/dev/null
 # construction. Asserted as an ABSENCE, in both candidate locations, because
 # the bug either shape would reintroduce is a FILE existing at all.
 _rd=$T/run/mux/render
-_tmpbefore=$(ls -1 "${TMPDIR:-/tmp}" 2>/dev/null | wc -l)
 render delta 400 >/dev/null
 [ ! -d "$_rd" ] || [ "$(ls -1 "$_rd" | wc -l)" -eq 0 ] \
   || fail "the render left scratch under the runtime dir: [$(ls "$_rd")].
 It keeps its records in a variable; a file there is a shape that can be
 shared between two concurrent renders of one client."
-[ "$(ls -1 "${TMPDIR:-/tmp}" 2>/dev/null | wc -l)" -eq "$_tmpbefore" ] \
-  || fail "the render added something to \$TMPDIR; an anonymous scratch file
-is the one shape nothing can prune once it leaks"
+# EVERY render in this file has run by now and they all shared that TMPDIR,
+# so emptiness is a stronger claim than the before/after count ever made.
+[ "$(ls -1A "$T/tmpprobe" | wc -l)" -eq 0 ] \
+  || fail "a render wrote into \$TMPDIR: [$(ls -1A "$T/tmpprobe")].
+An anonymous scratch file is the one shape nothing can prune once it leaks."
 
 # TWO RENDERS OF THE SAME STATE ARE IDENTICAL. Guards accumulation whatever
 # holds the records: appending without resetting makes the strip CHANGE, and
