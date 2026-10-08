@@ -1,0 +1,54 @@
+#!/bin/sh
+# test/lab/avail_lib - `available` derived from an environment's own `deps`.
+#
+# SOURCED BY EVERY env/ AND daemon/ FILE, because all of them owe the same
+# two answers from one table: can this box run it, and what would it need.
+# Two copies of that is how a provisioning file in another repo goes stale
+# against the thing it provisions, which is the whole reason `lab deps`
+# exists.
+#
+# THE TABLE IS `tool package` PER LINE, and the pairing is the part that has
+# to be written down: most of the packages this lab wants have a name unlike
+# the command they supply (`Xvfb` from `xvfb`, `notify-send` from
+# `libnotify-bin`, `xprop` from `x11-utils`), so deriving one from the other
+# is not available.
+#
+# IT REPORTS THE FIRST MISSING TOOL AND STOPS, deliberately: the message is
+# for a human about to install something, and a wall of every absence is
+# less use than one line naming a package. `lab deps` is the complete list.
+#
+# WHAT THE CALLER OWES, since a sourced file in POSIX sh cannot locate its
+# own siblings and so cannot check: a `deps` function printing the table,
+# and `$_me` naming itself for the message. shellcheck names the second one
+# from this side (SC2154), which is the contract detector working rather
+# than a nuisance.
+
+# _avail_from_deps: 0 if every tool in deps() is on PATH, else 1 with the
+# first missing one named along with the package that supplies it.
+#
+# A HERE-DOC AND NOT `deps | while read`, which is what I wrote first and is
+# wrong in the way this tree keeps recording: a pipe puts the loop in a
+# SUBSHELL, so neither a `return 1` nor an assignment inside it reaches the
+# caller and the function answers 0 for an environment that is missing
+# everything. The first fix was worse than the bug, a flag file defaulting
+# to /dev/null, which is size 0 and so made `[ ! -s ]` true unconditionally:
+# a guard that could never fire. A here-doc keeps the body in THIS shell,
+# measured in dash, bash, ksh and macOS /bin/sh.
+_avail_from_deps() {
+  _miss_t=
+  _miss_p=
+  while read -r _t _p; do
+    [ -n "$_t" ] || continue
+    command -v "$_t" >/dev/null 2>&1 && continue
+    _miss_t=$_t
+    _miss_p=$_p
+    break
+  done <<EOF
+$(deps)
+EOF
+  [ -z "$_miss_t" ] || {
+    # shellcheck disable=SC2154   # _me is the caller's, per the header
+    echo "$_me: $_miss_t is not on PATH (apt: $_miss_p)" >&2
+    return 1; }
+  return 0
+}

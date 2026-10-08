@@ -23,6 +23,8 @@
 set -eu
 
 _me=daemon/mako
+# shellcheck source=test/lab/avail_lib
+. "$(dirname -- "$0")/../avail_lib"
 _dir=${LAB_DIR:-}
 
 # LAB_DIR IS DEMANDED LAZILY, by the verbs that write in it, and not at
@@ -33,13 +35,18 @@ _dir=${LAB_DIR:-}
 _need_dir() { [ -n "${LAB_DIR:-}" ] || {
   echo "$_me: LAB_DIR must be set by the driver" >&2; exit 2; }; }
 
-available() {
-  command -v mako >/dev/null 2>&1 || {
-    echo "$_me: mako is not on PATH (apt: mako-notifier)" >&2; return 1; }
-  command -v notify-send >/dev/null 2>&1 || {
-    echo "$_me: notify-send is not on PATH (apt: libnotify-bin)" >&2
-    return 1; }
+# ONE TABLE; see env/sway. Both of these have a package name unlike the
+# command, which is the usual case rather than the exception.
+deps() {
+  cat <<'EOF'
+mako mako-notifier
+makoctl mako-notifier
+notify-send libnotify-bin
+gdbus libglib2.0-bin
+EOF
 }
+
+available() { _avail_from_deps; }
 
 # The format each mode installs, printed so the probe can report WHICH line
 # it was testing against: a verdict about a format nobody can see is a
@@ -103,8 +110,9 @@ down() {
 
 case ${1:-} in
   (available) available ;;
+  (deps)      deps ;;
   (fmt)       shift; fmt "$1" ;;
   (up)        _need_dir;        shift; up "$1" ;;
   (down)      _need_dir;      down ;;
-  (*) echo "usage: $_me {available|fmt MODE|up MODE|down}" >&2; exit 2 ;;
+  (*) echo "usage: $_me {available|deps|fmt MODE|up MODE|down}" >&2; exit 2 ;;
 esac

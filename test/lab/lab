@@ -3,6 +3,7 @@
 # bring up. See test/lab/README.md.
 #
 #   lab list                 what is available, and why the rest is not
+#   lab deps                 every apt package it needs, one per line
 #   lab run [ENV...]         every available environment, or the named ones
 #   lab shots [ENV...]       the same, keeping the screenshots
 #
@@ -31,6 +32,63 @@ _daemons() { find "$HERE/daemon" -maxdepth 1 -type f | sed 's|.*/||' | sort; }
 # convention is that a throwaway surviving a reboot beats one that does not,
 # and a failed run's screenshots are the whole evidence.
 _LAB=${MUX_LAB_DIR:-/var/tmp/mux-hook-lab}
+
+# deps: every apt package this lab needs, one per line, with no verdict.
+#
+# THE ONE SOURCE, because the alternative is a list typed twice. Each
+# environment already names the tool it is missing and the package that
+# supplies it, in its own `available`, which is the only place that knows:
+# tackup's provisioning data and the handoff script both read THIS rather
+# than carrying a copy, the same way `tackup notes check` reads the
+# canonical conventions.t instead of a list of who has it.
+#
+# SCRAPED FROM THE `apt:` HINTS, not a second list in this file. That keeps
+# the fact beside the `command -v` that needs it, so a new environment
+# cannot add a dependency without declaring where it comes from: the hint is
+# in the message a human reads when it is missing, so it cannot rot
+# unnoticed either.
+#
+# EVERY ENVIRONMENT IS ASKED, available or not, because the question is what
+# the lab WANTS rather than what this box lacks. A box with everything
+# installed must still be able to answer it, or the declaration would empty
+# itself exactly where it is used to check another repo's copy.
+deps() {
+  # EVERY ENVIRONMENT IS ASKED, available or not, because the question is
+  # what the lab WANTS rather than what this box lacks. A box with
+  # everything installed must still answer it, or the declaration would
+  # empty itself exactly where another repo reads it.
+  #
+  # AND IT IS ASKED, NOT SCRAPED. The first version read the apt names out
+  # of each `available` message with a sed, and missed env/x11 entirely
+  # because that one mapped tool to package in a helper instead of inline:
+  # five packages where there are twelve, under a floor of five, so the
+  # guard passed. A declaration the environment PRINTS cannot be missed by
+  # a pattern.
+  for _p in "$HERE"/env/* "$HERE"/daemon/*; do
+    [ -f "$_p" ] || continue
+    _d=$("$_p" deps 2>/dev/null) || {
+      printf '%s: %s answered no deps, so its packages are invisible to\n' \
+        "$_me" "$_p" >&2
+      printf 'every consumer of this list\n' >&2
+      return 1; }
+    [ -n "$_d" ] || {
+      printf '%s: %s declared an EMPTY dep table\n' "$_me" "$_p" >&2
+      return 1; }
+    printf '%s\n' "$_d" | awk 'NF >= 2 {print $2}'
+  done | sort -u | grep -v '^$'
+}
+
+# PER-ENVIRONMENT, NOT ONE FLOOR OVER THE TOTAL, which is the lesson the
+# first version taught by passing: a floor is a vacuity guard and never a
+# completeness one, so it cannot see a whole environment failing to arrive.
+# deps() above refuses an empty table per file instead, and this only has to
+# catch the union coming back empty.
+deps_checked() {
+  _dl=$(deps) || return 1
+  [ -n "$_dl" ] || { printf '%s: no package was declared at all\n' "$_me" >&2
+    return 1; }
+  printf '%s\n' "$_dl"
+}
 
 list() {
   printf 'environments\n'
@@ -137,8 +195,10 @@ run() {
 mkdir -p "$_LAB"
 case ${1:-run} in
   (list)  list ;;
+  (deps)  deps_checked ;;
   (run)   shift 2>/dev/null || :; run "$@" ;;
   (shots) shift 2>/dev/null || :; MUX_LAB_KEEP=1 export MUX_LAB_KEEP
           run "$@"; printf 'screenshots under %s\n' "$_LAB" ;;
-  (*) echo "usage: $_me {list|run [ENV...]|shots [ENV...]}" >&2; exit 2 ;;
+  (*) echo "usage: $_me {list|deps|run [ENV...]|shots [ENV...]}" >&2
+      exit 2 ;;
 esac

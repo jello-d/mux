@@ -21,6 +21,8 @@
 set -eu
 
 _me=env/sway
+# shellcheck source=test/lab/avail_lib
+. "$(dirname -- "$0")/../avail_lib"
 _dir=${LAB_DIR:-}
 
 # LAB_DIR IS DEMANDED LAZILY, by the verbs that write in it, and not at
@@ -42,17 +44,23 @@ kind() { echo wayland; }
 # and this one runs foot.
 hooks() { echo sway; }
 
-available() {
-  for _t in sway swaymsg; do
-    command -v "$_t" >/dev/null 2>&1 || {
-      echo "$_me: $_t is not on PATH (apt: sway)" >&2; return 1; }
-  done
-  # A TERMINAL IS PART OF THE ENVIRONMENT, because the thing under test
-  # matches a window TITLE and only a client can carry one. foot is the
-  # smallest Wayland one packaged; any would do.
-  command -v foot >/dev/null 2>&1 || {
-    echo "$_me: foot is not on PATH (apt: foot)" >&2; return 1; }
+# ONE TABLE, `tool package` per line, and `available` is DERIVED from it.
+# Two copies of "what this needs" is how a provisioning file in another repo
+# goes stale against the thing it provisions, so there is one: `lab deps`
+# aggregates these, and tackup's data is held against that.
+#
+# A TERMINAL IS PART OF THE ENVIRONMENT, because the thing under test matches
+# a window TITLE and only a client can carry one. foot is the smallest
+# Wayland one packaged; any would do.
+deps() {
+  cat <<'EOF'
+sway sway
+swaymsg sway
+foot foot
+EOF
 }
+
+available() { _avail_from_deps; }
 
 up() {
   cat >"$_dir/sway.conf" <<'EOF'
@@ -157,6 +165,7 @@ down() {
 case ${1:-} in
   (kind)      kind ;;
   (hooks)     hooks ;;
+  (deps)      deps ;;
   (available) available ;;
   (up)        _need_dir;        up ;;
   (window)    _need_dir;    shift; window "$1" ;;
@@ -164,7 +173,7 @@ case ${1:-} in
   (focused)   _need_dir;   focused ;;
   (shot)      _need_dir;      shift; shot "$1" ;;
   (down)      _need_dir;      down ;;
-  (*) echo "usage: $_me {kind|hooks|available|up|window T|focus T|
+  (*) echo "usage: $_me {kind|hooks|deps|available|up|window T|focus T|
                  focused|shot F|down}" >&2
       exit 2 ;;
 esac

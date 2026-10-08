@@ -21,6 +21,8 @@
 set -eu
 
 _me=env/x11
+# shellcheck source=test/lab/avail_lib
+. "$(dirname -- "$0")/../avail_lib"
 _dir=${LAB_DIR:-}
 
 # LAB_DIR IS DEMANDED LAZILY, by the verbs that write in it, and not at
@@ -38,20 +40,22 @@ _dpy=:71
 kind()  { echo x11; }
 hooks() { echo wmctrl; }
 
-available() {
-  for _t in Xvfb openbox wmctrl xdotool xterm; do
-    command -v "$_t" >/dev/null 2>&1 || {
-      echo "$_me: $_t is not on PATH (apt: $(_pkg "$_t"))" >&2; return 1; }
-  done
+# ONE TABLE, `tool package` per line; see env/sway for why. Four of these
+# five have a package name that differs from the command, which is exactly
+# why the pairing has to be written down somewhere rather than guessed from
+# the tool name.
+deps() {
+  cat <<'EOF'
+Xvfb xvfb
+openbox openbox
+wmctrl wmctrl
+xdotool xdotool
+xterm xterm
+xprop x11-utils
+EOF
 }
-_pkg() {
-  case $1 in
-    (Xvfb)    echo xvfb ;;
-    (openbox) echo openbox ;;
-    (xterm)   echo xterm ;;
-    (*)       echo "$1" ;;
-  esac
-}
+
+available() { _avail_from_deps; }
 
 up() {
   # REFUSED LOUDLY IF THE NUMBER IS TAKEN, rather than searching for a free
@@ -142,6 +146,7 @@ down() {
 case ${1:-} in
   (kind)      kind ;;
   (hooks)     hooks ;;
+  (deps)      deps ;;
   (available) available ;;
   (up)        _need_dir;        up ;;
   (window)    _need_dir;    shift; window "$1" ;;
@@ -149,7 +154,7 @@ case ${1:-} in
   (focused)   _need_dir;   focused ;;
   (shot)      _need_dir;      shift; shot "$1" ;;
   (down)      _need_dir;      down ;;
-  (*) echo "usage: $_me {kind|hooks|available|up|window T|focus T|
+  (*) echo "usage: $_me {kind|hooks|deps|available|up|window T|focus T|
                  focused|shot F|down}" >&2
       exit 2 ;;
 esac
