@@ -13,8 +13,7 @@
 # at all. mux emits text that reads correctly everywhere and leaves styling
 # here, the same line it draws for a terminal emulator and a compositor.
 #
-# IT PAIRS WITH ONE LINE OF DAEMON CONFIG, and without that line it still reads
-# correctly, just on two rows. For mako:
+# IT REQUIRES ONE LINE OF DAEMON CONFIG. For mako:
 #
 #     [app-name="mux"]
 #     format=<big><b>%s</b></big> %b
@@ -26,6 +25,21 @@
 #
 #     Claude finished: api (on northgate)      <- bold, then dim and normal
 #     your turn                                <- the body, as usual
+#
+# REQUIRES, NOT PAIRS WITH, and the difference is measured rather than argued:
+# against mako's default `<b>%s</b>\n%b` this hook's empty line BECOMES A BLANK
+# ROW, because Pango does not collapse one (pango-view at Sans 11: 83px against
+# the built-in wording's 62px, one line taller). Only on the LOCAL path, which
+# is the common one on your own box, so it is also the half you would see
+# first. So both halves of this pair are wrong alone and in opposite
+# directions: the format with no hook puts the whole banner on one row, the
+# hook with no format adds an empty one.
+#
+# SO THE ONE QUESTION THAT PICKS A HOOK IS WHETHER YOUR DAEMON'S FORMAT IS
+# CONFIGURABLE. mako and dunst, yes; swaync, GNOME Shell, plasma and
+# xfce4-notifyd, no. Where it is not, leave this unset: mux's own wording is
+# already two correct rows there, and the only thing this would buy is a dim
+# grey, which is not worth a blank row.
 #
 # THE HOST IS MARKUP AND THE REST IS NOT, because only the body is parsed:
 # putting a span in the summary would print the tags literally.

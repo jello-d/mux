@@ -219,7 +219,10 @@
 # at all. mux emits text that reads correctly everywhere and leaves styling
 # to you. `toast-pango` in $MUX_SHARE/desktop-notifier/ is a worked example
 # (a dim, normal-weight host on the title row) and documents the one line of
-# daemon config it pairs with.
+# daemon config it REQUIRES: without that line its empty host row renders as a
+# blank one. So the question that picks a hook is whether your daemon's format
+# is configurable (mako and dunst, yes; swaync, GNOME Shell, plasma and
+# xfce4-notifyd, no), and where it is not the answer is to leave this unset.
 #
 # Default: unset, so the wording is mux's own and carries no markup.
 #desktop-notifier-toast   toast-pango

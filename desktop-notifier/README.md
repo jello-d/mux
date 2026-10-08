@@ -92,8 +92,7 @@ Claude finished: api (on northgate)     <- bold, then dim and normal weight
 your turn
 ```
 
-It pairs with one line of daemon config, and without that line it still reads
-correctly, just on two rows. For mako:
+It **requires** one line of daemon config. For mako:
 
 ```
 [app-name="mux"]
@@ -105,6 +104,19 @@ rest then comes from the hook's own newline rather than from the format, which
 is what puts the host on the title row and leaves the body its own. That is
 also why the hook always prints three lines, the middle one empty when there
 is no host to name.
+
+**Requires, rather than pairs with.** Against mako's default
+`<b>%s</b>\n%b` that empty line becomes a blank *row*, because Pango does not
+collapse one (measured with `pango-view` at Sans 11: 83px against the built-in
+wording's 62px, one line taller). Only on the local path, which is the common
+one on your own box. So each half is wrong alone, in opposite directions: the
+format with no hook puts the whole banner on one row, the hook with no format
+adds an empty one.
+
+**The one question that picks a hook is whether your daemon's format is
+configurable.** mako and dunst, yes; swaync, GNOME Shell, plasma and
+xfce4-notifyd, no. Where it is not, leave the hook unset: mux's own wording is
+already two correct rows there, and a dim grey is not worth a blank row.
 
 Note the asymmetry inside it, which is the thing most likely to look like a
 bug: the **host is escaped and the session is not**. Only the body is parsed,
