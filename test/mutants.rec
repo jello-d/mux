@@ -4638,3 +4638,10 @@ t mux-demo
 -     hook Notification
 +     hook PostToolUse
 m nothing reached `blocked`
+
+= toast-host-moves-back-to-the-body
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
+-             summary = f"{summary} (on {host})"
++             body = f"{body} (on {host})"
+m test_a_REMOTE_banner_names_the_host

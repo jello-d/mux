@@ -551,12 +551,24 @@ class Toaster:
         return self._iface
 
     def text(self, host, session, kind, local):
-        """The banner, and the HOST is in it when there is one to name.
+        """The banner, and the HOST rides in the TITLE beside the session.
 
         emit could never say which machine, because it only ever ran on one.
         A daemon watching several can, and without it two boxes running the
         same session name produce identical banners: the tray spent two
         releases learning that lesson about colour.
+
+        THE TITLE, NOT THE BODY, and not the app name either. Which field a
+        reader actually SEES is the notification daemon's choice, and the one
+        in use here renders only the summary and the body:
+
+            format=<big><b>%s</b></big>\n<span foreground="#fff">%b</span>
+
+        So `%a` is never drawn, and putting the host in the app name would
+        have made it INVISIBLE while also splitting `group-by=app-name` into
+        one group per machine. WHICH MACHINE belongs with WHICH SESSION,
+        because together they are the address of the thing asking for you;
+        the body says what it wants, which is the same sentence on every box.
         """
         if kind == "blocked":
             summary = f"Claude needs you: {session}"
@@ -565,7 +577,7 @@ class Toaster:
             summary = f"Claude finished: {session}"
             body = "your turn"
         if not local and host:
-            body = f"{body} (on {host})"
+            summary = f"{summary} (on {host})"
         return summary, body
 
     async def announce(self, host, part, session, kind, local=True):

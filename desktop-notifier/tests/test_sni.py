@@ -1556,7 +1556,16 @@ class Toasts(unittest.TestCase):
         sni, bus, t = self._toaster()
         asyncio.run(t.announce("northwood", "global", "api", "finished",
                                local=False))
-        self.assertIn("northwood", bus.calls[0][3])
+        # THE TITLE, asserted by INDEX, because the recorded tuple is
+        # (app, replaces, summary, body) and which field a reader actually
+        # SEES is the daemon's choice: the one in use renders `%s` and `%b`
+        # and never `%a`, so a host in the app name would be invisible.
+        self.assertIn("northwood", bus.calls[0][2])
+        # AND NOT IN THE BODY, which is where it used to be. Without this the
+        # move is unpinned: putting it back would satisfy the assertion above
+        # only if that one were a search across the whole call, and this is
+        # what makes it a position rather than a presence.
+        self.assertNotIn("northwood", bus.calls[0][3])
 
     def test_a_LOCAL_banner_does_not(self):
         """The control, and the reason it is a separate case: a banner that
@@ -1564,6 +1573,7 @@ class Toasts(unittest.TestCase):
         sni, bus, t = self._toaster()
         asyncio.run(t.announce("here", "global", "api", "finished",
                                local=True))
+        self.assertNotIn("here", bus.calls[0][2])
         self.assertNotIn("here", bus.calls[0][3])
 
     def test_a_SECOND_announcement_replaces_the_first(self):
