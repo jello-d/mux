@@ -1,0 +1,166 @@
+#!/bin/sh
+# test/lab/probe/toast - render a toast hook through a REAL daemon and
+# measure the rows a human would see.
+#
+#   toast ENV DAEMON
+#
+# WHAT THIS ADDS OVER test/mux-toast-hooks.t: that file asserts the LINES a
+# hook prints. Where the break between them lands is the daemon's decision,
+# and the hooks' headers make three claims about it that no amount of line
+# assertion can reach:
+#
+#   pango on a JOINED format        the host sits on the title row
+#   pango on a DEFAULT format       its empty line becomes a BLANK ROW
+#   dim on a DEFAULT format         three rows remote, two local, no blank
+#
+# The second was measured once with `pango-view`, which renders the same
+# markup with the same library and is therefore a good proxy and not the
+# thing: it cannot show that the daemon substitutes %s and %b where we think,
+# nor that it parses markup in the body and not the summary.
+#
+# AND THE DIM IS THE MARKUP ASSERTION, which is the neatest part. If a daemon
+# did NOT parse Pango in the body, `<span foreground="#8a8a8a">` would render
+# as its own literal tag text in the ordinary text colour. So a host row
+# measurably DARKER than the title row is simultaneous proof that the span
+# was interpreted and that it was interpreted in the right field.
+#
+# EVERY THRESHOLD IS RELATIVE. Row counts are compared between shots and
+# luminances within one shot, so a different font, size or theme in the
+# daemon's config moves every number together and the verdicts hold. An
+# absolute pixel figure here would be a test of this box's font stack.
+set -eu
+
+_env=${1:?usage: toast ENV DAEMON}
+_dmn=${2:?usage: toast ENV DAEMON}
+_dir=${LAB_DIR:?LAB_DIR must be set by the driver}
+_here=$(cd -- "$(dirname -- "$0")" && pwd)
+_root=$(cd -- "$_here/../../.." && pwd)
+E=$_here/../env/$_env
+D=$_here/../daemon/$_dmn
+ROWS=$_here/../rows.py
+
+_pass=0
+_fail=0
+ok()  { _pass=$((_pass + 1)); printf '    ok   %s\n' "$1"; }
+bad() { _fail=$((_fail + 1)); printf '    FAIL %s\n' "$1" >&2
+        [ $# -lt 2 ] || printf '         %s\n' "$2" >&2; }
+
+# Each shot is taken by a child under the private bus; this reads the result.
+# FIELDS RATHER THAN THE WHOLE JSON, so a shell can compare them: row count,
+# the largest gap between rows, and each row's weighted luminance.
+_rows()  { python3 "$ROWS" "$_dir/$1.png" --json \
+  | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["rows"]))'; }
+_maxgap() { python3 "$ROWS" "$_dir/$1.png" --json | python3 -c '
+import json, sys
+r = json.load(sys.stdin)["rows"]
+print(max((b["top"] - a["bottom"] for a, b in zip(r, r[1:])), default=0))'; }
+_lum() { python3 "$ROWS" "$_dir/$1.png" --json | python3 -c '
+import json, sys
+r = json.load(sys.stdin)["rows"]
+i = int(sys.argv[1])
+print(r[i]["lum"] if -len(r) <= i < len(r) else -1)' "$2"; }
+_ink() { python3 "$ROWS" "$_dir/$1.png" --json | python3 -c '
+import json, sys
+r = json.load(sys.stdin)["rows"]
+i = int(sys.argv[1])
+print(r[i]["ink"] if -len(r) <= i < len(r) else -1)' "$2"; }
+
+printf '  %s via %s\n' "$_env" "$_dmn"
+
+# --- EVERY SHOT IS TAKEN IN ONE CHILD, UNDER ONE PRIVATE BUS ------------
+# The daemon owns org.freedesktop.Notifications and this box has a live one,
+# so a shared bus would either fail to start or steal the name from the
+# human's desktop. `dbus-run-session` is also what lets the whole matrix run
+# while somebody is using the machine.
+# shellcheck disable=SC1091   # written by the environment's up()
+. "$_dir/env"
+env -u WAYFIRE_SOCKET WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-}" \
+  LAB_DIR="$_dir" LAB_D="$D" LAB_ROOT="$_root" LAB_E="$E" \
+  dbus-run-session -- sh "$_here/shoot" \
+  >"$_dir/shoot.log" 2>&1 || :
+
+# THE PRECONDITION IS THE SHOTS, NOT THE EXIT CODE, and that distinction is
+# the first thing this probe got wrong: `shoot` exited 0 while writing all
+# six pictures to one filename, so the analysis below read whichever was
+# last and reported confident nonsense. A missing shot is named here rather
+# than reaching Pillow, because a traceback about a path reads as the
+# harness being broken instead of as the shot not having been taken.
+_missing=
+for _s in pango-joined-remote pango-joined-local pango-default-remote \
+          pango-default-local dim-default-remote dim-default-local; do
+  [ -s "$_dir/$_s.png" ] || _missing="$_missing $_s"
+done
+if [ -n "$_missing" ]; then
+  bad "shots missing:$_missing" "$(tail -4 "$_dir/shoot.log" 2>/dev/null)"
+  printf '  %s/%s: %d ok, %d failed\n' "$_env" "$_dmn" "$_pass" "$_fail"
+  exit 1
+fi
+
+# --- pango IN ITS OWN MODE: TWO ROWS, HOST ON THE TITLE ROW -------------
+# The row count alone is not the claim: two rows is also what a hook that
+# dropped the host entirely would give. The host being ON the title row is
+# visible as that row carrying MORE INK than the same row with no host to
+# name, which is the only way a band profile can see text appended to a line.
+_r=$(_rows pango-joined-remote)
+[ "$_r" -eq 2 ] && ok "pango/joined remote: 2 rows" \
+  || bad "pango/joined remote" "wanted 2 rows, got $_r"
+_withhost=$(_ink pango-joined-remote 0)
+_nohost=$(_ink pango-joined-local 0)
+if [ "$_withhost" -gt "$_nohost" ]; then
+  ok "pango/joined: the host is ON the title row (ink $_withhost > $_nohost)"
+else
+  bad "pango/joined: the host is not on the title row" \
+    "title-row ink with a host ($_withhost) is not greater than without
+         one ($_nohost), so the join did not happen"
+fi
+
+# --- pango IN THE WRONG MODE: THE BLANK ROW, RENDERED ------------------
+# The documented defect, asserted rather than described. Its empty first body
+# line lands on its own row under a `\n` format, and a band profile sees that
+# as a GAP several times the ordinary line spacing rather than as a third
+# row, because a blank line has no ink to find.
+_good=$(_maxgap pango-joined-local)
+_bad=$(_maxgap pango-default-local)
+if [ "$_bad" -gt $((_good * 2)) ]; then
+  ok "pango/default local: the blank row is there (${_bad}px vs ${_good}px)"
+else
+  bad "pango/default local: no blank row" \
+    "gap ${_bad}px against ${_good}px in its own mode. Either this daemon
+         collapses an empty line, which would make toast/pango safe on it,
+         or the hook stopped emitting one."
+fi
+
+# --- dim IN ITS OWN MODE: THREE REMOTE, TWO LOCAL, NO BLANK -----------
+_r=$(_rows dim-default-remote)
+[ "$_r" -eq 3 ] && ok "dim/default remote: 3 rows" \
+  || bad "dim/default remote" "wanted 3 rows, got $_r"
+_r=$(_rows dim-default-local)
+[ "$_r" -eq 2 ] && ok "dim/default local: 2 rows" \
+  || bad "dim/default local" "wanted 2 rows, got $_r"
+_dg=$(_maxgap dim-default-local)
+if [ "$_dg" -le $((_good * 2)) ]; then
+  ok "dim/default local: no blank row (${_dg}px)"
+else
+  bad "dim/default local: a blank row appeared" \
+    "gap ${_dg}px, which is the one failure this hook exists to avoid"
+fi
+
+# --- AND THE DIM IS DIM, WHICH IS ALSO THE MARKUP ASSERTION -----------
+# Within ONE shot, so no font or theme difference can move it: the host row
+# must be darker than the title row above it. A daemon that did not parse the
+# span would draw the tag text in the ordinary colour and this would fail at
+# full brightness, which is why one assertion covers both facts.
+for _s in dim-default-remote pango-default-remote; do
+  _t=$(_lum "$_s" 0); _h=$(_lum "$_s" 1)
+  if python3 -c "import sys; sys.exit(0 if $_h < $_t * 0.8 else 1)"; then
+    ok "$_s: the host row is dim (lum $_h vs $_t)"
+  else
+    bad "$_s: the host row is not dim" \
+      "lum $_h against the title's $_t. Either the span was not parsed (so
+         its tag text drew in the normal colour) or it was parsed in the
+         wrong field."
+  fi
+done
+
+printf '  %s/%s: %d ok, %d failed\n' "$_env" "$_dmn" "$_pass" "$_fail"
+[ "$_fail" -eq 0 ]

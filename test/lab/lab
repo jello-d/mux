@@ -1,0 +1,144 @@
+#!/bin/sh
+# test/lab/lab - run the hook probes against every environment this box can
+# bring up. See test/lab/README.md.
+#
+#   lab list                 what is available, and why the rest is not
+#   lab run [ENV...]         every available environment, or the named ones
+#   lab shots [ENV...]       the same, keeping the screenshots
+#
+# NOT PART OF `test/run`, which globs `test/*.t`. The relationship is the one
+# `test/mutate` already has with the suite: a cheap continuous check and an
+# expensive explicit one. `test/mux-hook-lab.t` runs the subset needing
+# nothing installed, so CI gets some of this without the matrix.
+#
+# WHAT IS NOT AVAILABLE IS REPORTED, NOT SKIPPED SILENTLY, and that is the
+# half this tree keeps relearning: a flake that fails is annoying and one
+# that SKIPS is invisible. `list` prints the apt line for every missing
+# piece, so the gap is a shopping list rather than a mystery.
+set -eu
+
+_me=lab
+HERE=$(cd -- "$(dirname -- "$0")" && pwd)
+ROOT=$(cd -- "$HERE/../.." && pwd)
+
+# EVERY ENVIRONMENT IS DISCOVERED, never listed here, so adding one is
+# writing one file: the same reason mux's own key check derives its list from
+# the fragment instead of carrying a copy.
+_envs() { find "$HERE/env" -maxdepth 1 -type f | sed 's|.*/||' | sort; }
+_daemons() { find "$HERE/daemon" -maxdepth 1 -type f | sed 's|.*/||' | sort; }
+
+# THE SCRATCH ROOT IS UNDER /var/tmp, not /tmp, because this tree's own
+# convention is that a throwaway surviving a reboot beats one that does not,
+# and a failed run's screenshots are the whole evidence.
+_LAB=${MUX_LAB_DIR:-/var/tmp/mux-hook-lab}
+
+list() {
+  printf 'environments\n'
+  for _e in $(_envs); do
+    if "$HERE/env/$_e" available 2>"$_LAB/why" ; then
+      printf '  %-10s available   hooks: %s\n' "$_e" \
+        "$("$HERE/env/$_e" hooks | tr '\n' ' ')"
+    else
+      printf '  %-10s NO          %s\n' "$_e" \
+        "$(sed -n 1p "$_LAB/why" | sed 's/^[^:]*: //')"
+    fi
+  done
+  printf 'notification daemons\n'
+  for _d in $(_daemons); do
+    if "$HERE/daemon/$_d" available 2>"$_LAB/why"; then
+      printf '  %-10s available\n' "$_d"
+    else
+      printf '  %-10s NO          %s\n' "$_d" \
+        "$(sed -n 1p "$_LAB/why" | sed 's/^[^:]*: //')"
+    fi
+  done
+  printf 'hooks with no environment here\n'
+  for _h in $(find "$ROOT/share/desktop-notifier/focus" -type f \
+      | sed 's|.*/||' | sort); do
+    _covered=no
+    for _e in $(_envs); do
+      "$HERE/env/$_e" hooks | grep -qxF -- "$_h" && _covered=yes
+    done
+    [ "$_covered" = no ] && printf '  focus/%s\n' "$_h"
+  done
+  return 0
+}
+
+# ONE SCRATCH DIRECTORY PER ENVIRONMENT, and the teardown runs even when a
+# probe dies, because a leaked compositor holds a socket and the next run's
+# `up` then races it. The literal is baked into the trap at ARM time rather
+# than expanded when it fires: this tree once deleted its own working copy
+# because a trap held a variable that resolved to the cwd.
+_run_env() {
+  _e=$1; shift
+  _d=$_LAB/$_e
+  rm -rf -- "$_d"
+  mkdir -p "$_d"
+  _lit="'$_d'"
+  # shellcheck disable=SC2064   # the literal is baked in ON PURPOSE
+  trap "\"$HERE/env/$_e\" down 2>/dev/null || :" EXIT INT HUP TERM
+  printf '%s\n' "--- $_e ---"
+  LAB_DIR=$_d; export LAB_DIR
+  if ! "$HERE/env/$_e" up; then
+    printf '  %s: could not start\n' "$_e" >&2
+    trap - EXIT INT HUP TERM; return 1
+  fi
+  _bad=0
+  for _h in $("$HERE/env/$_e" hooks); do
+    sh "$HERE/probe/focus" "$_e" "$_h" || _bad=1
+  done
+  # THE TOAST PROBE NEEDS A WAYLAND DISPLAY TO SCREENSHOT, so it runs only
+  # where the environment is one. An X11 toast matrix is a separate job: the
+  # daemons there are the desktops' own, which is the VM tier.
+  if [ "$("$HERE/env/$_e" kind)" = wayland ]; then
+    for _dm in $(_daemons); do
+      "$HERE/daemon/$_dm" available 2>/dev/null || continue
+      sh "$HERE/probe/toast" "$_e" "$_dm" || _bad=1
+    done
+  fi
+  "$HERE/env/$_e" down || :
+  trap - EXIT INT HUP TERM
+  [ "$_bad" -eq 0 ] || return 1
+  printf '  %s: all probes passed\n' "$_e"
+  return 0
+}
+
+run() {
+  _want=$*
+  _any=0
+  _bad=0
+  for _e in $(_envs); do
+    if [ -n "$_want" ]; then
+      # shellcheck disable=SC2086   # the wanted names, split on purpose
+      printf '%s\n' $_want | grep -qxF -- "$_e" || continue
+    fi
+    if ! "$HERE/env/$_e" available 2>/dev/null; then
+      printf -- '--- %s: SKIPPED ---\n' "$_e"
+      "$HERE/env/$_e" available 2>&1 | sed 's/^/  /' || :
+      continue
+    fi
+    _any=1
+    _run_env "$_e" || _bad=1
+  done
+  if [ "$_any" -eq 0 ]; then
+    # A RUN THAT EXAMINED NOTHING IS A FAILURE, not a pass, which is the rule
+    # `test/mutate` already states about a filter matching nothing. Reporting
+    # success here is how a whole matrix goes quiet unnoticed.
+    printf '%s: no environment was available, so NOTHING was\n' "$_me" >&2
+    printf 'tested. A run that examined nothing is a failure.\n' >&2
+    printf 'run `sh %s list` for what is missing\n' "test/lab/lab" >&2
+    return 1
+  fi
+  [ "$_bad" -eq 0 ] || { printf '%s: some probes FAILED\n' "$_me" >&2
+    return 1; }
+  printf '%s: every available environment passed\n' "$_me"
+}
+
+mkdir -p "$_LAB"
+case ${1:-run} in
+  (list)  list ;;
+  (run)   shift 2>/dev/null || :; run "$@" ;;
+  (shots) shift 2>/dev/null || :; MUX_LAB_KEEP=1 export MUX_LAB_KEEP
+          run "$@"; printf 'screenshots under %s\n' "$_LAB" ;;
+  (*) echo "usage: $_me {list|run [ENV...]|shots [ENV...]}" >&2; exit 2 ;;
+esac

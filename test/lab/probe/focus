@@ -1,0 +1,109 @@
+#!/bin/sh
+# test/lab/probe/focus - drive a focus hook against a REAL compositor.
+#
+#   focus ENV HOOK
+#
+# WHAT THIS ADDS OVER test/mux-focus-hooks.t, which is the only reason it is
+# worth a compositor: that file asserts the ARGV a hook composes, against a
+# stub. It cannot know whether the compositor ACCEPTS that syntax, and four
+# of the six hooks shipped saying exactly that in their headers.
+#
+# THE ANCHOR IS THE PRIZE. mux's windows end in `[host_short]`, and the hooks
+# match on the brackets because the bare name would also hit a SESSION called
+# `northgate` or a path in a title. A stub can only record that the pattern
+# was composed; a real matcher is the only thing that can show it DISCRIMINATES.
+# So the decoys are the point of this file:
+#
+#   [northgate] in brackets     must be raised
+#   northgate, no brackets      must NOT be raised
+#   [northgatex]                must NOT be raised, which is what the CLOSING
+#                               bracket buys and no argv check can see
+#
+# EVERY CASE STARTS FROM THE WRONG WINDOW, because a hook that does nothing
+# at all passes any assertion made about a window that was already focused.
+# That is this tree's vacuous-assertion rule applied to a compositor.
+set -eu
+
+_env=${1:?usage: focus ENV HOOK}
+_hook=${2:?usage: focus ENV HOOK}
+_dir=${LAB_DIR:?LAB_DIR must be set by the driver}
+_here=$(cd -- "$(dirname -- "$0")" && pwd)
+_root=$(cd -- "$_here/../../.." && pwd)
+E=$_here/../env/$_env
+HOOK=$_root/share/desktop-notifier/focus/$_hook
+
+_pass=0
+_fail=0
+ok()   { _pass=$((_pass + 1)); printf '    ok   %s\n' "$1"; }
+bad()  { _fail=$((_fail + 1)); printf '    FAIL %s\n' "$1" >&2
+         [ $# -lt 2 ] || printf '         %s\n' "$2" >&2; }
+
+# THE HOOK RUNS WITH THE ENVIRONMENT THE COMPOSITOR PUBLISHED, which is the
+# whole point of `up` writing a file: a hook guards on its compositor's own
+# variable and would refuse 78 without it, and that refusal reads exactly
+# like the matcher failing.
+runhook() {
+  # shellcheck disable=SC1091   # written by the environment's up()
+  ( set -a; . "$_dir/env"; set +a
+    "$HOOK" "$@" ) >"$_dir/hook.out" 2>"$_dir/hook.err"
+}
+
+# `raises LABEL TITLE` -> the hook, started from a decoy, lands on TITLE.
+raises() {
+  "$E" focus "$DECOY" || { bad "$1: could not start from the decoy"; return; }
+  sleep 0.2
+  _rc=0; runhook "$1" || _rc=$?
+  sleep 0.3
+  _got=$("$E" focused || echo '(none)')
+  if [ "$_got" = "$2" ]; then
+    ok "raises  $1 -> $2"
+  else
+    bad "raises  $1" "wanted [$2] got [$_got], hook rc=$_rc
+         $(head -1 "$_dir/hook.err" 2>/dev/null || :)"
+  fi
+}
+
+# `refuses LABEL` -> the hook does NOT move focus off the decoy, and says so
+# with 78 rather than claiming success.
+refuses() {
+  "$E" focus "$DECOY" || { bad "$1: could not start from the decoy"; return; }
+  sleep 0.2
+  _rc=0; runhook "$1" || _rc=$?
+  sleep 0.3
+  _got=$("$E" focused || echo '(none)')
+  if [ "$_got" != "$DECOY" ]; then
+    bad "refuses $1" "focus MOVED to [$_got], so the anchor matched
+         something it must not"
+  elif [ "$_rc" -ne 78 ]; then
+    bad "refuses $1" "focus stayed, correctly, but the hook exited $_rc
+         where 78 is the contract for cannot-answer"
+  else
+    ok "refuses $1 (78, focus unmoved)"
+  fi
+}
+
+printf '  %s via focus/%s\n' "$_env" "$_hook"
+
+# --- THE FIXTURE ----------------------------------------------------------
+# Four windows, and three of them are decoys chosen to break a matcher that
+# is almost right. The first is where every case starts from.
+DECOY='shell:~                    [elsewhere]'
+"$E" window "$DECOY"
+"$E" window 'mux api                    [northgate]'
+# NO BRACKETS: what an unanchored matcher would hit. A session really can be
+# called after a host, which is why the hooks anchor at all.
+"$E" window 'northgate'
+# A LONGER NAME IN BRACKETS: what a matcher missing the CLOSING bracket would
+# hit. This is the case `mux-focus-hooks.t` can only assert as a string.
+"$E" window 'mux api                    [northgatex]'
+
+raises  northgate  'mux api                    [northgate]'
+refuses nosuchhost
+# THE SUBSTRING CASES, which are the ones a real matcher answers and a
+# recorded argv cannot. `northgat` is a prefix of the real host and of the
+# decoy; `elsewher` is a prefix of the decoy's own label.
+refuses northgat
+refuses gate
+
+printf '  %s: %d ok, %d failed\n' "$_env/$_hook" "$_pass" "$_fail"
+[ "$_fail" -eq 0 ]

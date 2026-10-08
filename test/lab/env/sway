@@ -1,0 +1,170 @@
+#!/bin/sh
+# test/lab/env/sway - a headless sway, for test/lab/lab.
+#
+# See test/lab/README.md for the verb contract. The interesting parts here
+# are the three things that are NOT obvious:
+#
+# A CLIENT IS LAUNCHED BY THE COMPOSITOR, never from outside. sway creates
+# its own WAYLAND_DISPLAY and ignores one passed in, so a terminal started
+# from this script's environment reports "failed to connect to wayland; no
+# compositor running?" and the whole lab reads as broken. `swaymsg exec`
+# hands it sway's own environment, which is also how a real session does it.
+#
+# AND THE LIVE SESSION IS UNSET, not merely overridden: WAYLAND_DISPLAY and
+# WAYFIRE_SOCKET both go, because this box runs wayfire and an inherited
+# value is how a scratch thing reaches into a real one. This repo has paid
+# for that three times in hand probes.
+#
+# SWAYSOCK IS OURS AND IS NOT $XDG_RUNTIME_DIR's: a fixed path under the
+# lab's scratch directory, so two labs cannot collide and nothing survives a
+# teardown.
+set -eu
+
+_me=env/sway
+_dir=${LAB_DIR:-}
+
+# LAB_DIR IS DEMANDED LAZILY, by the verbs that write in it, and not at
+# source time. `available`, `kind` and `hooks` are pure QUERIES: making them
+# require a scratch directory meant `lab list` could not ask what this box
+# can run without first inventing somewhere to run it, which is the shape of
+# a validator demanding state it never reads.
+_need_dir() { [ -n "${LAB_DIR:-}" ] || {
+  echo "$_me: LAB_DIR must be set by the driver" >&2; exit 2; }; }
+_sock=$_dir/sway.sock
+_log=$_dir/sway.log
+
+kind() { echo wayland; }
+
+# WHICH HOOKS THIS ENVIRONMENT CAN EXERCISE, declared here rather than mapped
+# in the driver, because it is the environment that knows. One name per line.
+# `kitty` is absent on purpose: it matches through the TERMINAL rather than
+# the compositor, so it belongs to an environment whose terminal is kitty,
+# and this one runs foot.
+hooks() { echo sway; }
+
+available() {
+  for _t in sway swaymsg; do
+    command -v "$_t" >/dev/null 2>&1 || {
+      echo "$_me: $_t is not on PATH (apt: sway)" >&2; return 1; }
+  done
+  # A TERMINAL IS PART OF THE ENVIRONMENT, because the thing under test
+  # matches a window TITLE and only a client can carry one. foot is the
+  # smallest Wayland one packaged; any would do.
+  command -v foot >/dev/null 2>&1 || {
+    echo "$_me: foot is not on PATH (apt: foot)" >&2; return 1; }
+}
+
+up() {
+  cat >"$_dir/sway.conf" <<'EOF'
+# Deliberately inert: no bar, no autostart, no keybindings. The lab drives
+# everything over the IPC, and anything running here is something that can
+# fail for a reason the lab did not ask about.
+output HEADLESS-1 resolution 1280x800
+# A KNOWN BACKGROUND, because the toast probe counts rows of ink against it:
+# an undefined or transparent backdrop makes "is this pixel empty" a question
+# about the compositor's clear colour rather than about the banner.
+output HEADLESS-1 background #000000 solid_color
+default_border none
+focus_follows_mouse no
+EOF
+  env -u WAYLAND_DISPLAY -u WAYFIRE_SOCKET -u DISPLAY \
+    WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 \
+    SWAYSOCK="$_sock" \
+    sway -c "$_dir/sway.conf" >"$_log" 2>&1 &
+  echo "$!" >"$_dir/sway.pid"
+  # POLLED, NOT SLEPT, the lesson mux-undo-pane paid for: a fixed sleep hides
+  # an ordering fact and costs the difference anyway.
+  _i=0
+  while [ "$_i" -lt 80 ]; do
+    [ -S "$_sock" ] && break
+    _i=$((_i + 1)); sleep 0.05
+  done
+  [ -S "$_sock" ] || { echo "$_me: no IPC socket after 4s" >&2
+    sed 's/^/  /' "$_log" >&2; return 1; }
+  # THE DISPLAY NAME IS ASKED OF SWAY'S OWN CHILD, which is authoritative
+  # and is the only form that cannot be raced. The first version picked the
+  # NEWEST socket out of $XDG_RUNTIME_DIR, which is a guess: any other
+  # compositor starting in the same instant wins it, and on this box there is
+  # a live wayfire whose socket is sitting right there. A child's environment
+  # is exactly what a real client gets.
+  rm -f -- "$_dir/wd"
+  SWAYSOCK=$_sock swaymsg -q exec -- \
+    "sh -c 'printf %s \"\$WAYLAND_DISPLAY\" >\"$_dir/wd\"'"
+  _i=0
+  while [ "$_i" -lt 100 ]; do
+    [ -s "$_dir/wd" ] && break
+    _i=$((_i + 1)); sleep 0.05
+  done
+  [ -s "$_dir/wd" ] || { echo "$_me: sway never reported a display name" >&2
+    return 1; }
+  printf 'SWAYSOCK=%s\nWAYLAND_DISPLAY=%s\n' "$_sock" "$(cat "$_dir/wd")" \
+    >"$_dir/env"
+}
+
+window() {
+  # `--` SO A TITLE IS NEVER PARSED AS OPTIONS, and `sleep` rather than a
+  # shell so the client cannot exit on a stray EOF: that is how a probe of
+  # mine once destroyed the session it was measuring.
+  SWAYSOCK=$_sock swaymsg -q exec -- \
+    "foot -T '$(printf '%s' "$1" | sed "s/'/'\\\\''/g")' -- sleep 600"
+  _i=0
+  while [ "$_i" -lt 120 ]; do
+    _titles | grep -qxF -- "$1" && return 0
+    _i=$((_i + 1)); sleep 0.05
+  done
+  echo "$_me: a window titled '$1' never appeared" >&2; return 1
+}
+
+_titles() { SWAYSOCK=$_sock swaymsg -t get_tree \
+  | python3 "$(dirname "$0")/../tree.py" --all; }
+
+focus() { SWAYSOCK=$_sock swaymsg -q \
+  "[title=\"^$(_rex "$1")\$\"] focus"; }
+
+# A TITLE IS DATA AND THE CRITERIA TAKE A REGEX, so it is escaped here. The
+# lab is the one place that has to be careful about this in the opposite
+# direction from the hook: the hook anchors on `[host]` deliberately, and the
+# lab must match a whole title exactly.
+_rex() { printf '%s' "$1" | sed 's/[][\\.*^$(){}?+|/]/\\&/g'; }
+
+focused() { SWAYSOCK=$_sock swaymsg -t get_tree \
+  | python3 "$(dirname "$0")/../tree.py"; }
+
+shot() {
+  command -v grim >/dev/null 2>&1 || {
+    echo "$_me: grim is not on PATH" >&2; return 78; }
+  # shellcheck disable=SC1091   # written by up(), read back here
+  . "$_dir/env"
+  [ -n "${WAYLAND_DISPLAY:-}" ] || {
+    echo "$_me: up() never resolved a display name" >&2; return 78; }
+  env -u WAYFIRE_SOCKET WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
+    grim "$1" >/dev/null 2>&1 || {
+      echo "$_me: grim could not capture the output" >&2; return 78; }
+}
+
+down() {
+  [ -S "$_sock" ] && SWAYSOCK=$_sock swaymsg -q exit 2>/dev/null || :
+  # BY PID, FROM A FILE, never by pattern: `pkill -f` matches the very shell
+  # whose argv holds the pattern, which this tree has recorded five times and
+  # twice killed its own tool shell with.
+  if [ -f "$_dir/sway.pid" ]; then
+    _p=$(cat "$_dir/sway.pid")
+    case $_p in ([0-9]*) kill "$_p" 2>/dev/null || : ;; esac
+  fi
+  return 0
+}
+
+case ${1:-} in
+  (kind)      kind ;;
+  (hooks)     hooks ;;
+  (available) available ;;
+  (up)        _need_dir;        up ;;
+  (window)    _need_dir;    shift; window "$1" ;;
+  (focus)     _need_dir;     shift; focus "$1" ;;
+  (focused)   _need_dir;   focused ;;
+  (shot)      _need_dir;      shift; shot "$1" ;;
+  (down)      _need_dir;      down ;;
+  (*) echo "usage: $_me {kind|hooks|available|up|window T|focus T|
+                 focused|shot F|down}" >&2
+      exit 2 ;;
+esac

@@ -1,0 +1,110 @@
+#!/bin/sh
+# test/lab/daemon/mako - a private mako, for test/lab/probe/toast.
+#
+# TWO MODES, AND THEY ARE THE WHOLE POINT. mux ships two toast hooks because
+# one question divides every Pango daemon: can you configure its format?
+#
+#   joined   mux's recommended line, `format=<big><b>%s</b></big> %b`, which
+#            is what toast/pango REQUIRES. A space where mako's default has
+#            `\n`, so the title/body break comes from the hook's own newline.
+#   default  mako's stock `<b>%s</b>\n%b`, which is what a daemon you cannot
+#            configure looks like, and what toast/dim is for.
+#
+# So `joined` is the environment pango is correct in, and `default` is the
+# one dim is correct in. Running each hook in the WRONG mode is how the lab
+# shows the blank row this repo measured with pango-view but never rendered
+# through a real daemon.
+#
+# A PRIVATE BUS, NEVER THE USER'S. mako owns
+# org.freedesktop.Notifications, and this box has a live one: starting a
+# second on the session bus would either fail or steal the name from the
+# human's desktop. The probe wraps everything in `dbus-run-session`, so this
+# script only ever sees the private one it was started under.
+set -eu
+
+_me=daemon/mako
+_dir=${LAB_DIR:-}
+
+# LAB_DIR IS DEMANDED LAZILY, by the verbs that write in it, and not at
+# source time. `available`, `kind` and `hooks` are pure QUERIES: making them
+# require a scratch directory meant `lab list` could not ask what this box
+# can run without first inventing somewhere to run it, which is the shape of
+# a validator demanding state it never reads.
+_need_dir() { [ -n "${LAB_DIR:-}" ] || {
+  echo "$_me: LAB_DIR must be set by the driver" >&2; exit 2; }; }
+
+available() {
+  command -v mako >/dev/null 2>&1 || {
+    echo "$_me: mako is not on PATH (apt: mako-notifier)" >&2; return 1; }
+  command -v notify-send >/dev/null 2>&1 || {
+    echo "$_me: notify-send is not on PATH (apt: libnotify-bin)" >&2
+    return 1; }
+}
+
+# The format each mode installs, printed so the probe can report WHICH line
+# it was testing against: a verdict about a format nobody can see is a
+# verdict you cannot act on.
+fmt() {
+  case ${1:?} in
+    (joined)  printf '%s' '<big><b>%s</b></big> %b' ;;
+    (default) printf '%s' '<b>%s</b>\n%b' ;;
+    (*) echo "$_me: unknown mode '$1'" >&2; return 2 ;;
+  esac
+}
+
+up() {
+  _mode=${1:?usage: up MODE}
+  # ANCHORED TOP-LEFT AND WIDE, with no margin and a fixed font, so the row
+  # analysis is measuring the banner rather than mako's default placement
+  # drifting with the output size. Everything here is about making the
+  # PICTURE deterministic; none of it is about what mux sends.
+  {
+    printf 'anchor=top-left\n'
+    printf 'margin=0\n'
+    printf 'padding=4\n'
+    printf 'border-size=0\n'
+    printf 'width=600\n'
+    printf 'height=400\n'
+    printf 'font=monospace 12\n'
+    printf 'background-color=#000000ff\n'
+    printf 'text-color=#ffffffff\n'
+    printf 'default-timeout=0\n'
+    printf 'max-visible=3\n'
+    printf '\n[app-name="mux"]\n'
+    printf 'format=%s\n' "$(fmt "$_mode")"
+  } >"$_dir/mako.conf"
+  mako -c "$_dir/mako.conf" >"$_dir/mako.log" 2>&1 &
+  echo "$!" >"$_dir/mako.pid"
+  # POLLED ON THE BUS NAME, which is the only thing that says it is ready:
+  # the process existing proves nothing, and a notify-send into a daemon that
+  # has not claimed the name yet is silently activated or lost.
+  _i=0
+  while [ "$_i" -lt 100 ]; do
+    if gdbus call --session -d org.freedesktop.DBus -o /org/freedesktop/DBus \
+        -m org.freedesktop.DBus.NameHasOwner \
+        org.freedesktop.Notifications 2>/dev/null | grep -q true; then
+      return 0
+    fi
+    _i=$((_i + 1)); sleep 0.05
+  done
+  echo "$_me: never claimed org.freedesktop.Notifications" >&2
+  sed 's/^/  /' "$_dir/mako.log" >&2
+  return 1
+}
+
+down() {
+  command -v makoctl >/dev/null 2>&1 && makoctl dismiss --all 2>/dev/null || :
+  if [ -f "$_dir/mako.pid" ]; then
+    _p=$(cat "$_dir/mako.pid")
+    case $_p in ([0-9]*) kill "$_p" 2>/dev/null || : ;; esac
+  fi
+  return 0
+}
+
+case ${1:-} in
+  (available) available ;;
+  (fmt)       shift; fmt "$1" ;;
+  (up)        _need_dir;        shift; up "$1" ;;
+  (down)      _need_dir;      down ;;
+  (*) echo "usage: $_me {available|fmt MODE|up MODE|down}" >&2; exit 2 ;;
+esac

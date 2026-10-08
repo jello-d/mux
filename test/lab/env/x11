@@ -1,0 +1,155 @@
+#!/bin/sh
+# test/lab/env/x11 - an Xvfb display with a real window manager, for the
+# hook that covers every X11 desktop at once.
+#
+# WHY THIS ONE MATTERS MOST PER LINE: `focus/wmctrl` talks EWMH, so one hook
+# reaches i3, bspwm, openbox, awesome, xfwm, Mutter-on-X11 and KWin-on-X11.
+# Verifying it against ANY compliant window manager is therefore worth more
+# than verifying any single Wayland compositor, and openbox is the smallest
+# compliant one packaged.
+#
+# A WINDOW MANAGER IS NOT OPTIONAL HERE, which is the trap this file exists
+# to not fall into. `wmctrl -a` asks the WM to activate a window through
+# _NET_ACTIVE_WINDOW; on a bare Xvfb with no WM there is nobody to answer,
+# so the hook would exit 78 and read as the flag being wrong. The failure
+# would look exactly like the thing being tested.
+#
+# AND `xdotool` IS THE QUERY, NOT `wmctrl`: wmctrl can list windows but not
+# say which is ACTIVE in a form worth parsing, and the lab's whole assertion
+# is about which one ended up focused. Two tools, two jobs; neither is the
+# hook's business.
+set -eu
+
+_me=env/x11
+_dir=${LAB_DIR:-}
+
+# LAB_DIR IS DEMANDED LAZILY, by the verbs that write in it, and not at
+# source time. `available`, `kind` and `hooks` are pure QUERIES: making them
+# require a scratch directory meant `lab list` could not ask what this box
+# can run without first inventing somewhere to run it, which is the shape of
+# a validator demanding state it never reads.
+_need_dir() { [ -n "${LAB_DIR:-}" ] || {
+  echo "$_me: LAB_DIR must be set by the driver" >&2; exit 2; }; }
+# A HIGH, FIXED DISPLAY NUMBER, not :0 and not a search: :0 is the human's if
+# they are on X, and probing for a free one races any other lab on the box.
+# 71 is arbitrary and written down rather than computed.
+_dpy=:71
+
+kind()  { echo x11; }
+hooks() { echo wmctrl; }
+
+available() {
+  for _t in Xvfb openbox wmctrl xdotool xterm; do
+    command -v "$_t" >/dev/null 2>&1 || {
+      echo "$_me: $_t is not on PATH (apt: $(_pkg "$_t"))" >&2; return 1; }
+  done
+}
+_pkg() {
+  case $1 in
+    (Xvfb)    echo xvfb ;;
+    (openbox) echo openbox ;;
+    (xterm)   echo xterm ;;
+    (*)       echo "$1" ;;
+  esac
+}
+
+up() {
+  # REFUSED LOUDLY IF THE NUMBER IS TAKEN, rather than searching for a free
+  # one. A search makes the display a thing you cannot write down, and this
+  # is the one piece of the lab that is GLOBAL to the box: two concurrent
+  # runs would otherwise share a WM and each would see the other's windows,
+  # which reads as the hook raising something it never touched.
+  if xdotool getdisplaygeometry >/dev/null 2>&1; then :; fi
+  if DISPLAY=$_dpy xdotool getdisplaygeometry >/dev/null 2>&1; then
+    echo "$_me: $_dpy is already in use, so another lab is running here.
+Wait for it, or point this one elsewhere by editing _dpy." >&2
+    return 1
+  fi
+  Xvfb "$_dpy" -screen 0 1280x800x24 >"$_dir/xvfb.log" 2>&1 &
+  echo "$!" >"$_dir/xvfb.pid"
+  # POLLED ON THE DISPLAY ANSWERING, not on the process existing: Xvfb forks
+  # and listens later, and an xterm against a not-yet-listening display dies
+  # with "cannot open display" that reads as a missing package.
+  _i=0
+  while [ "$_i" -lt 100 ]; do
+    DISPLAY=$_dpy xdotool getdisplaygeometry >/dev/null 2>&1 && break
+    _i=$((_i + 1)); sleep 0.05
+  done
+  DISPLAY=$_dpy xdotool getdisplaygeometry >/dev/null 2>&1 || {
+    echo "$_me: $_dpy never came up" >&2
+    sed 's/^/  /' "$_dir/xvfb.log" >&2; return 1; }
+  DISPLAY=$_dpy openbox >"$_dir/openbox.log" 2>&1 &
+  echo "$!" >"$_dir/openbox.pid"
+  # AND POLLED ON THE WM OWNING _NET_SUPPORTING_WM_CHECK, which is EWMH's own
+  # "a compliant window manager is running" answer and therefore exactly the
+  # precondition `wmctrl -a` needs. Waiting on the process would be waiting
+  # on the wrong thing.
+  _i=0
+  while [ "$_i" -lt 100 ]; do
+    DISPLAY=$_dpy xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null \
+      | grep -q 'window id' && break
+    _i=$((_i + 1)); sleep 0.05
+  done
+  DISPLAY=$_dpy xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null \
+    | grep -q 'window id' || {
+      echo "$_me: openbox never claimed _NET_SUPPORTING_WM_CHECK, so there
+is no window manager to activate anything" >&2; return 1; }
+  printf 'DISPLAY=%s\n' "$_dpy" >"$_dir/env"
+}
+
+window() {
+  # `-T` IS THE TITLE AND `-e` MUST BE LAST, which is xterm's own grammar.
+  # `sleep` rather than a shell, so a stray EOF cannot close the window
+  # under the probe: a client that exits mid-assertion reads as the hook
+  # having raised nothing.
+  DISPLAY=$_dpy xterm -T "$1" -e sleep 600 >/dev/null 2>&1 &
+  _i=0
+  while [ "$_i" -lt 120 ]; do
+    DISPLAY=$_dpy wmctrl -l | sed 's/^[^ ]* *[^ ]* *[^ ]* *//' \
+      | grep -qxF -- "$1" && return 0
+    _i=$((_i + 1)); sleep 0.05
+  done
+  echo "$_me: a window titled '$1' never appeared" >&2; return 1
+}
+
+# `-F` IS AN EXACT, FULL-TITLE MATCH, which the lab wants and the HOOK
+# deliberately does not: the hook uses wmctrl's default substring match
+# because mux's `[host]` anchor is meant to be found inside a longer title.
+# Using -F here keeps the fixture's own focusing from being as loose as the
+# thing under test.
+focus() { DISPLAY=$_dpy wmctrl -F -a "$1"; }
+
+focused() { DISPLAY=$_dpy xdotool getactivewindow getwindowname 2>/dev/null \
+  || :; }
+
+shot() {
+  command -v import >/dev/null 2>&1 || {
+    echo "$_me: ImageMagick's import is not on PATH (apt: imagemagick)" >&2
+    return 78; }
+  DISPLAY=$_dpy import -window root "$1" >/dev/null 2>&1 || {
+    echo "$_me: could not capture $_dpy" >&2; return 78; }
+}
+
+down() {
+  for _f in openbox.pid xvfb.pid; do
+    [ -f "$_dir/$_f" ] || continue
+    _p=$(cat "$_dir/$_f")
+    case $_p in ([0-9]*) kill "$_p" 2>/dev/null || : ;; esac
+  done
+  return 0
+}
+
+case ${1:-} in
+  (kind)      kind ;;
+  (hooks)     hooks ;;
+  (available) available ;;
+  (up)        _need_dir;        up ;;
+  (window)    _need_dir;    shift; window "$1" ;;
+  (focus)     _need_dir;     shift; focus "$1" ;;
+  (focused)   _need_dir;   focused ;;
+  (shot)      _need_dir;      shift; shot "$1" ;;
+  (down)      _need_dir;      down ;;
+  (*) echo "usage: $_me {kind|hooks|available|up|window T|focus T|
+                 focused|shot F|down}" >&2
+      exit 2 ;;
+esac

@@ -1,0 +1,74 @@
+#!/bin/sh
+# test/lab/probe/shoot - take every toast screenshot, inside one private bus.
+#
+# A SEPARATE FILE BECAUSE IT RUNS UNDER `dbus-run-session`, which takes a
+# command rather than a shell function: everything that needs the private bus
+# has to be reachable as one executable. Putting it here also means the
+# shots and the ASSERTIONS about them cannot share a variable by accident,
+# which is how a fixture starts agreeing with whatever it produced.
+#
+# ONE DAEMON PER SHOT, started and stopped around each. mako keeps a banner
+# up for its timeout and `max-visible`; leaving one running would put the
+# previous notification in the next picture, and a band profile would read
+# the two stacked banners as a taller one. That is the cheapest possible way
+# for every row count in this matrix to be wrong at once.
+set -eu
+
+_dir=${LAB_DIR:?}
+_d=${LAB_D:?}
+_root=${LAB_ROOT:?}
+
+shoot() {   # <hook> <mode> <locality> <tag>
+  # EVERY ARGUMENT IS SAVED BEFORE ANYTHING ELSE, because the `set --` below
+  # replaces them: the first version read the tag as `$4` AFTER that line, so
+  # `$4` was `global` from the new list and all six shots were written to one
+  # file called global.png. Nothing failed; the analysis then read whichever
+  # picture happened to be last.
+  _tag=$4
+  _hook=$1
+  "$_d" up "$2" >/dev/null
+  _h=$_root/share/desktop-notifier/toast/$_hook
+  case $3 in
+    (remote) set -- finished api northgate global remote ;;
+    (local)  set -- finished api here global local ;;
+    (*) echo "shoot: bad locality '$3'" >&2; return 2 ;;
+  esac
+  # THE HOOK IS RUN FOR REAL, and its two fields are handed over exactly as
+  # the notifier does: line one is the summary, the rest is the body. This is
+  # the one place the lab substitutes for the daemon-side code, and the
+  # python suite asserts that split independently.
+  _sum=$("$_h" "$@" | sed -n 1p)
+  _body=$("$_h" "$@" | sed -n '2,$p')
+  notify-send -a mux -- "$_sum" "$_body"
+  # WAITED FOR, NOT SLEPT PAST: the banner has to be ON SCREEN before grim
+  # runs, and a fixed sleep that is too short reads as the daemon rendering
+  # nothing. makoctl lists what is visible, which is the real signal.
+  _i=0
+  while [ "$_i" -lt 60 ]; do
+    makoctl list 2>/dev/null | grep -q . && break
+    _i=$((_i + 1)); sleep 0.05
+  done
+  sleep 0.3
+  grim "$_dir/$_tag.png"
+  "$_d" down
+  # AND THE NEXT SHOT WAITS FOR THE NAME TO GO, or its own `up` races a
+  # daemon that still owns the bus and the config of the shot just taken is
+  # what renders.
+  _i=0
+  while [ "$_i" -lt 60 ]; do
+    gdbus call --session -d org.freedesktop.DBus -o /org/freedesktop/DBus \
+      -m org.freedesktop.DBus.NameHasOwner org.freedesktop.Notifications \
+      2>/dev/null | grep -q true || break
+    _i=$((_i + 1)); sleep 0.05
+  done
+}
+
+# THE SIX CASES, and the pairing is the design: each hook in the mode it is
+# FOR and in the mode it is not, so the probe can compare them. A matrix that
+# only ran each hook where it is correct could not show the blank row.
+shoot pango joined  remote pango-joined-remote
+shoot pango joined  local  pango-joined-local
+shoot pango default remote pango-default-remote
+shoot pango default local  pango-default-local
+shoot dim   default remote dim-default-remote
+shoot dim   default local  dim-default-local
