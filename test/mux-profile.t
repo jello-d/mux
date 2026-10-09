@@ -129,4 +129,55 @@ case $_o in
 esac
 has legacy-builds '@mux-theme green'
 
+# --- A BUILD MUST NOT EAT THE PROFILE IT READ ---------------------------
+# The go path writes a temp copy of a profile ROW and must clean it up: one
+# anonymous /tmp file per `mux go` leaked for as long as rows have existed,
+# 883 of them on the author's box, and nothing can prune an anonymous one.
+#
+# THE DANGEROUS HALF IS THE OTHER CASE, which is why this is asserted rather
+# than left to the leak count: with no row, the same variable holds the
+# USER'S OWN breakout file, so a cleanup written one line wider deletes a
+# config file on every build. A leak costs disk; this costs work.
+printf 'theme   cyan\n' >"$T/conf/profiles.d/survivor.profile"
+go survivor >/dev/null || fail "the survivor profile should build"
+[ -f "$T/conf/profiles.d/survivor.profile" ] \
+  || fail "mux go DELETED the profile it was given, which is a user's
+config file and not mux's to remove"
+[ -s "$T/conf/profiles.d/survivor.profile" ] \
+  || fail "mux go emptied the profile it was given"
+
+# AND THE ROW TEMP IS GONE, which is the leak itself. Counted in a TMPDIR of
+# our own, because /tmp holds every other program's scratch and an anonymous
+# name is exactly what makes a leak unattributable.
+mkdir -p "$T/leak"
+printf 'rowprof root=%s\n' "$T/proj" >"$T/conf/profiles"
+( cd "$T" && env -u TMUX -u TMUX_PANE -u MUX_SHARE PATH="$T/bin:$PATH" \
+  HOME="$T/home" TMPDIR="$T/leak" MUX_DIR="$T/conf" MUX_CACHE="$T/cache" \
+  MUX_STATE="$T/state" TMUXLOG="$T/log" "$HERE/bin/mux" go rowprof ) \
+  >/dev/null 2>&1 || :
+_lk=$(find "$T/leak" -maxdepth 1 -name 'tmp.*' 2>/dev/null | wc -l)
+[ "$_lk" -eq 0 ] || fail "a build left $_lk scratch file(s) in TMPDIR; an
+anonymous /tmp file is indistinguishable from every other program's and so
+can never be pruned"
+
+# AND A MALFORMED ROW IS THE CASE THAT ACTUALLY LEAKED, which is why it has
+# its own assertion: the row temp exists before the row is PARSED, so a
+# refusal between those two points leaves it behind. The first version of
+# the fix armed its trap after the second temp was made and missed exactly
+# this, on the input a user is likeliest to have.
+rm -f "$T/leak"/tmp.*
+printf 'badrow notapair\n' >"$T/conf/profiles"
+( cd "$T" && env -u TMUX -u TMUX_PANE -u MUX_SHARE PATH="$T/bin:$PATH" \
+  HOME="$T/home" TMPDIR="$T/leak" MUX_DIR="$T/conf" MUX_CACHE="$T/cache" \
+  MUX_STATE="$T/state" TMUXLOG="$T/log" "$HERE/bin/mux" go badrow ) \
+  >"$T/badout" 2>&1 && fail "a malformed profiles row should not build"
+case $(cat "$T/badout") in
+  (*'bad pair'*) ;;
+  (*) fail "a malformed row did not say so: [$(cat "$T/badout")]" ;;
+esac
+_lk=$(find "$T/leak" -maxdepth 1 -name 'tmp.*' 2>/dev/null | wc -l)
+[ "$_lk" -eq 0 ] || fail "a REFUSED build left $_lk scratch file(s): the row
+temp is created before the row is parsed, so the cleanup has to be armed
+before the parse rather than after the next temp"
+
 pass

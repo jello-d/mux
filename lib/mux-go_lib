@@ -244,8 +244,21 @@ _go_flatten() {
   # A row is materialised as the same `key value` stream a breakout file holds,
   # so there is one parse path below whichever form the profile was stored in.
   plabel=$profile
+  # ONLY THE ONE WE MADE IS EVER REMOVED, which is why this is a SECOND
+  # variable rather than a flag on $profile: with no row, $profile is the
+  # user's own breakout file, and cleaning up "the profile" would delete it.
+  prowtmp=
   if [ -n "$prow" ]; then
     profile=$(mktemp) || { echo "mux: mktemp failed" >&2; exit "$MUX_EC_FAIL"; }
+    prowtmp=$profile
+    # ARMED BEFORE ANYTHING CAN FAIL, which is a window the first version of
+    # this fix left open: `mux_prof_directives` exits on a malformed row, so
+    # arming only once $flat exists leaks the row temp on exactly the input
+    # a user is most likely to have. Caught by the leak assertion in
+    # test/mux-profile.t rather than by reading it.
+    _gocl="'$prowtmp'"
+    # shellcheck disable=SC2064   # baked ON PURPOSE; see _go_flatten below
+    trap "rm -f $_gocl" EXIT INT HUP TERM
     mux_prof_directives "$prow" >"$profile" || exit "$MUX_EC_FAIL"
     plabel="$(mux_prof_file) [$prow]"
   fi
@@ -258,7 +271,38 @@ _go_flatten() {
   # include), fails before any session exists, never leaving a half-built one,
   # and root/theme are position-independent (last one wins).
   flat=$(mktemp) || { echo "mux: mktemp failed" >&2; exit "$MUX_EC_FAIL"; }
-  trap 'rm -f "$flat"' EXIT
+  # BOTH FILES, AND THE SIGNALS NAMED. The row temp above was never removed
+  # at all: measured, one anonymous file per `mux go` with a profile row,
+  # 883 of them on this box. Anonymous is what makes that permanent, because
+  # a leaked /tmp/tmp.XXXXXXXXXX is indistinguishable from every other
+  # program's scratch and nothing can ever prune it. The strip's render leak
+  # was the same shape.
+  #
+  # EXIT ALONE IS NOT ENOUGH: an exit trap does not run when the shell is
+  # SIGNALLED, measured when the render leaked the same way, and `mux go`
+  # holds a terminal that a ^C reaches.
+  #
+  # THE LITERALS ARE BAKED IN AT ARM TIME, so `trap` prints exactly what
+  # will run and no later assignment can move the target. That is this
+  # tree's hard rule about deferring an expansion to fire time, and the
+  # reason it is hard is that the same shape once deleted this repository.
+  # RE-ARMED, NOT ADDED TO: POSIX sh has one trap per signal, so this
+  # REPLACES the row-temp trap above and has to name both files. Worth
+  # knowing when proving this: restoring the broken form at only one of the
+  # two arming sites proves nothing, because the later one overwrites it.
+  #
+  # AND THIS WHOLE ARMING IS UNKILLABLE BY THE SUITE, measured rather than
+  # assumed: emptying it still leaves the first trap and the explicit
+  # removals at the end of the build, so the only path it covers is a SIGNAL
+  # arriving between here and there. Driving that means racing a signal into
+  # a mid-build mux, which measures the scheduler rather than the guard, and
+  # this tree has a rule about records that do. It stays because the case is
+  # real (a ^C during a build is ordinary) and is recorded as uncovered,
+  # because an unkillable mutation is either a missing assertion or
+  # redundant code and this one is the first.
+  _gocl="'$flat'${prowtmp:+ '$prowtmp'}"
+  # shellcheck disable=SC2064   # baked ON PURPOSE, per the comment above
+  trap "rm -f $_gocl" EXIT INT HUP TERM
   expand_profile "$profile" "$plabel" >"$flat"
   return 0
 }
@@ -583,7 +627,8 @@ _go_build() {
   done <"$flat"
 
   rm -f "$flat"
-  trap - EXIT
+  [ -z "$prowtmp" ] || rm -f "$prowtmp"
+  trap - EXIT INT HUP TERM
   return 0
 }
 

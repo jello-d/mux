@@ -4750,3 +4750,17 @@ t mux-focus-hooks
 - [ -n "$_to" ] || {
 + [ -z "$_to" ] || {
 m kitty-ok: got
+
+= go-cleanup-eats-the-users-profile
+f lib/mux-go_lib
+t mux-profile
+-   [ -z "$prowtmp" ] || rm -f "$prowtmp"
++ rm -f "$profile"
+m DELETED the profile
+
+= go-leaks-its-row-temp-on-a-refusal
+f lib/mux-go_lib
+t mux-profile
+-     _gocl="'$prowtmp'"
++     _gocl=
+m REFUSED build left

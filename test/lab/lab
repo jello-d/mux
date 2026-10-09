@@ -139,6 +139,14 @@ _run_env() {
   LAB_DIR=$_d; export LAB_DIR
   if ! "$HERE/env/$_e" up; then
     printf '  %s: could not start\n' "$_e" >&2
+    # TORN DOWN ON THE WAY OUT, which this used to skip by disarming the trap
+    # first. A FAILED `up` is exactly when a teardown matters most: it has
+    # already started whatever came before the step that failed, and the
+    # env/hyprland case starts a HOST compositor before its own. Measured:
+    # four failing runs left two Hyprland and one wayfire each, eight and
+    # six processes deep, while the three PASSING runs leaked nothing. A
+    # cleanup path that runs only on success is not a cleanup path.
+    "$HERE/env/$_e" down 2>/dev/null || :
     trap - EXIT INT HUP TERM; return 1
   fi
   # `_envbad`, NOT `_bad`, WHICH `run` ALSO USES. POSIX sh has no locals, so

@@ -77,7 +77,21 @@ _need_dir() { [ -n "${LAB_DIR:-}" ] || {
 # fail to create its wayland socket (`unable to lock lockfile ... maybe
 # another compositor is running`) because the host already holds that name
 # there, and it then limps on with a display nobody asked for.
-_hyrt=$_dir/hyrt
+#
+# AND IT IS A SHORT FIXED BASE RATHER THAN A PATH UNDER $LAB_DIR, which is
+# the same call harness_lib makes about TMUX_TMPDIR and for the same
+# measured reason. An AF_UNIX path caps at 107 bytes here (probed: 105
+# binds, 108 does not), and Hyprland's instance signature is SIXTY-ONE
+# characters, so `$LAB_DIR/hyrt/hypr/<sig>/.socket.sock` came to 118 under
+# the suite's own scratch directory. It passed standalone, where $LAB_DIR is
+# shorter, and failed 3 for 3 inside `test/run`, which reads exactly like a
+# load-induced flake and is not one: the only variable is the length of the
+# path somebody else chose.
+#
+# THE PATH IS RECORDED IN $_dir so every verb and the teardown agree on it
+# without re-deriving a name with a random component.
+_hyrt_file=${_dir:-}/hyrtpath
+_hyrt=$(cat "$_hyrt_file" 2>/dev/null || true)
 
 kind()  { echo wayland; }
 hooks() { echo hyprland; }
@@ -142,7 +156,11 @@ general {
     gaps_out = 0
 }
 EOF
-  mkdir -p -- "$_hyrt"
+  # /tmp AND NOT $TMPDIR, because $TMPDIR is whatever the caller's harness
+  # pinned and its length is exactly what this is escaping.
+  _hyrt=$(mktemp -d /tmp/muxhy.XXXXXX) || { echo "$_me: mktemp failed" >&2
+    return 1; }
+  printf '%s' "$_hyrt" >"$_hyrt_file"
   chmod 700 -- "$_hyrt"
   # THE HOST, unless one was named for us. An ABSOLUTE PATH is a legal
   # WAYLAND_DISPLAY, which is what lets the two keep separate runtime dirs.
@@ -173,6 +191,22 @@ published a socket" >&2
   [ -s "$_dir/hysig" ] || { echo "$_me: Hyprland never published an
 instance (hyprctl -j instances stayed empty)" >&2
     sed 's/^/  /' "$_dir/hypr.log" >&2; return 1; }
+  # AND THE INSTANCE ANSWERING IS A SECOND QUESTION, POLLED. It appears in
+  # `-j instances` before its socket serves, so a one-shot check here passed
+  # on an idle box and FAILED inside the parallel suite, reporting "hyprctl
+  # cannot reach the instance it just started" about a Hyprland that was
+  # merely 20ms behind. Startup is 0.6s against a 10s bound, so the bound was
+  # never the problem: the readiness SIGNAL was the wrong one.
+  #
+  # env/wayfire already carries this rule two files over ("the socket exists
+  # before the methods are registered, so the readiness question is whether
+  # it ANSWERS") and I did not carry it here. Ask the thing you need, in a
+  # loop.
+  _i=0
+  while [ "$_i" -lt 200 ]; do
+    _hy version >/dev/null 2>&1 && break
+    _i=$((_i + 1)); sleep 0.05
+  done
   _hy version >/dev/null 2>&1 || { echo "$_me: hyprctl cannot reach the
 instance it just started" >&2
     sed 's/^/  /' "$_dir/hypr.log" >&2; return 1; }
@@ -258,6 +292,16 @@ down() {
     case $_p in ([0-9]*) kill "$_p" 2>/dev/null || : ;; esac
   fi
   lab_wayfire_down "$_dir"
+  # THE SHORT RUNTIME DIR GOES TOO, and the literal is written down before
+  # the removal rather than expanded inside it: this tree's hard rule, which
+  # it has already paid for once by deleting its own working copy.
+  if [ -n "${_hyrt:-}" ]; then
+    case $_hyrt in
+      (/tmp/muxhy.*) rm -rf -- "$_hyrt" ;;
+      (*) echo "$_me: refusing to remove an unexpected runtime dir
+[$_hyrt]" >&2 ;;
+    esac
+  fi
   # AND A SWEEP, because HYPRLAND IS TWO PROCESSES and the pid we recorded is
   # only the first: measured, it forks a second that the first's death leaves
   # re-parented to init. One pass is not enough either, and that is the part
