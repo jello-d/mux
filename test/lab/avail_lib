@@ -52,3 +52,51 @@ EOF
     return 1; }
   return 0
 }
+
+# WAYFIRE IS RESOLVED BY PATH, NOT DECLARED AS A PACKAGE, and it is here
+# rather than in one environment because TWO need it: env/wayfire runs it as
+# the thing under test, and env/hyprland runs it as a HOST DISPLAY, Hyprland
+# having no headless backend of its own. Two copies of "where does wayfire
+# live" is exactly the pair that can disagree.
+#
+# NOT A `deps` ROW, deliberately: apt carries 0.10 while this fleet runs a
+# 0.11 build under /opt, so naming a package would tell a provisioner to
+# install a SECOND wayfire beside the one the desktop already runs.
+lab_wayfire() {
+  if command -v wayfire >/dev/null 2>&1; then command -v wayfire
+  elif [ -x /opt/wayfire/bin/wayfire ]; then echo /opt/wayfire/bin/wayfire
+  else return 1; fi
+}
+
+# A HEADLESS WAYFIRE, for an environment that needs a DISPLAY rather than
+# wayfire itself. Answers the socket path on stdout; the display name is the
+# socket's own filename, which is the only form that cannot be raced by
+# another compositor starting beside it.
+lab_wayfire_up() {   # <dir>
+  mkdir -p -- "$1/rt"
+  chmod 700 -- "$1/rt"
+  printf '[core]\nplugins = ipc ipc-rules\nclose_top_view = none\n' \
+    >"$1/host.ini"
+  printf '[output:HEADLESS-1]\nmode = 1280x800@60\n' >>"$1/host.ini"
+  env -u WAYLAND_DISPLAY -u WAYFIRE_SOCKET -u DISPLAY \
+    WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 \
+    XDG_RUNTIME_DIR="$1/rt" \
+    "$(lab_wayfire)" -c "$1/host.ini" >"$1/host.log" 2>&1 &
+  echo "$!" >"$1/host.pid"
+  _i=0
+  while [ "$_i" -lt 120 ]; do
+    _hs=$(ls "$1"/rt/wayfire-*.socket 2>/dev/null | head -1) || :
+    [ -n "${_hs:-}" ] && break
+    _i=$((_i + 1)); sleep 0.05
+  done
+  [ -n "${_hs:-}" ] || return 1
+  printf '%s' "$_hs"
+}
+
+lab_wayfire_down() {   # <dir>
+  if [ -f "$1/host.pid" ]; then
+    _p=$(cat "$1/host.pid")
+    case $_p in ([0-9]*) kill "$_p" 2>/dev/null || : ;; esac
+  fi
+  return 0
+}

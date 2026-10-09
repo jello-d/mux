@@ -104,12 +104,17 @@ hook itself where the compositor's focus verb takes a window id rather than a
 title (`niri`, `wayfire`).
 
 Each hook's header says what it was **verified against**, because a hook whose
-mechanism was read rather than run is a different thing. Four of the six are
-now driven against a real compositor by `test/lab` (`kitty`, `sway`,
-`wayfire`, and `wmctrl` under Xvfb, which covers every X11 window manager at
-once). `hyprland` and `niri` are not: neither can be nested on the machines
-this was written on, so they remain read rather than run, and
-`test/lab/env/hyprland` records in detail why.
+mechanism was read rather than run is a different thing. Five of the six are
+now driven against a real compositor by `test/lab`: `kitty`, `sway`,
+`hyprland`, `wayfire`, and `wmctrl` under Xvfb, which covers every X11 window
+manager at once. Only `niri` is not, because this distribution does not
+package it.
+
+Two of those five were written from documentation before they could be run,
+and they came out opposite: `hyprland` was correct in every particular, and
+`wayfire` called a tool that does not exist. A hook read rather than run is
+not wrong, it is **unknown**, and that pair is what the difference looks
+like.
 
 All follow the same contract as latch's hooks
 (0 done, 78 cannot tell), and the notifier reports a non-zero exit rather than

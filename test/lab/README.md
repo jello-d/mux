@@ -8,8 +8,8 @@ lines as the intended rows, are facts about somebody else's software.
 
 Four of the six focus hooks shipped with their headers saying *not verified
 against a running compositor*. This is how that sentence gets retired, one
-environment at a time: two are left (`hyprland` and `niri`), and both for a
-measured reason rather than for want of trying.
+environment at a time. One is left: `niri`, which this distribution does not
+package.
 
 IT RETIRED A HOOK THAT COULD NOT HAVE WORKED, which is the argument for the
 whole directory. `focus/wayfire` called `wf-msg focus-window "title:..."`,
@@ -100,12 +100,20 @@ comes up on this host in under a second with the live session untouched. So
 sway needs **no VM at all**, and neither does X11 (`Xvfb`) nor wayfire,
 which takes the same wlroots variable.
 
-HYPRLAND DOES NOT, and that was learned rather than assumed: it has no
-headless backend to ask for, so it has to nest on a host display, and no
-host available here gives it one it can use. A VM is reserved for exactly
-this: a compositor that cannot nest, one this distribution does not package
-(niri), and the desktops whose notification daemon is part of a whole
-session.
+HYPRLAND NESTS TOO, but it takes two more steps, and finding them is the
+best thing this directory has done so far. It has no headless backend to
+ask for, so it must nest on a host display, and sway cannot be that host
+(it offers `xdg_wm_base` 5 where Hyprland wants 6) while wayfire can. Even
+then it starts with NO OUTPUT and every client answers `no monitors
+available`, until you ask it for one:
+
+```sh
+hyprctl output create headless     # then give it a mode: it arrives 0x0
+```
+
+A VM is now reserved for one thing: a compositor this distribution does not
+package (`niri`), and the desktops whose notification daemon is part of a
+whole session.
 
 That is not a small difference in cost. A nested compositor is a second of
 setup and no disk; a VM is a minute and a gigabyte. Being able to run the

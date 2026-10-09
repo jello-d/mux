@@ -18,11 +18,18 @@
 # match rather than a search: `^.*\[host\].*$` is how a trailing `[host]`
 # becomes findable. The brackets are escaped for the same reason as sway's.
 #
-# NOT VERIFIED AGAINST A RUNNING Hyprland. `hyprctl` is not packaged on this
-# fleet, so both the dispatcher name and the `ok` convention come from
-# Hyprland's documentation rather than from a run. If the `ok` test is what
-# is wrong, this hook reports "could not focus" about a raise that worked,
-# which is the safe direction: the click has already switched the session.
+# VERIFIED AGAINST A RUNNING Hyprland 0.53.3, which this header spent two
+# releases saying it was not. Driven by test/lab/env/hyprland: it raises the
+# window carrying the anchor, and refuses the three decoys that break a
+# matcher which is almost right. Both halves of the reasoning above held, so
+# nothing here changed: `hyprctl dispatch` really does exit 0 while
+# reporting the outcome in its output, and the anchored full match really is
+# what `title:` needs.
+#
+# WORTH SAYING BECAUSE ITS NEIGHBOUR DID NOT HOLD: focus/wayfire was written
+# the same way, from the same kind of reading, and named a tool that does
+# not exist. A hook read rather than run is not WRONG, it is UNKNOWN, and
+# these two are what the difference looks like.
 set -eu
 
 _me=focus/hyprland
