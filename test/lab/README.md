@@ -8,7 +8,16 @@ lines as the intended rows, are facts about somebody else's software.
 
 Four of the six focus hooks shipped with their headers saying *not verified
 against a running compositor*. This is how that sentence gets retired, one
-environment at a time.
+environment at a time: two are left (`hyprland` and `niri`), and both for a
+measured reason rather than for want of trying.
+
+IT RETIRED A HOOK THAT COULD NOT HAVE WORKED, which is the argument for the
+whole directory. `focus/wayfire` called `wf-msg focus-window "title:..."`,
+and `wf-msg` does not exist: no package, no source, and not one of
+wayfire's eight binaries. Of 79 methods a live wayfire exposes, none matches
+by title. So the tool, the verb and the argument form were all invented by
+analogy with `swaymsg`, the unit suite's recorded-argv assertion PINNED it,
+and nothing short of a real compositor was ever going to say so.
 
 ## Not part of `test/run`
 
@@ -62,13 +71,23 @@ too: run on `env/kitty`, whose clients draw a prompt, four of eight
 assertions failed for a reason that had nothing to do with the daemon. It
 tests the *daemon*, so one environment hosts it.
 
-**Not every environment here has been run.** `env/hyprland` and
-`daemon/dunst` were written from documentation because `lab deps` is what
-asks the provisioner to install them, so they exist before the packages do.
-Each says so in its own header, `available` reports them missing with their
-apt name, and the first run afterwards is the verification. A hook whose
-mechanism was read rather than exercised is a different thing, and turning
-the first into the second is what this directory is for.
+**THE FIRST RUN IS THE VERIFICATION, and it falsified two things.**
+`env/hyprland` and `daemon/dunst` were written from documentation, because
+`lab deps` is what asks a provisioner to install them and so they had to
+exist before the packages did. dunst then passed every assertion
+unchanged, which is worth as much: with only mako, every toast claim was a
+claim about mako.
+
+`env/hyprland` did not, and its header now carries the measured chain
+rather than the guess it shipped with. In short: Hyprland has no headless
+backend to select (the variable that header named does not exist), sway
+offers it `xdg_wm_base` 5 where it wants 6, and wayfire hosts it with no
+`wl_output` so no client can map. It cannot be nested on this fleet, so
+`available` refuses with that reason and it joins niri in the VM tier.
+
+A hook whose mechanism was read rather than exercised is a different thing,
+and turning the first into the second is what this directory is for. It
+works in both directions.
 
 `78` means **cannot answer**, the same three-answer contract the hooks
 themselves use, so an environment that is present but cannot screenshot is
@@ -78,10 +97,15 @@ distinguishable from one that failed.
 
 Measured first, and it decided the whole shape: `WLR_BACKENDS=headless` sway
 comes up on this host in under a second with the live session untouched. So
-sway, wayfire and Hyprland need **no VM at all**, and neither does X11
-(`Xvfb`). A VM is reserved for what genuinely cannot nest: a compositor this
-distribution does not package, and the desktops whose notification daemon is
-part of a whole session.
+sway needs **no VM at all**, and neither does X11 (`Xvfb`) nor wayfire,
+which takes the same wlroots variable.
+
+HYPRLAND DOES NOT, and that was learned rather than assumed: it has no
+headless backend to ask for, so it has to nest on a host display, and no
+host available here gives it one it can use. A VM is reserved for exactly
+this: a compositor that cannot nest, one this distribution does not package
+(niri), and the desktops whose notification daemon is part of a whole
+session.
 
 That is not a small difference in cost. A nested compositor is a second of
 setup and no disk; a VM is a minute and a gigabyte. Being able to run the

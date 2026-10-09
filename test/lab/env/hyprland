@@ -5,30 +5,38 @@
 # this follows. Everything below that differs from sway is a fact about
 # Hyprland rather than a choice.
 #
-# NOT YET VERIFIED AGAINST A RUNNING Hyprland, and this header says so
-# rather than implying otherwise: the package is not installed on this fleet
-# at the time of writing, so the backend variable, the dispatchers and the
-# query shapes below come from Hyprland's documentation rather than from a
-# run. It is here anyway for one concrete reason: `lab deps` reads this
-# file's DECLARATION, so tackup installs hyprland because this environment
-# asks for it, and the first run of the lab afterwards is the verification.
+# HYPRLAND CANNOT BE NESTED ON THIS FLEET, measured, and that is why
+# `available` refuses by default rather than leaving a crash in the matrix.
+# The first run of this file WAS its verification, exactly as its previous
+# header promised, and what it falsified was that header's own first claim.
+# The chain, each step measured rather than read:
 #
-# What makes that honest rather than hopeful is that nothing trusts it
-# until it runs: `available` reports it missing with its apt name, the
-# driver skips it, and the probe's own assertions are the judge. A hook
-# whose mechanism was read rather than run is a different thing from one
-# that has been exercised, and the lab exists to turn the first into the
-# second.
+#   1  THERE IS NO HEADLESS BACKEND TO SELECT. The old version here set
+#      `AQ_BACKENDS=headless` and called it "the one documented". No such
+#      variable exists: aquamarine's are AQ_DRM_DEVICES, AQ_FORCE_LINEAR_BLIT,
+#      AQ_MGPU_NO_EXPLICIT, AQ_NO_ATOMIC, AQ_NO_MODIFIERS and AQ_TRACE, and
+#      `Hyprland --help` has no headless flag. Headless exists only as an
+#      internal FALLBACK. The symptom was `CBackend::create() failed!`.
+#   2  SWAY CANNOT HOST IT. Nesting on the lab's own headless sway 1.11 is
+#      refused during handshake: `invalid version for global xdg_wm_base
+#      (12): have 5, wanted 6`.
+#   3  AND WAYFIRE HOSTS IT WITHOUT HELPING. On the lab's headless wayfire
+#      0.11 (wlroots 0.20, so xdg-shell 6) Hyprland starts and its IPC
+#      answers, but aquamarine's Wayland backend creates NO output, so
+#      Hyprland synthesises `monitor FALLBACK`, which advertises no
+#      `wl_output`. A client then refuses with foot's own
+#      `no monitors available`, and `hyprctl clients` stays empty for ever.
 #
-# --- THE THREE THINGS EXPECTED TO BE DIFFERENT FROM SWAY ---------------
+# SO IT IS THE VM TIER, with niri. DRM is not an option either: the live
+# desktop holds DRM master.
 #
-# THE BACKEND IS aquamarine's, NOT wlroots'. Hyprland moved off wlroots, so
-# `WLR_BACKENDS=headless` is the wrong variable for a current version and
-# `AQ_BACKENDS=headless` is the one documented. Both are set: an unknown
-# variable is ignored, and if the version here turns out to be an older
-# wlroots build the first still applies. That is cheap insurance rather
-# than confusion, and the comment is the record of which is expected to be
-# doing the work.
+# THE DRIVE CODE IS KEPT AND IS REACHABLE, because all of it is about
+# Hyprland rather than about the backend, and throwing it away would mean
+# re-deriving it in the VM. `MUX_LAB_HYPR_DISPLAY` names a host Wayland
+# display that DOES advertise an output, which is the one precondition step
+# 3 fails, so a box that has one opts in rather than this file guessing.
+#
+# --- THE TWO THINGS THAT ARE REALLY DIFFERENT FROM SWAY -----------------
 #
 # A CLIENT IS LAUNCHED BY THE COMPOSITOR for the reason env/sway records at
 # length: a headless compositor creates its own WAYLAND_DISPLAY, so a
@@ -41,6 +49,16 @@
 # than through tree.py, whose header says plainly that it is about the
 # sway/i3 shape alone and that a reader guessing between formats is how a
 # wrong answer looks like a right one.
+#
+# THE SIGNATURE IS ASKED FOR, NOT GUESSED: `hyprctl -j instances` reports
+# both the instance signature and the `wl_socket` it published, which is the
+# only answer that cannot be raced by another compositor starting beside it.
+# The previous version took the newest directory under $XDG_RUNTIME_DIR/hypr,
+# which is the guess env/sway already records paying for.
+#
+# AND A CRASHED Hyprland OUTLIVES `down()`: two of them survived a lab run
+# because the recorded pid is not the process that lingers. Killed by number
+# from `pgrep -x`, never by pattern, and the teardown below sweeps that way.
 set -eu
 
 _me=env/hyprland
@@ -70,7 +88,20 @@ foot foot
 EOF
 }
 
-available() { _avail_from_deps; }
+# REFUSES BY DEFAULT, with the measured chain in the header. The tools are
+# still checked FIRST, so a box with no Hyprland is told that rather than
+# told about a nesting limit it has not reached yet.
+available() {
+  _avail_from_deps || return 1
+  [ -n "${MUX_LAB_HYPR_DISPLAY:-}" ] || {
+    echo "$_me: Hyprland cannot nest here. It has no headless backend, sway
+offers xdg_wm_base 5 where it wants 6, and wayfire hosts it with no
+wl_output so no client can map (see the header). Set
+MUX_LAB_HYPR_DISPLAY to a host Wayland display that advertises an
+output to opt in." >&2
+    return 1; }
+  return 0
+}
 
 _hy() { HYPRLAND_INSTANCE_SIGNATURE="$(cat "$_dir/hysig" 2>/dev/null)" \
   hyprctl "$@"; }
@@ -80,7 +111,7 @@ up() {
 # Deliberately inert: no autostart, no keybindings, no bar. The lab drives
 # everything over hyprctl, and anything running here is something that can
 # fail for a reason the lab did not ask about.
-monitor = HEADLESS-1, 1280x800@60, 0x0, 1
+monitor = , 1280x800@60, 0x0, 1
 misc {
     disable_hyprland_logo = true
     disable_splash_rendering = true
@@ -99,28 +130,25 @@ general {
     gaps_out = 0
 }
 EOF
-  env -u WAYLAND_DISPLAY -u WAYFIRE_SOCKET -u DISPLAY \
-    AQ_BACKENDS=headless WLR_BACKENDS=headless \
-    WLR_LIBINPUT_NO_DEVICES=1 \
+  # NESTED ON A HOST DISPLAY, since there is no headless backend to ask for.
+  # WAYFIRE_SOCKET and DISPLAY still go: this box runs wayfire, and an
+  # inherited handle is how a scratch thing reaches a real one.
+  env -u WAYFIRE_SOCKET -u DISPLAY \
+    WAYLAND_DISPLAY="$MUX_LAB_HYPR_DISPLAY" \
+    HYPRLAND_NO_CRASHREPORTER=1 \
     Hyprland -c "$_dir/hypr.conf" >"$_dir/hypr.log" 2>&1 &
   echo "$!" >"$_dir/hypr.pid"
-  # THE SIGNATURE IS READ FROM THE INSTANCE DIRECTORY, because Hyprland
-  # chooses it and exports it to its own children only, exactly as sway
-  # chooses its display name. A lab process is not a child, so it has to be
-  # discovered; the newest directory under the instance root is the one this
-  # run just made.
+  # THE SIGNATURE IS ASKED FOR. `hyprctl -j instances` answers without one
+  # being set, and reports both the signature and the `wl_socket` this
+  # instance published, so neither is guessed from a shared directory.
   _i=0
   while [ "$_i" -lt 200 ]; do
-    _sig=$(find "${XDG_RUNTIME_DIR:-/tmp}/hypr" -maxdepth 1 -mindepth 1 \
-      -type d -newer "$_dir/hypr.conf" 2>/dev/null | sed 's|.*/||' | head -1)
-    if [ -n "${_sig:-}" ]; then
-      printf '%s' "$_sig" >"$_dir/hysig"
-      _hy version >/dev/null 2>&1 && break
-    fi
+    hyprctl -j instances 2>/dev/null \
+      | python3 "$_here/../hyinst.py" "$_dir/hysig" "$_dir/hywd" && break
     _i=$((_i + 1)); sleep 0.05
   done
   [ -s "$_dir/hysig" ] || { echo "$_me: Hyprland never published an
-instance signature under \$XDG_RUNTIME_DIR/hypr" >&2
+instance (hyprctl -j instances stayed empty)" >&2
     sed 's/^/  /' "$_dir/hypr.log" >&2; return 1; }
   _hy version >/dev/null 2>&1 || { echo "$_me: hyprctl cannot reach the
 instance it just started" >&2
@@ -179,6 +207,19 @@ down() {
     _p=$(cat "$_dir/hypr.pid")
     case $_p in ([0-9]*) kill "$_p" 2>/dev/null || : ;; esac
   fi
+  # AND A SWEEP, because a CRASHED Hyprland outlives the pid we recorded:
+  # two survived a lab run and had to be cleared by hand. `pgrep -x` matches
+  # the process NAME, so it cannot match the shell running it, which `-f`
+  # would and which this tree has twice killed its own tool shell with. Each
+  # candidate is then confirmed against OUR config path, so a real Hyprland
+  # session on this box is never a candidate at all.
+  for _p in $(pgrep -x Hyprland 2>/dev/null || :); do
+    case $_p in ([0-9]*) ;; (*) continue ;; esac
+    _cl=$(tr '\0' ' ' 2>/dev/null <"/proc/$_p/cmdline" || :)
+    case $_cl in
+      (*"$_dir/hypr.conf"*) kill "$_p" 2>/dev/null || : ;;
+    esac
+  done
   return 0
 }
 

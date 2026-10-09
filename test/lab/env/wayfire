@@ -1,0 +1,212 @@
+#!/bin/sh
+# test/lab/env/wayfire - a headless wayfire, for focus/wayfire.
+#
+# See test/lab/README.md for the verb contract and env/sway for the shape
+# this follows. Everything below that differs from sway is a measured fact
+# about wayfire rather than a choice.
+#
+# IT NESTS, which is the finding that made this environment possible at all:
+# wayfire 0.11 is built on wlroots 0.20, so `WLR_BACKENDS=headless` brings a
+# private compositor up in under three seconds with its own IPC socket and
+# the live session untouched. The hook it exercises was the last one in the
+# directory that had never run.
+#
+# --- THE FOUR THINGS THAT ARE NOT SWAY ----------------------------------
+#
+# THE SOCKET PATH IS NOT OURS TO CHOOSE. sway takes `SWAYSOCK`; wayfire puts
+# its socket in `$XDG_RUNTIME_DIR` under a name it derives from the display,
+# so isolation comes from pointing THAT at the lab's scratch directory. It
+# must be mode 0700 or wayland refuses it.
+#
+# AND THE DISPLAY NAME IS IN THE SOCKET'S FILENAME:
+# `wayfire-wayland-1-.socket` is display `wayland-1`. So it is read off the
+# one file this instance created rather than guessed from the newest socket
+# in a shared directory, which is the race env/sway records paying for.
+#
+# AN EXTERNAL CLIENT CONNECTS FINE, where sway's note says a terminal started
+# from outside cannot. The difference is only ever the display NAME: with the
+# right one plus the right XDG_RUNTIME_DIR, foot connects. So there is no
+# `exec` dance here, which is just as well, since wayfire's IPC has no run
+# method without a further plugin.
+#
+# THE ipc PLUGIN IS NOT ON BY DEFAULT, and that is the half a reader will
+# miss: `plugins = ipc ipc-rules` is what creates the socket the hook guards
+# on. `ipc-rules` is what provides `window-rules/*`, which is every method
+# this environment and the hook use.
+set -eu
+
+_me=env/wayfire
+# shellcheck source=test/lab/avail_lib
+. "$(dirname -- "$0")/../avail_lib"
+_dir=${LAB_DIR:-}
+
+_need_dir() { [ -n "${LAB_DIR:-}" ] || {
+  echo "$_me: LAB_DIR must be set by the driver" >&2; exit 2; }; }
+
+# A SHORT RUNTIME DIR, because the socket inside it is an AF_UNIX path and
+# those are capped (108 bytes here, 104 on macOS). The lab's own root is
+# short, so one level is affordable; deriving this from $TMPDIR would not be.
+_rt=$_dir/rt
+_log=$_dir/wayfire.log
+
+kind()  { echo wayland; }
+hooks() { echo wayfire; }
+
+# FOCUS ONLY. The toast matrix counts rows of ink in a screenshot, so it
+# lives on exactly one environment; env/sway hosts it.
+probes() { echo "focus"; }
+
+# ONE TABLE, `tool package` per line; see env/sway for why `available` is
+# derived from it rather than written twice.
+#
+# WAYFIRE IS NOT IN THIS LIST ON PURPOSE AND IS FOUND BY PATH. apt carries
+# 0.10 while this fleet runs a 0.11 build under /opt, and naming a package
+# would tell a provisioner to install a SECOND wayfire beside the one the
+# desktop already runs. The resolver below prefers whatever is on PATH.
+deps() {
+  cat <<'EOF'
+python3 python3
+foot foot
+EOF
+}
+
+# RESOLVED ONCE, AND ITS ABSENCE IS THE ENVIRONMENT'S OWN ANSWER rather than
+# a dependency row: /opt is where this fleet keeps it and $PATH is where
+# anybody else would.
+_wayfire() {
+  if command -v wayfire >/dev/null 2>&1; then command -v wayfire
+  elif [ -x /opt/wayfire/bin/wayfire ]; then echo /opt/wayfire/bin/wayfire
+  else return 1; fi
+}
+
+available() {
+  _avail_from_deps || return 1
+  _wayfire >/dev/null 2>&1 || {
+    echo "$_me: no wayfire on PATH or at /opt/wayfire/bin" >&2; return 1; }
+  return 0
+}
+
+# ONE CLIENT, every question asked of ONE connection and ONE snapshot. The
+# alternative (a fresh connect per question) is the shape this tree records
+# as racing itself: a consistent snapshot plus a later point read is not a
+# snapshot.
+_ipc() {
+  _sock=$(ls "$_rt"/wayfire-*.socket 2>/dev/null | head -1) || :
+  [ -n "${_sock:-}" ] || { echo "$_me: no IPC socket" >&2; return 1; }
+  WF_SOCK=$_sock python3 "$(dirname -- "$0")/../wfipc.py" "$@"
+}
+
+up() {
+  mkdir -p -- "$_rt"
+  chmod 700 -- "$_rt"
+  cat >"$_dir/wayfire.ini" <<'EOF'
+# Deliberately inert: no panel, no background, no autostart. The lab drives
+# everything over the IPC, and anything else running here is something that
+# can fail for a reason the lab did not ask about.
+[core]
+plugins = ipc ipc-rules
+close_top_view = none
+[output:HEADLESS-1]
+mode = 1280x800@60
+EOF
+  # THE LIVE SESSION IS UNSET, not overridden: this box runs wayfire, so an
+  # inherited WAYFIRE_SOCKET is how a scratch thing reaches a real one. This
+  # repo has paid for that three times in hand probes.
+  env -u WAYLAND_DISPLAY -u WAYFIRE_SOCKET -u DISPLAY \
+    WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 \
+    XDG_RUNTIME_DIR="$_rt" \
+    "$(_wayfire)" -c "$_dir/wayfire.ini" >"$_log" 2>&1 &
+  echo "$!" >"$_dir/wayfire.pid"
+  # POLLED, NOT SLEPT: a fixed sleep hides an ordering fact and costs the
+  # difference anyway.
+  _i=0
+  while [ "$_i" -lt 120 ]; do
+    [ -n "$(ls "$_rt"/wayfire-*.socket 2>/dev/null)" ] && break
+    _i=$((_i + 1)); sleep 0.05
+  done
+  _sock=$(ls "$_rt"/wayfire-*.socket 2>/dev/null | head -1) || :
+  [ -n "${_sock:-}" ] || { echo "$_me: no IPC socket after 6s" >&2
+    sed 's/^/  /' "$_log" >&2; return 1; }
+  # AND THE SOCKET IS NOT ENOUGH: it exists before the methods are
+  # registered, so the readiness question is whether it ANSWERS.
+  _i=0
+  while [ "$_i" -lt 120 ]; do
+    _ipc list >/dev/null 2>&1 && break
+    _i=$((_i + 1)); sleep 0.05
+  done
+  _ipc list >/dev/null 2>&1 || { echo "$_me: the IPC socket never answered
+(is ipc-rules in the plugin list?)" >&2
+    sed 's/^/  /' "$_log" >&2; return 1; }
+  # THE DISPLAY NAME COMES OUT OF THE FILENAME, which is this instance's own
+  # and so cannot be raced by another compositor starting beside it.
+  _wd=$(basename -- "$_sock" | sed 's/^wayfire-//; s/-\.socket$//')
+  [ -n "$_wd" ] || { echo "$_me: could not read a display name from
+$_sock" >&2; return 1; }
+  printf 'WAYFIRE_SOCKET=%s\nWAYLAND_DISPLAY=%s\nXDG_RUNTIME_DIR=%s\n' \
+    "$_sock" "$_wd" "$_rt" >"$_dir/env"
+}
+
+window() {
+  # shellcheck disable=SC1091   # written by up(), read back here
+  . "$_dir/env"
+  # `sleep` RATHER THAN A SHELL, so the client cannot exit on a stray EOF:
+  # that is how a probe of mine once destroyed the session it was measuring.
+  env -u WAYFIRE_SOCKET XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
+    WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
+    foot -T "$1" -- sleep 600 >/dev/null 2>&1 &
+  _i=0
+  while [ "$_i" -lt 160 ]; do
+    _ipc titles 2>/dev/null | grep -qxF -- "$1" && return 0
+    _i=$((_i + 1)); sleep 0.05
+  done
+  echo "$_me: a window titled '$1' never appeared" >&2; return 1
+}
+
+# EXACT, NOT A SUBSTRING, which is the opposite of what the hook wants and is
+# right for both: the hook anchors on `[host]` deliberately, and the lab has
+# to put focus on one NAMED window.
+focus() { _ipc focus-exact "$1" >/dev/null; }
+
+focused() { _ipc focused; }
+
+shot() {
+  command -v grim >/dev/null 2>&1 || {
+    echo "$_me: grim is not on PATH" >&2; return 78; }
+  # shellcheck disable=SC1091   # written by up(), read back here
+  . "$_dir/env"
+  env -u WAYFIRE_SOCKET XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
+    WAYLAND_DISPLAY="$WAYLAND_DISPLAY" grim "$1" >/dev/null 2>&1 || {
+      echo "$_me: grim could not capture the output" >&2; return 78; }
+}
+
+down() {
+  # THE CLIENTS GO FIRST, and by the pid the COMPOSITOR reports rather than
+  # by a pattern: `pkill -f` matches the very shell whose argv holds the
+  # pattern, which this tree has recorded five times and twice killed its own
+  # tool shell with.
+  for _p in $(_ipc pids 2>/dev/null || :); do
+    case $_p in ([0-9]*) kill "$_p" 2>/dev/null || : ;; esac
+  done
+  if [ -f "$_dir/wayfire.pid" ]; then
+    _p=$(cat "$_dir/wayfire.pid")
+    case $_p in ([0-9]*) kill "$_p" 2>/dev/null || : ;; esac
+  fi
+  return 0
+}
+
+case ${1:-} in
+  (kind)      kind ;;
+  (hooks)     hooks ;;
+  (probes)    probes ;;
+  (deps)      deps ;;
+  (available) available ;;
+  (up)        _need_dir;        up ;;
+  (window)    _need_dir;    shift; window "$1" ;;
+  (focus)     _need_dir;     shift; focus "$1" ;;
+  (focused)   _need_dir;   focused ;;
+  (shot)      _need_dir;      shift; shot "$1" ;;
+  (down)      _need_dir;      down ;;
+  (*) echo "usage: $_me {kind|hooks|probes|deps|available|up|window T|focus T|
+                 focused|shot F|down}" >&2
+      exit 2 ;;
+esac

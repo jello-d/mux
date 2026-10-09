@@ -108,13 +108,23 @@ printf '  %s via focus/%s\n' "$_env" "$_hook"
 # is almost right. The first is where every case starts from.
 DECOY='shell:~ [elsewhere]'
 "$E" window "$DECOY"
+# A LONGER NAME IN BRACKETS: what a matcher missing the CLOSING bracket would
+# hit. This is the case `mux-focus-hooks.t` can only assert as a string.
+#
+# IT IS CREATED BEFORE THE REAL ONE, AND THAT ORDERING IS THE ASSERTION.
+# Measured against a live wayfire: with the target created first, a hook
+# whose anchor has LOST its closing bracket matches both windows, takes the
+# first, and lands on the right one anyway, so the case passes while the
+# rule it exists for is gone. Creating this one first makes a broken anchor
+# land HERE instead. The ordering was arbitrary and was deciding whether the
+# probe's best case could fail at all, which is this tree's own
+# vacuous-assertion rule met in a fixture's creation order rather than in
+# its values.
+"$E" window 'mux api [northgatex]'
 "$E" window 'mux api [northgate]'
 # NO BRACKETS: what an unanchored matcher would hit. A session really can be
 # called after a host, which is why the hooks anchor at all.
 "$E" window 'northgate'
-# A LONGER NAME IN BRACKETS: what a matcher missing the CLOSING bracket would
-# hit. This is the case `mux-focus-hooks.t` can only assert as a string.
-"$E" window 'mux api [northgatex]'
 
 raises  northgate  'mux api [northgate]'
 refuses nosuchhost
