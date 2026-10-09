@@ -237,6 +237,14 @@ def activate_hook():
     return (os.environ.get("MUX_DESKTOP_NOTIFIER_ACTIVATE")
             or _conf("desktop-notifier-activate"))
 
+# NOTE: THIS RETURNS THE RAW VALUE, where `toast_hook` below returns a
+# RESOLVED one. The caller resolves (sni.py does `hook_path(hook, "focus")`),
+# which is fine and is not obvious: reading one as the other made the
+# installer's check warn about a perfectly good `activate kitty`.
+# `hook_path` is idempotent on an already-resolved path, so a second call is
+# the safe way to be sure.
+
+
 
 def share_dir():
     """The shipped `share/` tree, or None.

@@ -333,7 +333,72 @@ check() {
   _st=$(systemctl --user is-enabled "$UNIT" 2>/dev/null || true)
   if [ "$_st" = enabled ]; then ok "$UNIT enabled"
   else bad "$UNIT not enabled (${_st:-unknown})"; fi
+  _hooks_resolve
   return "$RC"
+}
+
+# A CONFIGURED HOOK THAT DOES NOT RESOLVE, which is the one state this
+# package had no way to report. The daemon falls back to its built-in
+# wording on purpose, because a styling preference must never cost the
+# notification, and that fallback is SILENT to everyone except the journal.
+#
+# IT COST A LIVE REGRESSION. The focus/toast split renamed the hooks to bare
+# names inside per-kind directories, the provisioner's placed config still
+# said `toast-pango`, and `hook_path` fell through to PATH where nothing of
+# that name exists. So the toast reverted to mux's own wording, which puts
+# the host in the SUMMARY where the daemon's format makes it BOLD, for a day
+# and a half across the fleet. The daemon logged it on every single toast;
+# nobody reads a journal. A HUMAN-RUN CHECK IS THE ONLY PLACE THIS LANDS.
+#
+# IT ASKS THE DAEMON'S OWN RESOLVER rather than reimplementing the overlay
+# rule, which would be the second copy that drifts: `hook_path` is the one
+# that decides, so it is the one that answers.
+#
+# A WARN, NOT A FAIL, for the reason `warn` is advisory here: the value is
+# the user's or their provisioner's, and THIS package's apply cannot repair
+# it, so failing would schedule a repair that can never happen and end every
+# provisioning run the same way.
+_hooks_resolve() {
+  [ -x "$VENV/bin/python" ] || return 0
+  "$VENV/bin/python" - <<'EOF' 2>/dev/null | while IFS= read -r _line
+import os
+from mux_desktop_notifier.sources import (activate_hook, hook_path,
+                                          share_dir, toast_hook)
+
+KEY = {"toast": "desktop-notifier-toast",
+       "focus": "desktop-notifier-activate"}
+sd = share_dir()
+# BOTH ARE RESOLVED HERE, because the two accessors do NOT agree:
+# `toast_hook` resolves and `activate_hook` returns the raw value for its
+# caller to resolve. Reading one as the other made this check warn about a
+# perfectly good `activate kitty`, which is the direction that cries wolf.
+# `hook_path` is idempotent on an already-resolved path, so asking twice is
+# free and keeps the question symmetric.
+pairs = (("toast", hook_path(toast_hook() or "", "toast")),
+         ("focus", hook_path(activate_hook() or "", "focus")))
+for kind, got in pairs:
+    if not got:
+        continue
+    # THE RESOLVER ANSWERS THE VALUE UNCHANGED when it found nothing to
+    # resolve it to, which is exactly what falling through to PATH looks
+    # like. So a bare word that is not executable is the finding.
+    first = (got.split() or [""])[0]
+    if os.sep in first or os.access(first, os.X_OK):
+        continue
+    d = os.path.join(sd, "desktop-notifier", kind) if sd else None
+    try:
+        names = " ".join(sorted(os.listdir(d))) if d else "?"
+    except OSError:
+        names = "?"
+    print("%s names `%s`, which resolves to nothing; shipped: %s"
+          % (KEY[kind], first, names))
+EOF
+  do
+    [ -n "$_line" ] || continue
+    warn "$_line
+         The daemon falls back to its built-in behaviour, silently."
+  done
+  return 0
 }
 
 case "${1:-install}" in

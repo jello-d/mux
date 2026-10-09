@@ -427,4 +427,95 @@ case $_vo in
 [$_vo]" ;;
 esac
 
+# --- A CONFIGURED HOOK THAT RESOLVES TO NOTHING -------------------------
+# THIS MARKER EXISTS BECAUSE ITS ABSENCE COST A LIVE REGRESSION. The
+# focus/toast split renamed the hooks to bare names in per-kind
+# directories, the provisioner's placed config still named the old
+# `toast-pango`, and `hook_path` fell through to PATH where nothing of that
+# name exists. Every toast on the fleet reverted to the built-in wording for
+# a day and a half. The daemon logged it on each one; a journal is not a
+# place anybody looks.
+#
+# DRIVEN WITH A REAL python3, not the shell stub the cases above use: the
+# logic IS the resolver, so a stub would be testing the stub. `sources.py`
+# imports only stdlib (asserted below, because that is what makes this
+# possible), so the system interpreter can answer with PYTHONPATH pointed at
+# the package.
+if command -v python3 >/dev/null 2>&1 \
+  && PYTHONPATH="$HERE/desktop-notifier" python3 -c \
+     'import mux_desktop_notifier.sources' 2>/dev/null; then
+  mkdir -p "$T/pyshim"
+  # A SHIM, so $VENV/bin/python is a real interpreter that can see the
+  # package. `exec` so the exit status is python's own.
+  cat >"$T/venv/bin/python" <<EOF
+#!/bin/sh
+PYTHONPATH="$HERE/desktop-notifier" exec python3 "\$@"
+EOF
+  chmod +x "$T/venv/bin/python"
+  # A SHARE TREE WITH THE REAL HOOK NAMES, found the way the daemon finds
+  # it: resolve \`mux\` on PATH, and share is the sibling of bin.
+  mkdir -p "$T/pfx/bin" "$T/pfx/share/desktop-notifier/toast" \
+           "$T/pfx/share/desktop-notifier/focus"
+  printf '#!/bin/sh\nexit 0\n' >"$T/pfx/bin/mux"; chmod +x "$T/pfx/bin/mux"
+  for _h in pango dim; do
+    printf '#!/bin/sh\nexit 0\n' >"$T/pfx/share/desktop-notifier/toast/$_h"
+    chmod +x "$T/pfx/share/desktop-notifier/toast/$_h"
+  done
+  printf '#!/bin/sh\nexit 0\n' >"$T/pfx/share/desktop-notifier/focus/sway"
+  chmod +x "$T/pfx/share/desktop-notifier/focus/sway"
+
+  # GUARDED, because `check` exits non-zero whenever ANY marker fails, and
+  # in this sandbox several do for reasons that have nothing to do with the
+  # hooks. An unguarded capture under `set -e` takes the whole file down with
+  # no FAIL line at all, which is exactly what it did first: this suite's
+  # own recorded rule about `$(verb)` when a verb starts returning non-zero.
+  _hk() {   # <toast-value> <activate-value> -> the check's output
+    env PATH="$T/pfx/bin:$T/bin:$PATH" HOME="$T/home" \
+      XDG_CONFIG_HOME="$T/xdg" MUX_DESKTOP_NOTIFIER_VENV="$T/venv" \
+      MUX_DESKTOP_NOTIFIER_BIN="$T/bin" SCTL="$SCTL" \
+      MUX_DESKTOP_NOTIFIER_TOAST="$1" MUX_DESKTOP_NOTIFIER_ACTIVATE="$2" \
+      sh "$HERE/desktop-notifier/setup.sh" check 2>&1 || :
+  }
+
+  # THE STALE NAME IS REPORTED, AND NAMES THE SHIPPED ONES, because a
+  # warning that does not say what WOULD work leaves you grepping a tree.
+  _o=$(_hk toast-pango '')
+  case $_o in
+    (*'desktop-notifier-toast names `toast-pango`'*) ;;
+    (*) fail "an unresolvable toast hook was not reported: [$_o]" ;;
+  esac
+  # MATCHED ON `dim`, NOT `pango`: the stale value under test is
+  # `toast-pango`, which CONTAINS `pango`, so asserting that passed whether
+  # or not the shipped list was printed at all. Found by mutating the list
+  # away and watching this stay green, which is the only thing that tells a
+  # covering assertion from a decorative one.
+  case $_o in
+    (*'shipped:'*dim*) ;;
+    (*) fail "the warning did not name the shipped hooks: [$_o]" ;;
+  esac
+
+  # AND THE OTHER KEY, which is the half that was WRONG first: the two
+  # accessors disagree about whether they resolve, so reading one as the
+  # other made this warn about a perfectly good value.
+  _o=$(_hk '' focus-sway)
+  case $_o in
+    (*'desktop-notifier-activate names `focus-sway`'*) ;;
+    (*) fail "an unresolvable activate hook was not reported: [$_o]" ;;
+  esac
+
+  # THREE THINGS THAT MUST NOT WARN, and each is a different rule: a name
+  # that resolves, the documented off switch, and a literal path.
+  for _good in "pango|" "|sway" "none|none" "/bin/echo|"; do
+    _t=${_good%|*}; _a=${_good#*|}
+    _o=$(_hk "$_t" "$_a")
+    case $_o in
+      (*'resolves to nothing'*)
+        fail "a VALID hook pair warned: toast=[$_t] activate=[$_a]
+[$_o]" ;;
+    esac
+  done
+else
+  printf '  (skipping the hook-resolution marker: no usable python3)\n'
+fi
+
 pass
