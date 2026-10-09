@@ -60,9 +60,23 @@ _host=${3:-}
 _part=${4:-}
 _loc=${5:-local}
 
-# The dim is a GREY rather than an alpha, because a notification's background
-# is the daemon's and an alpha over an unknown colour is unpredictable.
-_DIM=${MUX_TOAST_DIM:-#8a8a8a}
+# AN ALPHA, NOT A COLOUR, and the comment this replaces had the reasoning
+# exactly inverted: it said a grey was safer "because a notification's
+# background is the daemon's and an alpha over an unknown colour is
+# unpredictable". A FIXED GREY over an unknown background is the
+# unpredictable one. Measured against the author's own theme
+# (background #2200aa), #8a8a8a gives 3.69:1, under the 4.5:1 floor for body
+# text, and it was reported from a live desktop as too dark to read.
+#
+# An alpha dims RELATIVE to whatever colour the theme already chose, so it
+# tracks the background instead of guessing it. 65% clears 4.5:1 on a
+# saturated blue (5.72:1), on dark grey (7.69:1) and on a light theme
+# (6.73:1), while staying visibly recessive against full white (12.74:1).
+#
+# THE VALUE IS A PANGO ALPHA, so `65%` and not a colour. Pango has accepted
+# the attribute since 1.38; verified here through pango-view and through a
+# real mako and a real dunst by test/lab.
+_DIM=${MUX_TOAST_DIM:-65%}
 
 case $_kind in
   (blocked) _sum="Claude needs you: $_sess"; _body="permission or input" ;;
@@ -80,7 +94,7 @@ esc() { printf '%s' "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'; }
 # A LOCAL BANNER NAMES NO HOST, the same rule the built-in wording follows:
 # saying "on this-box" every time is noise on the common path.
 if [ "$_loc" = remote ] && [ -n "$_host" ]; then
-  _tail="<span foreground=\"$_DIM\">(on $(esc "$_host"))</span>"
+  _tail="<span alpha=\"$_DIM\">(on $(esc "$_host"))</span>"
 else
   _tail=
 fi
@@ -88,7 +102,7 @@ fi
 # THE PARTITION, only when there is one worth naming. `global` is the baseline
 # every box has, so printing it would add a word that never varies.
 if [ -n "$_part" ] && [ "$_part" != global ]; then
-  _body="$_body <span foreground=\"$_DIM\">[$(esc "$_part")]</span>"
+  _body="$_body <span alpha=\"$_DIM\">[$(esc "$_part")]</span>"
 fi
 
 # THREE LINES, AND THE MIDDLE ONE IS EMPTY ON THE LOCAL PATH. The body's

@@ -49,9 +49,13 @@ _host=${3:-}
 _part=${4:-}
 _loc=${5:-local}
 
-# A GREY RATHER THAN AN ALPHA, because a notification's background is the
-# daemon's and an alpha over an unknown colour is unpredictable.
-_DIM=${MUX_TOAST_DIM:-#8a8a8a}
+# AN ALPHA, NOT A COLOUR. The comment this replaces had it inverted: a
+# FIXED grey over an unknown background is the unpredictable one. Measured
+# on the author's theme (background #2200aa), #8a8a8a gives 3.69:1, under
+# the 4.5:1 floor, and read as too dark from a live desktop. An alpha dims
+# relative to the colour the theme already chose. See toast/pango for the
+# numbers across three backgrounds; the value is a PANGO ALPHA (`65%`).
+_DIM=${MUX_TOAST_DIM:-65%}
 
 case $_kind in
   (blocked) _sum="Claude needs you: $_sess"; _body="permission or input" ;;
@@ -85,7 +89,7 @@ elif [ -n "$_part" ] && [ "$_part" != global ]; then
 fi
 
 if [ -n "$_addr" ]; then
-  printf '%s\n<span foreground="%s">%s</span>\n%s\n' \
+  printf '%s\n<span alpha="%s">%s</span>\n%s\n' \
     "$_sum" "$_DIM" "$_addr" "$_body"
 else
   printf '%s\n%s\n' "$_sum" "$_body"

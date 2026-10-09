@@ -51,8 +51,15 @@ _forbidden='MUX_SEND_POLICY_FILE'
 # the hook and is a channel from outside. Documenting it as a knob would
 # invite somebody to set it.
 _SHIPPED="$HERE/bin/mux $HERE/setup.sh"
+# THE NOTIFIER'S TWO HOOK DIRECTORIES WERE MISSING, and that is the third
+# time a rule written for "the hook directory" has gone stale here: this
+# list named latch, envhooks.d and demo while its own comment above claims
+# EVERY shipped shell file. `MUX_TOAST_DIM` was read by two shipped hooks
+# and documented nowhere, and this audit exists for precisely that.
 for _d in "$HERE"/lib/*_lib "$HERE"/libexec/* "$HERE"/share/latch/* \
-          "$HERE"/share/envhooks.d/* "$HERE"/share/demo/*; do
+          "$HERE"/share/envhooks.d/* "$HERE"/share/demo/* \
+          "$HERE"/share/desktop-notifier/focus/* \
+          "$HERE"/share/desktop-notifier/toast/*; do
   [ -f "$_d" ] || continue
   case $_d in *__pycache__*) continue ;; esac
   _SHIPPED="$_SHIPPED $_d"

@@ -78,7 +78,7 @@ eq pango-local-body "$(line 3)" "your turn"
 
 run pango blocked api northgate global remote
 eq pango-remote-host "$(line 2)" \
-  '<span foreground="#8a8a8a">(on northgate)</span>'
+  '<span alpha="65%">(on northgate)</span>'
 eq pango-remote-body "$(line 3)" "permission or input"
 
 # --- dim: NEVER AN EMPTY LINE, which is the whole reason it exists -------
@@ -122,18 +122,18 @@ eq dim-local-body "$(line 2)" "your turn"
 # title. `global` is the baseline every box has, so naming it would add a
 # word that never varies.
 run dim blocked api northgate global remote
-eq dim-host "$(line 2)" '<span foreground="#8a8a8a">(on northgate)</span>'
+eq dim-host "$(line 2)" '<span alpha="65%">(on northgate)</span>'
 eq dim-body "$(line 3)" "permission or input"
 run dim finished api northgate work remote
 eq dim-host-part "$(line 2)" \
-  '<span foreground="#8a8a8a">(on northgate [work])</span>'
+  '<span alpha="65%">(on northgate [work])</span>'
 # A NON-BASELINE PARTITION IS WORTH A ROW EVEN LOCALLY, because two
 # partitions on one box otherwise produce identical banners. Both directions,
 # since one assertion passes on a hook that prints it never and on one that
 # prints it always.
 run dim finished api here work local
 eq dim-local-part-lines "$(nlines)" 3
-eq dim-local-part "$(line 2)" '<span foreground="#8a8a8a">[work]</span>'
+eq dim-local-part "$(line 2)" '<span alpha="65%">[work]</span>'
 # THE OTHER DIRECTION IS `dim-local-lines` ABOVE, which asserts 2 for the
 # same call with the BASELINE partition: a row appearing there is the only
 # way the global case can go wrong. A second copy of it here was redundant
@@ -159,16 +159,31 @@ for _h in $ALL; do
 ampersand makes the daemon drop the banner: [$(line 2)]" ;; esac
 done
 
-# --- THE DIM COLOUR IS OVERRIDABLE, AND IT IS THE ONLY KNOB -------------
+# --- THE DIM IS AN ALPHA, AND IT IS THE ONLY KNOB -----------------------
+# ASSERTED AS AN ALPHA RATHER THAN A VALUE, which is the half worth keeping:
+# a span dimming RELATIVE to the theme is the property, and the fraction is
+# a number somebody may retune. Pinning `65%` alone would break on a tune
+# and pass on a change back to a fixed colour, which is the defect this
+# replaced: #8a8a8a measured 3.69:1 on the author's own background, under
+# the 4.5:1 floor, and was reported as unreadable from a live desktop.
+#
 # `env`, NOT a prefix on a function call: that shape is unspecified and
 # PERSISTS on macOS /bin/sh and ksh, which test/lint.t refuses for the reason.
 for _h in $ALL; do
   run "$_h" finished api northgate global remote
-  case $(line 2) in (*'#8a8a8a'*) ;;
-    (*) fail "$_h: no default dim: [$(line 2)]" ;; esac
-  env MUX_TOAST_DIM='#ff0000' "$HOOKS/$_h" \
+  case $(line 2) in
+    (*'<span alpha="'*'%"'*) ;;
+    (*) fail "$_h: the host is not dimmed by an ALPHA, so it names a colour
+the theme cannot be known to suit: [$(line 2)]" ;;
+  esac
+  # AND NO FIXED COLOUR ANYWHERE IN THE OUTPUT, because dimming by alpha and
+  # ALSO naming a foreground would put the old bug back beside the fix.
+  case $(run "$_h" finished api northgate global remote; cat "$T/out") in
+    (*foreground=*) fail "$_h: still names a foreground colour" ;;
+  esac
+  env MUX_TOAST_DIM='33%' "$HOOKS/$_h" \
     finished api northgate global remote >"$T/out" 2>"$T/err"
-  case $(line 2) in (*'#ff0000'*) ;;
+  case $(line 2) in (*'alpha="33%"'*) ;;
     (*) fail "$_h: MUX_TOAST_DIM did not reach the span: [$(line 2)]" ;;
   esac
 done

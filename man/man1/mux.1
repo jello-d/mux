@@ -2723,6 +2723,17 @@ looks for an installed
 (default
 .IR ~/.local/bin ).
 .TP
+.B MUX_TOAST_DIM
+How much the shipped
+.I toast/
+hooks dim the host and partition they add to a banner, as a Pango alpha
+(default
+.BR 65% ).
+An alpha rather than a colour because the background belongs to the
+notification daemon: a fixed grey cannot know it, and the one shipped before
+this read at 3.69:1 on a saturated blue, under the 4.5:1 floor for body text.
+65% clears that floor on dark, light and saturated backgrounds alike.
+.TP
 .B MUX_STRIP_WIDTH
 Override the column budget the agent\-state strip fits itself into. A TEST
 SEAM: the real budget comes from the client width, which a piped test has none
