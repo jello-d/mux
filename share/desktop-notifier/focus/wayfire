@@ -1,34 +1,140 @@
 #!/bin/sh
 # focus/wayfire - raise a window by title under wayfire.
 #
-# An ACTIVATE hook; see focus/kitty for the contract, for the `[host]` title
-# mux emits, and for why this is a hook rather than something mux does.
+# An ACTIVATE hook; see focus/kitty for the contract and for the `[host]`
+# title mux emits.
 #
 #     desktop-notifier-activate   wayfire
 #
-# TERMINAL-NEUTRAL where focus/kitty is not: it asks the COMPOSITOR to raise
-# whatever window carries the title, so it works for any terminal. It needs
-# wayfire's IPC socket, which is a plugin you must enable, so the two trade
-# different requirements, which is the point of shipping both.
+# TWO STEPS, like focus/niri and for the same reason: wayfire's only focus
+# verb is `window-rules/focus-view`, which takes a view ID. Asked of a live
+# compositor rather than read: of 79 IPC methods, none matches by title. So
+# the anchor is matched HERE and only an id crosses into wayfire.
 #
-# NOT VERIFIED AGAINST A RUNNING wf-msg. The socket half is real and is
-# checked on a live wayfire here; `wf-msg` itself is not packaged on this
-# fleet, so the command FORM comes from wayfire's IPC documentation rather
-# than from a run. The cost of its being wrong is bounded and loud: exit 78
-# with the message below, and the click has already switched the session.
+# IT TALKS TO THE SOCKET DIRECTLY, which is what makes python3 a dependency,
+# uniquely in this directory. There is no CLI to call: wayfire ships eight
+# binaries and none of them is an IPC client. The protocol is a 4-byte
+# native-order length prefix and a JSON body over a unix socket, which is
+# fifteen lines of stdlib and no package. Shell alone cannot do it, because
+# reading a binary length back is not portable.
+#
+# STDLIB AND NOT THE `wayfire` PyPI PACKAGE, deliberately: a shipped hook has
+# to stay copyable by somebody with neither a venv nor pip, and the package
+# would add a dependency mux cannot install. No python3 is answered as 78,
+# naming it.
+#
+# A LITERAL SUBSTRING MATCH, so nothing is escaped, where focus/sway and
+# focus/hyprland hand a REGEX to the compositor. That is the quieter half of
+# matching here rather than there: `[` needs no treatment, because no regex
+# engine ever sees it.
+#
+# THE FILTER IS wayfire's OWN. A view is a candidate only when it is mapped,
+# is not `desktop-environment` and has a real pid, which is the same triple
+# the reference client applies. Without it a background or unmapped view can
+# match and the focus lands on something invisible.
+#
+# WAYFIRE REPORTS FAILURE IN THE PAYLOAD, not in an exit status, since there
+# is no process to exit: a bad id answers `{"error": "... No view with
+# id=N"}` on a connection that is otherwise healthy. Measured, because the
+# alternative assumption is kitty's bug, where a focus call returned success
+# having done nothing. So the response is read before it is believed.
 set -eu
 
 _me=focus/wayfire
 _label=${1:-}
 [ -n "$_label" ] || { echo "usage: $_me LABEL" >&2; exit 78; }
-# CHECKED BEFORE THE TOOL, because wf-msg being present tells you nothing
-# about the ipc plugin being enabled, and that is the usual missing half.
+# CHECKED BEFORE THE TOOL, because the socket is the half that is usually
+# missing: wayfire's IPC is a plugin you enable, and a box running wayfire
+# with no `ipc` in its plugin list has no socket at all.
 [ -n "${WAYFIRE_SOCKET:-}" ] || {
   echo "$_me: WAYFIRE_SOCKET unset (enable the ipc plugin)" >&2
   exit 78; }
-command -v wf-msg >/dev/null 2>&1 || {
-  echo "$_me: wf-msg is not on PATH" >&2; exit 78; }
+command -v python3 >/dev/null 2>&1 || {
+  echo "$_me: python3 is not on PATH, and this hook needs it to speak
+wayfire's IPC (see the header)" >&2; exit 78; }
 
-wf-msg focus-window "title:\\[$_label\\]" 2>/dev/null || {
-  echo "$_me: could not focus a window titled '$_label'" >&2
-  exit 78; }
+# THE ANCHOR IN A VARIABLE, for focus/niri's reason: `[label]` with its
+# brackets is the fact this directory turns on, and a rule buried in a
+# continued line is one the mutation corpus cannot take as a target.
+_anchor="[$_label]"
+
+# ARGUMENTS, NEVER INTERPOLATION. The label arrives from a tray item and the
+# heredoc is quoted, so no value is ever read as python source.
+python3 - "$_me" "$WAYFIRE_SOCKET" "$_anchor" <<'PY' || exit 78
+import json
+import socket
+import struct
+import sys
+
+me, sock_path, anchor = sys.argv[1], sys.argv[2], sys.argv[3]
+
+
+def die(msg):
+    sys.stderr.write("%s: %s\n" % (me, msg))
+    raise SystemExit(1)
+
+
+try:
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.settimeout(5)
+    s.connect(sock_path)
+except OSError as e:
+    die("cannot reach wayfire's IPC socket: %s" % e)
+
+
+def call(method, data=None):
+    """One request, one response. `=i` is NATIVE order and native size,
+    which is what the compositor writes; `<i` would be a guess that happens
+    to agree on every box we have."""
+    body = json.dumps({"method": method, "data": data or {}}).encode()
+    try:
+        s.sendall(struct.pack("=i", len(body)) + body)
+        head = s.recv(4)
+        if len(head) < 4:
+            die("wayfire closed the connection")
+        want = struct.unpack("=i", head)[0]
+        buf = b""
+        while len(buf) < want:
+            chunk = s.recv(want - len(buf))
+            if not chunk:
+                die("wayfire closed the connection mid-message")
+            buf += chunk
+    except OSError as e:
+        die("wayfire's IPC stopped answering: %s" % e)
+    try:
+        return json.loads(buf.decode("utf-8"))
+    except ValueError as e:
+        die("wayfire answered something that is not JSON: %s" % e)
+
+
+views = call("window-rules/list-views")
+if isinstance(views, dict) and "error" in views:
+    die("wayfire refused to list its views: %s" % views["error"])
+if not isinstance(views, list):
+    die("wayfire's view list is not a list")
+
+# FIRST MATCH WINS, which is a real choice: a label is a HOST, so two
+# terminals showing sessions on one machine both carry the anchor. Raising
+# either is a better answer than refusing, and the click has already
+# switched the session on the far side regardless.
+match = None
+for v in views:
+    if not isinstance(v, dict):
+        continue
+    if v.get("mapped") is not True:
+        continue
+    if v.get("role") == "desktop-environment":
+        continue
+    if v.get("pid") == -1:
+        continue
+    if anchor in (v.get("title") or ""):
+        match = v
+        break
+
+if match is None:
+    die("no wayfire window titled %r" % anchor)
+
+res = call("window-rules/focus-view", {"id": match["id"]})
+if isinstance(res, dict) and "error" in res:
+    die("could not focus view %s: %s" % (match["id"], res["error"]))
+PY

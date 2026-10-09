@@ -256,7 +256,9 @@
 #   sway        sway
 #   hyprland    Hyprland
 #   niri        niri (needs jq)
-#   wayfire     wayfire, with its ipc plugin enabled
+#   wayfire     wayfire, with its ipc plugin enabled (needs python3:
+#               wayfire ships no IPC client, so the hook speaks its
+#               protocol directly)
 #   wmctrl      every X11 window manager at once, via EWMH
 #
 # NOT SHIPPED, because there is nothing supported to call: GNOME Shell and

@@ -34,10 +34,13 @@
 # makes wf-view, wf-overview and expo-toggle die blaming "the ipc plugin",
 # which sends the reader at the compositor when the value is merely stale.
 #
-# nc AND NOT wf-msg, though wf-msg is wayfire's own tool and would speak the
-# real protocol: mux must not take a dependency on a particular compositor's
-# utilities, and this generic connect is the same one the WAYLAND_DISPLAY hook
-# already falls back to. With no nc the answer is 2, never a guess.
+# nc, BECAUSE THERE IS NO WAYFIRE CLIENT TO USE. An earlier version of this
+# comment offered `wf-msg` as the tool we were declining to depend on, and no
+# such program exists: wayfire ships no IPC client, which is why
+# share/desktop-notifier/focus/wayfire speaks the protocol itself. A generic
+# connect is the right answer here anyway, and it is the same one the
+# WAYLAND_DISPLAY hook falls back to. With no nc the answer is 2, never a
+# guess.
 #
 # NO TIMEOUT, unlike that hook's wayland-info branch, and deliberately: `-z`
 # is connect-and-close with no read, so there is no handshake to hang on. A

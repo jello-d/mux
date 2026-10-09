@@ -4614,16 +4614,30 @@ m kitten is not on PATH
 = focus-wayfire-matches-an-unanchored-title
 f share/desktop-notifier/focus/wayfire
 t mux-focus-hooks
-- wf-msg focus-window "title:\\[$_label\\]" 2>/dev/null || {
-+ wf-msg focus-window "title:$_label" 2>/dev/null || {
-m wayfire-argv: got
+- _anchor="[$_label]"
++ _anchor="[$_label"
+m wayfire-id: focused the wrong view
 
 = focus-wayfire-skips-the-socket-check
 f share/desktop-notifier/focus/wayfire
 t mux-focus-hooks
 - [ -n "${WAYFIRE_SOCKET:-}" ] || {
-+ [ -z "${WAYFIRE_SOCKET:-}" ] || {
-m missing-wf-msg-names-it
++ [ -n "x" ] || {
+m unset-WAYFIRE_SOCKET: got
+
+= focus-wayfire-raises-an-unmapped-view
+f share/desktop-notifier/focus/wayfire
+t mux-focus-hooks
+-     if v.get("mapped") is not True:
++     if False:
+m wayfire-unmapped: got
+
+= focus-wayfire-believes-a-refused-focus
+f share/desktop-notifier/focus/wayfire
+t mux-focus-hooks
+- if isinstance(res, dict) and "error" in res:
++ if False:
+m wayfire-payload-error: got
 
 = demo-agent-writes-state-directly
 f share/demo/fake-agent

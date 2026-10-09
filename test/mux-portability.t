@@ -286,7 +286,15 @@ for _t in timeout sha256sum; do
   # shellcheck disable=SC2046,SC2013   # as above: this repo's own paths
   for _f in $(grep -l -- "$_t" $(cat "$_shipped") 2>/dev/null); do
     # A use, not a mention: a non-comment line that is not the guard itself.
-    grep -E "^[^#]*[^-]$_t" "$_f" | grep -qv 'command -v' || continue
+    #
+    # ANCHORED ON A NON-WORD CHARACTER, or the name matches the TAIL of a
+    # longer identifier: python's `s.settimeout(5)` in
+    # share/desktop-notifier/focus/wayfire was reported as a use of the
+    # `timeout` command, because the character before it is a letter rather
+    # than the `-` this used to exclude. Same false positive the `ps --`
+    # rule above already carries a fix for, met from the other end.
+    grep -E "(^|[^-_[:alnum:]])$_t" "$_f" | grep -v '^[[:space:]]*#' \
+      | grep -qv 'command -v' || continue
     grep -q "command -v $_t" "$_f" || fail "$_f uses \`$_t\` without asking
 whether it exists. A BSD userland does not have it under that name, so it fails
 there rather than degrading."

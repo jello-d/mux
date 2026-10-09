@@ -59,7 +59,7 @@ run:
 | `sway` | sway | `swaymsg`, `SWAYSOCK` |
 | `hyprland` | Hyprland | `hyprctl` |
 | `niri` | niri | `niri`, and `jq` to read its window list |
-| `wayfire` | wayfire | `wf-msg`, and the ipc plugin enabled |
+| `wayfire` | wayfire | `python3`, and the ipc plugin enabled |
 | `wmctrl` | **every X11 window manager**, via EWMH | `wmctrl`, `DISPLAY` |
 
 **`kitty` is narrower than it looks**, and this was measured rather than
@@ -89,15 +89,29 @@ use the hook named after your compositor.
 supported window-raise IPC. That is a gap stated rather than papered over with
 something that does not work.
 
-The three matchers take the `[label]` anchor three different ways, which is the
+**`wayfire` needs `python3`, alone in this directory**, and that is not a
+preference: wayfire ships no IPC client, so there is no command to call.
+Measured, its eight binaries are `wayfire`, `wayfire-plugin`,
+`wayland-logout`, `wcm`, `wf-background`, `wf-dock`, `wf-info` and
+`wf-panel`. The protocol is a length-prefixed JSON message over a unix
+socket, which is a few lines of stdlib, so the hook speaks it directly
+rather than depending on a PyPI package a user may not have.
+
+The matchers take the `[label]` anchor four different ways, which is the
 thing to copy carefully if you write your own: escaped for a regex (`sway`,
 `hyprland`), literal for a substring match (`wmctrl`), and matched inside the
-hook for `niri`, whose focus action takes a window id rather than a title.
+hook itself where the compositor's focus verb takes a window id rather than a
+title (`niri`, `wayfire`).
 
 Each hook's header says what it was **verified against**, because a hook whose
-mechanism was read rather than run is a different thing: `kitty` and the
-wayfire socket check are exercised live here, and the rest come from their
-compositors' documentation. All follow the same contract as latch's hooks
+mechanism was read rather than run is a different thing. Four of the six are
+now driven against a real compositor by `test/lab` (`kitty`, `sway`,
+`wayfire`, and `wmctrl` under Xvfb, which covers every X11 window manager at
+once). `hyprland` and `niri` are not: neither can be nested on the machines
+this was written on, so they remain read rather than run, and
+`test/lab/env/hyprland` records in detail why.
+
+All follow the same contract as latch's hooks
 (0 done, 78 cannot tell), and the notifier reports a non-zero exit rather than
 swallowing it, so a misconfigured hook says so instead of doing nothing. The
 cost of one being wrong is bounded: the click has already switched the session.
