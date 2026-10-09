@@ -44,10 +44,17 @@ probes() { echo "focus"; }
 
 hooks() { echo wmctrl; }
 
-# ONE TABLE, `tool package` per line; see env/sway for why. Four of these
-# five have a package name that differs from the command, which is exactly
-# why the pairing has to be written down somewhere rather than guessed from
-# the tool name.
+# ONE TABLE, `tool package` per line; see env/sway for why. Most of these
+# have a package name that differs from the command, which is exactly why
+# the pairing has to be written down rather than guessed from the tool name.
+#
+# `import` IS IN HERE RATHER THAN CALLED OPTIONAL, which was a judgement I
+# got wrong: `shot` is a verb in the environment contract, so the tool it
+# needs is a dependency of this environment and not an extra. Answering 78
+# is what `shot` does when the tool is absent, which is the contract being
+# honest about a degraded state, NOT a statement that the state is fine. An
+# environment that cannot screenshot cannot host the toast matrix, so
+# calling it optional was too soft.
 deps() {
   cat <<'EOF'
 Xvfb xvfb
@@ -56,6 +63,7 @@ wmctrl wmctrl
 xdotool xdotool
 xterm xterm
 xprop x11-utils
+import imagemagick
 EOF
 }
 

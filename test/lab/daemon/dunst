@@ -1,0 +1,138 @@
+#!/bin/sh
+# test/lab/daemon/dunst - a private dunst, for test/lab/probe/toast.
+#
+# WHY A SECOND DAEMON AT ALL, and it is the whole value of this file: with
+# only mako, every toast assertion is a statement about mako. The hooks'
+# headers claim something wider, that a PANGO DAEMON renders their markup in
+# the body and not the summary, and one implementation cannot support that
+# claim. dunst is the cheapest second opinion: same markup library, an
+# independent implementation, and packaged.
+#
+# THE SAME TWO MODES AS mako, because the question that divides every Pango
+# daemon is whether you can configure its format, and both of these can:
+#
+#   joined   title and body on ONE row, which is what toast/pango REQUIRES.
+#   default  title and body on SEPARATE rows, which is what a daemon you
+#            cannot configure looks like, and what toast/dim is for.
+#
+# So each hook is rendered in the mode it is FOR and in the mode it is not,
+# and the probe compares them. dunst spells a format differently from mako
+# (`format = "<b>%s</b>\n%b"`, an ini-ish file rather than mako's), which is
+# exactly why the daemon is a seam rather than a parameter.
+#
+# A PRIVATE BUS, NEVER THE USER'S: dunst claims
+# org.freedesktop.Notifications like mako, and this box has a live mako.
+# The probe wraps everything in `dbus-run-session`, so this script only ever
+# sees the private bus it was started under and the human's desktop keeps
+# its own notifications throughout.
+#
+# NOT YET VERIFIED AGAINST A RUNNING dunst, and this header says so rather
+# than implying otherwise: the package is not installed on this fleet at the
+# time of writing, so the config syntax and the geometry keys below come
+# from dunst(5) rather than from a run. The lab reports it as unavailable
+# with its apt name until then, and the FIRST run is the verification. What
+# makes that honest rather than hopeful is that nothing downstream trusts
+# this file: `probes` on an environment decides whether the toast matrix
+# runs at all, and the probe's own assertions are the judge.
+set -eu
+
+_me=daemon/dunst
+_dir=${LAB_DIR:-}
+_here=$(cd -- "$(dirname -- "$0")" && pwd)
+# shellcheck source=test/lab/avail_lib
+. "$_here/../avail_lib"
+
+_need_dir() { [ -n "${LAB_DIR:-}" ] || {
+  echo "$_me: LAB_DIR must be set by the driver" >&2; exit 2; }; }
+
+# ONE TABLE, `tool package` per line; see env/sway. `dunstify` is dunst's
+# own notify-send and is NOT what the probe uses: the probe sends through
+# `notify-send` on purpose, because that is the generic client every daemon
+# answers and using a daemon's own tool would make the test agree with the
+# daemon about the protocol.
+deps() {
+  cat <<'EOF'
+dunst dunst
+notify-send libnotify-bin
+gdbus libglib2.0-bin
+EOF
+}
+
+available() { _avail_from_deps; }
+
+# The format each mode installs, printed so the probe can report WHICH line
+# it was testing against: a verdict about a format nobody can see is a
+# verdict you cannot act on.
+fmt() {
+  case ${1:?} in
+    (joined)  printf '%s' '<b>%s</b> %b' ;;
+    (default) printf '%s' '<b>%s</b>\n%b' ;;
+    (*) echo "$_me: unknown mode '$1'" >&2; return 2 ;;
+  esac
+}
+
+up() {
+  _mode=${1:?usage: up MODE}
+  # EVERYTHING HERE IS ABOUT MAKING THE PICTURE DETERMINISTIC, and none of it
+  # is about what mux sends: a fixed origin, no padding surprises, a
+  # monospace font, and a timeout of 0 so the banner is still up when grim
+  # runs. The same reasoning as mako's config, spelled dunst's way.
+  {
+    printf '[global]\n'
+    printf '    origin = top-left\n'
+    printf '    offset = 0x0\n'
+    printf '    width = 600\n'
+    printf '    height = 400\n'
+    printf '    padding = 4\n'
+    printf '    horizontal_padding = 4\n'
+    printf '    frame_width = 0\n'
+    printf '    font = monospace 12\n'
+    printf '    markup = full\n'
+    printf '    format = "%s"\n' "$(fmt "$_mode")"
+    printf '    background = "#000000"\n'
+    printf '    foreground = "#ffffff"\n'
+    printf '    separator_height = 0\n'
+    printf '\n[urgency_normal]\n'
+    printf '    timeout = 0\n'
+    printf '\n[urgency_critical]\n'
+    printf '    timeout = 0\n'
+  } >"$_dir/dunstrc"
+  dunst -conf "$_dir/dunstrc" >"$_dir/dunst.log" 2>&1 &
+  echo "$!" >"$_dir/dunst.pid"
+  # POLLED ON THE BUS NAME, which is the only thing that says it is ready:
+  # the process existing proves nothing, and a notify-send into a daemon
+  # that has not claimed the name yet is activated separately or lost.
+  _i=0
+  while [ "$_i" -lt 100 ]; do
+    if gdbus call --session -d org.freedesktop.DBus -o /org/freedesktop/DBus \
+        -m org.freedesktop.DBus.NameHasOwner \
+        org.freedesktop.Notifications 2>/dev/null | grep -q true; then
+      return 0
+    fi
+    _i=$((_i + 1)); sleep 0.05
+  done
+  echo "$_me: never claimed org.freedesktop.Notifications" >&2
+  sed 's/^/  /' "$_dir/dunst.log" >&2
+  return 1
+}
+
+down() {
+  # `dunstctl close-all` IS NOT USED, deliberately: it is another tool to
+  # depend on for something killing the process already achieves, and the
+  # probe starts a fresh daemon per shot precisely so no banner survives
+  # into the next picture.
+  if [ -f "$_dir/dunst.pid" ]; then
+    _p=$(cat "$_dir/dunst.pid")
+    case $_p in ([0-9]*) kill "$_p" 2>/dev/null || : ;; esac
+  fi
+  return 0
+}
+
+case ${1:-} in
+  (available) available ;;
+  (deps)      deps ;;
+  (fmt)       shift; fmt "$1" ;;
+  (up)        _need_dir; shift; up "$1" ;;
+  (down)      _need_dir; down ;;
+  (*) echo "usage: $_me {available|deps|fmt MODE|up MODE|down}" >&2; exit 2 ;;
+esac

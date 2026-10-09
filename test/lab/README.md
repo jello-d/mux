@@ -39,7 +39,10 @@ writing this file and nothing else:
 
 | verb | answers |
 | --- | --- |
+| `deps` | `tool package` per line: everything it needs, and where from |
 | `available` | exit 0 if this box can run it; a reason on stderr if not |
+| `hooks` | which hooks it can exercise, one per line |
+| `probes` | which probes it hosts (`focus`, `toast`) |
 | `up DIR` | start it, write `DIR/env` as `KEY=VALUE` lines a client needs |
 | `window TITLE` | open a window carrying TITLE, and wait for it to appear |
 | `focus TITLE` | force focus elsewhere, so a probe starts from the wrong one |
@@ -47,6 +50,25 @@ writing this file and nothing else:
 | `shot FILE` | screenshot, or exit 78 if it cannot |
 | `down` | tear down, leaving nothing behind |
 | `kind` | `wayland` or `x11`, which is all a probe needs to know |
+
+**`available` is DERIVED from `deps`**, through `avail_lib`, so "what this
+needs" is written once. That single table is also what `lab deps` aggregates
+for the provisioner, which is the reason it exists: a package list typed
+twice is one that goes stale against the thing it provisions.
+
+**`probes` is a declaration and not an inference.** The toast probe counts
+rows of ink in a screenshot, so any other window with text in it is counted
+too: run on `env/kitty`, whose clients draw a prompt, four of eight
+assertions failed for a reason that had nothing to do with the daemon. It
+tests the *daemon*, so one environment hosts it.
+
+**Not every environment here has been run.** `env/hyprland` and
+`daemon/dunst` were written from documentation because `lab deps` is what
+asks the provisioner to install them, so they exist before the packages do.
+Each says so in its own header, `available` reports them missing with their
+apt name, and the first run afterwards is the verification. A hook whose
+mechanism was read rather than exercised is a different thing, and turning
+the first into the second is what this directory is for.
 
 `78` means **cannot answer**, the same three-answer contract the hooks
 themselves use, so an environment that is present but cannot screenshot is
