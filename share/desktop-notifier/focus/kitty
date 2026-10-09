@@ -3,15 +3,15 @@
 #
 # A `mux-desktop-notifier` ACTIVATE hook, and the one the others are written
 # against: it carries the contract, and the rest say "see focus/kitty".
-# Called as `kitty LABEL [PARTITION]`, on the box with the tray, AFTER the
-# click has already switched that host's session.
+# Called as `kitty [--to ADDR] LABEL [PARTITION]`, on the box with the tray,
+# AFTER the click has already switched that host's session.
 #
 # SHIPPED BUT NOT WIRED, which is the point of a hook library: mux ships
 # these so you do not have to write one, and whether any RUNS is your
 # config's decision. Wire it in $MUX_DIR/config, by the bare name, because
 # the directory it lives in is the seam:
 #
-#     desktop-notifier-activate   kitty
+#     desktop-notifier-activate   kitty --to unix:@mux
 #
 # WHY MUX DOES NOT DO THIS ITSELF. Raising a window means knowing about a
 # compositor, and mux manages sessions inside terminals with no opinion about
@@ -24,8 +24,57 @@
 # raise having failed, and the notifier REPORTS a non-zero exit rather than
 # swallowing it, so a misconfigured hook says so instead of doing nothing.
 #
-# REQUIRES `allow_remote_control yes` in kitty.conf (or `--listen-on`).
-# Without it kitten exits non-zero, which the indicator reports.
+# --- WHAT KITTY NEEDS, MEASURED AGAINST 0.45.0 --------------------------
+#
+# TWO THINGS, AND THE FIRST ONE ALONE IS NOT ENOUGH, which is what this hook
+# shipped believing. It said "REQUIRES `allow_remote_control yes` in
+# kitty.conf (or `--listen-on`)", with the socket as an alternative. It is
+# not an alternative, it is the other half, and without it this hook could
+# never have worked from the notifier:
+#
+#   1. REMOTE CONTROL ALLOWED. `allow_remote_control yes` in kitty.conf, or
+#      `-o allow_remote_control=yes`.
+#   2. A LISTENING SOCKET, and ONLY `--listen-on` on the COMMAND LINE makes
+#      one. Measured, four ways, with the socket path checked after each:
+#
+#          kitty --listen-on unix:/path       socket created
+#          kitty -o allow_remote_control=yes
+#                --listen-on unix:/path       socket created
+#          listen_on in a --config file       NO SOCKET
+#          -o listen_on=unix:/path            NO SOCKET
+#
+#      So a kitty.conf `listen_on` line is not sufficient on this version,
+#      whatever the documentation implies, and the config-only setup is
+#      exactly the one a reader would try first.
+#
+# AND WITHOUT A SOCKET THERE IS NO WAY IN FROM A DAEMON. `kitten @` with no
+# `--to` reaches kitty through the CONTROLLING TERMINAL of the window it is
+# running inside, and a notification daemon has none:
+#
+#     $ kitten @ ls
+#     Error: open /dev/tty: no such device or address
+#
+# That error is what this hook would have produced on every click, reported
+# by the notifier as the hook failing, while `allow_remote_control yes` sat
+# correctly in kitty.conf and the window sat on screen. Latent rather than
+# live only because nobody had wired the seam yet.
+#
+# SO THE ADDRESS IS A PARAMETER, and the two ways it can arrive are the two
+# ways this hook is actually run:
+#
+#     --to ADDR              from your config, which is the daemon case and
+#                            the only one that matters in anger
+#     $KITTY_LISTEN_ON       inherited, which is what you get running this
+#                            BY HAND from inside kitty to try it out
+#
+# A FLAG AND NOT A BARE FIRST ARGUMENT, deliberately: `hook_path` already
+# passes configured arguments ahead of the label, so a bare address would
+# have to be told apart from a label by its SHAPE, and this tree refuses
+# that kind of magic everywhere else (a rule like "an argument containing a
+# colon is an address" breaks the day somebody's host has one). The flag is
+# spelled as kitten's own, so a reader who knows one knows the other.
+#
+# --- THE ANCHOR, ALSO MEASURED -----------------------------------------
 #
 # MATCHED ON `[host]`, WHICH MUX ITSELF EMITS, and this is the half every
 # hook here shares. share/mux.tmux sets
@@ -34,24 +83,77 @@
 #
 # so every mux window's title ends in the host in SQUARE BRACKETS, and
 # host_short is the tmux SERVER's hostname, so a latched session advertises
-# the REMOTE's name in the terminal in front of you. That is exactly the
-# label the indicator hands this hook.
+# the REMOTE's name in the terminal in front of you.
 #
-# The brackets are not decoration: matching the bare name would also match a
-# SESSION called `northwood`, or a path in the title. Anchor on what mux
-# emits.
+# AND `title:` IS AN UNANCHORED SEARCH, so the brackets are ESCAPED: measured
+# against a real kitty, `title:northgate` and `title:[northgate]` BOTH match
+# a window titled `mux api [northgate]`, the second because an unescaped
+# bracket is a character class matching any one of those letters. Either
+# would also match a SESSION called `northgate`. The escaped form is the only
+# one that discriminates.
 #
-# VERIFIED AGAINST A LIVE kitty. Which the others in this directory are, and
-# are not, each says in its own header, because a hook whose mechanism was
-# read rather than run is a different thing and this package has paid for
-# pretending otherwise.
+# IT IS THE KITTY WINDOW'S TITLE, not the OS window's, which cost a fixture
+# to learn: `kitty -T foo` sets the OS window title and leaves the kitty
+# window titled after the running program. tmux emits an OSC title, which is
+# what reaches both, so in real use this matches; a test client that does not
+# emit one is testing nothing.
+#
+# VERIFIED AGAINST A LIVE kitty 0.45.0, end to end, by test/lab. Which of the
+# others in this directory are, and are not, each says in its own header.
 set -eu
 
 _me=focus/kitty
+_to=${KITTY_LISTEN_ON:-}
+if [ "${1:-}" = --to ]; then
+  shift
+  _to=${1:-}
+  shift || :
+fi
+
 _label=${1:-}
-[ -n "$_label" ] || { echo "usage: $_me LABEL" >&2; exit 78; }
+[ -n "$_label" ] || { echo "usage: $_me [--to ADDR] LABEL" >&2; exit 78; }
 command -v kitten >/dev/null 2>&1 || {
   echo "$_me: kitten is not on PATH" >&2; exit 78; }
+[ -n "$_to" ] || {
+  echo "$_me: no kitty socket to talk to. Start kitty with
+  --listen-on unix:@mux  (a kitty.conf listen_on line is NOT enough)
+and wire the hook as
+  desktop-notifier-activate   kitty --to unix:@mux
+Without it kitten looks for a controlling terminal, which a notification
+daemon does not have." >&2
+  exit 78; }
 
-kitten @ focus-window --match "title:\\[$_label\\]" 2>/dev/null || {
-  echo "$_me: no kitty window titled '$_label'" >&2; exit 78; }
+# THE MATCH EXPRESSION IN ONE PLACE, which is both halves of a fix. It was
+# spelled twice, in the act and in the verify, so they could disagree about
+# the anchor the whole directory turns on; and both lines were
+# continuations, which cannot be mutation-corpus anchors, so the rule that
+# the brackets are ESCAPED had nothing holding it. Naming it makes the rule
+# assertable and the two calls agree by construction.
+_m="title:\\[$_label\\]"
+
+kitten @ --to "$_to" focus-window --match "$_m" 2>/dev/null || {
+  echo "$_me: no kitty window titled '$_label' at $_to" >&2; exit 78; }
+
+# AND THE OUTCOME IS VERIFIED, because `focus-window` EXITS 0 HAVING DONE
+# NOTHING whenever the target is in another OS window. Measured on 0.45.0:
+# two kitty OS windows, focus on the second, `focus-window --match` the
+# first, rc=0, and both kitty's own view and the compositor's still name the
+# second. The same call between two windows INSIDE one OS window moves
+# focus correctly.
+#
+# Without this the hook reports success for a click that raised nothing,
+# which is this package's signature failure: plausible, wrong and silent.
+# One extra round trip on a human-speed path buys a legible 78.
+#
+# ONE CALL, NO JSON. kitten's `--match` takes a `state:` field and combines
+# expressions with `and`, so "is the window I asked for now the focused one"
+# is a single question whose ANSWER IS THE EXIT CODE. Verified live: with
+# `[bravo]` focused, `title:\[bravo\] and state:focused` matches and
+# `title:\[alpha\] and state:focused` does not.
+kitten @ --to "$_to" ls --match "$_m and state:focused" >/dev/null || {
+  echo "$_me: kitten reported success but '$_label' is not focused.
+kitty remote control can focus a window WITHIN an OS window and cannot
+RAISE one, so this hook works when your sessions are kitty tabs or splits
+and not when each is its own window. For separate windows use the hook
+named after your compositor." >&2
+  exit 78; }

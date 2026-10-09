@@ -45,7 +45,16 @@ bad()  { _fail=$((_fail + 1)); printf '    FAIL %s\n' "$1" >&2
 runhook() {
   # shellcheck disable=SC1091   # written by the environment's up()
   ( set -a; . "$_dir/env"; set +a
-    "$HOOK" "$@" ) >"$_dir/hook.out" 2>"$_dir/hook.err"
+    # AN ENVIRONMENT MAY OWE THE HOOK AN ARGUMENT, which `focus/kitty` is
+    # the first to need: kitten cannot find a kitty from a process with no
+    # controlling terminal, so the socket address arrives as `--to` exactly
+    # as a user's config would pass it. Published by `up` as KITTY_LAB_TO
+    # rather than assumed here, because only the environment knows it.
+    if [ -n "${KITTY_LAB_TO:-}" ]; then
+      "$HOOK" --to "$KITTY_LAB_TO" "$@"
+    else
+      "$HOOK" "$@"
+    fi ) >"$_dir/hook.out" 2>"$_dir/hook.err"
 }
 
 # `raises LABEL TITLE` -> the hook, started from a decoy, lands on TITLE.
@@ -84,20 +93,30 @@ refuses() {
 
 printf '  %s via focus/%s\n' "$_env" "$_hook"
 
+# ONE SPACE BETWEEN THE FIELDS, not the run of them mux's own
+# `set-titles-string` uses, and the reason is a fact about kitty: it
+# COLLAPSES runs of whitespace in a window title, so a fixture asking for
+# four spaces gets one back and a `grep -qxF` poll for the title it asked
+# for never matches. mux is unaffected in anger because its separator is
+# four U+2800 BRAILLE BLANKs rather than spaces, which no terminal treats as
+# whitespace. The separator is incidental to what is under test here, which
+# is the bracket anchor, so the fixture uses the form every environment
+# stores verbatim.
+#
 # --- THE FIXTURE ----------------------------------------------------------
 # Four windows, and three of them are decoys chosen to break a matcher that
 # is almost right. The first is where every case starts from.
-DECOY='shell:~                    [elsewhere]'
+DECOY='shell:~ [elsewhere]'
 "$E" window "$DECOY"
-"$E" window 'mux api                    [northgate]'
+"$E" window 'mux api [northgate]'
 # NO BRACKETS: what an unanchored matcher would hit. A session really can be
 # called after a host, which is why the hooks anchor at all.
 "$E" window 'northgate'
 # A LONGER NAME IN BRACKETS: what a matcher missing the CLOSING bracket would
 # hit. This is the case `mux-focus-hooks.t` can only assert as a string.
-"$E" window 'mux api                    [northgatex]'
+"$E" window 'mux api [northgatex]'
 
-raises  northgate  'mux api                    [northgate]'
+raises  northgate  'mux api [northgate]'
 refuses nosuchhost
 # THE SUBSTRING CASES, which are the ones a real matcher answers and a
 # recorded argv cannot. `northgat` is a prefix of the real host and of the

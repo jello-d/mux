@@ -249,7 +249,10 @@
 # A BARE NAME RESOLVES IN $MUX_SHARE/desktop-notifier/focus/, overlaid from
 # $MUX_DIR the same way. Pick the one named after what you run:
 #
-#   kitty       any compositor, via kitty remote control
+#   kitty       kitty's own tabs/splits, any compositor. NEEDS an argument
+#               and a kitty started with `--listen-on`; see its header. It
+#               can focus a window WITHIN a kitty window and cannot RAISE
+#               one, so for one terminal per machine use the compositor's
 #   sway        sway
 #   hyprland    Hyprland
 #   niri        niri (needs jq)
@@ -262,4 +265,4 @@
 # answer, which the notifier reports rather than swallowing.
 #
 # Default: unset, so the click does only the part mux owns.
-#desktop-notifier-activate   kitty
+#desktop-notifier-activate   kitty --to unix:@mux

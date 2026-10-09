@@ -4593,15 +4593,15 @@ m split-row: got
 = focus-kitty-matches-an-unanchored-title
 f share/desktop-notifier/focus/kitty
 t mux-focus-hooks
-- kitten @ focus-window --match "title:\\[$_label\\]" 2>/dev/null || {
-+ kitten @ focus-window --match "title:$_label" 2>/dev/null || {
+- _m="title:\\[$_label\\]"
++ _m="title:$_label"
 m kitty-argv: got
 
 = focus-kitty-acts-with-no-label
 f share/desktop-notifier/focus/kitty
 t mux-focus-hooks
-- [ -n "$_label" ] || { echo "usage: $_me LABEL" >&2; exit 78; }
-+ [ -z "$_label" ] || { echo "usage: $_me LABEL" >&2; exit 78; }
+- [ -n "$_label" ] || { echo "usage: $_me [--to ADDR] LABEL" >&2; exit 78; }
++ [ -z "$_label" ] || { echo "usage: $_me [--to ADDR] LABEL" >&2; exit 78; }
 m no-label-kitty: got
 
 = focus-kitty-skips-the-tool-check
@@ -4722,3 +4722,17 @@ t mux-toast-hooks
 - elif [ -n "$_part" ] && [ "$_part" != global ]; then
 + elif [ -n "$_part" ] && [ "$_part" != nosuchpart ]; then
 m dim-local-lines: got
+
+= focus-kitty-trusts-its-exit-code
+f share/desktop-notifier/focus/kitty
+t mux-focus-hooks
+- kitten @ --to "$_to" ls --match "$_m and state:focused" >/dev/null || {
++ kitten @ --to "$_to" ls --match "$_m and state:focused" >/dev/null; : || {
+m kitty-acted-but-did-not-focus: got
+
+= focus-kitty-socket-guard-inverted
+f share/desktop-notifier/focus/kitty
+t mux-focus-hooks
+- [ -n "$_to" ] || {
++ [ -z "$_to" ] || {
+m kitty-ok: got

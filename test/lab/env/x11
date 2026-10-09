@@ -38,6 +38,10 @@ _need_dir() { [ -n "${LAB_DIR:-}" ] || {
 _dpy=:71
 
 kind()  { echo x11; }
+# FOCUS ONLY: the X11 notification daemons are the desktops' own, which
+# is the VM tier rather than anything nestable here.
+probes() { echo "focus"; }
+
 hooks() { echo wmctrl; }
 
 # ONE TABLE, `tool package` per line; see env/sway for why. Four of these
@@ -146,6 +150,7 @@ down() {
 case ${1:-} in
   (kind)      kind ;;
   (hooks)     hooks ;;
+  (probes)    probes ;;
   (deps)      deps ;;
   (available) available ;;
   (up)        _need_dir;        up ;;
@@ -154,7 +159,7 @@ case ${1:-} in
   (focused)   _need_dir;   focused ;;
   (shot)      _need_dir;      shift; shot "$1" ;;
   (down)      _need_dir;      down ;;
-  (*) echo "usage: $_me {kind|hooks|deps|available|up|window T|focus T|
+  (*) echo "usage: $_me {kind|hooks|probes|deps|available|up|window T|focus T|
                  focused|shot F|down}" >&2
       exit 2 ;;
 esac

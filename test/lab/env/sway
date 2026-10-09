@@ -42,6 +42,11 @@ kind() { echo wayland; }
 # `kitty` is absent on purpose: it matches through the TERMINAL rather than
 # the compositor, so it belongs to an environment whose terminal is kitty,
 # and this one runs foot.
+# AND THE TOAST MATRIX LIVES HERE, because its band profile counts every
+# row of ink on screen and foot's windows draw none until something runs
+# in them. One environment hosts it; it is a test of the DAEMON.
+probes() { echo "focus toast"; }
+
 hooks() { echo sway; }
 
 # ONE TABLE, `tool package` per line, and `available` is DERIVED from it.
@@ -165,6 +170,7 @@ down() {
 case ${1:-} in
   (kind)      kind ;;
   (hooks)     hooks ;;
+  (probes)    probes ;;
   (deps)      deps ;;
   (available) available ;;
   (up)        _need_dir;        up ;;
@@ -173,7 +179,7 @@ case ${1:-} in
   (focused)   _need_dir;   focused ;;
   (shot)      _need_dir;      shift; shot "$1" ;;
   (down)      _need_dir;      down ;;
-  (*) echo "usage: $_me {kind|hooks|deps|available|up|window T|focus T|
+  (*) echo "usage: $_me {kind|hooks|probes|deps|available|up|window T|focus T|
                  focused|shot F|down}" >&2
       exit 2 ;;
 esac

@@ -55,12 +55,27 @@ run:
 
 | name | reaches | needs |
 | --- | --- | --- |
-| `kitty` | any compositor, via the terminal | `allow_remote_control` set |
+| `kitty` | kitty tabs/splits, any compositor | `--listen-on`, and a `--to` |
 | `sway` | sway | `swaymsg`, `SWAYSOCK` |
 | `hyprland` | Hyprland | `hyprctl` |
 | `niri` | niri | `niri`, and `jq` to read its window list |
 | `wayfire` | wayfire | `wf-msg`, and the ipc plugin enabled |
 | `wmctrl` | **every X11 window manager**, via EWMH | `wmctrl`, `DISPLAY` |
+
+**`kitty` is narrower than it looks**, and this was measured rather than
+assumed: kitty remote control can focus a window *within* an OS window and
+has no verb to raise one. Between two kitty OS windows `focus-window` exits 0
+and moves nothing. So it suits a setup where your sessions are kitty tabs or
+splits, and for one terminal window per machine the compositor's hook is the
+one that works. The hook verifies its own outcome, so the unsupported shape
+answers 78 rather than reporting success.
+
+It also needs two things where its header used to say one:
+`allow_remote_control yes` **and** a listening socket, and only
+`--listen-on` on the command line creates one (a `listen_on` line in
+kitty.conf produces nothing, measured on 0.45.0). The socket address reaches
+the hook as `--to`, because `kitten @` without one looks for a controlling
+terminal and a notification daemon has none.
 
 `wmctrl` is the widest per line, because X11 standardised this twenty years
 ago: one file reaches i3, bspwm, openbox, awesome, xfwm, Mutter-on-X11 and

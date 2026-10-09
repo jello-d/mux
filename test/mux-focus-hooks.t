@@ -62,17 +62,40 @@ exit $2
 EOF
   chmod +x "$T/bin/$1"
 }
+# A kitten stub that dispatches on the VERB, because focus/kitty makes TWO
+# calls now: `focus-window` to act, then `ls --match ... and state:focused`
+# to VERIFY. A single-exit-code stub cannot answer them differently, and the
+# second one is the whole point: measured against a live kitty,
+# `focus-window` exits 0 having moved NOTHING whenever the target is in
+# another OS window, so a hook trusting that exit code reported success for
+# a click that raised nothing.
+mk_kitten() {   # <focus-window rc> <ls rc>
+  cat >"$T/bin/kitten" <<EOF
+#!/bin/sh
+printf '%s\n' "\$*" >>"$ARGV"
+for a in "\$@"; do
+  case \$a in
+    (focus-window) exit $1 ;;
+    (ls)           exit $2 ;;
+  esac
+done
+exit 0
+EOF
+  chmod +x "$T/bin/kitten"
+}
+
 # Every tool any hook reaches for, all succeeding, so a generic case fails
 # only for the reason it is testing.
 mkall() {
-  mk kitten 0; mk wf-msg 0; mk swaymsg 0; mk hyprctl 0 ok
+  mk_kitten 0 0; mk wf-msg 0; mk swaymsg 0; mk hyprctl 0 ok
   mk wmctrl 0; mk niri 0 '[]'; mk jq 0 '7'
 }
 # EVERY COMPOSITOR'S ENV AT ONCE, so the generic cases get past each hook's
 # liveness guard whichever hook they are running. A real box never looks like
 # this; the point is to reach the code under test.
 LIVE="WAYFIRE_SOCKET=/run/wf.sock SWAYSOCK=/run/sway.sock
-HYPRLAND_INSTANCE_SIGNATURE=sig NIRI_SOCKET=/run/niri.sock DISPLAY=:0"
+HYPRLAND_INSTANCE_SIGNATURE=sig NIRI_SOCKET=/run/niri.sock DISPLAY=:0
+KITTY_LISTEN_ON=unix:/run/kitty.sock"
 
 run() {   # <hook> [args...] -> exit code, with stderr in $T/err
   : >"$ARGV"
@@ -105,7 +128,7 @@ ENVSET=$LIVE
 for _h in $ALL; do
   mkall
   eq "no-label-$_h" "$(run "$_h")" 78
-  errhas "usage: focus/$_h LABEL" "no-label-$_h-says-so"
+  errhas "usage: focus/$_h" "no-label-$_h-says-so"
   [ ! -s "$ARGV" ] || fail "focus/$_h ran its tool with no label to match"
 done
 
@@ -164,7 +187,14 @@ ENVSET=$LIVE
 # own form and only the recorded argv can show which.
 mkall
 eq kitty-ok "$(run kitty northwood)" 0
-eq kitty-argv "$(cat "$ARGV")" '@ focus-window --match title:\[northwood\]'
+# BOTH CALLS, IN ORDER, because the second is the GUARD and an assertion
+# on the first alone passes with the verification deleted. `--to` is on
+# each: without it kitten looks for a controlling terminal, which a
+# notification daemon does not have, so the hook could never have worked
+# from the only place it is ever invoked.
+eq kitty-argv "$(cat "$ARGV")" "\
+@ --to unix:/run/kitty.sock focus-window --match title:\\[northwood\\]
+@ --to unix:/run/kitty.sock ls --match title:\\[northwood\\] and state:focused"
 
 eq wayfire-ok "$(run wayfire northwood)" 0
 eq wayfire-argv "$(cat "$ARGV")" 'focus-window title:\[northwood\]'
@@ -207,7 +237,8 @@ esac
 mkall
 eq kitty-anchored-right "$(run kitty man; cat "$ARGV")" \
   "0
-@ focus-window --match title:\\[man\\]"
+@ --to unix:/run/kitty.sock focus-window --match title:\\[man\\]
+@ --to unix:/run/kitty.sock ls --match title:\\[man\\] and state:focused"
 eq wmctrl-anchored-right "$(run wmctrl man; cat "$ARGV")" \
   "0
 -a [man]"
@@ -215,14 +246,22 @@ eq wmctrl-anchored-right "$(run wmctrl man; cat "$ARGV")" \
 # --- A TOOL THAT FAILS IS 78, NOT ITS OWN CODE --------------------------
 # A raise that did not happen is "cannot answer"; passing the tool's status
 # through would mean the notifier had to learn each compositor's exit codes.
-for _row in "kitty kitten" "wayfire wf-msg" "sway swaymsg" \
-            "wmctrl wmctrl"; do
+for _row in "wayfire wf-msg" "sway swaymsg" "wmctrl wmctrl"; do
   # shellcheck disable=SC2086   # a two-word table row, split on purpose
   set -- $_row
   mkall; mk "$2" 3
   eq "failed-$1" "$(run "$1" northwood)" 78
 done
+# THE MESSAGE CHECK SITS WITH ITS OWN RUN, not after the loop: `errhas`
+# reads whatever stderr was written LAST, so a case appended below the loop
+# silently re-points it. That is the positional hazard this suite already
+# records for a shared `$_o`.
 errhas "no X11 window titled 'northwood'" wmctrl-failure-says-so
+
+# kitty separately, since its stub takes two codes. The ACT failing first.
+mkall; mk_kitten 3 0
+eq failed-kitty "$(run kitty northwood)" 78
+errhas "no kitty window titled 'northwood'" failed-kitty-says-so
 
 # --- AND HYPRLAND'S EXIT CODE IS NOT THE ANSWER -------------------------
 # The one hook where a zero exit means nothing: `hyprctl dispatch` succeeds
@@ -250,5 +289,55 @@ errhas "jq is not on PATH" niri-no-jq-names-it
 mkall; mk jq 0 ''
 eq niri-no-match "$(run niri northwood)" 78
 errhas "no niri window titled 'northwood'" niri-no-match-says-so
+
+# --- AND KITTY'S ZERO EXIT IS NOT THE ANSWER ----------------------------
+# THE PRODUCT BUG THIS FILE EXISTS TO HOLD DOWN, found by building a lab
+# environment for the hook and measured against a live kitty 0.45.0: two
+# kitty OS windows, focus on the second, `focus-window --match` the first,
+# and it exits 0 having moved nothing, in kitty's own view and the
+# compositor's alike. kitty remote control can focus a window WITHIN an OS
+# window and has no verb to RAISE one.
+#
+# So the hook asks a second question whose answer is an exit code
+# (`ls --match "title:... and state:focused"`), and a stub that succeeds at
+# the ACT and fails the VERIFY is the state a bare rc check waves through.
+mkall; mk_kitten 0 1
+eq kitty-acted-but-did-not-focus "$(run kitty northwood)" 78
+errhas "is not focused" kitty-says-it-did-not-focus
+errhas "cannot
+RAISE one" kitty-names-the-limit
+# And the control, because "it always fails" would pass the line above.
+mkall
+eq kitty-verify-ok "$(run kitty northwood)" 0
+
+# --- A SOCKET IS REQUIRED, AND ITS ABSENCE IS NOT THE TOOL'S FAULT ------
+# `kitten @` with no `--to` reaches kitty through the CONTROLLING TERMINAL
+# of the window it runs inside, and a notification daemon has none: the real
+# error is `open /dev/tty: no such device or address`, reported as the hook
+# failing while `allow_remote_control yes` sits correctly in kitty.conf. So
+# the hook refuses FIRST and says what to set, rather than letting kitten
+# produce that.
+mkall
+# shellcheck disable=SC2086   # LIVE is a list of assignments, split
+ENVSET=$(printf '%s\n' $LIVE | grep -v '^KITTY_LISTEN_ON=' | tr '\n' ' ')
+eq kitty-no-socket "$(run kitty northwood)" 78
+errhas "no kitty socket" kitty-no-socket-says-so
+errhas "--listen-on" kitty-names-the-flag
+[ ! -s "$ARGV" ] || fail "focus/kitty called kitten with no socket to talk
+to, so the error a user sees is kitten's /dev/tty one rather than mux's"
+ENVSET=$LIVE
+
+# --- AND `--to` BEATS THE INHERITED VALUE -------------------------------
+# The config case, which is the only one that matters in anger: the daemon
+# has no KITTY_LISTEN_ON, so the address comes from the hook's own argument.
+# Asserted on the ARGV, because both forms exit 0 and only what was ASKED
+# tells them apart.
+mkall
+run kitty --to unix:/tmp/other.sock northwood
+case $(sed -n 1p "$ARGV") in
+  (*'--to unix:/tmp/other.sock'*) ;;
+  (*) fail "kitty-to-wins: the flag did not reach kitten:
+[$(sed -n 1p "$ARGV")]" ;;
+esac
 
 pass

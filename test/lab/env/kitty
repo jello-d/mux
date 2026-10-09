@@ -1,0 +1,208 @@
+#!/bin/sh
+# test/lab/env/kitty - a headless sway with kitty as the terminal, so
+# focus/kitty can be exercised at all.
+#
+# A SECOND ENVIRONMENT OVER THE SAME COMPOSITOR, and that is the point of
+# the two-layer split rather than a duplication of it: focus/kitty matches
+# through the TERMINAL, so which compositor is underneath is irrelevant to
+# it and only the client matters. env/sway runs foot and exercises
+# focus/sway; this runs kitty and exercises focus/kitty. Neither hook can be
+# tested by the other's environment.
+#
+# IT DELEGATES EVERYTHING COMPOSITOR-SHAPED to env/sway, so there is one
+# place that knows how to bring a headless sway up and read its display name
+# back. Only `window` and `hooks` differ.
+#
+# --- THE THREE THINGS THAT COST A FIXTURE EACH ------------------------
+#
+# A LISTENING SOCKET NEEDS `--listen-on` ON THE COMMAND LINE. Measured on
+# kitty 0.45.0: a `listen_on` line in a --config file produces no socket, and
+# neither does `-o listen_on=...`. Only the flag does. The hook's header
+# carries the full table; the consequence here is that this file must pass
+# the flag and cannot just write a config.
+#
+# AND THE TITLE MUST BE EMITTED AS AN OSC SEQUENCE, not passed as `-T`.
+# kitty's `--match title:` matches the KITTY WINDOW's title, which comes from
+# the running program; `-T` sets the OS WINDOW's. A client started with
+# `-T 'mux api [northgate]' -- sleep` reports its title to kitten as
+# `sleep`, so every match fails and it reads as the hook's expression being
+# wrong. tmux emits an OSC title, which reaches both, so the fixture has to
+# do what tmux does. `titler` below is that, and it is the whole reason this
+# file ships a helper script.
+#
+# AND KITTY COLLAPSES WHITESPACE IN A TITLE, so a fixture asking for a run
+# of spaces gets one space back and an exact-match poll never succeeds. mux
+# is unaffected because its own separator is four U+2800 braille blanks,
+# which are not whitespace to anyone; the probe uses a single space so every
+# environment stores its fixture titles verbatim.
+#
+# AND ONE KITTY INSTANCE, MANY WINDOWS. Two `kitty --listen-on` processes
+# pointed at one socket do not both bind it, so a fixture that launches a
+# process per window silently ends up with one window and a confusing set of
+# match results. Extra windows come from `kitten @ launch` against the
+# instance that owns the socket.
+set -eu
+
+_me=env/kitty
+_dir=${LAB_DIR:-}
+_here=$(cd -- "$(dirname -- "$0")" && pwd)
+# shellcheck source=test/lab/avail_lib
+. "$_here/../avail_lib"
+
+_need_dir() { [ -n "${LAB_DIR:-}" ] || {
+  echo "$_me: LAB_DIR must be set by the driver" >&2; exit 2; }; }
+
+SWAY=$_here/sway
+_sock=$_dir/kitty.sock
+_addr=unix:$_dir/kitty.sock
+
+kind()  { echo wayland; }
+# FOCUS ONLY. kitty's clients draw a prompt, so a screenshot of this
+# environment has text in it that is not the banner, and the toast
+# probe's row count would read it. env/sway hosts that matrix.
+probes() { echo "focus"; }
+
+hooks() { echo kitty; }
+
+# ITS OWN TABLE PLUS SWAY'S, because it needs both: this environment cannot
+# run without a compositor either, and restating sway's three packages here
+# would be the second copy `lab deps` exists to avoid.
+deps() {
+  "$SWAY" deps
+  cat <<'EOF'
+kitty kitty
+kitten kitty
+EOF
+}
+
+available() { _avail_from_deps; }
+
+up() {
+  "$SWAY" up || return 1
+  cp "$_dir/env" "$_dir/env.sway"
+  # THE TITLER, as a FILE, because it has to survive being handed through
+  # kitten's own argument parsing and because an inline `printf` of an escape
+  # sequence through two layers of quoting is how a fixture starts lying.
+  cat >"$_dir/titler" <<'EOF'
+#!/bin/sh
+# Emit the title the way tmux's set-titles does, then hold the window open.
+# `sleep` rather than a shell: a stray EOF closing the window mid-assertion
+# reads as the hook having raised nothing.
+printf '\033]0;%s\007' "$1"
+exec sleep 600
+EOF
+  chmod +x "$_dir/titler"
+  # shellcheck disable=SC1091   # written by sway's up()
+  . "$_dir/env"
+  # THE FIRST WINDOW CREATES THE INSTANCE, so it is started here rather than
+  # by `window`: everything after it is a `kitten @ launch` into this one.
+  # A placeholder title, because the probe's own first `window` call provides
+  # the one that matters and a fixture should not pretend to know it.
+  env -u WAYFIRE_SOCKET -u KITTY_LISTEN_ON \
+    WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-}" \
+    kitty --listen-on "$_addr" -o allow_remote_control=yes \
+    -o confirm_os_window_close=0 \
+    "$_dir/titler" 'lab:placeholder' >"$_dir/kitty.log" 2>&1 &
+  echo "$!" >"$_dir/kitty.pid"
+  _i=0
+  while [ "$_i" -lt 120 ]; do
+    [ -S "$_sock" ] && break
+    _i=$((_i + 1)); sleep 0.05
+  done
+  [ -S "$_sock" ] || { echo "$_me: kitty never created $_sock. Only
+\`--listen-on\` on the command line makes one; see this file's header." >&2
+    sed 's/^/  /' "$_dir/kitty.log" >&2; return 1; }
+  # THE ADDRESS IS PUBLISHED, so the probe hands it to the hook as `--to`
+  # exactly as a user's config would. Without it the hook correctly exits 78
+  # and the probe would read that as the matcher failing.
+  printf 'KITTY_LAB_TO=%s\n' "$_addr" >>"$_dir/env"
+}
+
+_kitten() { env -u KITTY_LISTEN_ON kitten @ --to "$_addr" "$@"; }
+
+window() {
+  # A NEW OS WINDOW PER TITLE, so each is independently focusable the way a
+  # separate terminal would be. `--keep-focus` is NOT used: the probe forces
+  # focus itself, and a fixture that also fought over it would make the
+  # starting state depend on creation order.
+  # NO `--title`, which was a fixture fault: kitten's launch flag SETS the
+  # window title and the titler's OSC sequence then does not replace it, so
+  # every window came back called `lab` and no match could ever succeed. The
+  # title has to arrive the way tmux sends it or not at all.
+  #
+  # AND NO `--type=os-window`, which was the fault that found a PRODUCT bug.
+  # With each window its own OS window, `kitten @ focus-window` exits 0 and
+  # moves nothing, because kitty remote control can focus a window WITHIN an
+  # OS window and has no verb to RAISE one. So this environment tests the
+  # shape the hook actually supports, tabs and splits in one window, and the
+  # hook now VERIFIES its own outcome so the unsupported shape answers 78
+  # instead of reporting success.
+  _kitten launch -- \
+    "$_dir/titler" "$1" >/dev/null 2>&1 || {
+      echo "$_me: kitten could not launch a window for '$1'" >&2; return 1; }
+  _i=0
+  while [ "$_i" -lt 120 ]; do
+    _titles | grep -qxF -- "$1" && return 0
+    _i=$((_i + 1)); sleep 0.05
+  done
+  echo "$_me: a kitty window titled '$1' never appeared" >&2; return 1
+}
+
+# KITTY'S OWN VIEW, not the compositor's, because that is what the hook
+# matches against and they genuinely differ: sway sees the OS window title,
+# kitten sees the kitty window's.
+_titles() { _kitten ls 2>/dev/null \
+  | python3 "$_here/../ktitles.py" --all; }
+
+# MATCHED ON THE BRACKETED TAIL, not the whole title, because KITTEN'S
+# `--match` CANNOT EXPRESS A COLON AT ALL. It splits the value on every
+# colon and reads each segment as `field:value`, before any regex is
+# considered, so `title:^shell:~ ...` becomes field `title` value `^shell`
+# plus an orphan and answers:
+#
+#     Error: No location specified before \[elsewhere\]$
+#
+# Measured: `\:`, `[:]` and `.` as a wildcard all fail the same way, so it
+# is a parse that happens first rather than an escaping question. Every
+# fixture title here ends in `[something]`, which is colon-free by
+# construction and unique per window, so that is what this matches.
+focus() {
+  _tail=${1##*[}
+  case $1 in
+    (*'['*']') _tail="[${_tail}" ;;
+    (*) echo "$_me: focus wants a title ending in [tag]; got '$1'" >&2
+        return 1 ;;
+  esac
+  _kitten focus-window --match "title:$(_rex "$_tail")" >/dev/null 2>&1
+}
+_rex() { printf '%s' "$1" | sed 's/[][\\.*^$(){}?+|/]/\\&/g'; }
+
+focused() { _kitten ls 2>/dev/null | python3 "$_here/../ktitles.py"; }
+
+shot() { "$SWAY" shot "$@"; }
+
+down() {
+  if [ -f "$_dir/kitty.pid" ]; then
+    _p=$(cat "$_dir/kitty.pid")
+    case $_p in ([0-9]*) kill "$_p" 2>/dev/null || : ;; esac
+  fi
+  "$SWAY" down || :
+  return 0
+}
+
+case ${1:-} in
+  (kind)      kind ;;
+  (hooks)     hooks ;;
+  (probes)    probes ;;
+  (deps)      deps ;;
+  (available) available ;;
+  (up)        _need_dir; up ;;
+  (window)    _need_dir; shift; window "$1" ;;
+  (focus)     _need_dir; shift; focus "$1" ;;
+  (focused)   _need_dir; focused ;;
+  (shot)      _need_dir; shift; shot "$1" ;;
+  (down)      _need_dir; down ;;
+  (*) echo "usage: $_me {kind|hooks|probes|deps|available|up|window T|focus T|
+                 focused|shot F|down}" >&2
+      exit 2 ;;
+esac
