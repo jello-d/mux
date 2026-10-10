@@ -4764,3 +4764,24 @@ t mux-profile
 -     _gocl="'$prowtmp'"
 +     _gocl=
 m REFUSED build left
+
+= toast-pango-drops-the-positional-blank
+f share/desktop-notifier/toast/pango
+t mux-toast-hooks
+- printf '%s\n%s\n%s\n' "$_sum" "$_tail" "$_body"
++ printf '%s\n%s\n' "$_sum" "$_body"
+m pango-remote-lines: got
+
+= toast-pango-names-the-host-locally
+f share/desktop-notifier/toast/pango
+t mux-toast-hooks
+- if [ "$_loc" = remote ] && [ -n "$_host" ]; then
++ if [ -n "$_host" ]; then
+m a LOCAL banner named the host
+
+= toast-pango-names-the-baseline-partition
+f share/desktop-notifier/toast/pango
+t mux-toast-hooks
+- if [ -n "$_part" ] && [ "$_part" != global ]; then
++ if [ -n "$_part" ] && [ "$_part" != nosuchpart ]; then
+m pango-local-body: got
