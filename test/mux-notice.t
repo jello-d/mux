@@ -94,8 +94,17 @@ adjacent lines and read as one: [$_got]" ;;
 esac
 # THE THREE AGE BANDS, each its own assertion: one "it mentioned an age" check
 # passes on a single working band and says nothing about the other two.
-case $_got in *'probing, 5s ago: the far side said nothing'*) ;;
-  *) fail "under 90s must read in SECONDS: [$_got]" ;;
+#
+# THE SECONDS BAND IS ASSERTED BY ITS UNIT AND NOT BY THE DIGIT, because this
+# fixture stamps at `_now - 5` while the flush re-reads the clock: a second of
+# suite load makes the age 6, and the product is RIGHT to say so. The other two
+# bands integer-divide (600 -> 10m, 9000 -> 2h), so they have 60s and 1800s of
+# slack and keep their exact values. The age token is EXTRACTED rather than
+# globbed for, so a `*` cannot span into a neighbouring notice line.
+_age=$(printf '%s\n' "$_got" |
+  sed -n 's/^  probing, \(.*\) ago: the far side said nothing$/\1/p')
+case $_age in *s) ;;
+  *) fail "under 90s must read in SECONDS, got age [$_age] in: [$_got]" ;;
 esac
 case $_got in *'attach, 10m ago: took the long way round'*) ;;
   *) fail "under 5400s must read in MINUTES: [$_got]" ;;
