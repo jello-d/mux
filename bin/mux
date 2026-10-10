@@ -109,7 +109,7 @@ set -eu
 
 # `mux --version` and the man page footer (.TH) both state this; test/setup.t
 # asserts they agree.
-MUX_VERSION=0.86
+MUX_VERSION=0.87
 
 MUX_DIR=${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mux}
 TMUX_CONF=${XDG_CONFIG_HOME:-$HOME/.config}/tmux/tmux.conf
