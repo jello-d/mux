@@ -2728,11 +2728,12 @@ How much the shipped
 .I toast/
 hooks dim the host and partition they add to a banner, as a Pango alpha
 (default
-.BR 65% ).
+.BR 85% ).
 An alpha rather than a colour because the background belongs to the
 notification daemon: a fixed grey cannot know it, and the one shipped before
-this read at 3.69:1 on a saturated blue, under the 4.5:1 floor for body text.
-65% clears that floor on dark, light and saturated backgrounds alike.
+this measured 2.86:1 on a live screen, under the 4.5:1 floor for body text.
+85% measured 5.56:1 on that same screen, against 7.10:1 for no dimming at
+all, so it clears the floor and stays recessive.
 .TP
 .B MUX_STRIP_WIDTH
 Override the column budget the agent\-state strip fits itself into. A TEST

@@ -54,8 +54,8 @@ _loc=${5:-local}
 # on the author's theme (background #2200aa), #8a8a8a gives 3.69:1, under
 # the 4.5:1 floor, and read as too dark from a live desktop. An alpha dims
 # relative to the colour the theme already chose. See toast/pango for the
-# numbers across three backgrounds; the value is a PANGO ALPHA (`65%`).
-_DIM=${MUX_TOAST_DIM:-65%}
+# numbers across three backgrounds; the value is a PANGO ALPHA (`85%`).
+_DIM=${MUX_TOAST_DIM:-85%}
 
 case $_kind in
   (blocked) _sum="Claude needs you: $_sess"; _body="permission or input" ;;

@@ -78,7 +78,7 @@ eq pango-local-body "$(line 3)" "your turn"
 
 run pango blocked api northgate global remote
 eq pango-remote-host "$(line 2)" \
-  '<span alpha="65%">(on northgate)</span>'
+  '<span alpha="85%">(on northgate)</span>'
 eq pango-remote-body "$(line 3)" "permission or input"
 
 # --- dim: NEVER AN EMPTY LINE, which is the whole reason it exists -------
@@ -122,18 +122,18 @@ eq dim-local-body "$(line 2)" "your turn"
 # title. `global` is the baseline every box has, so naming it would add a
 # word that never varies.
 run dim blocked api northgate global remote
-eq dim-host "$(line 2)" '<span alpha="65%">(on northgate)</span>'
+eq dim-host "$(line 2)" '<span alpha="85%">(on northgate)</span>'
 eq dim-body "$(line 3)" "permission or input"
 run dim finished api northgate work remote
 eq dim-host-part "$(line 2)" \
-  '<span alpha="65%">(on northgate [work])</span>'
+  '<span alpha="85%">(on northgate [work])</span>'
 # A NON-BASELINE PARTITION IS WORTH A ROW EVEN LOCALLY, because two
 # partitions on one box otherwise produce identical banners. Both directions,
 # since one assertion passes on a hook that prints it never and on one that
 # prints it always.
 run dim finished api here work local
 eq dim-local-part-lines "$(nlines)" 3
-eq dim-local-part "$(line 2)" '<span alpha="65%">[work]</span>'
+eq dim-local-part "$(line 2)" '<span alpha="85%">[work]</span>'
 # THE OTHER DIRECTION IS `dim-local-lines` ABOVE, which asserts 2 for the
 # same call with the BASELINE partition: a row appearing there is the only
 # way the global case can go wrong. A second copy of it here was redundant

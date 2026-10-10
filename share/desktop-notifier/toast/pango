@@ -69,14 +69,30 @@ _loc=${5:-local}
 # text, and it was reported from a live desktop as too dark to read.
 #
 # An alpha dims RELATIVE to whatever colour the theme already chose, so it
-# tracks the background instead of guessing it. 65% clears 4.5:1 on a
-# saturated blue (5.72:1), on dark grey (7.69:1) and on a light theme
-# (6.73:1), while staying visibly recessive against full white (12.74:1).
+# tracks the background instead of guessing it.
+#
+# 85% WAS PICKED ON A REAL SCREEN, NOT FROM THE ARITHMETIC, and the gap
+# between the two is the thing to carry. Computed contrast over a solid
+# background said 65% would give 5.72:1; photographing an actual banner on
+# that same theme measured 3.94:1. Antialiasing dilutes thin glyph strokes
+# and the banner's own fill is translucent, so a model of solid ink on an
+# opaque field is optimistic by roughly 1.8:1. Measured on the reporter's
+# screen, same banner, same theme:
+#
+#     #8a8a8a (the old grey)   2.86:1
+#     alpha 65%                3.94:1
+#     alpha 75%                4.74:1
+#     alpha 85%                5.56:1
+#     alpha 100% (no dimming)  7.10:1
+#
+# So 85%: it clears the 4.5:1 floor with margin rather than by 0.24, and it
+# still reads as secondary, because the title carries BOLD and LARGER as
+# well as colour and the dim was never the only signal.
 #
 # THE VALUE IS A PANGO ALPHA, so `65%` and not a colour. Pango has accepted
 # the attribute since 1.38; verified here through pango-view and through a
 # real mako and a real dunst by test/lab.
-_DIM=${MUX_TOAST_DIM:-65%}
+_DIM=${MUX_TOAST_DIM:-85%}
 
 case $_kind in
   (blocked) _sum="Claude needs you: $_sess"; _body="permission or input" ;;
