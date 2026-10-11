@@ -1,0 +1,558 @@
+#!/bin/sh
+# macos-probe - what the macOS CI runner can actually DO, measured there.
+#
+#     sh test/macos-probe OUTDIR
+#
+# WHY THIS EXISTS. mux's remaining macOS work is a desktop presenter:
+# `backend_appkit.py` over NSStatusItem and UNUserNotificationCenter, plus a
+# launchd agent. The notes record two questions as unanswerable without a Mac
+# to own, and this file exists to find out how many of them really are. The
+# runner is free, so the cheapest possible answer is to ask it.
+#
+# REPORT-ONLY, AND IT MUST NEVER GATE. Every probe is guarded and this script
+# exits 0 whatever it finds: a capability survey that can turn CI red is one
+# somebody deletes. The workflow uploads OUTDIR so the screenshots can be
+# looked at afterwards.
+#
+# THREE ANSWERS PER PROBE, the same contract the hooks use, because "no" and
+# "could not ask" are different facts and collapsing them is how a survey
+# reports a missing dependency as a missing capability:
+#
+#     yes       the runner can do this
+#     no        it cannot, and the evidence is printed
+#     cannot    the probe could not put the question
+#
+# IT PRINTS WHAT IT SAW, never just a verdict. That is this tree's standing
+# rule and it is what makes a surprising answer diagnosable in one run rather
+# than one push per theory.
+#
+# AND ITS FINDINGS GRADUATE INTO ASSERTIONS. This is a survey, so it belongs
+# outside the `*.t` glob `test/run` selects on: nothing here asserts anything.
+# Whatever it proves available becomes a real test, and whatever it proves
+# absent becomes a written limit.
+set -eu
+
+OUT=${1:-}
+[ -n "$OUT" ] || { echo "usage: macos-probe OUTDIR" >&2; exit 2; }
+mkdir -p "$OUT"
+
+# One line per fact, so the log is greppable and a reader can diff two runs.
+say() { printf '%-34s %-8s %s\n' "$1" "$2" "${3:-}"; }
+hr()  { printf '\n== %s\n' "$1"; }
+
+PY=$OUT/py
+VENV=$OUT/venv
+
+hr "the machine"
+say uname yes "$(uname -srm)"
+say sw_vers yes "$(sw_vers -productVersion 2>/dev/null || echo unknown)"
+say arch yes "$(arch 2>/dev/null || echo unknown)"
+say user yes "$(id -un) uid=$(id -u)"
+
+# WHICH GNU-ISMS THIS BOX REALLY LACKS IS ASKED IN THE WORKFLOW, not here.
+# `test/mux-portability.t` maintains that list by READING rather than by
+# asking, and three of its entries name a bare COMMAND, which asserts the tool
+# is absent outright; whether that is true is worth one run. It cannot be
+# asked from this file, because a table of those constructs IS the thing the
+# rule greps for and the rule's only opt-out is a `||` on the line, which
+# would invert the very exit status being measured. So the questions live in
+# the workflow's userland step, one guarded line each, which is where facts
+# about the runner already go.
+
+# --- A. IS THERE A GUI SESSION AT ALL ----------------------------------------
+#
+# Everything else depends on this one answer. A menu bar item and a banner are
+# both drawn by WindowServer into an Aqua session, and macOS only provisions
+# one on a real login: the `gui/<uid>` launchd domain does not exist without
+# it. So this is asked first and asked three independent ways, because a
+# process list, a launchd domain and Core Graphics can disagree and the
+# disagreement is itself the finding.
+hr "the session"
+
+if ! command -v launchctl >/dev/null 2>&1; then
+  say launchd-gui-domain cannot "no launchctl on PATH"
+elif launchctl print "gui/$(id -u)" >"$OUT/launchd-gui.txt" 2>&1; then
+  say launchd-gui-domain yes "see launchd-gui.txt"
+else
+  say launchd-gui-domain no "no gui/$(id -u) domain: no login session"
+fi
+
+# ASKED THROUGH A HELPER, because "pgrep said no" and "there is no pgrep" are
+# different answers and this file's own header forbids collapsing them. The
+# tree's portability check caught that conflation here, which is the rule
+# working: `test/mux-portability.t` lists `pgrep` as absent on BSD, and
+# whether that is TRUE is one of the things this probe can settle.
+running() {
+  command -v pgrep >/dev/null 2>&1 || return 2
+  pgrep -x "$1" >/dev/null 2>&1 || return 1
+  return 0
+}
+
+_rc=0; running WindowServer || _rc=$?
+case $_rc in
+  0) say windowserver yes "running" ;;
+  1) say windowserver no "not running" ;;
+  *) say windowserver cannot "pgrep(1) is not on PATH" ;;
+esac
+
+system_profiler SPDisplaysDataType >"$OUT/displays.txt" 2>&1 || true
+if grep -q 'Resolution' "$OUT/displays.txt" 2>/dev/null; then
+  _res=$(awk '/Resolution/{print $2"x"$4; exit}' "$OUT/displays.txt")
+  say display yes "$_res"
+else
+  say display no "no Resolution line: see displays.txt"
+fi
+
+# --- B. CAN IT SCREENSHOT ----------------------------------------------------
+#
+# THE LOAD-BEARING QUESTION, because mux's lab does not LOOK at a rendering,
+# it measures one: a band profile over a screenshot is how both toast hooks
+# were verified against a real daemon. If `screencapture` answers with real
+# pixels here then that whole technique is available on CI, and most of a
+# macOS presenter becomes developable without renting a machine.
+#
+# NON-BLACK IS THE TEST, NOT EXIT 0. `screencapture` succeeds and writes a
+# fully black image on a session it cannot read, which is exactly the shape
+# of answer that reads as working. Reported as a pixel count so a later run
+# can be compared rather than merely re-judged.
+hr "screen capture"
+
+if command -v screencapture >/dev/null 2>&1; then
+  if screencapture -x "$OUT/shot-bare.png" >"$OUT/screencapture.log" 2>&1; then
+    say screencapture-runs yes "shot-bare.png"
+  else
+    say screencapture-runs no "see screencapture.log"
+  fi
+else
+  say screencapture-runs cannot "no screencapture on PATH"
+fi
+
+# Pillow is already a notifier dependency on every platform, so the pixel
+# question costs no new tool. Asked through a venv rather than the system
+# python, which on macOS is not ours to install into.
+if python3 -m venv "$VENV" >"$OUT/venv.log" 2>&1 &&
+   "$VENV/bin/pip" install -q Pillow >>"$OUT/venv.log" 2>&1; then
+  say pillow yes "in $VENV"
+else
+  say pillow cannot "see venv.log"
+fi
+
+mkdir -p "$PY"
+cat >"$PY/ink.py" <<'PYINK'
+"""Report a PNG's size and how much of it is not black.
+
+NOT a verdict: the COUNT is the evidence, so two runs can be compared and a
+partially drawn screen is distinguishable from an empty one. The menu bar
+strip is reported separately because that is where a status item lands, and
+a desktop with a wallpaper can be bright while the bar is unreadable.
+"""
+import sys
+from PIL import Image
+
+path = sys.argv[1]
+im = Image.open(path).convert("RGB")
+w, h = im.size
+px = im.load()
+total = nonblack = 0
+bar = barink = 0
+# The menu bar is ~24 logical points; take 60 device rows to cover a 2x panel
+# and say so rather than pretending the number is exact.
+barh = min(60, h)
+for y in range(h):
+    for x in range(0, w, 4):          # every 4th column: a sample, not a sum
+        r, g, b = px[x, y]
+        total += 1
+        if r + g + b > 24:
+            nonblack += 1
+        if y < barh:
+            bar += 1
+            if r + g + b > 24:
+                barink += 1
+print("size %dx%d" % (w, h))
+print("nonblack %d/%d" % (nonblack, total))
+print("menubar-ink %d/%d (top %d rows)" % (barink, bar, barh))
+PYINK
+
+_INKBARE=$OUT/ink-bare.txt
+if [ -f "$OUT/shot-bare.png" ] && [ -x "$VENV/bin/python" ]; then
+  if "$VENV/bin/python" "$PY/ink.py" "$OUT/shot-bare.png" \
+       >"$_INKBARE" 2>&1; then
+    _nb=$(awk '/^nonblack/{print $2}' "$_INKBARE")
+    case $_nb in
+      0/*) say pixels-are-real no "all black: $_nb sampled" ;;
+      *)   say pixels-are-real yes "$_nb sampled non-black" ;;
+    esac
+    say screen-size yes "$(awk '/^size/{print $2}' "$_INKBARE")"
+    say menubar-ink yes "$(awk '/^menubar-ink/{print $2}' "$_INKBARE")"
+  else
+    say pixels-are-real cannot "see ink-bare.txt"
+  fi
+else
+  say pixels-are-real cannot "no shot or no Pillow"
+fi
+
+# --- C. APPKIT, AND WHETHER A STATUS ITEM IS VISIBLE -------------------------
+#
+# A DIFFERENTIAL, NOT AN ABSOLUTE. "Is there ink in the menu bar" is true of
+# the clock, so the question has to be whether OUR item changed it: capture,
+# publish an item, capture again, compare the strip. Same technique as the
+# toast band profile, and the same reason, which is that a presence check
+# passes on somebody else's pixels.
+hr "appkit"
+
+if [ -x "$VENV/bin/pip" ] &&
+   "$VENV/bin/pip" install -q pyobjc-framework-Cocoa \
+     >"$OUT/pyobjc.log" 2>&1; then
+  say pyobjc-cocoa yes "installed"
+else
+  say pyobjc-cocoa cannot "see pyobjc.log"
+fi
+
+cat >"$PY/statusitem.py" <<'PYSTATUS'
+"""Publish an NSStatusItem, hold it, and screenshot before and after.
+
+WHY A WIDE TITLE RATHER THAN AN IMAGE: the question is only whether the bar
+CHANGED, so the most detectable item wins. A pixmap would also be testing
+Pillow-to-NSImage conversion, which is a later question and would make a
+failure ambiguous between two causes.
+"""
+import subprocess
+import sys
+
+import AppKit
+from Foundation import NSRunLoop, NSDate
+
+before, after = sys.argv[1], sys.argv[2]
+
+
+def shoot(path):
+    return subprocess.call(["screencapture", "-x", path])
+
+
+def pump(seconds):
+    NSRunLoop.currentRunLoop().runUntilDate_(
+        NSDate.dateWithTimeIntervalSinceNow_(seconds))
+
+
+app = AppKit.NSApplication.sharedApplication()
+# ACCESSORY, so no Dock tile and no window: this is what a tray daemon is.
+app.setActivationPolicy_(AppKit.NSApplicationActivationPolicyAccessory)
+pump(1.0)
+print("rc-before %d" % shoot(before))
+
+bar = AppKit.NSStatusBar.systemStatusBar()
+item = bar.statusItemWithLength_(AppKit.NSVariableStatusItemLength)
+if item is None:
+    print("statusitem None")
+    raise SystemExit(1)
+button = item.button()
+if button is not None:
+    button.setTitle_("MUXPROBEMUXPROBE")
+else:
+    item.setTitle_("MUXPROBEMUXPROBE")
+print("statusitem ok")
+pump(2.0)
+print("rc-after %d" % shoot(after))
+# Held to the end on purpose: an item released before the capture is an item
+# the capture cannot contain, which would read as the bar refusing to draw it.
+print("visible %s" % (item.isVisible() if hasattr(item, "isVisible") else "?"))
+PYSTATUS
+
+# GUARDED ON AppKit BEING IMPORTABLE, so a pip failure cannot be reported as
+# the menu bar refusing an item: those want opposite responses, one a dependency
+# and the other a design.
+if ! "$VENV/bin/python" -c 'import AppKit' >/dev/null 2>&1; then
+  say statusitem-created cannot "AppKit will not import: see pyobjc.log"
+elif "$VENV/bin/python" "$PY/statusitem.py" \
+     "$OUT/shot-nobar.png" "$OUT/shot-item.png" \
+     >"$OUT/statusitem.txt" 2>&1; then
+  say statusitem-created yes "$(grep -c . "$OUT/statusitem.txt") lines"
+else
+  say statusitem-created no "see statusitem.txt"
+fi
+
+if [ -f "$OUT/shot-nobar.png" ] && [ -f "$OUT/shot-item.png" ] &&
+   [ -x "$VENV/bin/python" ]; then
+  "$VENV/bin/python" "$PY/ink.py" "$OUT/shot-nobar.png" \
+    >"$OUT/ink-nobar.txt" 2>&1 || true
+  "$VENV/bin/python" "$PY/ink.py" "$OUT/shot-item.png" \
+    >"$OUT/ink-item.txt" 2>&1 || true
+  _a=$(awk -F'[ /]' '/^menubar-ink/{print $2}' "$OUT/ink-nobar.txt" 2>/dev/null)
+  _b=$(awk -F'[ /]' '/^menubar-ink/{print $2}' "$OUT/ink-item.txt" 2>/dev/null)
+  if [ -n "${_a:-}" ] && [ -n "${_b:-}" ] && [ "$_a" -ne "$_b" ]; then
+    say statusitem-visible yes "menubar ink $_a -> $_b"
+  elif [ -n "${_a:-}" ] && [ -n "${_b:-}" ]; then
+    say statusitem-visible no "menubar ink unchanged at $_a"
+  else
+    say statusitem-visible cannot "could not measure both strips"
+  fi
+else
+  say statusitem-visible cannot "a capture is missing"
+fi
+
+# --- D. THE RUN LOOP, WHICH IS A CONDITION AND NOT A TOOL --------------------
+#
+# The notes list this as needing hardware and it does not: whether an
+# NSRunLoop can be pumped from a coroutine without starving asyncio is a
+# property of the two libraries, so it is reproducible anywhere macOS runs.
+# That distinction is this tree's own (reproduce a CONDITION, instrument a
+# TOOL'S BEHAVIOUR where it runs) and it is what makes this free.
+hr "the run loop"
+
+cat >"$PY/runloop.py" <<'PYLOOP'
+"""Pump an NSRunLoop from an asyncio task and require BOTH to make progress.
+
+THE FAILURE THIS LOOKS FOR IS STARVATION, not an exception: a run loop pumped
+with too long a deadline simply blocks the event loop, and the symptom in a
+daemon is a tray that stops repainting rather than a traceback. So the
+assertion is on the tick COUNT of an independent task, which is the only
+thing that can tell "it ran" from "it ran instead of everything else".
+"""
+import asyncio
+import time
+
+from Foundation import NSRunLoop, NSDate
+
+TICKS = 40
+SLICE = 0.01
+
+
+async def pump():
+    n = 0
+    for _ in range(TICKS):
+        NSRunLoop.currentRunLoop().runUntilDate_(
+            NSDate.dateWithTimeIntervalSinceNow_(SLICE))
+        await asyncio.sleep(0)
+        n += 1
+    return n
+
+
+async def ticker():
+    n = 0
+    for _ in range(TICKS):
+        await asyncio.sleep(SLICE)
+        n += 1
+    return n
+
+
+async def main():
+    t0 = time.monotonic()
+    pumped, ticked = await asyncio.gather(pump(), ticker())
+    print("pumped %d ticked %d elapsed %.2fs" %
+          (pumped, ticked, time.monotonic() - t0))
+    # Both reached their count, so neither starved the other.
+    print("coexist %s" % (pumped == TICKS and ticked == TICKS))
+
+
+asyncio.run(main())
+PYLOOP
+
+if "$VENV/bin/python" "$PY/runloop.py" >"$OUT/runloop.txt" 2>&1; then
+  if grep -q 'coexist True' "$OUT/runloop.txt"; then
+    say runloop-coexists yes "$(head -1 "$OUT/runloop.txt")"
+  else
+    say runloop-coexists no "$(head -2 "$OUT/runloop.txt" | tr '\n' ' ')"
+  fi
+else
+  say runloop-coexists cannot "see runloop.txt"
+fi
+
+# --- E. NOTIFICATIONS, THE ONE THE NOTES CALL BLOCKED ------------------------
+#
+# `Toaster` keeps an id per banner so a finished turn withdraws the one it
+# raised, and that is four rules' worth of behaviour rather than a detail.
+# `osascript -e 'display notification'` returns NO id at all, so it cannot
+# express any of them; UNUserNotificationCenter can, and is documented as
+# wanting a signed bundle.
+#
+# AN AD-HOC SIGNATURE IS THE QUESTION. `codesign -s -` needs no certificate
+# and no Apple account, so if UNUserNotificationCenter accepts one then the
+# blocker the notes record disappears and the whole withdrawal design becomes
+# answerable here. Asked in four separate steps, because "the bundle built",
+# "the centre resolved", "authorization was granted" and "a withdrawal was
+# accepted" are four facts and one verdict over them would hide which failed.
+hr "notifications"
+
+_rc=0; running NotificationCenter || _rc=$?
+if [ "$_rc" -eq 1 ]; then _rc=0; running usernoted || _rc=$?; fi
+case $_rc in
+  0) say notification-daemon yes "NotificationCenter or usernoted is up" ;;
+  1) say notification-daemon no "neither NotificationCenter nor usernoted" ;;
+  *) say notification-daemon cannot "pgrep(1) is not on PATH" ;;
+esac
+
+# EACH OF THESE THREE GUARDS ITS TOOL FIRST, for the reason the header gives
+# and because the portability check already caught this file collapsing the
+# two once: a missing `osascript` is not a refusal to notify.
+if ! command -v osascript >/dev/null 2>&1; then
+  say osascript-notify cannot "no osascript on PATH"
+elif osascript -e 'display notification "probe" with title "mux"' \
+     >"$OUT/osascript.txt" 2>&1; then
+  say osascript-notify yes "accepted (says nothing about display)"
+else
+  say osascript-notify no "see osascript.txt"
+fi
+
+# The bundle. A plain script has no bundle identifier, and
+# UNUserNotificationCenter refuses without one, so the probe has to BE an app.
+APP=$OUT/MuxProbe.app
+mkdir -p "$APP/Contents/MacOS"
+cat >"$APP/Contents/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key>      <string>dev.mux.probe</string>
+  <key>CFBundleName</key>            <string>MuxProbe</string>
+  <key>CFBundleExecutable</key>      <string>probe</string>
+  <key>CFBundlePackageType</key>     <string>APPL</string>
+  <key>CFBundleShortVersionString</key> <string>1.0</string>
+  <key>LSUIElement</key>             <true/>
+</dict>
+</plist>
+PLIST
+
+cat >"$PY/un.py" <<'PYUN'
+"""Ask UNUserNotificationCenter for an id, an authorization and a withdrawal.
+
+FOUR FACTS, PRINTED SEPARATELY, because each failure means something
+different: no bundle id is a packaging problem, a None centre is an API
+refusal, denied authorization is a CI-has-no-human problem, and a rejected
+withdrawal is the one that would actually block the design.
+
+AUTHORIZATION IS ASKED WITH A BOUNDED WAIT. The callback arrives on another
+queue and there is nobody here to click anything, so a blocking wait would
+hang the job: the answer wanted is "what does an unattended runner do", and
+a timeout IS one of the possible answers rather than a failure of the probe.
+"""
+import threading
+
+from Foundation import NSBundle
+
+print("bundle-id %s" % NSBundle.mainBundle().bundleIdentifier())
+
+try:
+    import UserNotifications as UN
+except Exception as exc:                                    # noqa: BLE001
+    print("import-failed %s" % exc)
+    raise SystemExit(0)
+
+centre = UN.UNUserNotificationCenter.currentNotificationCenter()
+print("centre %s" % ("ok" if centre is not None else "None"))
+if centre is None:
+    raise SystemExit(0)
+
+done = threading.Event()
+state = {}
+
+
+def granted(ok, err):
+    state["granted"] = bool(ok)
+    state["error"] = str(err) if err else ""
+    done.set()
+
+
+centre.requestAuthorizationWithOptions_completionHandler_(
+    UN.UNAuthorizationOptionAlert | UN.UNAuthorizationOptionSound, granted)
+if done.wait(10):
+    print("authorized %s %s" % (state.get("granted"), state.get("error")))
+else:
+    print("authorized timeout (no human to answer)")
+
+content = UN.UNMutableNotificationContent.alloc().init()
+content.setTitle_("mux")
+content.setBody_("probe body")
+req = UN.UNNotificationRequest.requestWithIdentifier_content_trigger_(
+    "mux-probe-1", content, None)
+centre.addNotificationRequest_withCompletionHandler_(req, None)
+print("add-accepted yes")
+
+# THE WITHDRAWAL IS THE WHOLE POINT. If this call is reachable and does not
+# raise, then a finished turn can close the banner it raised, which is what
+# `Toaster` promises on Linux and what osascript cannot express at all.
+centre.removeDeliveredNotificationsWithIdentifiers_(["mux-probe-1"])
+centre.removePendingNotificationRequestsWithIdentifiers_(["mux-probe-1"])
+print("withdraw-accepted yes")
+PYUN
+
+if [ -x "$VENV/bin/pip" ] &&
+   "$VENV/bin/pip" install -q pyobjc-framework-UserNotifications \
+     >"$OUT/pyobjc-un.log" 2>&1; then
+  say pyobjc-usernotifications yes "installed"
+else
+  say pyobjc-usernotifications cannot "see pyobjc-un.log"
+fi
+
+# The bundle's executable is a shim that runs the probe through the venv, so
+# the process really is inside the bundle and NSBundle can answer for it.
+cat >"$APP/Contents/MacOS/probe" <<SHIM
+#!/bin/sh
+exec "$VENV/bin/python" "$PY/un.py"
+SHIM
+chmod +x "$APP/Contents/MacOS/probe"
+
+if ! command -v codesign >/dev/null 2>&1; then
+  say adhoc-codesign cannot "no codesign on PATH"
+elif codesign -s - --force --deep "$APP" >"$OUT/codesign.txt" 2>&1; then
+  say adhoc-codesign yes "signed $APP"
+else
+  say adhoc-codesign no "see codesign.txt"
+fi
+
+if "$APP/Contents/MacOS/probe" >"$OUT/un.txt" 2>&1; then
+  for _k in bundle-id centre authorized add-accepted withdraw-accepted \
+    import-failed; do
+    _v=$(awk -v k="$_k" '$1==k {sub($1" *",""); print; exit}' "$OUT/un.txt")
+    [ -n "$_v" ] && say "un-$_k" yes "$_v"
+  done
+  grep -q 'withdraw-accepted yes' "$OUT/un.txt" ||
+    say un-withdraw no "see un.txt"
+else
+  say usernotifications cannot "the bundle would not run: see un.txt"
+fi
+
+# --- F. launchd, WHICH IS HOW A macOS NOTIFIER WOULD BE INSTALLED ------------
+#
+# The Linux notifier is a systemd --user unit. Its macOS twin is a LaunchAgent
+# in `gui/<uid>`, and an agent cannot load into a domain that does not exist,
+# so this is really the session question asked a second way: a yes here means
+# `setup.sh` has somewhere to install to on this runner.
+hr "launchd"
+
+AGENT=$OUT/dev.mux.probe.plist
+cat >"$AGENT" <<AGENTPLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>    <string>dev.mux.probe</string>
+  <key>ProgramArguments</key>
+  <array><string>/bin/sh</string><string>-c</string>
+    <string>echo probe >$OUT/agent-ran.txt</string></array>
+  <key>RunAtLoad</key> <true/>
+</dict>
+</plist>
+AGENTPLIST
+
+if ! command -v launchctl >/dev/null 2>&1; then
+  say launchagent-runs cannot "no launchctl on PATH"
+elif launchctl bootstrap "gui/$(id -u)" "$AGENT" \
+       >"$OUT/launchctl.txt" 2>&1; then
+  sleep 2
+  if [ -f "$OUT/agent-ran.txt" ]; then
+    say launchagent-runs yes "the agent executed"
+  else
+    say launchagent-runs no "bootstrapped but never ran"
+  fi
+  launchctl bootout "gui/$(id -u)/dev.mux.probe" >>"$OUT/launchctl.txt" 2>&1 ||
+    true
+else
+  say launchagent-runs no "bootstrap refused: see launchctl.txt"
+fi
+
+hr "artifacts"
+ls -la "$OUT" | sed 's/^/  /'
+
+printf '\nmacos-probe: done. Nothing here gates CI.\n'

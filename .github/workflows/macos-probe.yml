@@ -1,0 +1,66 @@
+# What the macOS runner can actually DO, asked on demand.
+#
+# WHY THIS IS SEPARATE FROM `test`. It gates nothing, so it must not be able
+# to turn the suite red, and it uploads screenshots, which on every push would
+# be noise nobody reads. `workflow_dispatch` means it runs when somebody wants
+# an answer:
+#
+#     gh workflow run macos-probe.yml
+#     gh run watch
+#
+# WHAT IT IS FOR. mux's remaining macOS work is a desktop presenter
+# (`backend_appkit.py` over NSStatusItem and UNUserNotificationCenter, plus a
+# launchd agent). The notes record two questions as unanswerable without a Mac
+# to own, and this exists to find out how many really are: the run loop is a
+# CONDITION rather than a tool's behaviour, so it is reproducible anywhere
+# macOS runs, and an ad-hoc `codesign -s -` may be enough for the
+# notification centre, which would retire the one genuine blocker.
+#
+# THE ARTIFACT IS THE POINT AS MUCH AS THE LOG. `test/lab` does not LOOK at a
+# rendering, it MEASURES one: a band profile over a screenshot is how both
+# toast hooks were verified against a real daemon. If `screencapture` answers
+# with real pixels here then that whole technique is available on CI, so the
+# captures are uploaded for exactly the same reason the lab keeps its shots.
+name: macos-probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: macos-latest capability survey
+    runs-on: macos-latest
+    # A SURVEY THAT CANNOT FAIL THE RUN. The script already exits 0 whatever
+    # it finds; this is the second guard, because a probe that goes red once
+    # is a probe somebody disables.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: the machine
+        run: |
+          set -eu
+          uname -a
+          sw_vers || true
+          echo "whoami: $(id -un) uid=$(id -u)"
+
+      - name: probe
+        # Unguarded on purpose: the script's own contract is to exit 0, so a
+        # non-zero here means the SCRIPT broke rather than a capability being
+        # absent, and that is worth seeing rather than swallowing.
+        run: sh test/macos-probe "$RUNNER_TEMP/macos-probe"
+
+      - name: artifacts
+        # `always()`, because the captures are most wanted on the run where
+        # something went wrong, which is exactly when a default `success()`
+        # would withhold them.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-probe
+          path: ${{ runner.temp }}/macos-probe
+          if-no-files-found: warn
+          retention-days: 14

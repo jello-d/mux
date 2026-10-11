@@ -61,6 +61,20 @@ jobs:
       - name: the userland this ran against
         # Recorded because the NEXT failure is easier to read with it: which
         # tmux, which sh, and whether the tools are BSD or GNU.
+        #
+        # AND IT ANSWERS test/mux-portability.t'S OWN LIST, which is the half
+        # added later. That check keeps a list of constructs it calls GNU-only
+        # and every entry is a claim about BSD maintained by READING rather
+        # than by asking: four name a FLAG, which is the sound shape, and
+        # three name a bare COMMAND, which asserts the tool is absent
+        # outright. A wrong entry costs in both directions, since too strict
+        # refuses portable code (it already refused a `pgrep -x` in
+        # test/macos-probe) and too loose ships a real break.
+        #
+        # THE QUESTIONS CANNOT LIVE IN THE SUITE, because a table of those
+        # constructs IS what the rule greps for and its only opt-out is a `||`
+        # on the line, which would invert the exit status being measured. Here
+        # a fallback is the natural shape and nothing scans this file.
         run: |
           set -eu
           uname -a
@@ -71,6 +85,42 @@ jobs:
             && echo "readlink: has -f" || echo "readlink: NO -f (BSD)"
           command -v sha256sum >/dev/null 2>&1 \
             && echo "hash: sha256sum" || echo "hash: no sha256sum (BSD)"
+          # THE EXIT CODE AND THE STDERR, NEVER A VERDICT. A first version
+          # binarised this and was wrong four ways on Linux, every one the
+          # same mistake: it read an exit code that means something else.
+          # `grep -qP x /dev/null` exits 1 because /dev/null holds no `x`;
+          # `sed -i` on /dev/null fails because it is not a regular file;
+          # `pgrep -x launchd` exits 1 because there is no launchd on Linux;
+          # and `date -r` EXISTS on both with different meanings, taking a
+          # file on GNU and an epoch on BSD, so the GNU box reported the
+          # refusal and a Mac will report acceptance, which is backwards from
+          # what a reader would conclude. Printing rc plus the tool's own
+          # words cannot make any of those errors.
+          probe() {
+            _d=$1; shift
+            if ! command -v "$1" >/dev/null 2>&1; then
+              echo "gnuism $_d: NO SUCH TOOL"; return 0
+            fi
+            _e=$(mktemp); _rc=0
+            "$@" >/dev/null 2>"$_e" || _rc=$?
+            echo "gnuism $_d: rc=$_rc $(head -1 "$_e" | cut -c1-70)"
+            rm -f "$_e"
+          }
+          _f=$(mktemp); printf 'x\n' >"$_f"
+          probe 'grep -P'    grep -qP x "$_f"
+          probe 'sed -i'     sed -i -e s/x/y/ "$_f"
+          probe 'stat -c'    stat -c %s /dev/null
+          probe 'date -r'    date -r 0
+          probe 'date -d'    date -d @0
+          # UNDER 15 CHARACTERS, or the pattern can never match whatever
+          # pgrep supports: /proc/<pid>/comm truncates there and pgrep says
+          # so on stderr, which is what a longer name measured instead of
+          # the flag. rc=1 is supported-and-no-match; rc=2 is a usage error.
+          probe 'pgrep -x'   pgrep -x nosuchproc
+          probe 'realpath'   realpath /
+          probe 'nproc'      nproc
+          probe 'xargs -r'   xargs -r true </dev/null
+          rm -f "$_f"
 
       # The notifier's Python tests, on BOTH platforms now.
       #
