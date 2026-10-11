@@ -216,21 +216,53 @@ class Dispatch(unittest.TestCase):
     """`sni._backend()` picks by platform, which is the only line in the
     shared half that learns there are two.
 
-    THE DARWIN BRANCH IS REACHED ON LINUX by putting a stand-in in
-    sys.modules, because the real one needs PyObjC: the question here is
-    which module the dispatch CHOOSES, and importing the answer would make
-    this test about the dependency instead.
+    BOTH BRANCHES ARE REACHED ON BOTH PLATFORMS, through stand-ins, because
+    the question here is which module the dispatch CHOOSES and importing the
+    answer would make this a test about the dependency. That is not
+    hypothetical in either direction: dbus-next is Linux-only by marker so
+    the dbus branch cannot import on a Mac, and PyObjC is darwin-only so the
+    appkit branch could not import here if it had any platform import left.
+    A skip would have hidden half the dispatch on each platform, and a skip
+    is invisible.
+
+    THE STAND-IN CARRIES THE REAL MODULE NAME, so the assertion is about the
+    CHOICE rather than about the stub: a dispatch that picked the other
+    module would fail here on either platform.
     """
 
     def setUp(self):
         self._plat = sys.platform
         self._saved = sni._BACKEND
+        self._mods = {}
+        self._attrs = {}
+        import mux_desktop_notifier as pkg
+        self._pkg = pkg
+        for short in ("backend_dbus", "backend_appkit"):
+            full = "mux_desktop_notifier." + short
+            self._mods[full] = sys.modules.get(full)
+            self._attrs[short] = getattr(pkg, short, None)
+            stand_in = types.ModuleType(full)
+            sys.modules[full] = stand_in
+            # The ATTRIBUTE too: `from . import X` takes it off the package
+            # object when a previous real import already set it, so patching
+            # sys.modules alone would leave the real module in play.
+            setattr(pkg, short, stand_in)
         sni._BACKEND = None
 
     def tearDown(self):
         sys.platform = self._plat
         sni._BACKEND = self._saved
-        sys.modules.pop("mux_desktop_notifier.backend_appkit_stub", None)
+        for full, mod in self._mods.items():
+            if mod is None:
+                sys.modules.pop(full, None)
+            else:
+                sys.modules[full] = mod
+        for short, attr in self._attrs.items():
+            if attr is None:
+                if hasattr(self._pkg, short):
+                    delattr(self._pkg, short)
+            else:
+                setattr(self._pkg, short, attr)
 
     def test_linux_gets_the_dbus_backend(self):
         sys.platform = "linux"
