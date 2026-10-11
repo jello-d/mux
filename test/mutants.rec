@@ -4785,3 +4785,38 @@ t mux-toast-hooks
 - if [ -n "$_part" ] && [ "$_part" != global ]; then
 + if [ -n "$_part" ] && [ "$_part" != nosuchpart ]; then
 m pango-local-body: got
+
+= appkit-raise-always-mints-an-identifier
+f desktop-notifier/mux_desktop_notifier/backend_appkit.py
+t mux-desktop-notifier
+-         ident = prev[0] if prev else "mux-%d" % next(_COUNTER)
++         ident = "mux-%d" % next(_COUNTER)
+m test_a_replacement_REUSES_the_previous_identifier
+
+= appkit-withdraw-leaves-the-pending-one
+f desktop-notifier/mux_desktop_notifier/backend_appkit.py
+t mux-desktop-notifier
+-         centre.removePendingNotificationRequestsWithIdentifiers_(ident)
++         pass
+m test_it_withdraws_from_BOTH_lists
+
+= appkit-completion-swallows-a-refusal
+f desktop-notifier/mux_desktop_notifier/backend_appkit.py
+t mux-desktop-notifier
+-         raise RuntimeError(str(err))
++         return
+m test_an_error_becomes_an_exception
+
+= appkit-identifier-counter-never-advances
+f desktop-notifier/mux_desktop_notifier/backend_appkit.py
+t mux-desktop-notifier
+-         n += 1
++         n += 0
+m test_two_different_sessions_do_NOT_share_one
+
+= backend-dispatch-ignores-darwin
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
+-         if sys.platform == "darwin":
++         if False:
+m test_darwin_gets_the_appkit_backend

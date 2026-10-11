@@ -8,9 +8,16 @@ requires-python = ">=3.8"
 # exactly one module (backend_dbus.py), so a platform with no D-Bus should not
 # be made to carry it. The marker is what lets a macOS presenter be an
 # ADDITION: `pip install` there resolves, and the shared half imports.
+# AND PyObjC ONLY WHERE THERE IS A MENU BAR, the same rule pointing the other
+# way. TWO FRAMEWORK WHEELS RATHER THAN THE `pyobjc` METAPACKAGE, which pulls
+# every framework Apple ships: measured on the runner, Cocoa and
+# UserNotifications are all backend_appkit imports, and they are what it asks
+# for. `pyobjc-core` arrives as their dependency rather than being named here.
 dependencies = [
   "Pillow>=9",
   "dbus-next>=0.2.3; sys_platform == 'linux'",
+  "pyobjc-framework-Cocoa>=9; sys_platform == 'darwin'",
+  "pyobjc-framework-UserNotifications>=9; sys_platform == 'darwin'",
 ]
 
 [project.scripts]

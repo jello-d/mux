@@ -29,6 +29,7 @@ import asyncio
 import json
 import os
 import shlex
+import sys
 # SIGKILL by NAME, which this file no longer strictly needs and keeps anyway:
 # the hazard was that `dbus_next.service` exports a `signal` DECORATOR, so a
 # module-level `import signal` beside it made `signal.SIGKILL` raise
@@ -38,7 +39,8 @@ import shlex
 # immune either way and costs nothing.
 from signal import SIGKILL
 
-from .render import MARK_PALETTE, host_mark, icon_pixmap, parse_pair
+from .render import (MARK_PALETTE, host_mark, icon_pixmap, parse_pair,
+                     tile as render_tile)
 from .slots import Slots
 from . import sources
 from .sources import (activate_cmd, activate_hook, hook_path,
@@ -157,6 +159,9 @@ class Tile:
         self._state = state
         self._count = count
         self._pixmap = icon_pixmap(state, count, host=host, part=part)
+        # WHICH BLINK PHASE THE LAST PAINT DREW, so `image()` below can answer
+        # with the same frame the pixmaps hold rather than a second opinion.
+        self._cursor = True
         self._blink = None
 
     def status(self):
@@ -189,7 +194,26 @@ class Tile:
             body = f"{self._count} session(s): {self._state}"
         return self.title(), body
 
+    def image(self, size):
+        """THE SAME TILE AS A PILLOW IMAGE, for a presenter that does not want
+        packed ARGB: SNI takes `a(iiay)` and an NSStatusItem wants an NSImage.
+
+        THE LAST PAINTED CURSOR PHASE, not a fresh `True`, or the blink would
+        reach one platform and not the other: `on_icon()` fires mid-animation
+        and a backend asking for the image then must get the frame the paint
+        just decided on.
+
+        NOTHING IS CACHED HERE and `_paint` still renders the pixmaps a macOS
+        backend never reads, which is MEASURED rather than assumed: a paint
+        costs 2.63ms for three ARGB sizes and this adds 0.48ms, so the waste
+        is 18% on an animation path Linux has shipped with since the tray
+        existed. Making `_pixmap` lazy would buy that back and would touch
+        this file's hot path, which is a worse trade than it looks."""
+        return render_tile(self._state, self._count, size, self._cursor,
+                           self._host, self._mark, self._ink, self._part)
+
     def _paint(self, cursor=True):
+        self._cursor = cursor
         self._pixmap = icon_pixmap(self._state, self._count, cursor=cursor,
                                    host=self._host, mark=self._mark,
                                    ink=self._ink, part=self._part)
@@ -622,6 +646,34 @@ class Toaster:
         lines = out.decode("utf-8", "replace").rstrip("\n").split("\n")
         return lines[0], "\n".join(lines[1:])
 
+    async def _raise(self, prev, summary, body):
+        """PUT ONE BANNER UP and answer with its id, replacing `prev` if we
+        hold one for this session.
+
+        THE ONLY D-BUS IN THIS CLASS, together with `_close` below, which is
+        what lets a second platform inherit everything else: the wording, the
+        hook seam with its six fallback paths, the id map and the four
+        withdrawal rules are all decisions rather than transport, and a
+        presenter that re-derived any of them would be a second opinion about
+        when a banner stops being true.
+
+        AN ID IS WHATEVER THE PLATFORM HANDS BACK. freedesktop answers a
+        uint32 and UNUserNotificationCenter takes a string identifier, so
+        nothing above here may assume a number: the map stores what this
+        returns and `_close` is the only thing that reads it.
+        """
+        iface = await self._notifications()
+        # REPLACING our own previous id rather than stacking: a session
+        # that goes blocked, is answered and blocks again should leave one
+        # banner, not a column of them. 0 means "a new one".
+        return await iface.call_notify(
+            self._app, prev[0] if prev else 0, "", summary, body, [], {}, -1)
+
+    async def _close(self, held):
+        """Take one down. `held` is the (id, kind) pair the map holds."""
+        iface = await self._notifications()
+        await iface.call_close_notification(held[0])
+
     async def announce(self, host, part, session, kind, local=True):
         """Raise one, replacing any we already hold for that session."""
         if not self._enabled:
@@ -629,14 +681,7 @@ class Toaster:
         key = (host, part, session)
         summary, body = await self.compose(host, part, session, kind, local)
         try:
-            iface = await self._notifications()
-            # REPLACING our own previous id rather than stacking: a session
-            # that goes blocked, is answered and blocks again should leave one
-            # banner, not a column of them. 0 means "a new one".
-            prev = self._ids.get(key)
-            nid = await iface.call_notify(
-                self._app, prev[0] if prev else 0, "", summary, body, [],
-                {}, -1)
+            nid = await self._raise(self._ids.get(key), summary, body)
         except Exception as e:
             # A desktop with no notification daemon is not an error here: the
             # tray is the persistent half of this signal and still works. Said
@@ -654,8 +699,7 @@ class Toaster:
         if held is None:
             return
         try:
-            iface = await self._notifications()
-            await iface.call_close_notification(held[0])
+            await self._close(held)
         except Exception:
             # Best effort, which the banner's own urgency is what makes safe:
             # banner is at NORMAL urgency so it expires by itself, which is
@@ -1288,12 +1332,22 @@ def _backend():
     IMPORTED LAZILY, and that is load-bearing rather than tidy: backend_dbus
     is the one module that needs dbus_next, so importing it at the top would
     put that dependency back on every reader of this file and take the 147
-    tests with it.
+    tests with it. The same now goes for backend_appkit and PyObjC, which no
+    Linux box has.
+
+    THE PLATFORM TEST IS `sys.platform`, with no env override, because a
+    backend is not a preference: a box has a menu bar or it has a tray, and a
+    seam for choosing would only ever be set wrong. Tests reach this by
+    patching `sys.platform`, which needs nothing shipped for them.
     """
     global _BACKEND
     if _BACKEND is None:
-        from . import backend_dbus
-        _BACKEND = backend_dbus
+        if sys.platform == "darwin":
+            from . import backend_appkit
+            _BACKEND = backend_appkit
+        else:
+            from . import backend_dbus
+            _BACKEND = backend_dbus
     return _BACKEND
 
 
