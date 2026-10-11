@@ -283,50 +283,73 @@ fi
 # in the menu bar is distinguishable from a window appearing somewhere else,
 # which a whole-image count never could.
 cat >"$PY/diff.py" <<'PYDIFF'
-"""Where, and by how much, do two captures differ.
+"""Where, and by how much, do two captures differ. Optionally in one strip.
 
-The bbox is the finding. A count alone cannot tell a menu bar item from a
-dialog that happened to open, and this probe's whole question is which.
+    diff.py BEFORE AFTER [CROP_HEIGHT]
+
+IT ASKS ABOUT A REGION, because the whole screen is the wrong question and
+measuring it cost two iterations to learn. A whole-screen diff of a menu bar
+item reported `(34,8)-(990,763)`, which reads as "the item is not in the bar";
+cropped to the top 25 rows the same pair answers `(645,8)-(866,22)`, 1057
+pixels, which is the item. The rest was the DOCK moving at y=734..740, about
+500 pixels a row, between two captures two seconds apart.
+
+SO BOTH ARE PRINTED AND THE CROP DECIDES. The full bbox stays as evidence,
+since "something else on this desktop also moved" is worth seeing rather than
+cropping away silently, and on a shared runner it is the normal case.
 """
 import sys
 from PIL import Image, ImageChops
 
 a = Image.open(sys.argv[1]).convert("RGB")
 b = Image.open(sys.argv[2]).convert("RGB")
+crop = int(sys.argv[3]) if len(sys.argv) > 3 else 0
 if a.size != b.size:
     print("sizes-differ %s %s" % (a.size, b.size))
     raise SystemExit(0)
-d = ImageChops.difference(a, b)
-box = d.getbbox()
 print("size %dx%d" % a.size)
-if box is None:
-    print("bbox none")
-    print("changed 0")
-    raise SystemExit(0)
-px = d.load()
-n = sum(1 for y in range(a.size[1]) for x in range(a.size[0])
-        if sum(px[x, y]) > 10)
-print("bbox %d,%d %d,%d" % box)
-print("changed %d" % n)
-# The menu bar is at the top, so a change confined to the first ~40 rows is
-# the one this probe asked for. Reported rather than judged.
-print("in-menubar %s" % (box[3] <= 40))
+
+
+def report(tag, im1, im2):
+    d = ImageChops.difference(im1, im2)
+    box = d.getbbox()
+    if box is None:
+        print("%s-bbox none" % tag)
+        print("%s-changed 0" % tag)
+        return
+    px = d.load()
+    n = sum(1 for y in range(im1.size[1]) for x in range(im1.size[0])
+            if sum(px[x, y]) > 10)
+    print("%s-bbox %d,%d %d,%d" % ((tag,) + box))
+    print("%s-changed %d" % (tag, n))
+
+
+report("full", a, b)
+if crop > 0:
+    h = min(crop, a.size[1])
+    report("crop", a.crop((0, 0, a.size[0], h)), b.crop((0, 0, b.size[0], h)))
 PYDIFF
 
+# 25 ROWS, WHICH IS MEASURED RATHER THAN ASSUMED: at the runner's 1024x768 the
+# bar is luminance 218 through row 24 and the desktop is black from row 30, so
+# it is a 1x panel and the earlier guess of 60 rows for a 2x one was wrong. A
+# bar taller than this crops to part of itself, which can only UNDER-report.
+MENUBAR_ROWS=25
 if [ -f "$OUT/shot-nobar.png" ] && [ -f "$OUT/shot-item.png" ] &&
    [ -x "$VENV/bin/python" ] &&
    "$VENV/bin/python" "$PY/diff.py" "$OUT/shot-nobar.png" \
-     "$OUT/shot-item.png" >"$OUT/diff-item.txt" 2>&1; then
-  _ch=$(awk '/^changed/{print $2}' "$OUT/diff-item.txt")
-  _bb=$(awk '/^bbox/{print $2" "$3}' "$OUT/diff-item.txt")
-  _mb=$(awk '/^in-menubar/{print $2}' "$OUT/diff-item.txt")
-  if [ "${_ch:-0}" -gt 0 ] && [ "$_mb" = True ]; then
-    say statusitem-visible yes "$_ch px changed at $_bb (menu bar)"
-  elif [ "${_ch:-0}" -gt 0 ]; then
-    say statusitem-visible no "$_ch px changed at $_bb, NOT the menu bar"
+     "$OUT/shot-item.png" "$MENUBAR_ROWS" >"$OUT/diff-item.txt" 2>&1; then
+  _ch=$(awk '/^crop-changed/{print $2}' "$OUT/diff-item.txt")
+  _bb=$(awk '/^crop-bbox/{print $2" "$3}' "$OUT/diff-item.txt")
+  _fb=$(awk '/^full-bbox/{print $2" "$3}' "$OUT/diff-item.txt")
+  if [ "${_ch:-0}" -gt 0 ]; then
+    say statusitem-visible yes "$_ch px in the bar at $_bb"
   else
-    say statusitem-visible no "the screen did not change at all"
+    say statusitem-visible no "the menu bar did not change"
   fi
+  # Printed either way: on a shared desktop something else usually moved, and
+  # a reader comparing two runs wants to know it was looked at.
+  say screen-also-changed yes "full-screen bbox $_fb"
 else
   say statusitem-visible cannot "a capture is missing or Pillow failed"
 fi
