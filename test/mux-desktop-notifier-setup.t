@@ -518,4 +518,154 @@ else
   printf '  (skipping the hook-resolution marker: no usable python3)\n'
 fi
 
+# --- THE launchd ARM, which no Linux box would otherwise ever execute -------
+#
+# A SECOND SERVICE MANAGER IS A SECOND SEAM, and this package has shipped the
+# same gap four times: both latch hooks, all four envhooks and the notifier's
+# own config key were each proven at the CALLER and never once run. The arm
+# below decides where a macOS install puts its agent and whether `check` can
+# see it, so it is stubbed here rather than left to a runner that has no
+# AppKit either.
+#
+# `uname` IS WHAT SELECTS IT, so the stub is the whole switch: the curated
+# PATH above deliberately has no `uname`, which is why every test so far took
+# the systemd arm and why adding one here cannot disturb them.
+cat >"$T/bin/uname" <<'EOF'
+#!/bin/sh
+[ "${1:-}" = -s ] && { printf 'Darwin\n'; exit 0; }
+printf 'Darwin\n'
+EOF
+chmod +x "$T/bin/uname"
+cat >"$T/bin/launchctl" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$*" >>"$LCTL"
+case ${1:-} in
+print)
+  [ -n "${LCTL_LOADED:-}" ] || exit 1
+  printf 'state = running\n'
+  [ -z "${LCTL_PID:-}" ] || printf '\tpid = %s\n' "$LCTL_PID"
+  exit 0 ;;
+bootstrap)
+  if [ -n "${LCTL_FAIL:-}" ]; then
+    printf '%s\n' "$LCTL_FAIL" >&2
+    exit 1
+  fi ;;
+esac
+exit 0
+EOF
+chmod +x "$T/bin/launchctl"
+for _c in id mv chmod; do
+  _p=$(command -v "$_c" 2>/dev/null) && ln -sf "$_p" "$T/bin/$_c"
+done
+LCTL=$T/launchctl.log
+PLIST=$T/home/Library/LaunchAgents/dev.mux.desktop-notifier.plist
+mkdir -p "$T/home"
+
+runmac() {   # <verb ...>
+  : >"$LCTL"
+  RC=0
+  OUT=$(env PATH="$T/bin" HOME="$T/home" XDG_CONFIG_HOME="$T/xdg" \
+    XDG_STATE_HOME="${STATE_HOME:-$T/state}" \
+    XDG_DATA_HOME="$T/home/.local/share" \
+    MUX_DESKTOP_NOTIFIER_VENV="$T/venv" MUX_DESKTOP_NOTIFIER_BIN="$T/bin" \
+    LCTL="$LCTL" LCTL_LOADED="${LCTL_LOADED:-}" LCTL_PID="${LCTL_PID:-}" \
+    LCTL_FAIL="${LCTL_FAIL:-}" \
+    "$SETUP" "$@" 2>&1) || RC=$?
+}
+
+runmac service
+[ "$RC" = 0 ] || fail "service on the launchd arm failed: $RC
+[$OUT]"
+[ -f "$PLIST" ] || fail "no agent plist was written to $PLIST
+[$OUT]"
+
+# THE PATHS ARE SUBSTITUTED, which is the whole reason the plist is WRITTEN
+# rather than copied: launchd expands nothing, so a shipped `%h` would be a
+# literal path nobody has.
+grep -q '@EXEC@\|@PATH@\|@LOG@' "$PLIST" &&
+  fail "the installed plist still holds a placeholder:
+$(cat "$PLIST")"
+grep -q "$T/bin/mux-desktop-notifier" "$PLIST" ||
+  fail "the plist does not name the installed executable:
+$(cat "$PLIST")"
+
+# BOOTOUT BEFORE BOOTSTRAP, because `bootstrap` over a loaded label FAILS
+# rather than replacing, so a re-run would never pick up a changed plist.
+grep -q '^bootout' "$LCTL" ||
+  fail "service never booted the old agent out:
+$(cat "$LCTL")"
+grep -q '^bootstrap' "$LCTL" ||
+  fail "service never bootstrapped the agent:
+$(cat "$LCTL")"
+_bo=$(grep -n '^bootout' "$LCTL" | head -1 | cut -d: -f1)
+_bs=$(grep -n '^bootstrap' "$LCTL" | head -1 | cut -d: -f1)
+[ "$_bo" -lt "$_bs" ] ||
+  fail "bootstrap came BEFORE bootout, so a changed plist is ignored:
+$(cat "$LCTL")"
+case $OUT in (*'(re)STARTED'*) ;;
+  (*) fail "a working bootstrap was not reported as started: [$OUT]" ;;
+esac
+
+# NO GUI SESSION IS THE THIRD ANSWER, not a failure: over ssh or before
+# anybody has logged in, `gui/<uid>` does not exist and launchd loads the
+# plist at the next login. The systemd arm already has this case and the two
+# must agree about it, or a provisioner fails on a headless Mac.
+LCTL_FAIL='Could not find domain for' runmac service; unset LCTL_FAIL
+[ "$RC" = 0 ] ||
+  fail "a missing GUI session must not fail the install, got $RC: [$OUT]"
+case $OUT in (*'next login'*) ;;
+  (*) fail "a missing GUI session was not reported as deferred: [$OUT]" ;;
+esac
+
+# AND A REAL FAILURE IS STILL A FAILURE. Asserted separately, because one
+# message covering both cases is the defect this file's systemd arm records
+# at length: a report that cannot tell a working start from a broken one.
+LCTL_FAIL='some other launchd problem' runmac service; unset LCTL_FAIL
+[ "$RC" != 0 ] ||
+  fail "a failed bootstrap reported success: [$OUT]"
+case $OUT in (*'BOOTSTRAP'*) ;;
+  (*) fail "a failed bootstrap did not say so: [$OUT]" ;;
+esac
+
+# `check` COMPARES THE SUBSTITUTED PLIST, from the installer's own producer,
+# so a path that moved reads as STALE rather than current. A `cmp` against
+# the shipped file (which still holds the placeholders) could never match.
+runmac service
+LCTL_LOADED=1 runmac check; unset LCTL_LOADED
+case $OUT in (*'dev.mux.desktop-notifier.plist current'*) ;;
+  (*) fail "a freshly written plist did not read current: [$OUT]" ;;
+esac
+printf 'x\n' >>"$PLIST"
+LCTL_LOADED=1 runmac check; unset LCTL_LOADED
+case $OUT in (*'missing or stale'*) ;;
+  (*) fail "an edited plist was not reported stale: [$OUT]" ;;
+esac
+
+# LOADED IS ASKED OF THE DOMAIN, NOT THE FILE, because a plist on disk that
+# was never bootstrapped is exactly the installed-and-inert state this check
+# exists to catch.
+runmac service
+unset LCTL_LOADED; runmac check
+case $OUT in (*'not loaded'*) ;;
+  (*) fail "an unloaded agent was not reported: [$OUT]" ;;
+esac
+LCTL_LOADED=1 runmac check; unset LCTL_LOADED
+case $OUT in (*'dev.mux.desktop-notifier loaded'*) ;;
+  (*) fail "a loaded agent was not reported as loaded: [$OUT]" ;;
+esac
+
+# UNINSTALL BOOTS OUT BEFORE REMOVING THE PLIST, because launchd resolves the
+# label from the loaded job: deleting the file first leaves a running agent
+# with nothing to unload it by until the next login.
+LCTL_LOADED=1 runmac uninstall; unset LCTL_LOADED
+[ -f "$PLIST" ] && fail "uninstall left the agent plist behind"
+grep -q '^bootout' "$LCTL" ||
+  fail "uninstall never booted the agent out:
+$(cat "$LCTL")"
+grep -q 'systemctl' "$LCTL" 2>/dev/null &&
+  fail "the launchd arm reached for systemctl"
+
+rm -f "$T/bin/uname" "$T/bin/launchctl"
+
+
 pass

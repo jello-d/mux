@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The launchd twin of mux-desktop-notifier.service.
+
+  A LaunchAGENT, not a daemon, and the difference is the whole point: an agent
+  runs in the user's `gui/<uid>` domain, which macOS only provisions on a real
+  login, and a menu bar item cannot exist anywhere else. A LaunchDaemon would
+  load at boot and have no session to draw in. Verified on a CI runner, where
+  `launchctl bootstrap gui/<uid>` loaded this shape and ran it.
+
+  @PATHS@ ARE SUBSTITUTED BY setup.sh, because a plist has no `%h` and no
+  environment expansion: launchd takes these strings literally. systemd's unit
+  can ship verbatim with `%h` in it; this one cannot, so the installer writes
+  it rather than copying it, and `check` compares what it WOULD write against
+  what is there.
+
+  KeepAlive RATHER THAN RunAtLoad ALONE, matching Restart=always on the other
+  platform: the tray is meant to outlive a crash, and an agent that exits
+  without KeepAlive stays gone until the next login.
+
+  THE PATH IS NAMED FOR THE SAME REASON THE UNIT NAMES IT. An agent inherits
+  no login shell, so `mux`, which the daemon re-execs on every poll, would not
+  be found. /opt/homebrew/bin comes first because that is where Apple silicon
+  Homebrew puts things and a mux installed by `brew` lives there.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>dev.mux.desktop-notifier</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>@EXEC@</string>
+  </array>
+
+  <!--
+    @PATH@ IS COMPOSED BY setup.sh RATHER THAN SPELLED HERE, because XML
+    whitespace inside a <string> is SIGNIFICANT: a plist has no line
+    continuation, so the full PATH cannot be wrapped and would be the one
+    line in this package over 80 columns. The installer already knows
+    BIN_DIR, so it is the right owner anyway, and it can wrap.
+  -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>@PATH@</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <!--
+    LSUIElement's launchd equivalent. Without it a GUI-session agent can get a
+    Dock tile, which a tray daemon must not have: `export` also sets the
+    activation policy to Accessory in code, and both are wanted, because the
+    policy is set only once an item is published and this covers the window
+    before that.
+  -->
+  <key>ProcessType</key>
+  <string>Interactive</string>
+
+  <key>StandardOutPath</key>
+  <string>@LOG@</string>
+  <key>StandardErrorPath</key>
+  <string>@LOG@</string>
+</dict>
+</plist>

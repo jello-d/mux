@@ -525,8 +525,8 @@ m ANSI colour into a pipe
 = indicator-stale-unit-reads-current
 f desktop-notifier/setup.sh
 t mux-desktop-notifier-setup
--   if cmp -s "$PKG_DIR/$UNIT" "$UNIT_DIR/$UNIT" 2>/dev/null
-+   if [ -f "$UNIT_DIR/$UNIT" ]
+-     if cmp -s "$PKG_DIR/$UNIT" "$UNIT_DIR/$UNIT" 2>/dev/null
++     if [ -f "$UNIT_DIR/$UNIT" ]
 m DRIFTED unit file read as current
 
 = indicator-check-never-fails
@@ -4820,3 +4820,45 @@ t mux-desktop-notifier
 -         if sys.platform == "darwin":
 +         if False:
 m test_darwin_gets_the_appkit_backend
+
+= notifier-launchd-arm-not-taken
+f desktop-notifier/setup.sh
+t mux-desktop-notifier-setup
+-   SVC=launchd
++   SVC=systemd
+m the installed plist still holds a placeholder
+
+= notifier-agent-bootstrap-skips-the-bootout
+f desktop-notifier/setup.sh
+t mux-desktop-notifier-setup
+-   launchctl bootout "$_gui/$LABEL" 2>/dev/null || true
++   :
+m never booted the old agent out
+
+= notifier-agent-no-gui-session-is-fatal
+f desktop-notifier/setup.sh
+t mux-desktop-notifier-setup
+-   *"Could not find domain"*|*"Bootstrap failed"*|*"Operation not permitted"*)
++   *"__never__")
+m must not fail the install
+
+= notifier-agent-check-reads-the-shipped-plist
+f desktop-notifier/setup.sh
+t mux-desktop-notifier-setup
+-     if _agent_plist 2>/dev/null | cmp -s - "$UNIT_DIR/$UNIT" 2>/dev/null
++     if cmp -s "$PKG_DIR/$UNIT" "$UNIT_DIR/$UNIT" 2>/dev/null
+m did not read current
+
+= notifier-agent-loaded-asks-the-file
+f desktop-notifier/setup.sh
+t mux-desktop-notifier-setup
+-     if launchctl print "gui/$(id -u)/$LABEL" >/dev/null 2>&1
++     if [ -f "$UNIT_DIR/$UNIT" ]
+m an unloaded agent was not reported
+
+= notifier-uninstall-skips-the-agent-bootout
+f desktop-notifier/setup.sh
+t mux-desktop-notifier-setup
+-     launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
++     :
+m uninstall never booted the agent out

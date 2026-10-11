@@ -43,8 +43,55 @@ VENV=${MUX_DESKTOP_NOTIFIER_VENV:-$_mux_pay/venv}
 # rather than each spelling the old path again.
 OLD_VENV=$HOME/.venvs/mux-desktop-notifier
 BIN_DIR=${MUX_DESKTOP_NOTIFIER_BIN:-$HOME/.local/bin}
-UNIT=mux-desktop-notifier.service
-UNIT_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user
+
+# TWO SERVICE MANAGERS, CHOSEN BY PLATFORM, the same split `_backend()` makes
+# in the daemon: a box has a systemd user manager or it has launchd, and that
+# is not a preference anybody should be able to set wrongly.
+#
+# A LaunchAGENT RATHER THAN A DAEMON, which is the whole of why this works: an
+# agent runs in `gui/<uid>`, the domain macOS provisions only on a real login,
+# and a menu bar item cannot exist anywhere else. Verified on a CI runner,
+# where `launchctl bootstrap gui/<uid>` loaded and ran one.
+#
+# AND THE PLIST IS WRITTEN RATHER THAN COPIED, because launchd takes its
+# strings literally: there is no `%h` and no environment expansion, so the
+# paths the unit file can ship verbatim have to be substituted here. `check`
+# compares what this WOULD write against what is installed, so the generated
+# form is still asserted rather than trusted.
+case $(uname -s 2>/dev/null || echo unknown) in
+Darwin)
+  SVC=launchd
+  UNIT=dev.mux.desktop-notifier.plist
+  UNIT_DIR=$HOME/Library/LaunchAgents
+  LABEL=dev.mux.desktop-notifier
+  AGENT_LOG=$_mux_pay/desktop-notifier.log
+  ;;
+*)
+  SVC=systemd
+  UNIT=mux-desktop-notifier.service
+  UNIT_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user
+  LABEL=
+  AGENT_LOG=
+  ;;
+esac
+
+# _agent_plist: the plist as it SHOULD be, on stdout.
+#
+# ONE PRODUCER FOR THE INSTALL AND THE CHECK, so "what is installed" and "what
+# we would install" cannot be two opinions. That is the same reason the unit
+# file is compared with `cmp` on the other platform rather than re-described.
+_agent_plist() {
+  # THE PATH IS NAMED FOR THE SAME REASON THE systemd UNIT NAMES IT: an agent
+  # inherits no login shell, so `mux`, which the daemon re-execs on every
+  # poll, would not be found. /opt/homebrew/bin comes before /usr/local/bin
+  # because that is where Apple silicon Homebrew puts things, and a mux
+  # installed by `brew` lives there.
+  _ap_path=$BIN_DIR:$HOME/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin
+  sed -e "s|@EXEC@|$BIN_DIR/mux-desktop-notifier|g" \
+      -e "s|@PATH@|$_ap_path|g" \
+      -e "s|@LOG@|$AGENT_LOG|g" \
+      "$PKG_DIR/$UNIT"
+}
 
 # _retire_old_venv: A REBUILD, NOT A MOVE, and the distinction is the whole
 # reason this is safe. A venv bakes an ABSOLUTE interpreter path into every
@@ -105,6 +152,49 @@ app() {
 }
 
 service() {
+  [ "$SVC" = launchd ] && { _service_launchd; return $?; }
+  _service_systemd
+}
+
+# _service_launchd: install the agent and (re)start it.
+#
+# BOOTOUT THEN BOOTSTRAP, which is launchd's idiom for "pick up a changed
+# plist": there is no `daemon-reload`, and `bootstrap` over an already-loaded
+# label fails rather than replacing. The bootout is allowed to fail, because
+# the first install has nothing to unload and that is not an error.
+#
+# AND IT REPORTS WHICH OF THREE HAPPENED, for the reason the systemd arm
+# already carries at length: this package has paid once for a message that
+# could not tell a working restart from a failed one.
+_service_launchd() {
+  mkdir -p "$UNIT_DIR" "$(dirname -- "$AGENT_LOG")"
+  _agent_plist >"$UNIT_DIR/$UNIT.new" || {
+    echo "mux-desktop-notifier: could not write the agent plist" >&2
+    return 1; }
+  mv -f "$UNIT_DIR/$UNIT.new" "$UNIT_DIR/$UNIT"
+  chmod 0644 "$UNIT_DIR/$UNIT"
+  _gui=gui/$(id -u)
+  launchctl bootout "$_gui/$LABEL" 2>/dev/null || true
+  _svc_err=$(launchctl bootstrap "$_gui" "$UNIT_DIR/$UNIT" 2>&1) && {
+    echo "mux-desktop-notifier: agent $LABEL installed and (re)STARTED"
+    return 0; }
+  # NO GUI SESSION IS NOT A FAILURE, and it is the macOS twin of "no user
+  # manager here": over ssh, or before anybody has logged in at the window
+  # server, `gui/<uid>` does not exist. The plist is in place and launchd
+  # loads it at the next login, which is the same third answer systemd has.
+  case $_svc_err in
+  *"Could not find domain"*|*"Bootstrap failed"*|*"Operation not permitted"*)
+    echo "mux-desktop-notifier: agent $LABEL installed; no GUI session" \
+      "here, so it starts at the next login"
+    return 0 ;;
+  esac
+  echo "mux-desktop-notifier: agent $LABEL installed, but the BOOTSTRAP" \
+    "FAILED, so it is not running:" >&2
+  printf '%s\n' "$_svc_err" | sed 's/^/mux-desktop-notifier:   /' >&2
+  return 1
+}
+
+_service_systemd() {
   mkdir -p "$UNIT_DIR"
   install -m 0644 "$PKG_DIR/$UNIT" "$UNIT_DIR/$UNIT"
   systemctl --user daemon-reload 2>/dev/null || true
@@ -143,9 +233,16 @@ service() {
 }
 
 uninstall() {
-  systemctl --user disable --now "$UNIT" 2>/dev/null || true
+  if [ "$SVC" = launchd ]; then
+    # BOOTOUT BEFORE REMOVING THE PLIST, because launchd resolves the label
+    # from the loaded job rather than from the file: deleting it first leaves
+    # a running agent with nothing to unload it by until the next login.
+    launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
+  else
+    systemctl --user disable --now "$UNIT" 2>/dev/null || true
+  fi
   rm -f "$UNIT_DIR/$UNIT" "$BIN_DIR/mux-desktop-notifier"
-  systemctl --user daemon-reload 2>/dev/null || true
+  [ "$SVC" = launchd ] || systemctl --user daemon-reload 2>/dev/null || true
   echo "mux-desktop-notifier: uninstalled (venv $VENV left in place)"
   echo "mux-desktop-notifier: it sits inside mux's payload, so \`mux\`'s own"
   echo "mux-desktop-notifier:   uninstall removes it with everything else."
@@ -243,8 +340,16 @@ _running_current() {
   # box where nothing whatever is installed.
   _rn_dir=$(_installed_dir)
   [ -n "$_rn_dir" ] && [ -d "$_rn_dir" ] || return 0
-  _rn_pid=$(systemctl --user show -p MainPID --value "$UNIT" 2>/dev/null \
-    || true)
+  if [ "$SVC" = launchd ]; then
+    # launchctl PRINTS a `pid = N` line for a running job and omits it for a
+    # loaded-but-stopped one, which is the same two answers systemd gives
+    # through MainPID. Asked of the domain, since that is where the job is.
+    _rn_pid=$(launchctl print "gui/$(id -u)/$LABEL" 2>/dev/null \
+      | awk -F'= *' '$1 ~ /^[[:space:]]*pid$/ {print $2; exit}' || true)
+  else
+    _rn_pid=$(systemctl --user show -p MainPID --value "$UNIT" 2>/dev/null \
+      || true)
+  fi
   case ${_rn_pid:-0} in
   ''|0|*[!0-9]*)
     # NOT RUNNING IS NOT STALE: there is no process to be wrong about.
@@ -326,13 +431,32 @@ check() {
   if [ -x "$BIN_DIR/mux-desktop-notifier" ]; then
     ok "$BIN_DIR/mux-desktop-notifier"
   else bad "$BIN_DIR/mux-desktop-notifier missing"; fi
-  if cmp -s "$PKG_DIR/$UNIT" "$UNIT_DIR/$UNIT" 2>/dev/null
-  then ok "$UNIT current"; else bad "$UNIT missing or stale"; fi
+  # THE INSTALLED UNIT AGAINST WHAT WE WOULD WRITE. On systemd that is the
+  # shipped file; on launchd it is the SUBSTITUTED plist, from the one
+  # producer the installer uses, so a path that moved (a different BIN_DIR, a
+  # relocated venv) reads as stale rather than as current.
+  if [ "$SVC" = launchd ]; then
+    if _agent_plist 2>/dev/null | cmp -s - "$UNIT_DIR/$UNIT" 2>/dev/null
+    then ok "$UNIT current"; else bad "$UNIT missing or stale"; fi
+  else
+    if cmp -s "$PKG_DIR/$UNIT" "$UNIT_DIR/$UNIT" 2>/dev/null
+    then ok "$UNIT current"; else bad "$UNIT missing or stale"; fi
+  fi
   _code_current
   _running_current
-  _st=$(systemctl --user is-enabled "$UNIT" 2>/dev/null || true)
-  if [ "$_st" = enabled ]; then ok "$UNIT enabled"
-  else bad "$UNIT not enabled (${_st:-unknown})"; fi
+  if [ "$SVC" = launchd ]; then
+    # LOADED IS launchd'S WORD FOR ENABLED, and the question has to be asked
+    # of the DOMAIN rather than of the file: a plist on disk that was never
+    # bootstrapped is exactly the "installed and inert" state this check
+    # exists to catch.
+    if launchctl print "gui/$(id -u)/$LABEL" >/dev/null 2>&1
+    then ok "$LABEL loaded"
+    else bad "$LABEL not loaded (run: setup.sh service)"; fi
+  else
+    _st=$(systemctl --user is-enabled "$UNIT" 2>/dev/null || true)
+    if [ "$_st" = enabled ]; then ok "$UNIT enabled"
+    else bad "$UNIT not enabled (${_st:-unknown})"; fi
+  fi
   _hooks_resolve
   return "$RC"
 }
