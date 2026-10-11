@@ -271,23 +271,64 @@ else
   say statusitem-created no "see statusitem.txt"
 fi
 
+# A PIXEL DIFF, NOT TWO INK COUNTS, and the first version got this wrong in a
+# way worth keeping: it compared "how much of the strip is not black" before
+# and after, which CANNOT SEE DARK TEXT ON A LIGHT BAR. The runner's menu bar
+# is luminance 218, so every pixel was already above the threshold and adding
+# a title moved the count by nothing: it reported `no` while the item was
+# plainly there, 1057 pixels of it at (645,8)-(866,22).
+#
+# A DIFF HAS NO THRESHOLD TO GET WRONG, and its BOUNDING BOX is better
+# evidence than any count: it says WHERE the screen changed, so an item drawn
+# in the menu bar is distinguishable from a window appearing somewhere else,
+# which a whole-image count never could.
+cat >"$PY/diff.py" <<'PYDIFF'
+"""Where, and by how much, do two captures differ.
+
+The bbox is the finding. A count alone cannot tell a menu bar item from a
+dialog that happened to open, and this probe's whole question is which.
+"""
+import sys
+from PIL import Image, ImageChops
+
+a = Image.open(sys.argv[1]).convert("RGB")
+b = Image.open(sys.argv[2]).convert("RGB")
+if a.size != b.size:
+    print("sizes-differ %s %s" % (a.size, b.size))
+    raise SystemExit(0)
+d = ImageChops.difference(a, b)
+box = d.getbbox()
+print("size %dx%d" % a.size)
+if box is None:
+    print("bbox none")
+    print("changed 0")
+    raise SystemExit(0)
+px = d.load()
+n = sum(1 for y in range(a.size[1]) for x in range(a.size[0])
+        if sum(px[x, y]) > 10)
+print("bbox %d,%d %d,%d" % box)
+print("changed %d" % n)
+# The menu bar is at the top, so a change confined to the first ~40 rows is
+# the one this probe asked for. Reported rather than judged.
+print("in-menubar %s" % (box[3] <= 40))
+PYDIFF
+
 if [ -f "$OUT/shot-nobar.png" ] && [ -f "$OUT/shot-item.png" ] &&
-   [ -x "$VENV/bin/python" ]; then
-  "$VENV/bin/python" "$PY/ink.py" "$OUT/shot-nobar.png" \
-    >"$OUT/ink-nobar.txt" 2>&1 || true
-  "$VENV/bin/python" "$PY/ink.py" "$OUT/shot-item.png" \
-    >"$OUT/ink-item.txt" 2>&1 || true
-  _a=$(awk -F'[ /]' '/^menubar-ink/{print $2}' "$OUT/ink-nobar.txt" 2>/dev/null)
-  _b=$(awk -F'[ /]' '/^menubar-ink/{print $2}' "$OUT/ink-item.txt" 2>/dev/null)
-  if [ -n "${_a:-}" ] && [ -n "${_b:-}" ] && [ "$_a" -ne "$_b" ]; then
-    say statusitem-visible yes "menubar ink $_a -> $_b"
-  elif [ -n "${_a:-}" ] && [ -n "${_b:-}" ]; then
-    say statusitem-visible no "menubar ink unchanged at $_a"
+   [ -x "$VENV/bin/python" ] &&
+   "$VENV/bin/python" "$PY/diff.py" "$OUT/shot-nobar.png" \
+     "$OUT/shot-item.png" >"$OUT/diff-item.txt" 2>&1; then
+  _ch=$(awk '/^changed/{print $2}' "$OUT/diff-item.txt")
+  _bb=$(awk '/^bbox/{print $2" "$3}' "$OUT/diff-item.txt")
+  _mb=$(awk '/^in-menubar/{print $2}' "$OUT/diff-item.txt")
+  if [ "${_ch:-0}" -gt 0 ] && [ "$_mb" = True ]; then
+    say statusitem-visible yes "$_ch px changed at $_bb (menu bar)"
+  elif [ "${_ch:-0}" -gt 0 ]; then
+    say statusitem-visible no "$_ch px changed at $_bb, NOT the menu bar"
   else
-    say statusitem-visible cannot "could not measure both strips"
+    say statusitem-visible no "the screen did not change at all"
   fi
 else
-  say statusitem-visible cannot "a capture is missing"
+  say statusitem-visible cannot "a capture is missing or Pillow failed"
 fi
 
 # --- D. THE RUN LOOP, WHICH IS A CONDITION AND NOT A TOOL --------------------
@@ -416,6 +457,15 @@ PLIST
 cat >"$PY/un.py" <<'PYUN'
 """Ask UNUserNotificationCenter for an id, an authorization and a withdrawal.
 
+THIS ONE RUNS AS PYTHON AND THEREFORE ANSWERS FOR PYTHON'S BUNDLE, which is
+the finding rather than a flaw: measured on the runner, it reports
+`org.python.python`. A shell shim inside MuxProbe.app does NOT move the
+identity, because NSBundle resolves from the PROCESS IMAGE and `exec` puts
+that back in the framework the interpreter lives in. So this probe says what
+mux's own Python notifier would get today, and the native probe beside it says
+what a real bundle gets. Two different questions, and conflating them would
+have reported an ad-hoc signature as working when it was never under test.
+
 FOUR FACTS, PRINTED SEPARATELY, because each failure means something
 different: no bundle id is a packaging problem, a None centre is an API
 refusal, denied authorization is a CI-has-no-human problem, and a rejected
@@ -484,8 +534,11 @@ else
   say pyobjc-usernotifications cannot "see pyobjc-un.log"
 fi
 
-# The bundle's executable is a shim that runs the probe through the venv, so
-# the process really is inside the bundle and NSBundle can answer for it.
+# A SHIM, AND IT DOES NOT CARRY THE BUNDLE'S IDENTITY. Kept anyway, because
+# what it measures is exactly what mux's Python notifier gets today, and the
+# native probe below is what answers the ad-hoc-signature question. Writing
+# only this one and calling it "the bundle" is how the first run reported a
+# signature as tested when the process was never inside the app.
 cat >"$APP/Contents/MacOS/probe" <<SHIM
 #!/bin/sh
 exec "$VENV/bin/python" "$PY/un.py"
@@ -504,12 +557,133 @@ if "$APP/Contents/MacOS/probe" >"$OUT/un.txt" 2>&1; then
   for _k in bundle-id centre authorized add-accepted withdraw-accepted \
     import-failed; do
     _v=$(awk -v k="$_k" '$1==k {sub($1" *",""); print; exit}' "$OUT/un.txt")
-    [ -n "$_v" ] && say "un-$_k" yes "$_v"
+    [ -n "$_v" ] && say "py-un-$_k" yes "$_v"
   done
-  grep -q 'withdraw-accepted yes' "$OUT/un.txt" ||
-    say un-withdraw no "see un.txt"
 else
-  say usernotifications cannot "the bundle would not run: see un.txt"
+  say py-usernotifications cannot "the shim would not run: see un.txt"
+fi
+
+# --- THE NATIVE BUNDLE, WHICH IS THE REAL QUESTION --------------------------
+#
+# NSBundle RESOLVES FROM THE PROCESS IMAGE, so the only way to ask what an
+# ad-hoc-signed app gets is for the running binary to BE the bundle's
+# executable. clang is on the runner, so that costs one compile and removes
+# Python from the question entirely.
+#
+# AND IT USES THE COMPLETION HANDLERS, which is the other thing the Python
+# probe could not do honestly: `addNotificationRequest` with a nil handler
+# reports nothing, so "the call did not raise" was being printed as
+# "accepted". Here the system's own answer is waited for, bounded, and a
+# timeout is reported as itself.
+NAPP=$OUT/MuxNative.app
+mkdir -p "$NAPP/Contents/MacOS"
+sed 's/dev\.mux\.probe/dev.mux.native/; s/MuxProbe/MuxNative/' \
+  "$APP/Contents/Info.plist" >"$NAPP/Contents/Info.plist"
+
+cat >"$OUT/un.m" <<'OBJC'
+#import <Foundation/Foundation.h>
+#import <UserNotifications/UserNotifications.h>
+
+static BOOL wait_for(dispatch_semaphore_t s, int secs) {
+  return dispatch_semaphore_wait(
+    s, dispatch_time(DISPATCH_TIME_NOW, (int64_t)secs * NSEC_PER_SEC)) == 0;
+}
+
+int main(void) {
+  @autoreleasepool {
+    NSString *bid = [[NSBundle mainBundle] bundleIdentifier];
+    printf("bundle-id %s\n", bid ? [bid UTF8String] : "(null)");
+
+    UNUserNotificationCenter *c =
+      [UNUserNotificationCenter currentNotificationCenter];
+    printf("centre %s\n", c ? "ok" : "nil");
+    if (!c) return 0;
+
+    dispatch_semaphore_t s1 = dispatch_semaphore_create(0);
+    __block BOOL granted = NO;
+    __block NSError *autherr = nil;
+    [c requestAuthorizationWithOptions:UNAuthorizationOptionAlert
+                    completionHandler:^(BOOL ok, NSError *err) {
+      granted = ok; autherr = err; dispatch_semaphore_signal(s1);
+    }];
+    if (!wait_for(s1, 10))
+      printf("authorized timeout\n");
+    else
+      printf("authorized %d %s\n", granted,
+             autherr ? [[autherr description] UTF8String] : "no-error");
+
+    UNMutableNotificationContent *body =
+      [[UNMutableNotificationContent alloc] init];
+    body.title = @"mux";
+    body.body = @"probe body";
+    UNNotificationRequest *req =
+      [UNNotificationRequest requestWithIdentifier:@"mux-probe-1"
+                                           content:body
+                                           trigger:nil];
+    dispatch_semaphore_t s2 = dispatch_semaphore_create(0);
+    __block NSError *adderr = nil;
+    [c addNotificationRequest:req withCompletionHandler:^(NSError *err) {
+      adderr = err; dispatch_semaphore_signal(s2);
+    }];
+    /* THE SYSTEM'S OWN ANSWER, not merely that the call returned. */
+    if (!wait_for(s2, 10))
+      printf("add timeout\n");
+    else
+      printf("add %s\n",
+             adderr ? [[adderr description] UTF8String] : "accepted");
+
+    /* THE WITHDRAWAL IS WHAT `Toaster` NEEDS and what osascript cannot
+       express at all: a finished turn closing the banner it raised. */
+    [c removeDeliveredNotificationsWithIdentifiers:@[@"mux-probe-1"]];
+    [c removePendingNotificationRequestsWithIdentifiers:@[@"mux-probe-1"]];
+    printf("withdraw-returned yes\n");
+
+    dispatch_semaphore_t s3 = dispatch_semaphore_create(0);
+    __block NSUInteger left = 999;
+    [c getPendingNotificationRequestsWithCompletionHandler:
+        ^(NSArray<UNNotificationRequest *> *reqs) {
+      left = [reqs count]; dispatch_semaphore_signal(s3);
+    }];
+    /* THE ONLY PROOF THE WITHDRAWAL DID ANYTHING: ask the centre back. A
+       call that returns void cannot otherwise be told from a no-op. */
+    if (!wait_for(s3, 10))
+      printf("pending-after timeout\n");
+    else
+      printf("pending-after %lu\n", (unsigned long)left);
+  }
+  return 0;
+}
+OBJC
+
+if ! command -v clang >/dev/null 2>&1; then
+  say native-compiles cannot "no clang on PATH"
+elif clang -fobjc-arc -framework Foundation \
+       -framework UserNotifications \
+       -o "$NAPP/Contents/MacOS/probe" "$OUT/un.m" \
+       >"$OUT/clang.txt" 2>&1; then
+  say native-compiles yes "MuxNative.app"
+else
+  say native-compiles no "see clang.txt"
+fi
+
+if [ -x "$NAPP/Contents/MacOS/probe" ]; then
+  if codesign -s - --force --deep "$NAPP" >>"$OUT/codesign.txt" 2>&1; then
+    say native-adhoc-signed yes "codesign -s - accepted it"
+  else
+    say native-adhoc-signed no "see codesign.txt"
+  fi
+  if "$NAPP/Contents/MacOS/probe" >"$OUT/un-native.txt" 2>&1; then
+    for _k in bundle-id centre authorized add withdraw-returned \
+      pending-after; do
+      _v=$(awk -v k="$_k" '$1==k {sub($1" *",""); print; exit}' \
+        "$OUT/un-native.txt")
+      [ -n "$_v" ] && say "nat-$_k" yes "$_v"
+    done
+  else
+    say native-un cannot "the bundle would not run: see un-native.txt"
+  fi
+else
+  say native-un cannot "nothing compiled"
 fi
 
 # --- F. launchd, WHICH IS HOW A macOS NOTIFIER WOULD BE INSTALLED ------------
