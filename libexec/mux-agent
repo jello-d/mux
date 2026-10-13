@@ -169,6 +169,22 @@ _winsel() {   # <session> <selector-or-empty>
   for _ws_f in "$_rd"/*; do
     [ -f "$_ws_f" ] || continue
     read -r _ws_x1 _ws_x2 _ws_x3 _ws_junk 2>/dev/null <"$_ws_f" || continue
+    # THE DERIVED STATE, NOT THE RECORD'S RAW WORD, and that is the whole of
+    # this line. `humming` is deliberately never STORED (the sidecar holds
+    # pids so the state clears itself when the last job exits), so a reader
+    # that takes field 1 at face value reports `idle` for a pane every other
+    # surface calls `humming`. Measured: one pane, `send` answering
+    # `"state":"idle"` while `peers` answered `"state":"humming"`, on a
+    # surface whose whole promise is one declared vocabulary. The audit log
+    # recorded the same wrong word.
+    #
+    # THE LIBRARY PREDICATE, never a second copy of the rule, and it is cheap
+    # enough to be uninteresting here: a file test plus `kill -0` per pid,
+    # not the /proc walk that WRITES the sidecar. These are human-speed
+    # actuating verbs (read, send, class), never the strip.
+    if [ "$_ws_x1" = idle ] && mux_agent_humming "$_ws_f"; then
+      _ws_x1=humming
+    fi
     _ws_rp="$_ws_rp$_ws_x3 "
     _ws_recs="$_ws_recs$_ws_x3 $_ws_x1
 "
@@ -590,8 +606,19 @@ if [ "$_verb" = send ]; then
   # working are ordinary: a turn that is running buffers the text and
   # picks it up when it ends, which is the natural "queue the next
   # instruction" case and is why working is not refused.
+  #
+  # AND `humming` IS NAMED HERE RATHER THAN LEFT TO THE FALL-THROUGH, which
+  # is the whole of this arm's history: it used to reach `*)` and demand
+  # `--blind` PLUS a root-owned `send-unknown` grant, so a session whose turn
+  # had ended with a build still running was the hardest pane on the box to
+  # talk to. That arm is for a state word THIS mux cannot classify (a newer
+  # mux across a transport), where blind is right because mux genuinely
+  # cannot say what the pane is doing. `humming` is the opposite: mux knows
+  # exactly what it means, and what it means is that the TURN IS OVER and the
+  # agent is sitting at a prompt. It is strictly as available as `idle`, so
+  # it is strictly as ordinary, and the background job is not the agent.
   case $_sstate in
-    idle|working) ;;
+    idle|working|humming) ;;
     blocked)
       [ "$_sack_prompt" -eq 1 ] || _refuse blocked --answer-prompt
       mux_send_allowed blocked "${_rp:-global}" "$_ssess" \

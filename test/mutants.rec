@@ -4939,3 +4939,17 @@ t mux-agent
 -     _rp=$_part
 +     _rp=$(mux_ctx_mine)
 m pres-scoped-part
+
+= send-reads-the-raw-record-state-not-the-derived-one
+f libexec/mux-agent
+t mux-agent
+-       _ws_x1=humming
++       _ws_x1=idle
+m hum-send-state
+
+= send-humming-falls-through-to-blind
+f libexec/mux-agent
+t mux-agent
+-     idle|working|humming) ;;
++     idle|working) ;;
+m hum-send-rc

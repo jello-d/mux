@@ -48,7 +48,8 @@ printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
   fresh @5 fresh  %5 global 3 \
   alpha @9 worker %9 global 4 \
   wsess @3 main   %3 work   0 \
-  spacey @6 'two words' %6 global 5 >"$PANESFILE"
+  spacey @6 'two words' %6 global 5 \
+  hum @12 main %12 global 0 >"$PANESFILE"
 
 # A RECORD WHOSE PANE IS GONE, which is a separate fixture now rather than an
 # accident of the stub being thin. It used to be `wsess`, which the old stub
@@ -1233,7 +1234,7 @@ eq r9-ambig-recover "$(jq 'd["pane"]')" %11
 # with a long-running background job it would burn the whole timeout and
 # report `timed-out` about a turn that HAD ended.
 sleep 30 & _hjob=$!
-agent_rec "$XDG_RUNTIME_DIR/mux/agent-state/global/ph" idle %5 400 hum x
+agent_rec "$XDG_RUNTIME_DIR/mux/agent-state/global/ph" idle %12 400 hum x
 printf '%s\n' "$_hjob" >"$XDG_RUNTIME_DIR/mux/agent-state/global/ph.hum"
 printf 'hum\t/srv/hum\n' >>"$MUX_STATE/sessions.global"
 
@@ -1273,6 +1274,37 @@ OUT=$(env -u TMUX -u MUX_SHARE MUX_DIR="$MUX_DIR" MUX_CACHE="$MUX_CACHE" \
   CAPLOG="${CAPLOG:-/dev/null}" PANESFILE="${PANESFILE:-/dev/null}" \
   timeout 20 "$HERE/bin/mux" agent wait hum humming -t 3 2>"$T/err") || RC=$?
 eq hum-wait-humming-rc "$RC" 0
+
+# AND A SEND REACHES IT WITH NO OVERRIDE AND NO GRANT, which is the defect
+# the gate's `humming` arm was named for. It used to fall through to `*)`,
+# the arm for a state word THIS mux cannot classify, so queueing the next
+# instruction into a session whose turn had ended with a build still running
+# demanded `--blind` AND a root-owned `send-unknown` line: the hardest pane
+# on the box to talk to, and the one most obviously ready for input.
+: >"$CAPLOG"
+CLASS=agent run send hum 'the next instruction'; unset CLASS
+eq hum-send-rc "$RC" 0
+eq hum-send-status "$(jq 'd["status"]')" ok
+# AND IT REPORTS THE SAME STATE `peers` DOES, which is the half that was
+# actually broken: the resolver read the record's RAW field 1, so send
+# answered `idle` for a pane peers called `humming`, and the root-readable
+# audit log recorded that word too. Two verbs, one declared vocabulary, one
+# pane, two answers.
+eq hum-send-state "$(jq 'd["state"]')" humming
+# THE TEXT ACTUALLY LANDED, rather than the verb merely answering ok: a gate
+# that refused would also have to not paste, so asserting the document alone
+# cannot tell a grant from a well-worded refusal.
+case $(cat "$CAPLOG") in
+(*paste-buffer*) ;;
+(*) fail "hum-send-pasted: nothing was pasted: $(cat "$CAPLOG")" ;;
+esac
+
+# AND THE CONTROL IS THE ARM IT WAS TAKEN OUT OF: a state word mux cannot
+# classify is still refused, so this widened the list rather than the gate.
+# `odd` carries `weirdstate`, which no mux emits.
+CLASS=agent run send odd 'should not land'; unset CLASS
+eq hum-unknown-still-refused-rc "$RC" 1
+eq hum-unknown-still-refused "$(jq 'd["reason"]')" unknown
 
 kill "$_hjob" 2>/dev/null; wait "$_hjob" 2>/dev/null || true
 
