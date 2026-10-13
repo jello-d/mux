@@ -2203,7 +2203,37 @@ it prints the block and says where it goes.
 .B mux agent " " \fIVERB\fR " [" \fIoptions\fR ]
 THE MACHINE CONTRACT: a surface a program is invited to depend on, and
 deliberately a different contract from the rest of mux rather than a second
-spelling of it. Seven verbs so far.
+spelling of it. Nine verbs so far.
+.B mux agent self
+answers which pane the CALLER is, reading its identity from
+.B $TMUX_PANE
+rather than taking a claim: the
+.BR partition ,
+.BR session ,
+.BR window ,
+.BR window_id ,
+.BR window_name ,
+.BR pane ,
+.B control
+and
+.BR attention .
+The partition comes from the caller's own SOCKET and not from
+.BR context\-command ,
+which is a different question and can answer differently. It refuses, rather
+than guessing, when there is no pane to be: outside tmux, or with a
+.B $TMUX_PANE
+this server does not have.
+.B mux agent presence
+lists each ATTACHED client, so a hold can tell an unattended box from a
+watched one before it decides to wait for a human: the
+.BR client ,
+.BR session ,
+.BR window_id ,
+.B window_name
+and
+.BR idle ,
+the last being SECONDS and never a timestamp. No client is an empty array and
+exit 0, so "nobody is watching" and "I could not ask" stay different answers.
 .B mux agent status
 answers what is going on as JSON: the same question
 .B mux agent-summary \-\-all \-\-attached
@@ -2445,7 +2475,7 @@ to exactly one exit code; several may share one.
 THE SHAPE IS STABLE OR THE CAPABILITY NUMBER MOVES.
 .B mux capabilities
 declares
-.BR "agent contract 7" ,
+.BR "agent contract 8" ,
 and a breaking change to any of these documents is a new number there,
 which is how a consumer finds out without sniffing a version string.
 .IP

@@ -81,7 +81,7 @@ _usage() {
   # mutation record cannot anchor a line ending in a continuation backslash,
   # and the guard that the status WORD is honoured is worth keeping killable.
   # Same move as the `untrusted` reason in mux-latch, for the same reason.
-  _uv='status|stream|peers|read|wait|send|open|class'
+  _uv='status|stream|self|presence|peers|read|wait|send|open|class'
   _out usage 2 "usage: mux agent <$_uv> ..."
 }
 
@@ -90,7 +90,7 @@ _verb=${1:-}
 shift
 
 case $_verb in
-  status|stream|peers|read|wait|send|open|class) ;;
+  status|stream|self|presence|peers|read|wait|send|open|class) ;;
   *) _out usage 2 "unknown agent verb: $_verb" ;;
 esac
 
@@ -849,6 +849,182 @@ human, which only a human may do")"
   exit "$MUX_EC_OK"
 fi
 
+
+if [ "$_verb" = self ]; then
+  # --- self ----------------------------------------------------------
+  # WHICH PANE AM I, answered from the pane's own server. `peers` says who
+  # else is here; this says who I am, which is the question a supervised
+  # agent has to answer before it can be addressed at all.
+  #
+  # THE CALLER NEVER CLAIMS AN IDENTITY. It is read from TMUX_PANE, which a
+  # process started inside a pane inherits and cannot usefully forge to
+  # something it is not already in: a wrong value names a pane this server
+  # does not have, or somebody else's, and either way mux answers about THAT
+  # pane rather than believing a claim. An orchestrator above can therefore
+  # take this as the agent's identity instead of a self-report.
+  #
+  # THE PARTITION COMES FROM MY OWN SOCKET, NOT FROM THE CONTEXT COMMAND,
+  # and that is the one real decision here. `mux_ctx_socket` is the identity
+  # function on the partition, so a socket's basename IS the partition, and
+  # $TMUX names the server this pane actually lives on. Asking the context
+  # command instead would be asking a DIFFERENT question ("which partition
+  # does my environment resolve to"), and the two can disagree: a declining
+  # or absent hook answers `global` while the pane sits on another server,
+  # and mux would then query the wrong socket. That bug has shipped three
+  # times here (agent read/send, mux even, next-blocked), every time because
+  # one answer was derived in two places.
+  #
+  # THE DERIVATION IS OPEN-CODED, which is a third copy (beside
+  # mux-agent-state_lib and mux-landing) and was MEASURED rather than
+  # assumed to be the cheaper answer: of the eleven files that source
+  # mux-agent-state_lib, six do NOT source mux-context_lib, two of those are
+  # libs whose own callers would each need the line, and one is
+  # mux-agent-state-render, which runs per client every status-interval. A
+  # fork and a parse on the hottest path mux has, to centralise two lines
+  # that have never drifted, is the trade mux-paths_lib already refused for
+  # XDG_RUNTIME_DIR. Centralise a RULE, not a derivation with one reader.
+  #
+  # NOT A `peers` ROW, deliberately, and the missing fields say why: `state`
+  # and `age` are facts about a SESSION's worst agent, which is a question
+  # `status` answers better and which would be odd here anyway, since a pane
+  # asking its own state already knows it is running. What is added instead
+  # is `pane` and `attention`, because both are part of "what am I": the
+  # pane is the input resolved, and the two classes are what decide whether
+  # anybody may type here and whose attention is owed.
+  while [ $# -gt 0 ]; do
+    case $1 in
+      (--) shift; break ;;
+      (*) _out usage 2 "unknown option: $1" ;;
+    esac
+  done
+
+  _sfnp="no TMUX_PANE: this is not running inside a pane"
+  _sfns="no TMUX: this is not running inside a tmux server"
+  [ -n "${TMUX_PANE:-}" ] || _out refused 1 "$_sfnp"
+  [ -n "${TMUX:-}" ] || _out refused 1 "$_sfns"
+
+  # SOURCED HERE, like every other verb in this file: the libs are lazy so a
+  # hot path pays for nothing it does not call. Only the VALIDATOR is wanted,
+  # never `mux_ctx_mine`, which would be the other question.
+  [ ! -r "$_lib/mux-context_lib" ] || . "$_lib/mux-context_lib"
+  _sfp=${TMUX%%,*}
+  _rp=${_sfp##*/}
+  _sfbp="my socket is not a usable partition name: $_rp"
+  mux_ctx_valid "$_rp" || _out refused 1 "$_sfbp"
+
+  # ONE QUERY, tab separated, for the reason the record format already
+  # documents: a comma is an argument separator inside a tmux format and
+  # truncates the loop, and a window name may contain a space.
+  _sft=$(printf '\t')
+  _sffmt="#{session_name}$_sft#{window_index}$_sft#{window_id}"
+  _sffmt="$_sffmt$_sft#{window_name}"
+  _sfrow=$(_tx display-message -p -t "$TMUX_PANE" "$_sffmt" 2>/dev/null) \
+    || _sfrow=
+  IFS="$_sft" read -r _sfs _sfwi _sfwid _sfwn <<EOF
+$_sfrow
+EOF
+  # THE SESSION FIELD, NOT THE WHOLE ROW, is what says the pane resolved.
+  # `display-message -t %999` EXITS 0 for a pane that does not exist and
+  # answers every field EMPTY, so a row of bare separators is non-empty and
+  # a test on the row passes. Measured, and it is this tree's recurring
+  # shape: a call that succeeds at the wrong thing.
+  _sfgp="$TMUX_PANE is not a pane on partition $_rp"
+  [ -n "$_sfs" ] || _out refused 1 "$_sfgp"
+
+  # BOTH CLASSES, each falling back to the DEFAULT rather than to null: an
+  # unset marker means `human`, which is what every reader of these options
+  # already assumes and is the safe direction. null would read as "unknown"
+  # and invite a caller to guess.
+  _sfc=$(_tx show-options -pqv -t "$TMUX_PANE" @mux-control 2>/dev/null)
+  _sfa=$(_tx show-options -pqv -t "$TMUX_PANE" @mux-attention 2>/dev/null)
+  case ${_sfc:-} in (agent|hybrid) ;; (*) _sfc=human ;; esac
+  case ${_sfa:-} in (agent|hybrid) ;; (*) _sfa=human ;; esac
+
+  printf '{"status":"ok","partition":%s,"session":%s,"window":%s,' \
+    "$(mux_json_str "$_rp")" \
+    "$(mux_json_str "$_sfs")" \
+    "$(mux_json_num "$_sfwi")"
+  printf '"window_id":%s,"window_name":%s,"pane":%s,' \
+    "$(mux_json_str "$_sfwid")" \
+    "$(mux_json_str "$_sfwn")" \
+    "$(mux_json_str "$TMUX_PANE")"
+  printf '"control":%s,"attention":%s}\n' \
+    "$(mux_json_str "$_sfc")" "$(mux_json_str "$_sfa")"
+  exit "$MUX_EC_OK"
+fi
+
+if [ "$_verb" = presence ]; then
+  # --- presence ------------------------------------------------------
+  # WHO IS WATCHING, which is the question a hybrid hold has to ask before
+  # it decides whether to wait for a human. One row per attached client:
+  # where it is looking, and how long since it was last touched.
+  #
+  # AN AGE, NEVER AN EPOCH, and this is the invariant rather than a
+  # preference. `#{client_activity}` is a unix timestamp (measured: a real
+  # attached client reports `1791922870`), and the intended caller is as
+  # likely to be `ssh box mux agent presence` as a local one. A reader on
+  # another machine subtracting a remote clock's timestamp from its own now
+  # is the bug `agent-list` was built to make impossible, and the whole
+  # cross-machine design rests on not reintroducing it.
+  #
+  # EMPTY IS EXIT 0, the other half of that contract: "nobody is attached"
+  # and "I could not ask" must be different answers, so a partition with no
+  # server answers `[]` successfully rather than failing. That is the same
+  # call `--attached` already makes, where this verb's boolean lives today.
+  #
+  # ATTACHED IS WHAT `list-clients` MEANS, so there is no `attached` field:
+  # a client that is not attached is not listed. Reporting one would be a
+  # column that is always true.
+  _part=
+  while [ $# -gt 0 ]; do
+    case $1 in
+      (--partition)
+        shift
+        _part=${1:-}
+        [ -n "$_part" ] || _out usage 2 "--partition needs a name"
+        shift ;;
+      (--) shift; break ;;
+      (*) _out usage 2 "unknown option: $1" ;;
+    esac
+  done
+  [ ! -r "$_lib/mux-context_lib" ] || . "$_lib/mux-context_lib"
+  if [ -n "$_part" ]; then
+    mux_ctx_valid "$_part" || _out usage 2 "not a partition name: $_part"
+    _rp=$_part
+  else
+    _rp=$(mux_ctx_mine)
+  fi
+
+  _prnow=$(date +%s)
+  _prrows=$(
+    # BUILT IN PIECES so no line runs past 80 columns, which a single
+    # tmux format string of five fields cannot do.
+    _prt=$(printf '\t')
+    _prf="#{client_name}$_prt#{client_session}$_prt#{window_id}"
+    _prf="$_prf$_prt#{window_name}$_prt#{client_activity}"
+    _tx list-clients -F "$_prf" 2>/dev/null \
+      | while IFS="$_prt" read -r _pn _ps _pwid _pwn _pa
+    do
+      [ -n "$_pn" ] || continue
+      # A CLOCK THAT DISAGREES IS CLAMPED AT 0 rather than reported
+      # negative: an activity stamp in the future is a machine whose clock
+      # moved, and a negative age would read as nonsense to a caller doing
+      # arithmetic on it.
+      _page=$((_prnow - ${_pa:-0}))
+      [ "$_page" -ge 0 ] || _page=0
+      printf '{"client":%s,"session":%s,"window_id":%s,' \
+        "$(mux_json_str "$_pn")" \
+        "$(mux_json_str "$_ps")" \
+        "$(mux_json_str "$_pwid")"
+      printf '"window_name":%s,"idle":%s}\n' \
+        "$(mux_json_str "$_pwn")" \
+        "$(mux_json_num "$_page")"
+    done | mux_json_array
+  )
+  printf '{"status":"ok","partition":%s,"clients":%s}\n' \
+    "$(mux_json_str "$_rp")" "$_prrows"
+  exit "$MUX_EC_OK"
+fi
 
 if [ "$_verb" = peers ]; then
   # --- peers ---------------------------------------------------------

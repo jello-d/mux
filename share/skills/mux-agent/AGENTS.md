@@ -29,6 +29,36 @@ Switch on `status` when you want detail; the exit code is the same fact for a
 shell. `mux` only ever exits 0, 1, 2 or 3, so 127 or 255 came from somewhere
 else.
 
+## Knowing which pane you are
+
+```sh
+mux agent self
+```
+
+```json
+{"status":"ok","partition":"global","session":"api","window":0,
+ "window_id":"@4","window_name":"build-1","pane":"%7",
+ "control":"agent","attention":"agent"}
+```
+
+The answer to "who am I" before you can be addressed at all. Report
+`partition`, `session` and `window_id` to whatever supervises you and it can
+reach you with `read`, `send` and `class` without guessing.
+
+- IT READS YOUR IDENTITY RATHER THAN BELIEVING A CLAIM. There is no argument:
+  it resolves `$TMUX_PANE`, which you inherited from the pane you are in. So
+  an orchestrator can take this as fact in a way it could not take a
+  self-report.
+- `window_id` IS THE HANDLE, for the same reason it is in `peers`. `window` is
+  the index and is for display only.
+- `attention` is new here and is not in `peers`: it says whose attention is
+  owed for this pane, where `control` says who may type in it. They are
+  separate on purpose. A worker handing off to the human has its `attention`
+  moved to `human` while its supervisor keeps `control`, so the supervisor can
+  go on nudging it through the handover.
+- It refuses, rather than guessing, when there is no pane to be: outside tmux
+  at all, or with a `$TMUX_PANE` this server does not have.
+
 ## Seeing who is here
 
 ```sh
@@ -84,6 +114,37 @@ would make every tick a change.
 Both are scoped to YOUR partition. `--partition NAME` asks about another one
 and `--all` about every one; a partition is an isolation boundary, so do not
 reach into one you were not pointed at.
+
+## Whether a human is actually watching
+
+```sh
+mux agent presence
+```
+
+```json
+{"status":"ok","partition":"global","clients":[
+  {"client":"/dev/pts/4","session":"api","window_id":"@4",
+   "window_name":"build-1","idle":37}
+]}
+```
+
+One row per ATTACHED client: where somebody is looking, and how long since
+they touched it. The question to ask before you decide to wait for a human.
+
+- `[]` IS A REAL ANSWER AND EXITS 0. Nobody is attached, which means a
+  `blocked` pane will sit there until somebody comes back. That is different
+  from a failure, and the exit code is how you tell: a non-zero exit means the
+  question could not be put.
+- `idle` IS SECONDS, already computed, like `age` in `peers` and for the same
+  reason: never treat it as a timestamp.
+- A row means a client is attached to that SESSION, not that the person is at
+  their desk. A long `idle` is the nearest thing to that, and it is a hint.
+- `--partition NAME` asks about another one.
+
+Use it to choose between waiting and proceeding, never to decide that nobody
+will mind. An unattended box is the case where a `blocked` worker stays
+blocked longest, so it is a reason to say what you need and stop, not a reason
+to answer a prompt addressed to somebody else.
 
 ## Reading what an agent is doing
 

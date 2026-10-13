@@ -40,14 +40,15 @@ agent_rec "$XDG_RUNTIME_DIR/mux/agent-state/work/p1"   idle    %3 300 wsess x
 # have put `global`'s pane %7 into `work`'s listing and quietly contradicted
 # the stale-pane fixture below, which needs a pane that is in no window.
 PANESFILE=$T/panes; export PANESFILE
-printf '%s\t%s\t%s\t%s\t%s\n' \
-  alpha @1 main   %1 global \
-  bravo @2 main   %2 global \
-  odd   @7 odd    %7 global \
-  ahead @8 ahead  %8 global \
-  fresh @5 fresh  %5 global \
-  alpha @9 worker %9 global \
-  wsess @3 main   %3 work >"$PANESFILE"
+printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+  alpha @1 main   %1 global 0 \
+  bravo @2 main   %2 global 0 \
+  odd   @7 odd    %7 global 1 \
+  ahead @8 ahead  %8 global 2 \
+  fresh @5 fresh  %5 global 3 \
+  alpha @9 worker %9 global 4 \
+  wsess @3 main   %3 work   0 \
+  spacey @6 'two words' %6 global 5 >"$PANESFILE"
 
 # A RECORD WHOSE PANE IS GONE, which is a separate fixture now rather than an
 # accident of the stub being thin. It used to be `wsess`, which the old stub
@@ -75,10 +76,29 @@ cat >"$T/bin/tmux" <<'EOF'
 _sock=
 [ "${1:-}" = -L ] && _sock=$2
 case "$*" in
+*list-clients*client_activity*)
+  # presence's five fields, from a fixture declaring each client's activity
+  # as an OFFSET in seconds rather than an absolute stamp: the test cannot
+  # know what `date` will say when the verb runs, so the stub subtracts from
+  # its own clock and the assertion is about the MAGNITUDE of the answer.
+  awk -F'\t' -v k="$_sock" -v now="$(date +%s)" \
+    '$5 == k { print $1 "\t" $2 "\t" $3 "\t" $4 "\t" (now - $6) }' \
+    "${CLIENTSFILE:-/dev/null}" ;;
 *list-clients*)
   case " ${WATCHED:-} " in
   *" $_sock "*) printf '/dev/pts/1\n' ;;
   esac ;;
+# `self` RESOLVES ITS OWN PANE, so the stub answers the four fields for a pane
+# it has and NOTHING for one it does not. It must EXIT 0 either way, because
+# that is what the real tool does: `display-message -t %999` succeeds and
+# answers every field empty, which is why the verb tests the session field
+# rather than the row.
+*display-message*session_name*)
+  _j=$*; _dp=${_j##*-t }; _dp=${_dp%% *}
+  awk -F'\t' -v pane="$_dp" -v k="$_sock" \
+    '$4 == pane && $5 == k { print $1 "\t" $6 "\t" $2 "\t" $3; n++ }
+     END { if (!n) print "\t\t\t" }' \
+    "${PANESFILE:-/dev/null}" ;;
 *capture-pane*)
   printf 'CAPTURED %s\n' "$*" >>"$CAPLOG"
   printf 'line one\nhe said "hi" \\ there\n' ;;
@@ -162,7 +182,7 @@ run() {   # <args...> -> stdout in $OUT, exit in $RC
     CLASS1="${CLASS1:-}" CLASS2="${CLASS2:-}" \
     NOSERVER="${NOSERVER:-}" NOSESSION="${NOSESSION:-}" ATTN="${ATTN:-}" \
     NEWIDX="${NEWIDX:-3}" PANESFILE="${PANESFILE:-/dev/null}" \
-    NEWWID="${NEWWID:-@3}" \
+    NEWWID="${NEWWID:-@3}" CLIENTSFILE="${CLIENTSFILE:-/dev/null}" \
     MUX_SEND_POLICY_FILE="$T/etc/send-policy" \
     "$HERE/bin/mux" agent "$@" 2>"$T/err") || RC=$?
 }
@@ -1263,5 +1283,193 @@ OUT=$(env -u TMUX -u MUX_SHARE MUX_DIR="$MUX_DIR" MUX_CACHE="$MUX_CACHE" \
   CAPLOG="${CAPLOG:-/dev/null}" PANESFILE="${PANESFILE:-/dev/null}" \
   timeout 20 "$HERE/bin/mux" agent wait hum idle -t 3 2>"$T/err") || RC=$?
 eq hum-wait-cleared "$(jq 'd["state"]')" idle
+
+# --- self: which pane am I ----------------------------------------------
+#
+# A SEPARATE RUNNER, because `run` strips $TMUX on purpose (every other verb
+# on this surface must answer HEADLESS, and leaving it set would let one leak
+# in from the developer's own pane). This verb's whole premise is the
+# opposite: it answers only from inside a pane, so the two values are its
+# INPUT and are passed explicitly.
+selfrun() {   # <tmux> <pane> [args...]
+  RC=0
+  _st=$1; _sp=$2; shift 2
+  OUT=$(env -u MUX_SHARE MUX_DIR="$MUX_DIR" MUX_CACHE="$MUX_CACHE" \
+    XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" PATH="$T/bin:$PATH" \
+    CAPLOG="${CAPLOG:-/dev/null}" PANESFILE="${PANESFILE:-/dev/null}" \
+    CLASS="${CLASS:-}" ATTN="${ATTN:-}" MUX_LOG="$T/log" \
+    TMUX="$_st" TMUX_PANE="$_sp" \
+    "$HERE/bin/mux" agent self "$@" 2>"$T/err") || RC=$?
+}
+
+CLASS=agent ATTN=hybrid selfrun /run/u/tmux-1000/global,9,0 %1; unset CLASS ATTN
+eq self-rc "$RC" 0
+eq self-status "$(jq 'd["status"]')" ok
+eq self-part "$(jq 'd["partition"]')" global
+eq self-sess "$(jq 'd["session"]')" alpha
+eq self-pane "$(jq 'd["pane"]')" %1
+eq self-control "$(jq 'd["control"]')" agent
+eq self-attention "$(jq 'd["attention"]')" hybrid
+# BOTH WINDOW FIELDS, because they answer different questions: the INDEX is
+# what a human types at `tmux select-window` and the ID is what survives a
+# kill, which is why `--window` takes either.
+eq self-window "$(jq 'd["window"]')" 0
+eq self-wid "$(jq 'd["window_id"]')" @1
+eq self-wname "$(jq 'd["window_name"]')" main
+# A NUMBER AND NOT A STRING, asserted because `mux_json_num` is what makes it
+# one and a quoted index would make every caller parse it.
+eq self-window-typed "$(jq 'type(d["window"]).__name__')" int
+
+# THE TAB SEPARATION IS LOAD-BEARING, and this is the case that says so: a
+# window name holding a space comes back whole. tmux does not expand `\t` in
+# a format (measured: the fields arrive joined by a literal backslash-t,
+# which no IFS can split), so the query builds a real tab.
+CLASS= ATTN= selfrun /run/u/tmux-1000/global,9,0 %6; unset CLASS ATTN
+eq self-space-wname "$(jq 'd["window_name"]')" 'two words'
+
+# THE CLASSES DEFAULT TO human, never to null: an unset marker means human to
+# every other reader of these options, and null would read as "unknown" and
+# invite a caller to guess.
+eq self-control-default "$(jq 'd["control"]')" human
+eq self-attention-default "$(jq 'd["attention"]')" human
+
+# THE PARTITION IS MY SOCKET'S, NOT THE CONTEXT COMMAND'S, which is the one
+# real decision in this verb. The hook here answers `global` while $TMUX
+# names `work`, so a verb asking the hook would query the wrong server and
+# answer about a pane it does not have. That bug has shipped three times.
+printf '#!/bin/sh\nprintf "partition=global\\n"\n' >"$T/ctx"
+chmod +x "$T/ctx"
+printf 'context-command %s\n' "$T/ctx" >"$MUX_DIR/config"
+CLASS= ATTN= selfrun /run/u/tmux-1000/work,9,0 %3; unset CLASS ATTN
+eq self-socket-wins-part "$(jq 'd["partition"]')" work
+eq self-socket-wins-sess "$(jq 'd["session"]')" wsess
+rm -f "$MUX_DIR/config"
+
+# A PANE THIS SERVER DOES NOT HAVE IS REFUSED, and it is the load-bearing
+# refusal: `display-message -t %999` EXITS 0 and answers every field EMPTY,
+# so the row is bare separators and a test on the ROW passes. The session
+# field is what says the pane resolved.
+CLASS= ATTN= selfrun /run/u/tmux-1000/global,9,0 %999; unset CLASS ATTN
+eq self-ghost-rc "$RC" 1
+eq self-ghost-status "$(jq 'd["status"]')" refused
+# A PANE ON ANOTHER PARTITION IS THE SAME REFUSAL, because the query goes to
+# MY socket: %3 is on `work`, so from `global` it does not exist. Asserted
+# because an answer here would mean the verb had asked the wrong server.
+CLASS= ATTN= selfrun /run/u/tmux-1000/global,9,0 %3; unset CLASS ATTN
+eq self-foreign-pane-rc "$RC" 1
+
+# NO PANE AND NO SERVER ARE DIFFERENT REFUSALS, each naming what is missing,
+# because the remedies differ: one means "run this inside a pane" and the
+# other "this is not a tmux process at all".
+RC=0
+OUT=$(env -u TMUX -u TMUX_PANE -u MUX_SHARE MUX_DIR="$MUX_DIR" \
+  MUX_CACHE="$MUX_CACHE" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
+  PATH="$T/bin:$PATH" PANESFILE="${PANESFILE:-/dev/null}" \
+  "$HERE/bin/mux" agent self 2>"$T/err") || RC=$?
+eq self-no-pane-rc "$RC" 1
+case $(jq 'd["message"]') in
+(*TMUX_PANE*) ;;
+(*) fail "self-no-pane: the refusal did not name TMUX_PANE: $OUT" ;;
+esac
+RC=0
+OUT=$(env -u TMUX -u MUX_SHARE MUX_DIR="$MUX_DIR" MUX_CACHE="$MUX_CACHE" \
+  XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" PATH="$T/bin:$PATH" \
+  PANESFILE="${PANESFILE:-/dev/null}" TMUX_PANE=%1 \
+  "$HERE/bin/mux" agent self 2>"$T/err") || RC=$?
+eq self-no-server-rc "$RC" 1
+case $(jq 'd["message"]') in
+(*"no TMUX:"*) ;;
+(*) fail "self-no-server: the refusal did not name TMUX: $OUT" ;;
+esac
+
+# A SOCKET WHOSE BASENAME IS NOT A PARTITION NAME is refused rather than
+# queried. A partition is a DNS label, and the name becomes a socket AND a
+# state directory, so an unvalidated one is the traversal guard gone.
+CLASS= ATTN= selfrun '/run/u/tmux-1000/Bad Name,9,0' %1; unset CLASS ATTN
+eq self-bad-part-rc "$RC" 1
+eq self-bad-part-status "$(jq 'd["status"]')" refused
+case $(jq 'd["message"]') in
+(*"not a usable partition name"*) ;;
+(*) fail "self-bad-part: it refused for the wrong reason: $OUT" ;;
+esac
+
+# AND IT TAKES NO OPTIONS, so a typo is a usage error rather than being
+# ignored: this surface has already shipped a flag that parsed and did
+# nothing, and the caller believed it had asked for something.
+CLASS= ATTN= selfrun /run/u/tmux-1000/global,9,0 %1 --all; unset CLASS ATTN
+eq self-no-options-rc "$RC" 2
+eq self-no-options-status "$(jq 'd["status"]')" usage
+
+# --- presence: who is watching ------------------------------------------
+#
+# Activity is declared as an OFFSET in seconds and the stub subtracts from
+# its own clock, because the test cannot know what `date` will say when the
+# verb runs.
+CLIENTSFILE=$T/clients; export CLIENTSFILE
+printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+  /dev/pts/4 alpha @1 main   global 300 \
+  /dev/pts/7 bravo @2 main   global 5 \
+  /dev/pts/9 wsess @3 main   work   10 >"$CLIENTSFILE"
+
+run presence
+eq pres-rc "$RC" 0
+eq pres-status "$(jq 'd["status"]')" ok
+eq pres-part "$(jq 'd["partition"]')" global
+eq pres-n "$(jq 'len(d["clients"])')" 2
+eq pres-client "$(jq 'd["clients"][0]["client"]')" /dev/pts/4
+eq pres-sess "$(jq 'd["clients"][0]["session"]')" alpha
+eq pres-wid "$(jq 'd["clients"][0]["window_id"]')" @1
+eq pres-wname "$(jq 'd["clients"][0]["window_name"]')" main
+
+# AN AGE, NEVER AN EPOCH, and this is the invariant the whole cross-machine
+# design rests on: a reader on another box must never subtract a remote
+# clock's timestamp from its own now. Asserted as a MAGNITUDE rather than a
+# value, which is both race-free and decisive: a leaked `client_activity` is
+# upwards of 1.7e9, so any plausible age kills it.
+eq pres-is-an-age "$(jq '0 <= d["clients"][0]["idle"] < 100000')" True
+eq pres-age-typed "$(jq 'type(d["clients"][0]["idle"]).__name__')" int
+# AND THE TWO CLIENTS DIFFER IN IT, so the field is read per row rather than
+# computed once: 300 against 5.
+eq pres-age-per-row \
+  "$(jq 'd["clients"][0]["idle"] > d["clients"][1]["idle"]')" True
+
+# A CLOCK IN THE FUTURE IS CLAMPED AT 0 rather than reported negative, which
+# would read as nonsense to a caller doing arithmetic on it.
+printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+  /dev/pts/4 alpha @1 main global -600 >"$CLIENTSFILE"
+run presence
+eq pres-future-clamped "$(jq 'd["clients"][0]["idle"]')" 0
+
+# THE PARTITION IS SELECTABLE, because the caller may be asking about a box
+# it reached over a transport and the login shell's own answer is not the
+# question.
+printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+  /dev/pts/4 alpha @1 main   global 300 \
+  /dev/pts/9 wsess @3 main   work   10 >"$CLIENTSFILE"
+run presence --partition work
+eq pres-scoped-part "$(jq 'd["partition"]')" work
+eq pres-scoped-n "$(jq 'len(d["clients"])')" 1
+eq pres-scoped-client "$(jq 'd["clients"][0]["client"]')" /dev/pts/9
+
+# EMPTY IS EXIT 0, the other half of the same contract: "nobody is attached"
+# and "I could not ask" must be different answers, so a partition with no
+# clients succeeds with an empty array rather than failing. A presenter can
+# then draw a quiet box as quiet and an unreachable one as unknown.
+: >"$CLIENTSFILE"
+run presence
+eq pres-empty-rc "$RC" 0
+eq pres-empty-status "$(jq 'd["status"]')" ok
+eq pres-empty-n "$(jq 'len(d["clients"])')" 0
+# A DOCUMENT, NOT A SENTENCE, even when there is nothing to report: the array
+# is `[]` and not absent, so a reader never has to decide whether a missing
+# key means none or means failure.
+eq pres-empty-is-a-list "$(jq 'type(d["clients"]).__name__')" list
+
+run presence --partition 'Bad Name'
+eq pres-bad-part-rc "$RC" 2
+eq pres-bad-part-status "$(jq 'd["status"]')" usage
+run presence --partition
+eq pres-part-needs-a-name "$RC" 2
+
 
 pass

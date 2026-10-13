@@ -4876,3 +4876,66 @@ t mux-desktop-notifier
 -             summary = f"{summary}  (on {host})"
 +             summary = f"{summary} (on {host})"
 m test_NO_HOOK_is_the_built_in_wording
+
+= self-asks-the-hook-rather-than-its-own-socket
+f libexec/mux-agent
+t mux-agent
+-   _rp=${_sfp##*/}
++   _rp=$(mux_ctx_mine)
+m self-socket-wins-part
+
+= self-format-separator-is-not-a-tab
+f libexec/mux-agent
+t mux-agent
+-   _sft=$(printf '\t')
++   _sft=x
+m self-sess
+
+= self-ghost-pane-tested-on-the-whole-row
+f libexec/mux-agent
+t mux-agent
+-   [ -n "$_sfs" ] || _out refused 1 "$_sfgp"
++   [ -n "$_sfrow" ] || _out refused 1 "$_sfgp"
+m self-ghost-rc
+
+= self-no-pane-guard-never-fires
+f libexec/mux-agent
+t mux-agent
+-   [ -n "${TMUX_PANE:-}" ] || _out refused 1 "$_sfnp"
++   [ -n "${TMUX_PANE:-}x" ] || _out refused 1 "$_sfnp"
+m the refusal did not name TMUX_PANE
+
+= self-socket-is-not-validated
+f libexec/mux-agent
+t mux-agent
+-   mux_ctx_valid "$_rp" || _out refused 1 "$_sfbp"
++   true "$_rp" || _out refused 1 "$_sfbp"
+m it refused for the wrong reason
+
+= self-window-index-is-a-string
+f libexec/mux-agent
+t mux-agent
+-     "$(mux_json_num "$_sfwi")"
++     "$(mux_json_str "$_sfwi")"
+m self-window-typed
+
+= presence-reports-an-epoch-not-an-age
+f libexec/mux-agent
+t mux-agent
+-       _page=$((_prnow - ${_pa:-0}))
++       _page=${_pa:-0}
+m pres-is-an-age
+
+= presence-negative-age-not-clamped
+f libexec/mux-agent
+t mux-agent
+-       [ "$_page" -ge 0 ] || _page=0
++       [ "$_page" -ge 0 ] || true
+m pres-future-clamped
+
+= presence-ignores-the-partition-asked-for
+f libexec/mux-agent
+t mux-agent
+-     _rp=$_part
++     _rp=$(mux_ctx_mine)
+m pres-scoped-part
