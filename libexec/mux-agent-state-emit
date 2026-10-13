@@ -22,10 +22,17 @@ _lib=$_libexec/../lib
 
 # STATE, plus an optional --beat. Parsed rather than taken as $1 so a
 # hook can pass them in either order.
-state= _beat= _src= _unless_working=
+state= _beat= _refresh= _src= _unless_working=
 while [ $# -gt 0 ]; do
   case $1 in
     --beat) _beat=1 ;;
+    # --refresh: a beat that is NOT EVIDENCE OF A TURN. It refreshes an
+    # existing `working` and promotes `blocked` exactly as `--beat` does,
+    # and over `idle` it is INERT: it neither leaves a corroboration mark nor
+    # completes one. The two-beat rule below rests on the agent calling
+    # TOOLS, and some events say only that SOME agent stopped, including the
+    # agent harness's own housekeeping. See the table in mux-agent-hook.
+    --refresh) _beat=1 _refresh=1 ;;
     # --unless-working: this state is an ASSERTION OF IGNORANCE, not an
     # observation. It means "an agent has just appeared here and knows of no
     # turn in progress", which is true at a startup, a resume or a clear,
@@ -59,8 +66,8 @@ while [ $# -gt 0 ]; do
   shift
 done
 [ -n "$state" ] || {
-  echo "usage: mux-agent-state-emit STATE [--beat] [--unless-working]" \
-    "[--source NAME]" >&2
+  echo "usage: mux-agent-state-emit STATE [--beat|--refresh]" \
+    "[--unless-working] [--source NAME]" >&2
   exit "$MUX_EC_USAGE"; }
 
 # No tmux pane means nothing to track. Exit clean so the hook never fails.
@@ -145,6 +152,22 @@ fi
 # the only thing it says.
 _beatf=$file.beat
 _BEAT_WINDOW=${MUX_AGENT_BEAT_WINDOW:-300}
+# A REFRESH OVER `idle` IS INERT, and it has to be checked BEFORE the mark is
+# read, because the hazard is a refresh COMPLETING a mark as much as leaving
+# one. Measured 2026-10-13: a session's turn ended with `Stop`, then two
+# "while you were away" recaps arrived 246s apart, each run by the agent
+# harness as a subagent, each firing SubagentStop. The first left a mark, the
+# second corroborated it, and the session read WORKING for an hour with no
+# turn running and nothing that would ever fire `Stop` to correct it. A
+# session that looks busy is one you deliberately leave alone.
+#
+# THE SAME DAY'S LOG IS THE ARGUMENT FOR SCOPING IT THIS NARROWLY: two other
+# corroborations were CORRECT, each followed within a minute by a real
+# Notification, so the rule works and was being fed an event that is not
+# evidence of work. Tool calls are; a subagent stopping is not.
+if [ -n "$_refresh" ] && [ "$_pstate" = idle ]; then
+  exit "$MUX_EC_OK"
+fi
 if [ -n "$_beat" ] && [ "$_pstate" = idle ]; then
   _bnow=$(date +%s 2>/dev/null || echo 0)
   _bfirst=

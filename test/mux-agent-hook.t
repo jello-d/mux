@@ -58,6 +58,47 @@ agent_rec "$REC" idle %9 100 sess
   || fail "UserPromptSubmit is being passed as a --beat: a turn START
 must be able to leave idle, or nothing ever can"
 
+# --- A SUBAGENT STOPPING IS NOT EVIDENCE OF A TURN -------------------------
+# THE BUG, MEASURED 2026-10-13: a session's turn ended with Stop, then two
+# "while you were away" recaps arrived 246s apart. The agent harness runs that
+# recap as a SUBAGENT, so each fired SubagentStop, and as a plain beat the
+# first left a corroboration mark and the second completed it: the session
+# read WORKING for an hour with no turn running and nothing that would ever
+# fire Stop to correct it. Reported as "after a compaction it still shows
+# busy", which is how it looks from the strip.
+agent_rec "$REC" idle %9 100 sess
+rm -f "$REC.beat"
+"$HERE/libexec/mux-agent-hook" SubagentStop >/dev/null 2>&1 || true
+"$HERE/libexec/mux-agent-hook" SubagentStop >/dev/null 2>&1 || true
+[ "$(state)" = idle ] \
+  || fail "two SubagentStop events promoted an idle record to [$(state)].
+That is the away-recap bug: a harness subagent is not evidence of a turn"
+# AND IT LEAVES NO MARK, which is the half the state cannot show: a refresh
+# that marked would let one recap plus one stray beat corroborate.
+[ ! -f "$REC.beat" ] \
+  || fail "a SubagentStop over idle left a corroboration mark"
+
+# THE CONTROL, without which the case above passes on a rule that no longer
+# promotes ANYTHING: two TOOL CALLS still corroborate an auto-mode turn,
+# which is what the two-beat rule exists for and what the same day's log
+# showed working correctly twice.
+agent_rec "$REC" idle %9 100 sess
+rm -f "$REC.beat"
+"$HERE/libexec/mux-agent-hook" PostToolUse >/dev/null 2>&1 || true
+"$HERE/libexec/mux-agent-hook" PostToolUse >/dev/null 2>&1 || true
+[ "$(state)" = working ] \
+  || fail "two PostToolUse beats left the record [$(state)]: the auto-mode
+corroboration has stopped working, so a turn with no UserPromptSubmit
+reads done for its whole run"
+
+# AND A SUBAGENT STOPPING STILL DOES EVERYTHING ELSE A BEAT DOES: it resumes
+# a blocked record (a permission was approved and the work continued) and it
+# refreshes a working one. Narrowing it to idle is the whole fix.
+agent_rec "$REC" blocked %9 100 sess
+"$HERE/libexec/mux-agent-hook" SubagentStop >/dev/null 2>&1 || true
+[ "$(state)" = working ] \
+  || fail "SubagentStop no longer resumes a blocked record: [$(state)]"
+
 # --- A COMPACTION MUST NOT FINISH A TURN ----------------------------------
 # THE BUG, MEASURED: a context compaction fires SessionStart mid-turn, so the
 # agent announces itself again while it is still working. Four of four compact

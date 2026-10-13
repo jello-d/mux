@@ -649,6 +649,31 @@ promotion is still allowed with
 .BR \-\-beat ,
 since approving a permission prompt genuinely resumes work.
 .IP
+ONE BEAT OVER
+.B idle
+IS A STRAGGLER AND TWO ARE WORK. An agent continuing in auto mode starts a
+turn with no
+.BR UserPromptSubmit ,
+so refusing every beat would leave it reading done for the whole run. A beat
+over
+.B idle
+leaves a mark instead, and a second inside the window (300 seconds,
+.BR MUX_AGENT_BEAT_WINDOW )
+corroborates it. That rule rests on the agent calling TOOLS, so
+.B \-\-refresh
+exists for an event that says only that SOME agent stopped: it behaves as
+.B \-\-beat
+everywhere except over
+.BR idle ,
+where it neither marks nor corroborates.
+.B SubagentStop
+carries it, because the agent harness runs its own housekeeping (a
+"while you were away" recap) as a subagent when no turn exists, and two of
+those promoted a finished session to
+.BR working .
+A real subagent is spawned as a tool call, so its return still arrives as
+.BR PostToolUse .
+.IP
 .B humming " : READY, AND NOT FINISHED"
 .br
 A turn can end while something it started keeps running: a build, a test run,

@@ -39,10 +39,21 @@ _ev=${1:-}
 # THE TABLE. A beat is an event that merely WITNESSES activity; only a turn
 # START may create `working` out of `idle`, which is why PostToolUse and
 # SubagentStop are beats and UserPromptSubmit is not.
+#
+# AND THE TWO BEATS ARE NOT EQUAL, which is the one distinction this table
+# adds over that. Two beats over `idle` inside a window CORROBORATE an
+# auto-mode turn, a rule resting on the agent calling TOOLS. PostToolUse is
+# exactly that. SubagentStop says only that SOME agent stopped, and the agent
+# harness runs its own housekeeping (the "while you were away" recap) as a
+# subagent while no turn exists, so two recaps promoted a finished session to
+# working, measured. `--refresh` keeps every other beat behaviour and is inert
+# over `idle`. A real subagent is spawned as an `Agent` TOOL CALL (measured
+# in transcripts), so its return fires PostToolUse and real work loses
+# nothing.
 case $_ev in
   UserPromptSubmit) set -- working ;;
   PostToolUse)      set -- working --beat ;;
-  SubagentStop)     set -- working --beat ;;
+  SubagentStop)     set -- working --refresh ;;
   Notification)     set -- blocked ;;
   Stop)             set -- idle ;;
   # A COMPACTION FIRES SessionStart MID-TURN, which is why this row carries a

@@ -4995,3 +4995,17 @@ t mux-agent
 -     _tx has-session -t "=$_entgt" 2>/dev/null || _out refused 1 "$_enpc"
 +     true "$_enpc"
 m ens-phantom-rc
+
+= hook-subagentstop-corroborates-like-a-tool-call
+f libexec/mux-agent-hook
+t mux-agent-hook
+-   SubagentStop)     set -- working --refresh ;;
++   SubagentStop)     set -- working --beat ;;
+m two SubagentStop events promoted
+
+= emit-refresh-is-not-inert-over-idle
+f libexec/mux-agent-state-emit
+t mux-agent-hook
+- if [ -n "$_refresh" ] && [ "$_pstate" = idle ]; then
++ if false; then
+m two SubagentStop events promoted
