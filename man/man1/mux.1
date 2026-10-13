@@ -2203,7 +2203,24 @@ it prints the block and says where it goes.
 .B mux agent " " \fIVERB\fR " [" \fIoptions\fR ]
 THE MACHINE CONTRACT: a surface a program is invited to depend on, and
 deliberately a different contract from the rest of mux rather than a second
-spelling of it. Nine verbs so far.
+spelling of it. Ten verbs so far.
+.B mux agent ensure " " \fISESSION\fR
+makes sure a session EXISTS and reports whether that took creating it
+(\fBcreated\fR), which is the companion to
+.B open
+and the one field worth having: a session just made is empty, one already
+there holds somebody's work. Idempotent, never attaches (there is no terminal
+on this surface, which is why it is named for the postcondition), and it
+delegates the build to
+.B mux go \-\-no\-attach
+rather than carrying a second copy of the resolution.
+It takes a session NAME and refuses a PATH, because mux derives a name from a
+directory by folding it, so the name answered would not be the one asked for.
+A name mux cannot resolve is refused with
+.B no\-such\-name
+rather than invented: from the name alone a new session and a typo are
+indistinguishable. Somewhere arbitrary to work is a WINDOW, where the name is
+the caller's to choose.
 .B mux agent self
 answers which pane the CALLER is, reading its identity from
 .B $TMUX_PANE
@@ -2475,7 +2492,7 @@ to exactly one exit code; several may share one.
 THE SHAPE IS STABLE OR THE CAPABILITY NUMBER MOVES.
 .B mux capabilities
 declares
-.BR "agent contract 8" ,
+.BR "agent contract 9" ,
 and a breaking change to any of these documents is a new number there,
 which is how a consumer finds out without sniffing a version string.
 .IP

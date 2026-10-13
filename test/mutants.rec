@@ -4953,3 +4953,45 @@ t mux-agent
 -     idle|working|humming) ;;
 +     idle|working) ;;
 m hum-send-rc
+
+= ensure-delegates-an-attaching-build
+f libexec/mux-agent
+t mux-agent
+-       _enerr=$("$_enbin" go --no-attach "$_entgt" 2>&1 >/dev/null) || _enrc=$?
++       _enerr=$("$_enbin" go "$_entgt" 2>&1 >/dev/null) || _enrc=$?
+m ens-make-argv
+
+= ensure-rebuilds-a-session-that-is-already-there
+f libexec/mux-agent
+t mux-agent
+-   if ! _tx has-session -t "=$_entgt" 2>/dev/null; then
++   if _tx has-session -t "=$_entgt" 2>/dev/null; then
+m ens-have-no-build
+
+= ensure-accepts-a-path-and-answers-a-folded-name
+f libexec/mux-agent
+t mux-agent
+-     (*/*|'~'*) _enm="'$_entgt' looks like a path. mux derives a session"
++     (nosuchpattern) _enm="x"
+m ens-path-rc
+
+= ensure-creates-across-a-partition-boundary
+f libexec/mux-agent
+t mux-agent
+-     mux_ctx_crossing "${_rp:-global}" 'create a session across' || {
++     true "${_rp:-global}" 'create a session across' || {
+m ens-cross-rc
+
+= ensure-reports-created-for-a-session-it-found
+f libexec/mux-agent
+t mux-agent
+-   _encreated=false
++   _encreated=true
+m ens-have-created
+
+= ensure-trusts-the-exit-code-over-the-postcondition
+f libexec/mux-agent
+t mux-agent
+-     _tx has-session -t "=$_entgt" 2>/dev/null || _out refused 1 "$_enpc"
++     true "$_enpc"
+m ens-phantom-rc

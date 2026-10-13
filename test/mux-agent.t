@@ -149,7 +149,15 @@ case "$*" in
 # $NOSESSION makes the existence check fail, which is a DIFFERENT answer
 # from "it exists and is empty" and the whole reason open exits 3.
 *has-session*)
-  [ -z "${NOSESSION:-}" ] || exit 1 ;;
+  # TWO QUESTIONS THROUGH ONE ARM, and $SESSFILE is the opt-in that keeps
+  # them apart: $NOSESSION is the blanket "nothing exists" every other case
+  # uses, while `ensure` needs a PER-NAME answer, its whole job being the
+  # difference between a session that is there and one that is not.
+  [ -z "${NOSESSION:-}" ] || exit 1
+  if [ -n "${SESSFILE:-}" ]; then
+    _j=$*; _hs=${_j##*-t =}; _hs=${_hs%% *}
+    grep -qxF -- "$_hs" "$SESSFILE" || exit 1
+  fi ;;
 # new-window answers with the index it made, because `open` asks the CREATE
 # for it (`-P -F`) rather than querying afterwards: a follow-up query would
 # be about "the current window", which `-d` has just declined to change.
@@ -184,6 +192,7 @@ run() {   # <args...> -> stdout in $OUT, exit in $RC
     NOSERVER="${NOSERVER:-}" NOSESSION="${NOSESSION:-}" ATTN="${ATTN:-}" \
     NEWIDX="${NEWIDX:-3}" PANESFILE="${PANESFILE:-/dev/null}" \
     NEWWID="${NEWWID:-@3}" CLIENTSFILE="${CLIENTSFILE:-/dev/null}" \
+    SESSFILE="${SESSFILE:-}" \
     MUX_SEND_POLICY_FILE="$T/etc/send-policy" \
     "$HERE/bin/mux" agent "$@" 2>"$T/err") || RC=$?
 }
@@ -1503,5 +1512,131 @@ eq pres-bad-part-status "$(jq 'd["status"]')" usage
 run presence --partition
 eq pres-part-needs-a-name "$RC" 2
 
+
+# --- ensure: make sure a session exists ----------------------------------
+#
+# A RELOCATED HELPER, because this verb DELEGATES the build to mux's own
+# front end and the point of these cases is the ASK rather than the build.
+# `_libexec=$(dirname "$0")` means a copy under $T/tree resolves its libs and
+# its front end there too, so a recording fake stands in for `mux go`. That
+# is this suite's existing pattern (mux-click.t does the same to put a fake
+# beside a helper), and it needs the WHOLE lib tree: a helper that resolves
+# siblings relative to itself must be moved with them.
+mkdir -p "$T/tree/libexec" "$T/tree/bin"
+cp "$HERE/libexec/mux-agent" "$T/tree/libexec/"
+cp -R "$HERE/lib" "$T/tree/lib"
+GOLOG=$T/golog; export GOLOG
+SESSFILE=$T/sessfile; export SESSFILE
+: >"$GOLOG"; printf 'alpha\nbravo\n' >"$SESSFILE"
+
+# THE FAKE PRINTS PROSE ON STDOUT, deliberately: the front end writes for a
+# human and this surface promises JSON, so every `jq` below is also an
+# assertion that the delegate's stdout was discarded rather than leaked into
+# the document.
+cat >"$T/tree/bin/mux" <<'GOEOF'
+#!/bin/sh
+printf '%s\n' "$*" >>"$GOLOG"
+printf 'mux: prose a human would read\n'
+[ -z "${GOMADE:-}" ] || printf '%s\n' "$GOMADE" >>"$SESSFILE"
+[ -z "${GOERR:-}" ] || printf '%s\n' "$GOERR" >&2
+exit "${GORC:-0}"
+GOEOF
+chmod +x "$T/tree/bin/mux"
+
+enrun() {   # <args...> -> stdout in $OUT, exit in $RC
+  RC=0
+  OUT=$(env -u TMUX -u MUX_SHARE MUX_DIR="$MUX_DIR" MUX_CACHE="$MUX_CACHE" \
+    XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" PATH="$T/bin:$PATH" \
+    MUX_LOG="$T/enlog" GOLOG="$GOLOG" SESSFILE="$SESSFILE" \
+    GORC="${GORC:-0}" GOMADE="${GOMADE:-}" GOERR="${GOERR:-}" \
+    PANESFILE="${PANESFILE:-/dev/null}" \
+    "$T/tree/libexec/mux-agent" ensure "$@" 2>"$T/err") || RC=$?
+}
+
+# A SESSION THAT IS ALREADY THERE IS NOT REBUILT, which is the load-bearing
+# half of idempotence: the document could say `created:false` while having
+# built anyway, so the ABSENCE of a delegation is what the case asserts.
+: >"$GOLOG"
+enrun alpha
+eq ens-have-rc "$RC" 0
+eq ens-have-status "$(jq 'd["status"]')" ok
+eq ens-have-no-build "$(cat "$GOLOG")" ""
+eq ens-have-created "$(jq 'd["created"]')" False
+eq ens-have-session "$(jq 'd["session"]')" alpha
+
+# A MISSING ONE IS BUILT, DETACHED, through the front end's own path.
+: >"$GOLOG"
+GOMADE=newsess enrun newsess; unset GOMADE
+eq ens-make-rc "$RC" 0
+eq ens-make-created "$(jq 'd["created"]')" True
+eq ens-make-session "$(jq 'd["session"]')" newsess
+# THE EXACT ASK, not merely that something was invoked: `--no-attach` is what
+# makes this usable at all on a surface with no terminal, and `mux go` would
+# otherwise try to attach. The option comes BEFORE the positional because the
+# front end stops parsing options at the first one, which is documented and
+# which this verb would otherwise hit (measured: `go worker --no-attach`
+# reads the flag as a PROFILE and refuses).
+eq ens-make-argv "$(cat "$GOLOG")" "go --no-attach newsess"
+
+# A PROFILE REACHES THE BUILD as the second positional, which is the shape
+# `mux go [NAME] [PROFILE]` takes.
+: >"$GOLOG"
+GOMADE=profsess enrun profsess --profile code; unset GOMADE
+eq ens-prof-rc "$RC" 0
+eq ens-prof-argv "$(cat "$GOLOG")" "go --no-attach profsess code"
+
+# A NAME MUX CANNOT RESOLVE IS REFUSED, NOT INVENTED, and the front end's own
+# explanation is passed through rather than replaced: it names what it looked
+# for, which is the thing a caller can act on.
+: >"$GOLOG"
+GORC=3 GOERR="mux: nothing known as 'ghost'" enrun ghost; unset GORC GOERR
+eq ens-ghost-rc "$RC" 3
+eq ens-ghost-status "$(jq 'd["status"]')" no-such-name
+case $(jq 'd["message"]') in
+(*"nothing known as 'ghost'"*) ;;
+(*) fail "ens-ghost: the front end's reason was not passed through: $OUT" ;;
+esac
+
+# THE POSTCONDITION IS VERIFIED RATHER THAN INFERRED FROM THE EXIT CODE,
+# which is the whole of what this verb's name promises. A build answering 0
+# having made nothing is this package's signature failure, and `ensure`
+# reporting ok there would hand back a session that is not there.
+: >"$GOLOG"
+enrun phantom
+eq ens-phantom-rc "$RC" 1
+eq ens-phantom-status "$(jq 'd["status"]')" refused
+case $(jq 'd["message"]') in
+(*"still not there"*) ;;
+(*) fail "ens-phantom: it did not name the broken postcondition: $OUT" ;;
+esac
+
+# A PATH IS REFUSED, because mux folds a directory into a session name, so
+# the name answered would not be the one asked about: a handle this surface
+# cannot re-derive is the trap `read` already refuses a pane id for.
+enrun /srv/somewhere
+eq ens-path-rc "$RC" 2
+eq ens-path-status "$(jq 'd["status"]')" usage
+case $(jq 'd["message"]') in
+(*"mux go"*) ;;
+(*) fail "ens-path: it refused without naming the human verb: $OUT" ;;
+esac
+
+# AND IT WILL NOT CROSS A PARTITION, which it must refuse HARDER than open:
+# open runs a command in a server that exists, this BUILDS the server, so
+# every pane it creates would hold whatever a boundary is made of.
+: >"$GOLOG"
+enrun alpha --partition work
+eq ens-cross-rc "$RC" 1
+eq ens-cross-reason "$(jq 'd["reason"]')" cross-partition
+eq ens-cross-override "$(jq 'd["override"]')" none
+# NOTHING WAS BUILT, which is the half a status check cannot see: a refusal
+# that reports correctly after creating a server across a boundary is the
+# failure this gate exists to prevent.
+eq ens-cross-no-build "$(cat "$GOLOG")" ""
+
+enrun
+eq ens-usage-rc "$RC" 2
+enrun alpha --bogus
+eq ens-bogus-rc "$RC" 2
 
 pass

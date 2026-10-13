@@ -275,6 +275,41 @@ It answers with the window it made:
   outright, with no flag and no policy that opens it. Opening runs a COMMAND,
   so it crosses harder than sending text does.
 
+## Making sure a session exists
+
+```sh
+mux agent ensure api
+```
+
+```json
+{"status":"ok","partition":"global","session":"api","created":true}
+```
+
+The companion to `open`, which deliberately will not create one. Call this
+first when you are not sure the session is there, then open your window in it.
+It is idempotent, so calling it when the session already exists is free and
+answers `created:false`.
+
+- `created` IS THE ONLY INTERESTING FIELD, and it is why the verb reports it:
+  a session you just made is empty, and one that was already there has
+  somebody's work in it. If you are about to seed it, this is how you know
+  whether you should.
+- IT TAKES A SESSION NAME, NOT A DIRECTORY. mux derives a session name from a
+  path by folding it, so the name you would get back is not the one you
+  asked for, and this surface never hands you a handle you cannot re-derive.
+  A path is refused and points you at `mux go`.
+- AND A NAME MUX CANNOT RESOLVE IS REFUSED rather than invented, with
+  `no-such-name` and mux's own explanation of what it looked for. That is
+  deliberate: from a name alone, a new session and a typo are
+  indistinguishable, and conjuring a session out of your own typo is worse
+  than failing. If you need somewhere arbitrary to work, that is a WINDOW
+  (`mux agent open --name`), where the name is yours to choose.
+- It never attaches anything. There is no terminal on this surface, which is
+  why the verb is named for the postcondition rather than for an act.
+- `--profile P` picks the blueprint when it does create. `--partition NAME`
+  names yours; another one is refused, because creating a session builds a
+  server and so crosses harder than either sending or opening.
+
 ## Escalating a worker to the human
 
 ```sh

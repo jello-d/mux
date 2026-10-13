@@ -81,7 +81,8 @@ _usage() {
   # mutation record cannot anchor a line ending in a continuation backslash,
   # and the guard that the status WORD is honoured is worth keeping killable.
   # Same move as the `untrusted` reason in mux-latch, for the same reason.
-  _uv='status|stream|self|presence|peers|read|wait|send|open|class'
+  _uv='status|stream|self|presence|peers|read|wait|send|open|ensure'
+  _uv="$_uv|class"
   _out usage 2 "usage: mux agent <$_uv> ..."
 }
 
@@ -90,7 +91,7 @@ _verb=${1:-}
 shift
 
 case $_verb in
-  status|stream|self|presence|peers|read|wait|send|open|class) ;;
+  status|stream|self|presence|peers|read|wait|send|open|ensure|class) ;;
   *) _out usage 2 "unknown agent verb: $_verb" ;;
 esac
 
@@ -754,6 +755,129 @@ $MUX_CTX_CROSS")"
   printf '"control":%s,"attention":%s}\n' \
     "$([ -n "$_octl" ] && mux_json_str "$_octl" || printf null)" \
     "$([ -n "$_oattn" ] && mux_json_str "$_oattn" || printf null)"
+  exit "$MUX_EC_OK"
+fi
+
+if [ "$_verb" = ensure ]; then
+  # --- ensure --------------------------------------------------------
+  # MAKE SURE A SESSION EXISTS, and say whether that took creating it.
+  # vicus's item 1 asked for a session-level create-or-attach; this surface
+  # holds no terminal, so there is nothing to attach and the honest name is
+  # the POSTCONDITION rather than the act.
+  #
+  # NOT `open --create`: `open` answers a WINDOW id, so a flag that also
+  # created a SESSION would have it answering one level up from what its
+  # name promises, and a caller could not tell which it got back.
+  #
+  # A SESSION NAME, NEVER A DIRECTORY, and that constraint is mux's rather
+  # than this verb's. `mux go ~/src/foo` DERIVES the session name by folding
+  # the basename, so a caller handed a path cannot predict the name it gets,
+  # and a handle this surface cannot re-derive is the trap `read` already
+  # refuses a pane id for. A path is refused with the human verb named.
+  #
+  # AND AN UNRESOLVABLE NAME IS REFUSED RATHER THAN INVENTED. That is mux's
+  # decision and this verb must not weaken it: `mux why` states the reason,
+  # that "from the name alone a new session and a typo are
+  # indistinguishable". An agent conjuring a session out of its own typo is
+  # strictly worse than a human doing it, so the explanation is passed
+  # through rather than replaced.
+  #
+  # IT DELEGATES TO `mux go --no-attach`, measured rather than assumed: that
+  # path resolves the project, reads the profile, lays out the panes, marks
+  # the agent pane, settles the theme, repairs the environment and records
+  # the session set, and it is idempotent and silent on stdout. Twenty
+  # caller values, one of which is the resolution `mux why` exists to
+  # explain. A second copy here would be free to disagree about every one.
+  _enpart= _entgt= _enprof=
+  while [ "$#" -gt 0 ]; do
+    case $1 in
+      (--partition) _enpart=${2:-}; shift 2 || _usage ;;
+      (--profile)   _enprof=${2:-}; shift 2 || _usage ;;
+      (-*) _out usage 2 "unknown option: $1" ;;
+      (*)  [ -z "$_entgt" ] || _out usage 2 "one session, not two: $1"
+           _entgt=$1; shift ;;
+    esac
+  done
+  [ -n "$_entgt" ] || _out usage 2 "usage: mux agent ensure SESSION \
+[--partition P] [--profile PROFILE]"
+
+  # A PATH IS THE ONE INPUT THAT WOULD SUCCEED AT THE WRONG THING, so it is
+  # named rather than attempted: `mux go` accepts one and answers a session
+  # whose name it folded, which is not the name this caller asked about.
+  case $_entgt in
+    (*/*|'~'*) _enm="'$_entgt' looks like a path. mux derives a session"
+      _enm="$_enm name from a directory by folding it, so the name you"
+      _enm="$_enm would get back is not the one you asked for; use"
+      _enm="$_enm \`mux go\` for a path, or name the session here"
+      _out usage 2 "$_enm" ;;
+  esac
+
+  _rp=$_enpart
+  [ ! -r "$_lib/mux-context_lib" ] || . "$_lib/mux-context_lib"
+  [ -n "$_rp" ] || _rp=$(mux_ctx_mine)
+
+  # CROSS-PARTITION IS REFUSED, AND THIS CROSSES HARDEST OF ALL. `send`
+  # types into a pane that exists and `open` runs a command in a session
+  # that does; this BUILDS the server, so where a boundary is a group
+  # acquired per session every pane it creates would hold it.
+  if [ -r "$_lib/mux-context_lib" ]; then
+    mux_ctx_crossing "${_rp:-global}" 'create a session across' || {
+      printf '{"status":%s,"reason":%s,"override":%s,"message":%s}\n' \
+        "$(mux_json_str refused)" \
+        "$(mux_json_str cross-partition)" \
+        "$(mux_json_str none)" \
+        "$(mux_json_str "refusing to create $_entgt: $MUX_CTX_CROSS")"
+      exit "$MUX_EC_FAIL"
+    }
+  fi
+
+  # LIVE IS ASKED WITH `has-session -t =NAME`, exact rather than a prefix,
+  # and it ERRORS rather than spawning a server, which is the property `mux
+  # check` had to learn the hard way about `list-keys`.
+  _encreated=false
+  if ! _tx has-session -t "=$_entgt" 2>/dev/null; then
+    _enbin=$_libexec/../bin/mux
+    [ -x "$_enbin" ] || _out refused 1 "cannot find mux's front end at \
+$_enbin, so there is nothing to build with (incomplete install)"
+    # STDERR CAPTURED, STDOUT DISCARDED, because this surface promises JSON
+    # on stdout and the front end writes prose for a human. No temp file:
+    # an anonymous one leaks indistinguishably, which this package has paid
+    # for twice.
+    _enrc=0
+    if [ -n "$_enprof" ]; then
+      _enerr=$("$_enbin" go --no-attach "$_entgt" "$_enprof" \
+        2>&1 >/dev/null) || _enrc=$?
+    else
+      _enerr=$("$_enbin" go --no-attach "$_entgt" 2>&1 >/dev/null) || _enrc=$?
+    fi
+    case $_enrc in
+      (0) _encreated=true ;;
+      ("$MUX_EC_NONAME") _out no-such-name 3 "$_enerr" ;;
+      (*) _out refused 1 "could not build $_entgt: $_enerr" ;;
+    esac
+
+    # THE POSTCONDITION IS VERIFIED, NOT INFERRED FROM THE EXIT CODE, which
+    # is the whole of what this verb's name promises. A build that answers 0
+    # having made nothing is exactly the shape this package keeps
+    # cataloguing, and `ensure` claiming it when it is false would hand a
+    # caller a session to address that is not there.
+    _enpc="$_entgt was built without error and is still not there, so"
+    _enpc="$_enpc something else removed it or the build did nothing"
+    _tx has-session -t "=$_entgt" 2>/dev/null || _out refused 1 "$_enpc"
+
+    # LOGGED ONLY WHEN IT CREATED, which is what makes the volume argument
+    # that keeps `mux go` silent not apply: a found session writes nothing,
+    # and an AGENT creating one is rare and worth attributing. mux's own
+    # notes record the cost of `mux go` being unlogged, a stray session
+    # nobody could trace to a command.
+    mux_log ensure "$_entgt (${_rp:-global}) created"
+  fi
+
+  printf '{"status":%s,"partition":%s,"session":%s,"created":%s}\n' \
+    "$(mux_json_str ok)" \
+    "$(mux_json_str "${_rp:-global}")" \
+    "$(mux_json_str "$_entgt")" \
+    "$_encreated"
   exit "$MUX_EC_OK"
 fi
 
