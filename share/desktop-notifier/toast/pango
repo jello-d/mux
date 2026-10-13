@@ -29,7 +29,7 @@
 # newline instead of from the format, so the host sits on the title row and
 # the body still gets its own. Rendered:
 #
-#     Claude finished: api (on northgate)      <- bold, then dim and normal
+#     Claude finished: api  (on northgate)     <- bold, then dim and normal
 #     your turn                                <- the body, as usual
 #
 # REQUIRES, NOT PAIRS WITH, and the difference is measured rather than argued:
@@ -109,8 +109,17 @@ esc() { printf '%s' "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'; }
 
 # A LOCAL BANNER NAMES NO HOST, the same rule the built-in wording follows:
 # saying "on this-box" every time is noise on the common path.
+# A LEADING SPACE, SO THE PAIR GETS BREATHING ROOM. The daemon's format
+# supplies one space when it joins the title to the body's first line, and
+# this adds the second, matching the built-in wording's two. ADDITIVE on
+# purpose: a format with no space at all would already render `usher(on x)`
+# today, so this file has always assumed one is there.
+#
+# ONLY WHEN THERE IS A HOST. Unconditionally it would put a second trailing
+# space after the title on the LOCAL path, where this line is empty and
+# exists only to carry the break.
 if [ "$_loc" = remote ] && [ -n "$_host" ]; then
-  _tail="<span alpha=\"$_DIM\">(on $(esc "$_host"))</span>"
+  _tail=" <span alpha=\"$_DIM\">(on $(esc "$_host"))</span>"
 else
   _tail=
 fi

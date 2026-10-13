@@ -601,7 +601,20 @@ class Toaster:
             summary = f"Claude finished: {session}"
             body = "your turn"
         if not local and host:
-            summary = f"{summary} (on {host})"
+            # TWO SPACES, FOR BREATHING ROOM, and the pair is one address so
+            # it wants a visible gap rather than a word boundary. MEASURED
+            # rather than hoped, because the obvious worry is that a variable
+            # width font collapses it: Pango does NOT, and each space adds a
+            # consistent width (at mako's own Inter 18, one space is 6px and
+            # three spaces is 12px, so it is linear).
+            #
+            # ASCII SPACES AND NOT AN EN SPACE, which is the same width here
+            # and fails in the worse direction: Inter does not advertise
+            # U+2002, so it would ride on font fallback and a missing glyph
+            # is a .notdef box in a notification TITLE. Two spaces degrade to
+            # today's appearance if some consumer ever does collapse them,
+            # which is the failure worth choosing.
+            summary = f"{summary}  (on {host})"
         return summary, body
 
     async def compose(self, host, part, session, kind, local):

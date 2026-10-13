@@ -1556,22 +1556,22 @@ class ToastHook(unittest.TestCase):
 
     def test_NO_HOOK_is_the_built_in_wording(self):
         s, b = self._compose(None)
-        self.assertEqual(s, "Claude finished: api (on northgate)")
+        self.assertEqual(s, "Claude finished: api  (on northgate)")
         self.assertEqual(b, "your turn")
 
     def test_a_hook_that_FAILS_falls_back(self):
         s, _b = self._compose(self._hook("echo nope >&2; exit 3"))
-        self.assertEqual(s, "Claude finished: api (on northgate)")
+        self.assertEqual(s, "Claude finished: api  (on northgate)")
 
     def test_a_hook_that_prints_NOTHING_falls_back(self):
         """Exit 0 and silence is the quietest way to break this, and it would
         otherwise publish a banner with an empty title."""
         s, _b = self._compose(self._hook("exit 0"))
-        self.assertEqual(s, "Claude finished: api (on northgate)")
+        self.assertEqual(s, "Claude finished: api  (on northgate)")
 
     def test_a_hook_that_DOES_NOT_EXIST_falls_back(self):
         s, _b = self._compose("/nonexistent/toast-hook")
-        self.assertEqual(s, "Claude finished: api (on northgate)")
+        self.assertEqual(s, "Claude finished: api  (on northgate)")
 
     def test_the_hook_is_told_everything_it_needs(self):
         """argv, asserted as a whole: kind, session, host, partition and

@@ -4656,8 +4656,8 @@ m nothing reached `blocked`
 = toast-host-moves-back-to-the-body
 f desktop-notifier/mux_desktop_notifier/sni.py
 t mux-desktop-notifier
--             summary = f"{summary} (on {host})"
-+             body = f"{body} (on {host})"
+-             summary = f"{summary}  (on {host})"
++             body = f"{body}  (on {host})"
 m test_a_REMOTE_banner_names_the_host
 
 = toast-hook-body-loses-its-line-breaks
@@ -4862,3 +4862,17 @@ t mux-desktop-notifier-setup
 -     launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
 +     :
 m uninstall never booted the agent out
+
+= toast-pango-host-loses-its-breathing-room
+f share/desktop-notifier/toast/pango
+t mux-toast-hooks
+-   _tail=" <span alpha=\"$_DIM\">(on $(esc "$_host"))</span>"
++   _tail="<span alpha=\"$_DIM\">(on $(esc "$_host"))</span>"
+m pango-remote-host: got
+
+= toast-builtin-host-loses-its-breathing-room
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
+-             summary = f"{summary}  (on {host})"
++             summary = f"{summary} (on {host})"
+m test_NO_HOOK_is_the_built_in_wording

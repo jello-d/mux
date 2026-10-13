@@ -77,8 +77,12 @@ eq pango-local-host-line "$(line 2)" ""
 eq pango-local-body "$(line 3)" "your turn"
 
 run pango blocked api northgate global remote
+# A LEADING SPACE, which is the breathing room: the daemon format supplies
+# one when it joins this line to the title and the hook supplies the second,
+# so the pair reads as one address rather than two words. Asserted on the
+# EXACT string, because a trimmed comparison is what would let it vanish.
 eq pango-remote-host "$(line 2)" \
-  '<span alpha="85%">(on northgate)</span>'
+  ' <span alpha="85%">(on northgate)</span>'
 eq pango-remote-body "$(line 3)" "permission or input"
 
 # --- dim: NEVER AN EMPTY LINE, which is the whole reason it exists -------
