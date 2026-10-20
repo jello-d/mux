@@ -5009,3 +5009,38 @@ t mux-agent-hook
 - if [ -n "$_refresh" ] && [ "$_pstate" = idle ]; then
 + if false; then
 m two SubagentStop events promoted
+
+= hook-stopfailure-leaves-the-turn-running
+f libexec/mux-agent-hook
+t mux-agent-hook
+-   StopFailure)      set -- idle ;;
++   StopFailure)      set -- working ;;
+m StopFailure mapped to
+
+= hook-idle-nudge-reads-as-blocked
+f libexec/mux-agent-hook
+t mux-agent-hook
+-     set -- idle --unless-blocked
++     set -- blocked
+m the idle nudge over a working record
+
+= hook-idle-nudge-may-clear-a-prompt
+f libexec/mux-agent-hook
+t mux-agent-hook
+-     set -- idle --unless-blocked
++     set -- idle
+m cleared a pending permission
+
+= emit-unless-blocked-is-inert
+f libexec/mux-agent-state-emit
+t mux-agent-hook
+- if [ -n "$_unless_blocked" ] && [ "$_pstate" = blocked ]; then
++ if false; then
+m cleared a pending permission
+
+= hook-nudge-match-wants-no-space
+f libexec/mux-agent-hook
+t mux-agent-hook
+-   _np='"notification_type"[[:space:]]*:[[:space:]]*"idle_prompt"'
++   _np='"notification_type":"idle_prompt"'
+m with a space after the colon

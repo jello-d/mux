@@ -56,6 +56,12 @@ case $_ev in
   SubagentStop)     set -- working --refresh ;;
   Notification)     set -- blocked ;;
   Stop)             set -- idle ;;
+  # A TURN THAT ENDS IN AN API ERROR FIRES StopFailure AND NEVER Stop, so
+  # without this row the record stays `working` with nothing running.
+  # Measured 2026-10-20: "Prompt is too long" left a session `working`, the
+  # 60s nudge then read it as `blocked`, and a manual /compact moved it back
+  # to `working`, which the compaction guard below then kept for good.
+  StopFailure)      set -- idle ;;
   # A COMPACTION FIRES SessionStart MID-TURN, which is why this row carries a
   # qualifier that `Stop` does not. Stop is an OBSERVATION that the turn ended;
   # SessionStart is an agent announcing itself, which is an assertion about what
@@ -75,5 +81,28 @@ case $_ev in
     echo "mux: agent-hook: unknown event: $_ev" >&2
     exit "$MUX_EC_USAGE" ;;
 esac
+
+# A Notification SAYS WHICH KIND IT IS, in `notification_type` on stdin.
+# `permission_prompt` needs a human and is `blocked`; `idle_prompt` is the
+# "waiting for your input" nudge, a minute after a turn ENDED, so it is
+# evidence the turn is over rather than a request. Read as `blocked` it rang
+# the bell for a session that was merely done, and over a stale `working` it
+# made a finished session read as needing you. Anything else (an absent
+# field, an older agent, a type mux has not met) keeps the old meaning, so
+# emit's blocked-over-idle rule still covers those. `--unless-blocked`,
+# because the nudge says the INPUT box is waiting and a permission prompt
+# is not the input box: it may end a turn, never answer a prompt.
+#
+# ONLY READ WHEN stdin IS NOT A TERMINAL: a human or the demo calling this
+# by hand has nothing to send, and `cat` would wait for them. The agent
+# harness writes one JSON object and closes the pipe. Matched rather than
+# parsed: mux carries no JSON parser, and the one field is enough.
+if [ "$_ev" = Notification ] && ! [ -t 0 ]; then
+  _in=$(cat 2>/dev/null) || _in=
+  _np='"notification_type"[[:space:]]*:[[:space:]]*"idle_prompt"'
+  if printf '%s' "$_in" | grep -q -- "$_np"; then
+    set -- idle --unless-blocked
+  fi
+fi
 
 exec "$_libexec/mux-agent-state-emit" "$@" --source "$_ev"

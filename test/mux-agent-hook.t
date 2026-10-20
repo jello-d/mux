@@ -21,13 +21,15 @@ XDG_RUNTIME_DIR=$T/run; TMUX=/tmp/fake/global,1,0; TMUX_PANE=%9
 export XDG_RUNTIME_DIR TMUX TMUX_PANE
 REC=$T/run/mux/agent-state/global/9
 
-hook() { rm -f "$REC"; "$HERE/libexec/mux-agent-hook" "$@" >/dev/null 2>&1; }
+hook() {
+  rm -f "$REC"; "$HERE/libexec/mux-agent-hook" "$@" </dev/null >/dev/null 2>&1
+}
 state() { cut -d' ' -f1 2>/dev/null <"$REC" || true; }
 
 # --- the whole table ------------------------------------------------------
 for _case in 'UserPromptSubmit working' 'PostToolUse working' \
        'SubagentStop working' 'Notification blocked' \
-       'Stop idle' 'SessionStart idle'; do
+       'Stop idle' 'StopFailure idle' 'SessionStart idle'; do
   # shellcheck disable=SC2086   # two words per entry, split on purpose
   set -- $_case
   hook "$1" || fail "$1 exited non-zero"
@@ -141,6 +143,44 @@ agent_rec "$REC" working %9 100 sess
 "$HERE/libexec/mux-agent-hook" Stop >/dev/null 2>&1 || true
 [ "$(state)" = idle ] \
   || fail "Stop could not end a turn: it left the record [$(state)]"
+
+# --- A TURN THAT FAILS STILL ENDS ----------------------------------------
+# THE BUG, MEASURED 2026-10-20: a prompt answered "Prompt is too long" ended
+# the turn with StopFailure and no Stop, so the record stayed `working` while
+# the agent sat at its prompt. Everything after that read it wrong.
+agent_rec "$REC" working %9 100 sess
+"$HERE/libexec/mux-agent-hook" StopFailure </dev/null >/dev/null 2>&1 || true
+[ "$(state)" = idle ] \
+  || fail "StopFailure left a working record [$(state)]: a turn that ended
+in an API error reads busy until the human types"
+
+# --- A Notification SAYS WHICH KIND IT IS --------------------------------
+# The "waiting for your input" nudge is `idle_prompt`, a minute after a turn
+# ended. Read as `blocked` over that stale `working`, the same session then
+# showed as needing attention while it compacted.
+note() {  # STATE TYPE: a Notification of that type over a STATE record
+  agent_rec "$REC" "$1" %9 100 sess
+  printf '{"hook_event_name":"Notification","notification_type":"%s"}' "$2" \
+    | "$HERE/libexec/mux-agent-hook" Notification >/dev/null 2>&1 || true
+}
+note working idle_prompt
+[ "$(state)" = idle ] || fail "the idle nudge over a working record wrote
+[$(state)], want idle: the agent is at its input prompt, the turn is over"
+note working permission_prompt
+[ "$(state)" = blocked ] || fail "a permission prompt over a working record
+wrote [$(state)], want blocked: that is the one that needs a human"
+# AND THE NUDGE NEVER ANSWERS A PROMPT. A permission prompt left waiting is
+# still waiting, whatever else the agent says about its input box.
+note blocked idle_prompt
+[ "$(state)" = blocked ] || fail "the idle nudge cleared a pending permission
+prompt to [$(state)]: a human is still needed there"
+# A SPACE after the colon is still JSON, and the match must not depend on
+# one serialiser's formatting.
+agent_rec "$REC" working %9 100 sess
+printf '{"notification_type": "idle_prompt"}' \
+  | "$HERE/libexec/mux-agent-hook" Notification >/dev/null 2>&1 || true
+[ "$(state)" = idle ] \
+  || fail "notification_type with a space after the colon was not read"
 
 # --- the SOURCE travels, which is the point of the verb -------------------
 # Stop and SessionStart both resolve to `idle`, so the record alone can never

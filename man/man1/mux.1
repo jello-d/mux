@@ -674,6 +674,29 @@ those promoted a finished session to
 A real subagent is spawned as a tool call, so its return still arrives as
 .BR PostToolUse .
 .IP
+A TURN CAN END WITHOUT
+.BR Stop .
+One that fails on an API error fires
+.B StopFailure
+instead, which
+.B mux agent-hook
+also maps to
+.BR idle ;
+unwired, the record stays
+.B working
+at an empty prompt. And a
+.B Notification
+is read for its
+.BR notification_type :
+the "waiting for your input" nudge
+.RB ( idle_prompt )
+arrives after a turn ended, so it may end a stale
+.B working
+with
+.B \-\-unless\-blocked
+and may never clear a permission prompt. Any other type is
+.BR blocked .
+.IP
 .B humming " : READY, AND NOT FINISHED"
 .br
 A turn can end while something it started keeps running: a build, a test run,

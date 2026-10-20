@@ -22,7 +22,7 @@ _lib=$_libexec/../lib
 
 # STATE, plus an optional --beat. Parsed rather than taken as $1 so a
 # hook can pass them in either order.
-state= _beat= _refresh= _src= _unless_working=
+state= _beat= _refresh= _src= _unless_working= _unless_blocked=
 while [ $# -gt 0 ]; do
   case $1 in
     --beat) _beat=1 ;;
@@ -40,6 +40,10 @@ while [ $# -gt 0 ]; do
     # itself is the same one, still mid-turn. See the table in
     # mux-agent-hook for which event carries it.
     --unless-working) _unless_working=1 ;;
+    # --unless-blocked: an `idle` inferred from the agent waiting at its
+    # INPUT prompt. It may end a turn nothing else ended, and must not clear
+    # a permission prompt still waiting for a human.
+    --unless-blocked) _unless_blocked=1 ;;
     # --source NAME: which hook is speaking. OPTIONAL, and mux never
     # requires it: an integrator that does not pass one is not broken,
     # it is just quieter. THE CONTRACT IS MUX'S TO OWN: this defines the
@@ -67,7 +71,7 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$state" ] || {
   echo "usage: mux-agent-state-emit STATE [--beat|--refresh]" \
-    "[--unless-working] [--source NAME]" >&2
+    "[--unless-working|--unless-blocked] [--source NAME]" >&2
   exit "$MUX_EC_USAGE"; }
 
 # No tmux pane means nothing to track. Exit clean so the hook never fails.
@@ -231,6 +235,12 @@ fi
 # one needs an agent to die mid-turn first.
 if [ -n "$_unless_working" ] && [ "$_pstate" = working ]; then
   mux_log agent "${_ps:-?} kept working; $state refused" \
+    "${_src:+via }${_src:-}"
+  exit "$MUX_EC_OK"
+fi
+
+if [ -n "$_unless_blocked" ] && [ "$_pstate" = blocked ]; then
+  mux_log agent "${_ps:-?} kept blocked; $state refused" \
     "${_src:+via }${_src:-}"
   exit "$MUX_EC_OK"
 fi
