@@ -252,6 +252,78 @@ mux_agent_hum_scan() {
     }'
 }
 
+# mux_agent_asker SELFPID AGENTS -> the pid of the agent that is asking: the
+# nearest ANCESTOR of SELFPID whose command name is in AGENTS, a space-padded
+# set. Called from inside a hook, which the agent spawns, so walking UP finds
+# the agent through any shell the hook was run with. Empty when none is found.
+#
+# mux_agent_approved RECORDFILE EPOCH NOW -> 0 when the agent named in
+# RECORDFILE.ask has a direct child that started after EPOCH and at least
+# two seconds before NOW.
+#
+# WHY IT EXISTS: Claude Code fires NO HOOK when a human approves a permission
+# prompt. Measured on 2.1.308: PreToolUse and PermissionRequest fire as the
+# dialog appears, Notification 6s later, then nothing until PostToolUse when
+# the approved tool FINISHES; the transcript is not written either. So a long
+# approved command read `blocked` for its whole run, 7 minutes once, live.
+#
+# WHAT DOES CHANGE IS THE PROCESS TREE: the approved Bash call starts its tool
+# shell as a child of the agent at the moment of approval. The two filters
+# carry the rule. STARTED AFTER THE PROMPT excludes background tasks, whose
+# shells are also children of the agent and started earlier. AT LEAST TWO
+# SECONDS OLD excludes hooks, which the agent also spawns as children, and
+# which live for milliseconds (a second Notification re-emits `blocked`
+# while the dialog is still up). A tool that spawns nothing (Edit, Write)
+# finishes fast enough that PostToolUse corrects the record anyway.
+#
+# STRICTLY AFTER, at one-second resolution, so an approval inside the same
+# second as the prompt is missed and waits for PostToolUse. Measured once,
+# from a scripted keystroke; no human reads a dialog that fast, and `>=`
+# would admit a background task launched in parallel with the prompt.
+#
+# LINUX ONLY, degrading the safe way: without /proc, or without the
+# per-thread `children` files, nothing is found and the record stays
+# `blocked`, which is what it said before this existed. MUX_HUM_PROC
+# relocates /proc for the suite, the same seam the humming scan uses.
+mux_agent_asker() {   # <selfpid> <agents>
+  _kproc=${MUX_HUM_PROC:-/proc}
+  _kp=$1 _kn=0
+  while [ "$_kn" -lt 12 ]; do
+    case $_kp in ''|0|1|*[!0-9]*) return 0 ;; esac
+    _kst=$(cat "$_kproc/$_kp/stat" 2>/dev/null) || return 0
+    _kcomm=${_kst#*\(}; _kcomm=${_kcomm%\)*}
+    case $2 in *" $_kcomm "*) printf '%s' "$_kp"; return 0 ;; esac
+    _kp=$(printf '%s\n' "${_kst##*) }" | awk '{ print $2 }')
+    _kn=$((_kn + 1))
+  done
+}
+
+mux_agent_approved() {   # <record file> <epoch> <now>
+  _vproc=${MUX_HUM_PROC:-/proc}
+  read -r _va _vrest 2>/dev/null <"$1.ask" || return 1
+  case ${_va:-} in ''|*[!0-9]*) return 1 ;; esac
+  case ${2:-}${3:-} in ''|*[!0-9]*) return 1 ;; esac
+  _vkids=$(cat "$_vproc/$_va"/task/*/children 2>/dev/null) || return 1
+  [ -n "$_vkids" ] || return 1
+  _vbt=$(awk '$1 == "btime" { print $2; exit }' "$_vproc/stat" 2>/dev/null)
+  case ${_vbt:-} in ''|*[!0-9]*) return 1 ;; esac
+  _vhz=$(getconf CLK_TCK 2>/dev/null) || _vhz=100
+  case ${_vhz:-} in ''|0|*[!0-9]*) _vhz=100 ;; esac
+  _vage=2
+  for _vc in $_vkids; do
+    _vs=$(cat "$_vproc/$_vc/stat" 2>/dev/null) || continue
+    # starttime is field 22 of stat, 20 once everything through the
+    # parenthesised comm is stripped (a comm may contain spaces).
+    _vt=$(printf '%s\n' "${_vs##*) }" | awk '{ print $20 }')
+    case ${_vt:-} in ''|*[!0-9]*) continue ;; esac
+    _vt=$((_vbt + _vt / _vhz))
+    if [ "$_vt" -gt "$2" ] && [ $(($3 - _vt)) -ge "$_vage" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 # mux_agent_humming RECORDFILE -> 0 when that pane's record carries a HUMMING
 # sidecar with at least one pid still alive.
 #

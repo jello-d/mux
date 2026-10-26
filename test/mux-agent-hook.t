@@ -29,7 +29,8 @@ state() { cut -d' ' -f1 2>/dev/null <"$REC" || true; }
 # --- the whole table ------------------------------------------------------
 for _case in 'UserPromptSubmit working' 'PostToolUse working' \
        'SubagentStop working' 'Notification blocked' \
-       'Stop idle' 'StopFailure idle' 'SessionStart idle'; do
+       'Stop idle' 'StopFailure idle' 'SessionStart idle' \
+       'PermissionRequest blocked'; do
   # shellcheck disable=SC2086   # two words per entry, split on purpose
   set -- $_case
   hook "$1" || fail "$1 exited non-zero"
@@ -181,6 +182,28 @@ printf '{"notification_type": "idle_prompt"}' \
   | "$HERE/libexec/mux-agent-hook" Notification >/dev/null 2>&1 || true
 [ "$(state)" = idle ] \
   || fail "notification_type with a space after the colon was not read"
+
+# --- THE DIALOG IS NEVER THE NUDGE ----------------------------------------
+# PermissionRequest fires as the dialog appears, 6s before the Notification
+# about it. An auto-mode turn can reach a prompt before any hook said it
+# started, so over `idle` it must still say blocked, where a bare
+# Notification there is the "waiting for input" nudge and stays idle.
+agent_rec "$REC" idle %9 100 sess
+"$HERE/libexec/mux-agent-hook" PermissionRequest </dev/null >/dev/null 2>&1 \
+  || true
+[ "$(state)" = blocked ] || fail "a PermissionRequest over an idle record
+wrote [$(state)]: the blocked-over-idle rule softened a real dialog"
+agent_rec "$REC" idle %9 100 sess
+"$HERE/libexec/mux-agent-hook" Notification </dev/null >/dev/null 2>&1 || true
+[ "$(state)" = idle ] \
+  || fail "an untyped Notification over idle wrote [$(state)], want idle"
+
+# THE ASK SIDECAR GOES WITH THE PROMPT: any other state clears it, so a pane
+# that leaves `blocked` cannot carry a stale asker into its next prompt.
+agent_rec "$REC" blocked %9 100 sess
+printf '910\n' >"$REC.ask"
+"$HERE/libexec/mux-agent-hook" PostToolUse </dev/null >/dev/null 2>&1 || true
+[ ! -e "$REC.ask" ] || fail "the .ask sidecar survived leaving blocked"
 
 # --- the SOURCE travels, which is the point of the verb -------------------
 # Stop and SessionStart both resolve to `idle`, so the record alone can never

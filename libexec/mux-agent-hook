@@ -55,6 +55,11 @@ case $_ev in
   PostToolUse)      set -- working --beat ;;
   SubagentStop)     set -- working --refresh ;;
   Notification)     set -- blocked ;;
+  # THE DIALOG ITSELF, and 6s sooner than the Notification about it
+  # (measured on 2.1.308). --asked because this one is never the "waiting
+  # for input" nudge, so the blocked-over-idle rule must not soften it: an
+  # auto-mode turn can reach a prompt before any hook said it started.
+  PermissionRequest) set -- blocked --asked ;;
   Stop)             set -- idle ;;
   # A TURN THAT ENDS IN AN API ERROR FIRES StopFailure AND NEVER Stop, so
   # without this row the record stays `working` with nothing running.

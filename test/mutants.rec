@@ -3592,14 +3592,14 @@ m hum-wait-idle-rc
 = prune-eats-the-sidecars
 f libexec/mux-agent-state-render
 t mux-strip
--     case $f in *.beat|*.hum) continue ;; esac
+-     case $f in *.beat|*.hum|*.ask) continue ;; esac
 +     case $f in zzzz) continue ;; esac
 m live background work must draw
 
 = prune-orphans-the-sidecars
 f libexec/mux-agent-state-render
 t mux-strip
--     rm -f "$f" "$f.beat" "$f.hum"
+-     rm -f "$f" "$f.beat" "$f.hum" "$f.ask"
 +     rm -f "$f"
 m sidecar was left behind
 
@@ -5044,3 +5044,52 @@ t mux-agent-hook
 -   _np='"notification_type"[[:space:]]*:[[:space:]]*"idle_prompt"'
 +   _np='"notification_type":"idle_prompt"'
 m with a space after the colon
+
+= approve-background-task-reads-as-approval
+f lib/mux-agent-state_lib
+t mux-agent-approve
+-     if [ "$_vt" -gt "$2" ] && [ $(($3 - _vt)) -ge "$_vage" ]; then
++     if [ $(($3 - _vt)) -ge "$_vage" ]; then
+m background task started before
+
+= approve-hook-reads-as-approval
+f lib/mux-agent-state_lib
+t mux-agent-approve
+-   _vage=2
++   _vage=0
+m one-second-old child
+
+= asker-matches-any-ancestor
+f lib/mux-agent-state_lib
+t mux-agent-approve
+-     case $2 in *" $_kcomm "*) printf '%s' "$_kp"; return 0 ;; esac
++     printf '%s' "$_kp"; return 0
+m did not find the agent
+
+= render-never-checks-a-blocked-record
+f libexec/mux-agent-state-render
+t mux-agent-approve
+-       *" $pane "*) [ "$st" = blocked ] && _unblock "$f"; continue ;;
++       *" $pane "*) continue ;;
+m left an approved prompt blocked
+
+= render-unblock-keeps-the-ask
+f libexec/mux-agent-state-render
+t mux-agent-approve
+-   rm -f "$1.ask"
++   :
+m sidecar outlived the prompt
+
+= hook-permission-request-softened-over-idle
+f libexec/mux-agent-hook
+t mux-agent-hook
+-   PermissionRequest) set -- blocked --asked ;;
++   PermissionRequest) set -- blocked ;;
+m softened a real dialog
+
+= emit-ask-survives-leaving-blocked
+f libexec/mux-agent-state-emit
+t mux-agent-hook
+-   rm -f "$_askf" 2>/dev/null || true
++   :
+m survived leaving blocked

@@ -697,6 +697,22 @@ with
 and may never clear a permission prompt. Any other type is
 .BR blocked .
 .IP
+APPROVING A PERMISSION PROMPT FIRES NO HOOK.
+.B PermissionRequest
+marks the dialog
+.B blocked
+as it appears, and nothing follows until the approved tool finishes. So the
+status-bar render checks a
+.B blocked
+record's agent process (recorded beside it as the prompt went up): a child
+started after the prompt and at least two seconds old is the approved tool
+running, and the record becomes
+.BR working .
+Background tasks started earlier and short-lived hooks are not counted.
+Linux only; elsewhere the record stays
+.B blocked
+until the tool finishes.
+.IP
 .B humming " : READY, AND NOT FINISHED"
 .br
 A turn can end while something it started keeps running: a build, a test run,

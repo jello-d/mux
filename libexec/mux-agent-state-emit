@@ -22,7 +22,7 @@ _lib=$_libexec/../lib
 
 # STATE, plus an optional --beat. Parsed rather than taken as $1 so a
 # hook can pass them in either order.
-state= _beat= _refresh= _src= _unless_working= _unless_blocked=
+state= _beat= _refresh= _src= _unless_working= _unless_blocked= _asked=
 while [ $# -gt 0 ]; do
   case $1 in
     --beat) _beat=1 ;;
@@ -44,6 +44,10 @@ while [ $# -gt 0 ]; do
     # INPUT prompt. It may end a turn nothing else ended, and must not clear
     # a permission prompt still waiting for a human.
     --unless-blocked) _unless_blocked=1 ;;
+    # --asked: this `blocked` is a dialog a human must answer, never the
+    # "waiting for your input" nudge, so the blocked-over-idle rule below
+    # does not apply to it.
+    --asked) _asked=1 ;;
     # --source NAME: which hook is speaking. OPTIONAL, and mux never
     # requires it: an integrator that does not pass one is not broken,
     # it is just quieter. THE CONTRACT IS MUX'S TO OWN: this defines the
@@ -71,7 +75,7 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$state" ] || {
   echo "usage: mux-agent-state-emit STATE [--beat|--refresh]" \
-    "[--unless-working|--unless-blocked] [--source NAME]" >&2
+    "[--unless-working|--unless-blocked] [--asked] [--source NAME]" >&2
   exit "$MUX_EC_USAGE"; }
 
 # No tmux pane means nothing to track. Exit clean so the hook never fails.
@@ -250,7 +254,7 @@ fi
 # arrive here as `blocked`. A permission prompt only happens while working, so a
 # `blocked` that lands while the agent is already idle is the waiting nudge:
 # keep it idle, so a finished turn stays a check (done), not a bell (needs you).
-if [ "$state" = blocked ] && [ "$_pstate" = idle ]; then
+if [ "$state" = blocked ] && [ "$_pstate" = idle ] && [ -z "$_asked" ]; then
   state=idle
 fi
 
@@ -391,6 +395,36 @@ if [ "$state" = idle ]; then
   fi
 else
   rm -f "$_humf" 2>/dev/null || true
+fi
+
+# --- the ASK sidecar: which process is waiting on a human -----------------
+# Written as a session goes `blocked`, so the status-bar render can notice
+# the one thing no hook reports: the prompt being APPROVED. See
+# mux_agent_approved. The agent is found by walking UP from this process,
+# which the agent spawned to run its hook. Kept across a re-emit of
+# `blocked` (a Notification follows a PermissionRequest), cleared by any
+# other state. Only this rare transition pays for the walk.
+_askf=$file.ask
+if [ "$state" = blocked ]; then
+  if [ ! -s "$_askf" ]; then
+    : "${MUX_SHARE:=$_libexec/../share}"
+    : "${MUX_DIR:=${XDG_CONFIG_HOME:-$HOME/.config}/mux}"
+    _agents=
+    if [ -r "$_lib/mux-data_lib" ]; then
+      # shellcheck source=/dev/null
+      . "$_lib/mux-data_lib"
+      _agents=" $(mux_data_stems agents .agent 2>/dev/null | tr '\n' ' ')"
+    fi
+    [ -n "${_agents# }" ] || _agents=" claude "
+    _asker=$(mux_agent_asker "$$" "$_agents" 2>/dev/null || true)
+    if [ -n "$_asker" ]; then
+      printf '%s\n' "$_asker" 2>/dev/null >"$_askf.$$" \
+        && mv -f "$_askf.$$" "$_askf" 2>/dev/null \
+        || rm -f "$_askf.$$" 2>/dev/null || true
+    fi
+  fi
+else
+  rm -f "$_askf" 2>/dev/null || true
 fi
 
 # An opt-in breadcrumb: with MUX_EMIT_LOG set, every transition is appended, so

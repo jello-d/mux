@@ -196,6 +196,30 @@ $1
 # incoherent answer, so the answer is refused instead. The cost of refusing is
 # that a genuinely dead pane's file survives until the next render that CAN
 # see the server: a stale chip, which the next real render clears.
+# A PROMPT THAT WAS APPROVED is invisible to every hook (see
+# mux_agent_approved), so a `blocked` record is checked here, the one place
+# that already runs on a timer. A record still `blocked` with the epoch we
+# read is rewritten to `working`, which is a compare-and-swap: a real event
+# that moved it in the meantime is the hooks' truth and wins. Only a blocked
+# record pays for this, and that is rare and brief.
+_unblock() {   # <record file>
+  [ -f "$1.ask" ] || return 0
+  [ -n "${_unow:-}" ] || _unow=$(date +%s)
+  mux_agent_approved "$1" "$ep" "$_unow" || return 0
+  read -r _ust _uw _up _uep _unid _uss 2>/dev/null <"$1" || return 0
+  [ "$_ust" = blocked ] && [ "$_uep" = "$ep" ] || return 0
+  printf 'working %s %s %s %s %s\n' "$_uw" "$_up" "$_unow" "$_unid" \
+    "$_uss" 2>/dev/null >"$1.$$" && mv -f "$1.$$" "$1" \
+    || { rm -f "$1.$$"; return 0; }
+  rm -f "$1.ask"
+  if [ -r "$_lib/mux-log_lib" ]; then
+    # shellcheck source=/dev/null
+    . "$_lib/mux-log_lib"
+    mux_log agent "$_uss blocked -> working via approval" || true
+  fi
+  return 0
+}
+
 if [ -d "$dir" ] && [ -n "${live# }" ]; then
   for f in "$dir"/*; do
     [ -e "$f" ] || continue
@@ -213,12 +237,14 @@ if [ -d "$dir" ] && [ -n "${live# }" ]; then
     # lines in two days of logs, on two boxes" while the path corroborates
     # first time when driven directly: the auto-mode recovery built in 0.49 has
     # never once been able to fire in production, and this is the reason.
-    case $f in *.beat|*.hum) continue ;; esac
+    case $f in *.beat|*.hum|*.ask) continue ;; esac
     read -r st win pane ep nid ss <"$f" || continue
-    case "$live" in *" $pane "*) continue ;; esac
+    case "$live" in
+      *" $pane "*) [ "$st" = blocked ] && _unblock "$f"; continue ;;
+    esac
     # The sidecars go WITH the record they describe, or a pruned pane leaves
     # orphans nothing will ever collect.
-    rm -f "$f" "$f.beat" "$f.hum"
+    rm -f "$f" "$f.beat" "$f.hum" "$f.ask"
   done
 fi
 
