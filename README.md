@@ -168,6 +168,29 @@ navigation defaults you can skip if you have your own.
 `setup.sh` installs the man page under `~/.local/share/man`, on the default
 `MANPATH`, so `man mux` works.
 
+### Machine-wide
+
+The same tree can serve every user on a machine instead:
+
+```sh
+sudo ~/.mux/setup.sh install --system   # /opt/mux, linked into /usr/local
+sudo ~/.mux/setup.sh check --system
+```
+
+The payload goes to `/opt/mux`, root-owned and writable by nobody else, with
+`mux` in `/usr/local/bin` and the man page under `/usr/local/share/man`.
+Everything mux keeps per user (config, state, the agent records, the desktop
+notifier) stays in each user's home, because none of it was ever inside the
+payload. Each user's `tmux.conf` sources `/opt/mux/share/mux.tmux`.
+
+One mode at a time. `/usr/local/bin` comes before `~/.local/bin` on `PATH`,
+so a second copy would be silently shadowed and left to rot. A system install
+therefore removes the invoking user's own copy (the `sudo` caller's), keeping
+the notifier's venv, and names any line in their `tmux.conf` that pointed at
+it. Both modes' `check` fail on a copy left over from the other.
+`uninstall --system` removes the machine copy and nothing of any user's.
+`DESTDIR` stages the system tree under another root, for packaging.
+
 ### Homebrew (macOS and Linux)
 
 This repository is its own tap, so there is no separate formula repo to keep in

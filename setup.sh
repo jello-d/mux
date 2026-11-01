@@ -11,6 +11,8 @@
 #   ./setup.sh test        run the in-repo test suite (test/run)
 #   ./setup.sh version     the packaged version
 #   ./setup.sh all         install + the optional desktop notifier
+#   ./setup.sh <install|uninstall|check|paths> --system
+#                          the MACHINE-WIDE mode, as root (below)
 #   ./setup.sh desktop-notifier [VERB]   drive the optional notifier
 #                          passthrough to desktop-notifier/setup.sh;
 #                          VERB defaults to
@@ -24,6 +26,20 @@
 # than ignored (see the arity guard at the dispatch, and why it exists). The
 # <pkg> namespace lives in the INSTALL prefix (~/.local/libexec/mux), applied
 # here; the source tree carries none (libexec/, share/), as a package should.
+#
+# SYSTEM MODE (`--system`, as root) is the same payload, root-owned and closed
+# (nothing writable by group or other), at /opt/mux, with the command at
+# /usr/local/bin/mux and the man page under /usr/local/share/man: one tree
+# plus its links, per the fleet's install-placement rule, and the same
+# `--system` spelling drydock's root mode already calls. Every user then gets
+# mux from one copy; their config, state and runtime stay per-user, because
+# none of it was ever inside the payload. THE MODE SWITCH removes the sudo
+# caller's user-mode copy in the same install, since two `mux` on PATH is
+# banned and /usr/local/bin shadows ~/.local/bin. The desktop notifier stays
+# per-user (a systemd --user unit and its venv), so it is not offered here
+# and its venv survives the switch. DESTDIR stages the system tree under a
+# root, as packagers expect; it grants nothing, since a non-root caller can
+# only write where it already could.
 set -eu
 
 PKG=mux
@@ -35,10 +51,30 @@ _root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 # shellcheck source=/dev/null
 . "$_root/lib/mux-exit_lib"
 
-PREFIX=${PREFIX:-$HOME/.local}
-_bin=${XDG_BIN_HOME:-$PREFIX/bin}
-_shr=${XDG_DATA_HOME:-$PREFIX/share}
-_man=$_shr/man
+_MODE=user
+[ "${2:-}" = --system ] && _MODE=system
+_dest=${DESTDIR:-}
+if [ "$_MODE" = system ]; then
+  case ${1:-} in
+    install|uninstall)
+      if [ -z "$_dest" ] && [ "$(id -u)" != 0 ]; then
+        echo "setup.sh: --system installs as root" \
+          "(sudo sh setup.sh $1 --system)" >&2
+        exit "$MUX_EC_FAIL"
+      fi ;;
+  esac
+  PREFIX=$_dest/usr/local
+  _bin=$PREFIX/bin
+  _shr=$_dest/opt
+  _man=$PREFIX/share/man
+else
+  PREFIX=${PREFIX:-$HOME/.local}
+  _bin=${XDG_BIN_HOME:-$PREFIX/bin}
+  _shr=${XDG_DATA_HOME:-$PREFIX/share}
+  _man=$_shr/man
+fi
+# Where the OTHER mode's command would be, so each mode can name a leftover.
+_sysbin=$_dest/usr/local/bin/$PKG
 # THE PAYLOAD: one tree holding mux as shipped, per the fleet's
 # install-placement rule (ruled 2026-10-01). bin/, libexec/, share/ and man/
 # live INSIDE it as siblings, because `bin/mux` resolves $0 and reads the
@@ -46,9 +82,16 @@ _man=$_shr/man
 # Homebrew keg and a relocated install all work, and it is why the nested
 # `<payload>/share` stays. The wart is cosmetic; the invariant is not.
 _pay=$_shr/$PKG
+# WHERE THE PAYLOAD WILL BE WHEN IT RUNS, which differs from where it is
+# WRITTEN only under DESTDIR: links carry the final path, as a staged
+# package's must, or they dangle once the stage is installed.
+_payt=${_pay#"$_dest"}
 # THE RETIRED ROOT, kept as a name so install, uninstall and check all remove
 # or report the same thing rather than each spelling it.
 _oldlib=$PREFIX/libexec/$PKG
+# No old layout ever lived under /usr/local, and retiring one there would
+# rmdir a system directory that merely happened to be empty.
+[ "$_MODE" = user ] || _oldlib=
 RC=0
 
 # marker contract: plain [OK]/[FAIL]/[WARN] a host styles; coloured at a tty,
@@ -265,6 +308,14 @@ _payload_stage() {
   done
   [ -f "$_ps_new/bin/$PKG" ] || { bad "staged payload has no bin/$PKG"; \
     rm -rf -- "$_ps_new"; return 1; }
+  # CLOSED BEFORE THE SWAP in system mode, so the live tree is never open
+  # for an instant: root-owned, nothing writable by group or other, and
+  # readable by everyone whatever root's umask happened to be, since every
+  # user runs it.
+  if [ "$_MODE" = system ]; then
+    [ "$(id -u)" != 0 ] || chown -R -h root:root "$_ps_new"
+    chmod -R u+rwX,go+rX,go-w "$_ps_new"
+  fi
   # THE TWO FRAGMENT ALIASES, and they are a COEXISTENCE WINDOW rather than
   # tidiness. The tmux fragments are the only payload files a user names in
   # their OWN config, and that line moved with the layout:
@@ -398,13 +449,26 @@ _adopt_runtime_state() {
 do_install() {
   mkdir -p "$_bin" "$_shr"
   _payload_stage || return 1
-  _ln "$_pay/bin/$PKG" "$_bin/$PKG"
+  _ln "$_payt/bin/$PKG" "$_bin/$PKG"
   _man_pages | while IFS= read -r _m; do
     _mr=${_m#"$_root"/}
-    _ln "$_pay/$_mr" "$_man/$(basename "$(dirname "$_m")")/$(basename "$_m")"
+    _ln "$_payt/$_mr" "$_man/$(basename "$(dirname "$_m")")/$(basename "$_m")"
   done
   _retire_old_layout
   echo "$PKG: installed to $_pay (+ bin and man links in $PREFIX)"
+  # EVERY STEP BELOW IS ONE USER'S, and as root it would act on /root: the
+  # log, the runtime records, that user's live tmux servers, their tmux.conf,
+  # their config dir. A live server needs nothing: the fragment calls `mux`
+  # by name, and bin/mux ignores an inherited MUX_SHARE that no longer
+  # exists, so a switched-away user copy resolves to this one.
+  if [ "$_MODE" = system ]; then
+    _mode_switch
+    echo "$PKG: per-user steps are each user's: a tmux.conf may source" \
+      "$_payt/share/mux.tmux, and 'mux check' audits one user's setup"
+    return 0
+  fi
+  _system_leftover && warn "a system install ($_sysbin) shadows this one:" \
+    "remove it with 'sudo sh setup.sh uninstall --system'"
   # THE ANCHOR EVENT, and it earns its line by answering a question nothing
   # else on the box can: WHICH mux this machine received and WHEN. The notes
   # have twice had to establish that from a payload mtime against a
@@ -597,6 +661,68 @@ _scan_root_step() {
 #
 # CONTENT, NOT VERSION: it asks the indicator's own check, which compares the
 # package to what is installed and what is RUNNING. Never fatal, and silent
+# _login_home: the sudo caller's home, or nothing. Only SUDO_USER is read: a
+# provisioner's own name for the login user is its business, and with none
+# the switch names the leftover rather than guessing whose home to edit.
+_login_home() {
+  _lu=${SUDO_USER:-}
+  [ -n "$_lu" ] && [ "$_lu" != root ] || return 0
+  getent passwd "$_lu" | cut -d: -f6
+}
+
+# _user_copies HOME: the user-mode pieces that may not coexist with a system
+# install, one per line. The payload's CODE only: its `venv` is the desktop
+# notifier's, which stays per-user, so the payload directory itself is not
+# named and survives as the venv's home.
+_user_copies() {
+  for _uc in "$1/.local/bin/$PKG" "$1/.local/share/man/man1/$PKG.1" \
+             "$1/.local/share/$PKG/bin" "$1/.local/share/$PKG/lib" \
+             "$1/.local/share/$PKG/libexec" "$1/.local/share/$PKG/share" \
+             "$1/.local/share/$PKG/man" "$1/.local/share/$PKG/mux.tmux" \
+             "$1/.local/share/$PKG/mux-opinions.tmux"; do
+    if [ -e "$_uc" ] || [ -L "$_uc" ]; then echo "$_uc"; fi
+  done
+  return 0
+}
+
+# _mode_switch: user to system, in the same install. Each removal is pinned
+# to its exact shape first, per the standing rm rule, and runs as root inside
+# a user's home, so nothing outside those literal shapes is ever touched.
+_mode_switch() {
+  _lh=$(_login_home)
+  case $_lh in
+    /?*) ;;
+    *) echo "$PKG: no sudo caller, so no user-mode copy was looked for;" \
+         "that user's 'mux check' names one if it exists" >&2
+       return 0 ;;
+  esac
+  for _uc in $(_user_copies "$_lh"); do
+    case $_uc in
+      "$_lh/.local/bin/$PKG"|"$_lh/.local/share/man/man1/$PKG.1"|\
+      "$_lh/.local/share/$PKG/mux.tmux"|\
+      "$_lh/.local/share/$PKG/mux-opinions.tmux") rm -f -- "$_uc" ;;
+      "$_lh/.local/share/$PKG"/bin|"$_lh/.local/share/$PKG"/lib|\
+      "$_lh/.local/share/$PKG"/libexec|"$_lh/.local/share/$PKG"/share|\
+      "$_lh/.local/share/$PKG"/man) rm -rf -- "$_uc" ;;
+      *) continue ;;
+    esac
+    echo "$PKG: removed the user-mode $_uc (mode switch to system)"
+  done
+  rmdir "$_lh/.local/share/$PKG" 2>/dev/null || :
+  # THE USER'S tmux.conf IS SAID, NEVER EDITED (it is theirs, the rule the
+  # user-mode notice already keeps). A line sourcing the removed copy now
+  # names a missing file; mux re-wires a server on its next session verb
+  # either way, so this is a stale line rather than a dead bar.
+  for _c in "$_lh/.config/tmux/tmux.conf" "$_lh/.tmux.conf"; do
+    grep -q -- '\.local/share/mux' "$_c" 2>/dev/null || continue
+    echo "$PKG: NOTE $_c sources the removed user copy; point it at" >&2
+    echo "$PKG:      source-file $_payt/share/mux.tmux" >&2
+  done
+}
+
+# _system_leftover: is there a system-mode command beside a user install?
+_system_leftover() { [ -e "$_sysbin" ] || [ -L "$_sysbin" ]; }
+
 # when no indicator is installed: an optional sub-package must not make the
 # core install noisy for everyone who does not use it.
 _indicator_notice() {
@@ -617,12 +743,12 @@ do_uninstall() {
   # Noted BEFORE the payload goes, since the evidence is inside it.
   _had_venv=
   [ -d "$_pay/venv" ] && _had_venv=1
-  _rmln "$_pay/bin/$PKG" "$_bin/$PKG"
+  _rmln "$_payt/bin/$PKG" "$_bin/$PKG"
   # The OLD link target too, so uninstalling a pre-migration install works.
   _rmln "$_root/bin/$PKG" "$_bin/$PKG"
   _man_pages | while IFS= read -r _m; do
     _mt=$_man/$(basename "$(dirname "$_m")")/$(basename "$_m")
-    _rmln "$_pay/${_m#"$_root"/}" "$_mt"
+    _rmln "$_payt/${_m#"$_root"/}" "$_mt"
     _rmln "$_m" "$_mt"
   done
   _rmln "$_root/share" "$_shr/$PKG"     # a pre-migration share link
@@ -634,6 +760,11 @@ do_uninstall() {
     esac
   fi
   echo "$PKG: removed $_pay and its links from $PREFIX"
+  if [ "$_MODE" = system ]; then
+    echo "$PKG: every user's own config, state and runtime are theirs and" \
+      "were not touched"
+    return 0
+  fi
   # A REMOVAL IS A MUTATION, which is exactly what this log is for, and it
   # answers the awkward question afterwards: mux went away, by what and when.
   _slog "removed $_pay and its links from $PREFIX"
@@ -658,9 +789,9 @@ do_uninstall() {
 
 do_check() {
   echo "== $PKG (package install) =="
-  [ "$(readlink "$_bin/$PKG" 2>/dev/null)" = "$_pay/bin/$PKG" ] \
+  [ "$(readlink "$_bin/$PKG" 2>/dev/null)" = "$_payt/bin/$PKG" ] \
     && ok "bin/$PKG links into the payload" \
-    || bad "bin/$PKG does not link to $_pay/bin/$PKG"
+    || bad "bin/$PKG does not link to $_payt/bin/$PKG"
   # THE PAYLOAD IS A TREE, NOT A LINK, which is the whole migration: a
   # symlink here means the install still depends on a source checkout and
   # dies when it moves.
@@ -680,7 +811,53 @@ do_check() {
   else
     ok "no retired layout path"
   fi
+  # ONE COPY ON PATH, from whichever side: a leftover of the OTHER mode is a
+  # FAIL, named, because /usr/local/bin shadows ~/.local/bin and the shadowed
+  # copy then rots.
+  if [ "$_MODE" = system ]; then
+    _check_system
+    return 0
+  fi
+  if _system_leftover; then
+    bad "a system install ($_sysbin) exists too: two copies on PATH, and" \
+      "the system one shadows this"
+  fi
   "$_root/bin/mux" check || RC=1      # deps + package data (its own markers)
+}
+
+# _check_system: what only the machine-wide mode owes. Ownership and modes
+# are read with find, which needs no privilege on a world-readable tree, so
+# a non-root caller gets the same verdict root does. `mux check` itself is
+# NOT run: it audits one user's config, state and tmux, and as root that is
+# /root's, which reports on nobody who uses this install.
+_check_system() {
+  # A DESTDIR stage is a non-root build, so ownership is asked only of a
+  # real install; the modes are asked of both.
+  if [ -d "$_pay" ]; then
+    _open=$(find "$_pay/" ! -type l \( -perm -0002 -o -perm -0020 \) -print \
+      2>/dev/null | head -n 1)
+    [ -n "$_open" ] || [ -n "$_dest" ] || _open=$(find "$_pay/" ! -user root \
+      -print 2>/dev/null | head -n 1)
+    if [ -n "$_open" ]; then
+      bad "the system payload is not root-owned and closed: $_open"
+    else
+      ok "the system payload is root-owned and closed"
+    fi
+  fi
+  _lh=$(_login_home)
+  case $_lh in
+    /?*)
+      _left=$(_user_copies "$_lh")
+      if [ -n "$_left" ]; then
+        bad "user-mode copy beside the system install (two copies):" \
+          "$(echo "$_left" | head -n 1)"
+      else
+        ok "no user-mode copy for $SUDO_USER"
+      fi ;;
+  esac
+  if command -v tmux >/dev/null 2>&1; then ok "tmux on PATH"
+  else bad "tmux not on PATH (mux drives tmux)"; fi
+  echo "  [INFO] per-user setup is each user's: run 'mux check' as them"
 }
 
 # --- paths: the ONE declaration of every root this package owns -----------
@@ -709,6 +886,13 @@ do_paths() {
   printf 'bin\t%s\n'     "$_bin/$PKG"
   printf 'payload\t%s\n' "$_shr/$PKG"
   printf 'man\t%s\n'     "$_man/man1/$PKG.1"
+  # SYSTEM MODE OWNS ONLY THE MACHINE'S ROOTS. Config, state, cache, runtime
+  # and the notifier's venv belong to each user, and printing root's would
+  # name directories nobody who uses this install ever reads.
+  if [ "$_MODE" = system ]; then
+    printf 'policy\t%s\n' "/etc/$PKG/send-policy"
+    return 0
+  fi
   printf 'config\t%s\n'  "${MUX_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/$PKG}"
   _p_st=${XDG_STATE_HOME:-$HOME/.local/state}
   printf 'state\t%s\n'   "${MUX_STATE:-$_p_st/$PKG}"
@@ -719,8 +903,8 @@ do_paths() {
   printf 'policy\t%s\n'  "/etc/$PKG/send-policy"
 }
 
-_U="usage: setup.sh [install|uninstall|check|paths|test|version|all|\
-desktop-notifier]"
+_U="usage: setup.sh [install|uninstall|check|paths [--system]|test|version|\
+all|desktop-notifier]"
 # --- ARGUMENTS PAST THE VERB ARE REFUSED, NEVER IGNORED --------------------
 # FOUND BY MAKING THE MISTAKE, on a live box: `sh setup.sh install
 # PREFIX=/var/tmp/scratch` installed to the REAL prefix and printed its usual
@@ -759,8 +943,17 @@ _badarg() {   # <verb> <offending argument>
 # provisioner that calls this by name move independently rather than needing a
 # flag day. Both repos have been renamed and deployed, so the overlap has done
 # its job and gone: an alias nobody uses is a second spelling to keep working.
+# `--system` is the one FLAG, and only on the verbs that have a system mode:
+# accepting it anywhere else would install somewhere the caller did not ask
+# for, which is the very accident this guard exists for.
 case "${1:-help}" in
   desktop-notifier) ;;
+  install|uninstall|check|paths)
+    if [ "${2:-}" = --system ]; then
+      [ "$#" -le 2 ] || _badarg "$1" "$3"
+    else
+      [ "$#" -le 1 ] || _badarg "$1" "$2"
+    fi ;;
   *) [ "$#" -le 1 ] || _badarg "${1:-help}" "$2" ;;
 esac
 

@@ -5093,3 +5093,58 @@ t mux-agent-hook
 -   rm -f "$_askf" 2>/dev/null || true
 +   :
 m survived leaving blocked
+
+= system-link-points-into-the-stage
+f setup.sh
+t setup-system
+-   _ln "$_payt/bin/$PKG" "$_bin/$PKG"
++   _ln "$_pay/bin/$PKG" "$_bin/$PKG"
+m not the final path
+
+= system-payload-left-open
+f setup.sh
+t setup-system
+-     chmod -R u+rwX,go+rX,go-w "$_ps_new"
+m writable by group/other
+
+= system-mode-switch-skipped
+f setup.sh
+t setup-system
+-     _mode_switch
++     :
+m two copies on PATH
+
+= system-switch-eats-the-venv
+f setup.sh
+t setup-system
+-   rmdir "$_lh/.local/share/$PKG" 2>/dev/null || :
++   rm -rf -- "$_lh/.local/share/$PKG"
+m notifier's venv
+
+= system-flag-accepted-everywhere
+f setup.sh
+t setup-system
+-   *) [ "$#" -le 1 ] || _badarg "${1:-help}" "$2" ;;
++   *) [ "$#" -le 2 ] || _badarg "${1:-help}" "$2" ;;
+m version --system
+
+= system-check-blind-to-open-files
+f setup.sh
+t setup-system
+-     if [ -n "$_open" ]; then
++     if false; then
+m group-writable payload passed
+
+= user-check-blind-to-system-copy
+f setup.sh
+t setup-system
+-   if _system_leftover; then
++   if false; then
+m did not name the system copy
+
+= system-tmuxconf-not-named
+f setup.sh
+t setup-system
+-     grep -q -- '\.local/share/mux' "$_c" 2>/dev/null || continue
++     continue
+m stale tmux.conf line
