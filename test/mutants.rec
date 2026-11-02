@@ -5148,3 +5148,10 @@ t setup-system
 -     grep -q -- '\.local/share/mux' "$_c" 2>/dev/null || continue
 +     continue
 m stale tmux.conf line
+
+= stream-outlives-its-code
+f libexec/mux-agent
+t mux-agent-stream
+-     if [ "$(ls -di -- "$0" 2>/dev/null || :)" != "$_sself" ]; then
++     if false; then
+m still running 8s later

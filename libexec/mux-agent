@@ -1496,8 +1496,25 @@ if [ "$_verb" = stream ]; then
   # daemon started or a connection came back.
   _slast=$_sdoc _ssnap="$_rows$_srows" _sprev=$_srows
   _squiet=0
+  # THIS PROCESS OUTLIVES THE CODE IT STARTED FROM, and a long-lived reader
+  # (the desktop notifier) never restarts it on its own. A reinstall swaps the
+  # payload; a switch to the machine-wide mode, or a Homebrew upgrade, removes
+  # the old path outright. MEASURED: after a mode switch the stream went on
+  # running against a deleted tree, answered `unknown` every tick, and the
+  # reader, seeing a live process, never respawned it; the tray item vanished
+  # until the child was killed by hand. So each tick asks whether the file
+  # it is running from is still the same file (inode and path, which a
+  # rename-swap and a deletion both change) and EXITS if not: the reader
+  # treats an ended stream as a disruption and starts a new one, on the code
+  # now on PATH. One fork per tick, beside the tmux calls each tick makes.
+  _sself=$(ls -di -- "$0" 2>/dev/null || :)
   while :; do
     sleep "$_sint"
+    if [ "$(ls -di -- "$0" 2>/dev/null || :)" != "$_sself" ]; then
+      echo "mux agent stream: mux was replaced under this stream; exiting" \
+        "so the reader starts it again on the installed code" >&2
+      exit "$MUX_EC_OK"
+    fi
     # TWO LEVELS, AND BOTH ARE NEEDED. The cheap one skips the formatting
     # entirely on a quiet tick, which is the common case by far. The second
     # is not redundant: `--partition` and `--attached` FILTER what reaches

@@ -174,4 +174,43 @@ for _bad in 0 x -1; do
   esac
 done
 
+# --- IT EXITS WHEN ITS OWN CODE IS REPLACED OR REMOVED --------------------
+# A long-lived reader never restarts its stream, so a stream that went on
+# running deleted code after an install was the tray going blank until a
+# human killed it (measured on a mode switch to the machine-wide install).
+# Run from a COPY of the tree, because altering the checkout's own file is
+# not a thing a test may do. A fresh copy per case, so nothing is deleted,
+# and "removed" is a MOVE aside: to the stream, the path is gone either way.
+reloc() {   # <how>: start a stream from a copied tree, then <how> its code
+  _tr=$T/tree-$1
+  mkdir "$_tr"
+  cp -R "$HERE/bin" "$HERE/lib" "$HERE/libexec" "$HERE/share" "$_tr/"
+  env -u TMUX -u TMUX_PANE -u MUX_SHARE XDG_RUNTIME_DIR="$T/run" \
+    PATH="$T/bin:$PATH" "$_tr/bin/mux" agent stream --any -i 1 \
+    --heartbeat 60 >"$T/out" 2>"$T/serr" &
+  _spid=$!
+  sleep 2
+  kill -0 "$_spid" 2>/dev/null || fail "fixture: the relocated stream did
+not start: $(cat "$T/serr")"
+  case $1 in
+    swap)   cp "$_tr/libexec/mux-agent" "$_tr/libexec/mux-agent.new"
+            mv "$_tr/libexec/mux-agent.new" "$_tr/libexec/mux-agent" ;;
+    remove) mv "$_tr/libexec/mux-agent" "$_tr/mux-agent.gone" ;;
+  esac
+  _n=0
+  while kill -0 "$_spid" 2>/dev/null && [ "$_n" -lt 8 ]; do
+    sleep 1; _n=$((_n + 1))
+  done
+  if kill -0 "$_spid" 2>/dev/null; then
+    stop
+    fail "after a $1 of its own code the stream was still running 8s later,
+so a reader that never restarts it goes on hearing from code that is gone"
+  fi
+  wait "$_spid" 2>/dev/null || true
+  grep -q 'replaced under this stream' "$T/serr" \
+    || fail "the stream exited after a $1 without saying why: $(cat "$T/serr")"
+}
+reloc swap
+reloc remove
+
 pass
