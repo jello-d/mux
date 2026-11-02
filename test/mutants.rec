@@ -5169,3 +5169,17 @@ t setup-system
 - warn() { printf '  %s[WARN]%s %s\n' "$_Y" "$_O" "$*"; }
 + warn() { printf '  %s[WARN]%s %s\n' "$_Y" "$_O" "$1"; }
 m lacks its remedy
+
+= switched-box-told-to-reinstall
+f setup.sh
+t setup-system
+-   if [ "$_MODE" = user ] && _switched_box; then
++   if false; then
+m did not say so
+
+= switched-box-fooled-by-the-venv
+f setup.sh
+t setup-system
+-   [ ! -e "$_bin/$PKG" ] && [ ! -L "$_bin/$PKG" ] && [ ! -e "$_pay/bin" ]
++   [ ! -e "$_bin/$PKG" ] && [ ! -L "$_bin/$PKG" ] && [ ! -e "$_pay" ]
+m did not say so

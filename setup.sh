@@ -722,6 +722,13 @@ _mode_switch() {
 
 # _system_leftover: is there a system-mode command beside a user install?
 _system_leftover() { [ -e "$_sysbin" ] || [ -L "$_sysbin" ]; }
+# _switched_box: a system install owns the command and nothing per-user is
+# installed. `$_pay/bin`, not `$_pay`: the notifier's per-user venv keeps the
+# payload directory alive after a switch.
+_switched_box() {
+  _system_leftover || return 1
+  [ ! -e "$_bin/$PKG" ] && [ ! -L "$_bin/$PKG" ] && [ ! -e "$_pay/bin" ]
+}
 
 # when no indicator is installed: an optional sub-package must not make the
 # core install noisy for everyone who does not use it.
@@ -789,6 +796,18 @@ do_uninstall() {
 
 do_check() {
   echo "== $PKG (package install) =="
+  # A SWITCHED BOX, asked the per-user question: nothing per-user is here
+  # because a system install owns the command. That is ONE fact with one
+  # remedy, and the per-user FAILs below would each say "reinstall mux",
+  # advice that would put back the second copy this mode exists to prevent.
+  # Still a FAIL, since the per-user install IS absent and a caller asking
+  # about that mode must not read success.
+  if [ "$_MODE" = user ] && _switched_box; then
+    bad "$PKG is installed system-wide ($_sysbin), not per-user here:" \
+      "audit it with 'sh setup.sh check --system', and your own setup" \
+      "with 'mux check'"
+    return 0
+  fi
   [ "$(readlink "$_bin/$PKG" 2>/dev/null)" = "$_payt/bin/$PKG" ] \
     && ok "bin/$PKG links into the payload" \
     || bad "bin/$PKG does not link to $_payt/bin/$PKG"

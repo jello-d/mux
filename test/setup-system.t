@@ -138,17 +138,26 @@ grep -q "$U/.local/bin/mux" "$T/out" \
   || fail "the user-copy FAIL does not name the file: $(grep FAIL "$T/out")"
 rm -f "$U/.local/bin/mux"
 
-# ... and from the user side, which is the one a provisioner with no sudo
-# caller relies on.
+# ... and from the user side. FIRST A SWITCHED BOX: nothing per-user is here
+# because the system install owns the command. One FAIL that points at the
+# audit that applies, and NOT the per-user "reinstall mux", which would put
+# back the second copy the system mode exists to prevent.
+# The notifier's venv survives a switch and keeps the payload directory,
+# so it is planted: "no payload dir" is not how a real switched box looks.
+mkdir -p "$T/p/share/mux/venv"
+_rc=0
 env PREFIX="$T/p" XDG_BIN_HOME="$T/p/bin" XDG_DATA_HOME="$T/p/share" \
-  DESTDIR="$D" NO_COLOR=1 sh "$HERE/setup.sh" check >"$T/out" 2>&1 || :
-grep -q 'a system install .* exists too' "$T/out" \
-  || fail "a user-mode check did not name the system copy: $(cat "$T/out")"
-grep -q 'the system one shadows this' "$T/out" \
-  || fail "the two-copies FAIL is truncated: $(grep FAIL "$T/out")"
+  DESTDIR="$D" NO_COLOR=1 sh "$HERE/setup.sh" check >"$T/out" 2>&1 || _rc=$?
+[ "$_rc" != 0 ] && grep -q 'installed system-wide' "$T/out" \
+  || fail "a switched box's user check did not say so: $(cat "$T/out")"
+grep -q "check --system" "$T/out" \
+  || fail "the switched-box FAIL does not point at check --system:
+$(grep FAIL "$T/out")"
+grep -q 'reinstall' "$T/out" \
+  && fail "a switched box was told to reinstall per-user: $(cat "$T/out")"
 
-# ... and a user INSTALL beside it warns WITH THE REMEDY, the second argument
-# that the same truncation dropped, leaving a warning with no way out.
+# A user INSTALL beside it warns WITH THE REMEDY, the second argument that a
+# "$1"-only helper dropped, leaving a warning with no way out.
 _o=$(env PREFIX="$T/p" XDG_BIN_HOME="$T/p/bin" XDG_DATA_HOME="$T/p/share" \
   DESTDIR="$D" NO_COLOR=1 sh "$HERE/setup.sh" install 2>&1) || :
 case $_o in
@@ -156,6 +165,15 @@ case $_o in
   *) fail "the shadowed-install WARN lacks its remedy: $(printf '%s\n' "$_o" \
        | grep WARN)" ;;
 esac
+
+# AND NOW TWO COPIES, which is the case the per-user check exists to name.
+# Its message is the SECOND place the "$1"-only helpers truncated.
+env PREFIX="$T/p" XDG_BIN_HOME="$T/p/bin" XDG_DATA_HOME="$T/p/share" \
+  DESTDIR="$D" NO_COLOR=1 sh "$HERE/setup.sh" check >"$T/out" 2>&1 || :
+grep -q 'a system install .* exists too' "$T/out" \
+  || fail "a user-mode check did not name the system copy: $(cat "$T/out")"
+grep -q 'the system one shadows this' "$T/out" \
+  || fail "the two-copies FAIL is truncated: $(grep FAIL "$T/out")"
 
 # --- PATHS: ONLY THE MACHINE'S ROOTS --------------------------------------
 _p=$(sysrun paths --system)
