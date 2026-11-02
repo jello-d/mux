@@ -5155,3 +5155,17 @@ t mux-agent-stream
 -     if [ "$(ls -di -- "$0" 2>/dev/null || :)" != "$_sself" ]; then
 +     if false; then
 m still running 8s later
+
+= marker-fail-drops-its-tail
+f setup.sh
+t setup-system
+- bad()  { printf '  %s[FAIL]%s %s\n' "$_R" "$_O" "$*"; RC=1; }
++ bad()  { printf '  %s[FAIL]%s %s\n' "$_R" "$_O" "$1"; RC=1; }
+m does not name the file
+
+= marker-warn-drops-its-remedy
+f setup.sh
+t setup-system
+- warn() { printf '  %s[WARN]%s %s\n' "$_Y" "$_O" "$*"; }
++ warn() { printf '  %s[WARN]%s %s\n' "$_Y" "$_O" "$1"; }
+m lacks its remedy

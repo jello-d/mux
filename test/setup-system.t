@@ -130,6 +130,12 @@ env PATH="$T/stub:$PATH" SUDO_USER=tester DESTDIR="$D" NO_COLOR=1 \
   sh "$HERE/setup.sh" check --system >"$T/out" 2>&1 || _rc=$?
 [ "$_rc" != 0 ] && grep -q 'two copies' "$T/out" \
   || fail "a user copy beside the system one passed: $(cat "$T/out")"
+# AND IT NAMES THE FILE, which is the half a reader needs to act. The marker
+# helpers printed only "$1" until 2026-11-01, so this path, passed as the
+# SECOND argument, was dropped while the grep above (which matches the first
+# argument) stayed green. Found by an usher session reading a real run.
+grep -q "$U/.local/bin/mux" "$T/out" \
+  || fail "the user-copy FAIL does not name the file: $(grep FAIL "$T/out")"
 rm -f "$U/.local/bin/mux"
 
 # ... and from the user side, which is the one a provisioner with no sudo
@@ -138,6 +144,18 @@ env PREFIX="$T/p" XDG_BIN_HOME="$T/p/bin" XDG_DATA_HOME="$T/p/share" \
   DESTDIR="$D" NO_COLOR=1 sh "$HERE/setup.sh" check >"$T/out" 2>&1 || :
 grep -q 'a system install .* exists too' "$T/out" \
   || fail "a user-mode check did not name the system copy: $(cat "$T/out")"
+grep -q 'the system one shadows this' "$T/out" \
+  || fail "the two-copies FAIL is truncated: $(grep FAIL "$T/out")"
+
+# ... and a user INSTALL beside it warns WITH THE REMEDY, the second argument
+# that the same truncation dropped, leaving a warning with no way out.
+_o=$(env PREFIX="$T/p" XDG_BIN_HOME="$T/p/bin" XDG_DATA_HOME="$T/p/share" \
+  DESTDIR="$D" NO_COLOR=1 sh "$HERE/setup.sh" install 2>&1) || :
+case $_o in
+  *"shadows this one:"*"uninstall --system"*) ;;
+  *) fail "the shadowed-install WARN lacks its remedy: $(printf '%s\n' "$_o" \
+       | grep WARN)" ;;
+esac
 
 # --- PATHS: ONLY THE MACHINE'S ROOTS --------------------------------------
 _p=$(sysrun paths --system)

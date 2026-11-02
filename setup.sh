@@ -100,9 +100,9 @@ if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
   _G=$(printf '\033[1;32m'); _R=$(printf '\033[1;31m')
   _Y=$(printf '\033[1;33m'); _O=$(printf '\033[0m')
 else _G=; _R=; _Y=; _O=; fi
-ok()   { printf '  %s[OK]%s   %s\n' "$_G" "$_O" "$1"; }
-bad()  { printf '  %s[FAIL]%s %s\n' "$_R" "$_O" "$1"; RC=1; }
-warn() { printf '  %s[WARN]%s %s\n' "$_Y" "$_O" "$1"; }
+ok()   { printf '  %s[OK]%s   %s\n' "$_G" "$_O" "$*"; }
+bad()  { printf '  %s[FAIL]%s %s\n' "$_R" "$_O" "$*"; RC=1; }
+warn() { printf '  %s[WARN]%s %s\n' "$_Y" "$_O" "$*"; }
 
 _ln()  { mkdir -p "$(dirname "$2")"; ln -sfn "$1" "$2"; }
 _rmln() { [ "$(readlink "$2" 2>/dev/null)" = "$1" ] && rm -f "$2" || :; }
