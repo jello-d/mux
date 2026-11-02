@@ -541,12 +541,16 @@ command for one word** and decides everything else itself.
 
 ```
 # $MUX_DIR/config
-context-command   severance current
+context-command   myctx current
 ```
 
 A bare name is looked up in `$MUX_DIR` before `$PATH`, so a config shared
-between machines needn't carry an absolute path. The command prints a
-**token**; empty output or a non-zero exit means `global`. That is the entire
+between machines needn't carry an absolute path. mux runs it with **one
+argument, a PID** (its own, or a pane's foreground process), and it answers
+for that process: a **token** and exit 0, or empty output and exit 0 for
+`global`. A non-zero exit means "cannot tell", and verbs that act on a
+partition (resume, latch, send) then refuse rather than guess. That is the
+entire
 integration surface: no sockets, no styles, no themes, no path
 classification. The integrator reports *identity*; mux decides presentation
 and isolation.
@@ -987,9 +991,11 @@ reads your override first, then the shipped default.
 - **Add an agent:** drop `<name>.agent` (a `go` and a `resume` line) in
   `share/agents`, and select it with `agent <name>` in a layout.
 - **Mark a context:** put `context-command CMD` in `$MUX_DIR/config`. CMD is
-  run with the calling PID and prints ONE DNS-label token on stdout (or
-  nothing, for the baseline). A bare name resolves against `$MUX_DIR` before
-  `$PATH`, so the same config travels between machines.
+  run with a PID (mux's own, or a pane's foreground process), answers for
+  that process with ONE DNS-label token on stdout (or nothing, for the
+  baseline), and exits non-zero only when it cannot tell. A bare name
+  resolves against `$MUX_DIR` before `$PATH`, so the same config travels
+  between machines.
 - **Notify on a platform of your own:** mux raises no banners itself. The
   optional `mux-desktop-notifier` does, reading `mux agent stream`, which is
   what lets a LATCHED session's banner appear where you are sitting rather

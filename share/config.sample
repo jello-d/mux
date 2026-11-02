@@ -37,11 +37,24 @@
 
 # context-command COMMAND...
 #
-# The one command mux asks for the current context TOKEN, printed as a single
-# word on stdout. Empty output or a non-zero exit means `global`, the
-# baseline, so a box with no integration is a box with one partition. Whatever
-# backs a boundary (a group, an ACL, a namespace) lives in the integrator;
-# mux only reflects what this answers.
+# The one command mux asks for a context TOKEN. It is run as
+#
+#     COMMAND... PID
+#
+# where PID is the process whose context is wanted: mux's own, or a pane's
+# foreground process when the status bar is styled. Answer for THAT process,
+# not for the command itself, and accept the argument even if you ignore it.
+#
+#   exit 0, one word     that token (a DNS label)
+#   exit 0, no output    `global`, the baseline: "in no context"
+#   non-zero             FAILED: mux cannot tell the partition, so verbs
+#                        that act on one (resume, latch, send) refuse rather
+#                        than guess. Reserve it for "cannot tell", never
+#                        for "in none".
+#
+# A box with no integration is a box with one partition. Whatever backs a
+# boundary (a group, an ACL, a namespace) lives in the integrator; mux only
+# reflects what this answers.
 #
 # Default: unset, which is `global`.
 #context-command   myctx current

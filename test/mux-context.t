@@ -250,4 +250,17 @@ _mine_rc=0
 unresolvable context, so every caller that assigns it under set -eu dies
 silently inside a command substitution. rc=$_mine_rc"
 
+# --- THE COMMAND IS HANDED A PID, AND THAT IS PART OF THE CONTRACT ---------
+# The PID is the process whose context is wanted: mux's own when the caller
+# names none, a pane's FOREGROUND process when mux-style colours the bar. A
+# command that refuses an argument therefore FAILS every call, and a failed
+# hook makes resume, latch and send refuse. That is exactly what broke on
+# 2026-11-02 when an integrator's `current` stopped taking one: nothing in
+# the docs said the argument existed, so its audit of callers found none.
+cc "printf '%s\\n' \"\$*\" >'$T/ccargs'"
+mux_ctx_resolve 4242 || fail "resolve failed for an explicit pid"
+eq pid-explicit "$(cat "$T/ccargs")" 4242
+mux_ctx_resolve || fail "resolve failed with no pid"
+eq pid-default "$(cat "$T/ccargs")" "$$"
+
 pass

@@ -5183,3 +5183,14 @@ t setup-system
 -   [ ! -e "$_bin/$PKG" ] && [ ! -L "$_bin/$PKG" ] && [ ! -e "$_pay/bin" ]
 +   [ ! -e "$_bin/$PKG" ] && [ ! -L "$_bin/$PKG" ] && [ ! -e "$_pay" ]
 m did not say so
+
+= context-command-loses-its-pid
+f lib/mux-context_lib
+t mux-context
+# THE PID IS PART OF THE CONTRACT, and an integrator once dropped support for
+# it because nothing said it existed. Dropping it here would make mux-style
+# ask about mux rather than a pane's foreground process, so an enclave pane
+# would draw as the baseline. Exact whitespace is the source's.
+-     if _raw=$($_cc "${1:-$$}" 2>/dev/null); then
++     if _raw=$($_cc 2>/dev/null); then
+m pid-explicit

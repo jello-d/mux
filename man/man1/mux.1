@@ -1184,9 +1184,20 @@ A bare name (no slash) is looked up in
 .B $MUX_DIR
 before
 .BR $PATH ,
-so a config file shared between machines need not carry an absolute path. The
-command prints a TOKEN; empty output or a non\-zero exit means
-.BR global .
+so a config file shared between machines need not carry an absolute path.
+.PP
+The command is run with ONE ARGUMENT, a PID: the process whose context is
+wanted. That is mux's own process, or a pane's foreground process when the
+status bar is styled, so the command must answer for THAT process and must
+accept the argument even if it ignores it. It prints a TOKEN (one DNS label)
+and exits 0; empty output with exit 0 means
+.BR global ,
+the baseline. A non\-zero exit means the command FAILED: mux cannot tell the
+partition, so verbs that act on one (resume, latch,
+.BR "agent send" )
+refuse rather than guess. Reserve it for "cannot tell", never for "in no
+context".
+.PP
 That is the entire integration surface: no sockets, no styles, no themes, no
 path classification. The integrator reports IDENTITY; mux decides presentation
 and isolation.
