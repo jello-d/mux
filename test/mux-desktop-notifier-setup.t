@@ -667,5 +667,55 @@ grep -q 'systemctl' "$LCTL" 2>/dev/null &&
 
 rm -f "$T/bin/uname" "$T/bin/launchctl"
 
+# THE SOURCE MAY BE READ-ONLY, and on this fleet it normally IS: mux's
+# deployed clone is root-owned since mux gained a machine-wide mode, while
+# THIS notifier is a per-user install that pips from that clone AS THE USER.
+# pip BUILDS IN TREE (the default since 21.3), so installing straight from the
+# source wants to write `*.egg-info` beside the code and cannot. Measured in a
+# fresh VM provision 2026-11-09, where it failed the phase outright, and a
+# FAILED PHASE ABORTS THE PASS, so every later phase in that run was lost too.
+#
+# DRIVEN WITH A STUB pip, which this file's header used to rule out ("stubbing
+# pip would be testing the stub"). That was right while the question was
+# whether pip WORKS; it is wrong now, because the question is WHICH PATH pip
+# is handed, and a stub is the only thing that can answer it. `app` skips
+# `python3 -m venv` when the dir exists, so a planted venv with a stub
+# `bin/pip` is enough to reach the install.
+RO=$T/ro
+mkdir -p "$RO"
+cp -R "$HERE/desktop-notifier/." "$RO/"
+rm -rf "$RO"/*.egg-info "$RO/build"
+PV=$T/pipvenv/bin
+mkdir -p "$PV"
+printf '#!/bin/sh\nprintf "%%s\\n" "$@" >> %s/pip.log\nexit 0\n' "$T" >"$PV/pip"
+chmod +x "$PV/pip"
+printf '#!/bin/sh\nexit 0\n' >"$PV/mux-desktop-notifier"
+chmod +x "$PV/mux-desktop-notifier"
+# THE SOURCE *DIRECTORY* IS WHAT IS NOT WRITABLE, which is what a root-owned
+# clone looks like to a non-root caller: its dirs are 0755 root-owned, so a
+# copy MADE by this user is this user's and removable. `chmod -R a-w` models
+# something harsher and wrong, and would fail somewhere other than the pip
+# build: the real bug is pip writing egg-info INTO the source dir.
+chmod a-w "$RO"
+_rc=0
+env PATH="$T/bin:$PATH" HOME="$T/rohome" \
+  MUX_DESKTOP_NOTIFIER_VENV="$T/pipvenv" \
+  MUX_DESKTOP_NOTIFIER_BIN="$T/robin" \
+  sh "$RO/setup.sh" app >"$T/ro.out" 2>&1 || _rc=$?
+chmod u+w "$RO"
+[ "$_rc" = 0 ] ||
+  fail "install from a READ-ONLY source errored: $(cat "$T/ro.out")"
+# pip WAS CALLED, or this check proves nothing at all.
+grep -q . "$T/pip.log" 2>/dev/null ||
+  fail "the stub pip was never called, so nothing was proven"
+# AND NOT ON THE SOURCE. That is the whole assertion.
+grep -qx -- "$RO" "$T/pip.log" &&
+  fail "pip was pointed AT THE SOURCE: $(cat "$T/pip.log")"
+# A GLOB RATHER THAN `ls | grep`: an unmatched glob stays literal and `-e` is
+# false for it, so this needs no pipeline and names the offending path.
+for _det in "$RO"/*.egg-info "$RO/build"; do
+  [ -e "$_det" ] &&
+    fail "the install wrote build detritus into the source: $_det"
+done
 
 pass

@@ -135,16 +135,62 @@ _retire_old_venv() {
   echo "mux-desktop-notifier: retired the old venv at $OLD_VENV"
 }
 
+# _pip_from_copy <venv> <source>: install a python project WITHOUT writing
+# into its source tree.
+#
+# pip BUILDS IN TREE (the default since 21.3), so `pip install <dir>` creates
+# `*.egg-info` and `build/` BESIDE the code. Fine for a checkout, fatal for a
+# READ-ONLY source, which is exactly what mux's deployed clone became the day
+# mux gained a machine-wide mode: the clone is root-owned, and THIS notifier
+# is a PER-USER install that pips from it AS THE USER. Measured in a fresh VM
+# provision 2026-11-09, where it failed the phase outright:
+#
+#     error: could not create 'mux_desktop_notifier.egg-info': Permission
+#     denied
+#
+# AND A FAILED PHASE ABORTS THE PASS, so this did not merely lose the tray: it
+# stopped every later phase in the run, which on a fresh box is how a declared
+# work enclave never got created. Latent on an established box only because
+# the venv already exists, so the apply never re-runs.
+#
+# A DIRECT PORT of usher's `_pip_from_copy` (usher 37b4604), which fixed the
+# identical defect in the identical shape. The shape is the fact rather than a
+# list, so a copy cannot drift into a wrong answer.
+_pip_from_copy() {
+  _pc_v=$1 _pc_s=$2
+  _pc_t=$(mktemp -d) || return 1
+  # EXPANDED AND CHECKED BEFORE ANY `rm -rf`, per the standing rule: an empty
+  # mktemp answer must never reach it.
+  case $_pc_t in
+  /*/*) ;;
+  *) echo "mux-desktop-notifier: refusing a scratch dir at '$_pc_t'" >&2
+     return 1 ;;
+  esac
+  _pc_rc=0
+  # Deps come from the package's pyproject.toml (the single source): the first
+  # install resolves them; the forced --no-deps reinstall then guarantees a
+  # code change is picked up on a re-run (same version would else no-op).
+  # THE COPY MUST BE WRITABLE WHATEVER THE SOURCE'S MODES WERE. `cp -R`
+  # carries them, so a read-only source yields a read-only copy: pip cannot
+  # build in it and the cleanup cannot remove it, which trades one failure for
+  # another with the same exit code.
+  cp -R "$_pc_s/." "$_pc_t/" \
+    && chmod -R u+w "$_pc_t" \
+    && "$_pc_v/bin/pip" install -q "$_pc_t" \
+    && "$_pc_v/bin/pip" install -q --force-reinstall --no-deps "$_pc_t" \
+    || _pc_rc=$?
+  rm -rf -- "$_pc_t"
+  return "$_pc_rc"
+}
+
 app() {
   mkdir -p "$(dirname "$VENV")"
   [ -d "$VENV" ] || python3 -m venv "$VENV"
   "$VENV/bin/pip" install -q --upgrade pip
-  # Deps come from the package's pyproject.toml (the single source): the first
-  # install resolves them; the forced --no-deps reinstall then guarantees a
-  # code change is picked up on a re-run (same version would else no-op).
-  "$VENV/bin/pip" install -q "$PKG_DIR"
-  "$VENV/bin/pip" install -q --force-reinstall --no-deps "$PKG_DIR"
-  rm -rf "$PKG_DIR/build" "$PKG_DIR"/*.egg-info    # in-place build detritus
+  # NO in-tree cleanup any more: nothing is written to the source, so there is
+  # nothing to remove, and the old `rm -rf "$PKG_DIR"/*.egg-info` could not
+  # have run against a root-owned clone in any case.
+  _pip_from_copy "$VENV" "$PKG_DIR" || return 1
   mkdir -p "$BIN_DIR"
   ln -sfn "$VENV/bin/mux-desktop-notifier" "$BIN_DIR/mux-desktop-notifier"
   echo "mux-desktop-notifier: app -> $BIN_DIR/mux-desktop-notifier"
