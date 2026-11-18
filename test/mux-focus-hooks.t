@@ -74,7 +74,7 @@ EOF
 # `focus-window` exits 0 having moved NOTHING whenever the target is in
 # another OS window, so a hook trusting that exit code reported success for
 # a click that raised nothing.
-mk_kitten() {   # <focus-window rc> <ls rc>
+mk_kitten() {   # <focus-window rc> <ls rc> [kitten rc]
   cat >"$T/bin/kitten" <<EOF
 #!/bin/sh
 printf '%s\n' "\$*" >>"$ARGV"
@@ -82,6 +82,7 @@ for a in "\$@"; do
   case \$a in
     (focus-window) exit $1 ;;
     (ls)           exit $2 ;;
+    (kitten)       exit ${3:-0} ;;
   esac
 done
 exit 0
@@ -442,5 +443,45 @@ case $(sed -n 1p "$ARGV") in
   (*) fail "kitty-to-wins: the flag did not reach kitten:
 [$(sed -n 1p "$ARGV")]" ;;
 esac
+
+# --- A CLICK'S ACTIVATION TOKEN: SPENT BY KITTY, THROUGH THE KITTEN ------
+# A token activates only a surface of the client that presents it, and
+# `focus-window` cannot pass one: measured from the compositor side, a
+# sandboxed kitty on another workspace is NOT raised by `focus-window` and IS
+# raised by a kitten handed the token. So with a token the hook must not call
+# `focus-window` at all, and must hand the kitten an ABSOLUTE path, since
+# kitty imports it from its own process and cwd.
+mkall
+_kp=$(cd "$HERE/share/kittens" && pwd -P)/raise_window.py
+ENVSET="$LIVE XDG_ACTIVATION_TOKEN=tok-1"
+eq kitty-token-ok "$(run kitty northwood)" 0
+eq kitty-token-argv "$(cat "$ARGV")" "\
+@ --to unix:/run/kitty.sock kitten --match title:\\[northwood\\] $_kp tok-1
+@ --to unix:/run/kitty.sock ls --match title:\\[northwood\\] and state:focused"
+
+# KITTY REFUSING THE KITTEN (remote control not allowing it, or no such
+# window) is a 78 that says so, never a silent success.
+mkall; mk_kitten 0 0 1
+eq kitty-token-refused "$(run kitty northwood)" 78
+errhas "refused the raise kitten" kitty-token-refused-says-so
+
+# A TOKEN THE COMPOSITOR DID NOT HONOUR gets no reply, so focus is polled
+# and, when it never arrives, said, naming where the reason is.
+mkall; mk_kitten 0 1 0
+eq kitty-token-unfocused "$(run kitty northwood)" 78
+errhas "presented the activation token" kitty-token-unfocused-says-so
+[ "$(grep -c 'state:focused' "$ARGV")" -gt 1 ] \
+  || fail "kitty-token-unfocused: focus was read once, not polled, so a
+compositor that answers a moment later reads as a refusal"
+
+# NO KITTEN ON DISK: refused before kitty is asked anything, because a
+# token handed to `focus-window` instead would be dropped silently.
+mkall
+ENVSET="$LIVE XDG_ACTIVATION_TOKEN=tok-1 MUX_SHARE=$T/nowhere"
+eq kitty-token-no-kitten "$(run kitty northwood)" 78
+errhas "raise kitten is not at" kitty-token-no-kitten-says-so
+[ ! -s "$ARGV" ] || fail "kitty-token-no-kitten: kitten was called anyway:
+$(cat "$ARGV")"
+ENVSET=$LIVE
 
 pass

@@ -11,6 +11,7 @@ applies though: a skip is invisible, so the SHARED half must not be in here or
 it would quietly stop being tested on exactly the platform we are trying to
 support.
 """
+import asyncio
 import unittest
 
 try:
@@ -126,6 +127,54 @@ class Wiring(unittest.TestCase):
             def disconnect(self):
                 raise RuntimeError("already gone")
         backend.Handle(Angry(), None).close()
+
+
+
+@unittest.skipUnless(HAVE_DBUS, "dbus_next is not installed")
+class ActivationToken(unittest.TestCase):
+    """ProvideXdgActivationToken, which a tray host sends JUST BEFORE
+    Activate with the token it minted from the click."""
+
+    def _click(self, item, provide=None, stale=False):
+        got = []
+
+        async def on_activate(label, token):
+            got.append((label, token))
+        item._on_activate = on_activate
+
+        async def go():
+            if provide is not None:
+                item.ProvideXdgActivationToken(provide)
+                if stale:
+                    tok, at = item._token
+                    item._token = (tok, at - sni.TOKEN_TTL)
+            item.Activate(0, 0)
+            await asyncio.sleep(0)
+        asyncio.run(go())
+        return got
+
+    def test_the_token_reaches_the_click(self):
+        self.assertEqual(self._click(_item(), "tok-1"),
+                         [("northwood", "tok-1")])
+
+    def test_NO_token_is_the_click_it_always_was(self):
+        self.assertEqual(self._click(_item()), [("northwood", "")])
+
+    def test_it_is_SINGLE_USE(self):
+        """The next click must not find this one's token: the compositor
+        refuses a spent one, and silently, so it would read as the raise
+        not working."""
+        i = _item()
+        self._click(i, "tok-2")
+        self.assertEqual(self._click(i), [("northwood", "")])
+
+    def test_an_EXPIRED_token_is_no_token(self):
+        self.assertEqual(self._click(_item(), "tok-3", stale=True),
+                         [("northwood", "")])
+
+    def test_junk_is_no_token(self):
+        self.assertEqual(self._click(_item(), "has space"),
+                         [("northwood", "")])
 
 
 if __name__ == "__main__":                              # pragma: no cover

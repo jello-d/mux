@@ -266,6 +266,7 @@
 #               and a kitty started with `--listen-on`; see its header. It
 #               can focus a window WITHIN a kitty window and cannot RAISE
 #               one, so for one terminal per machine use the compositor's
+#               hook, unless the click carries a token (below).
 #   sway        sway
 #   hyprland    Hyprland
 #   niri        niri (needs jq)
@@ -278,6 +279,16 @@
 # KDE under Wayland expose no window-raise IPC. Each hook names what it
 # needs and what it was verified against; all exit 78 when they cannot
 # answer, which the notifier reports rather than swallowing.
+#
+# A CLICK MAY CARRY AN xdg-activation TOKEN, from a tray host that sends
+# ProvideXdgActivationToken or a notification daemon that sends
+# ActivationToken with a banner's click. The hook gets it in its
+# environment as XDG_ACTIVATION_TOKEN, for that one click only. A token
+# raises only a window of the program that presents it, so it is the
+# terminal that must spend it: `kitty` does, through a kitten run inside
+# kitty (remote control must allow the `kitten` command), and that raises a
+# separate kitty window too, including from a sandbox with no compositor
+# control of its own. A hook that ignores the variable behaves as before.
 #
 # Default: unset, so the click does only the part mux owns.
 #desktop-notifier-activate   kitty --to unix:@mux

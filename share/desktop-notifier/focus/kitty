@@ -5,6 +5,9 @@
 # against: it carries the contract, and the rest say "see focus/kitty".
 # Called as `kitty [--to ADDR] LABEL [PARTITION]`, on the box with the tray,
 # AFTER the click has already switched that host's session.
+# XDG_ACTIVATION_TOKEN in the environment is the click's activation token,
+# when the tray host or notification daemon minted one: see below for why
+# it changes HOW the window is raised.
 #
 # SHIPPED BUT NOT WIRED, which is the point of a hook library: mux ships
 # these so you do not have to write one, and whether any RUNS is your
@@ -130,6 +133,55 @@ daemon does not have." >&2
 # the brackets are ESCAPED had nothing holding it. Naming it makes the rule
 # assertable and the two calls agree by construction.
 _m="title:\\[$_label\\]"
+
+# --- WITH A CLICK'S ACTIVATION TOKEN ------------------------------------
+#
+# The notifier puts the click's xdg-activation token in XDG_ACTIVATION_TOKEN
+# when the tray host or the notification daemon minted one. A token
+# activates only a surface of the client that PRESENTS it, so kitty must
+# spend it, and `focus-window` cannot pass one: kitty then asks the
+# compositor for a token of its own with no input behind it, which a
+# compositor may refuse. Inside a sandbox with no compositor control the
+# token is the ONLY way a click can raise the window.
+#
+# So the token path runs share/kittens/raise_window.py INSIDE kitty, which
+# makes the call kitty's own notification click makes. It needs remote
+# control to allow the `kitten` command as well as `focus-window`.
+_tok=${XDG_ACTIVATION_TOKEN:-}
+if [ -n "$_tok" ]; then
+  # BESIDE THIS FILE IN THE SHIPPED TREE, or under $MUX_SHARE when this
+  # copy has been moved into an overlay. kitty imports it by ABSOLUTE path.
+  # Parameter expansion rather than dirname, which is one more tool on a
+  # path a sandbox may have trimmed.
+  case $0 in (*/*) _kh=${0%/*} ;; (*) _kh=. ;; esac
+  _kd=${MUX_SHARE:-$_kh/../..}/kittens
+  _kd=$(cd "$_kd" 2>/dev/null && pwd -P) || _kd=
+  _k=$_kd/raise_window.py
+  [ -n "$_kd" ] && [ -r "$_k" ] || {
+    echo "$_me: the raise kitten is not at $_k; a token cannot be spent
+without it (set MUX_SHARE if this hook was copied out of mux's tree)" >&2
+    exit 78; }
+  _r=$(kitten @ --to "$_to" kitten --match "$_m" "$_k" "$_tok" 2>&1) || {
+    echo "$_me: kitty refused the raise kitten for '$_label' at $_to:
+  $_r
+It needs a window titled '[$_label]' and remote control allowing the
+\`kitten\` command." >&2
+    exit 78; }
+  # THE COMPOSITOR ANSWERS ASYNCHRONOUSLY, and a refused token gets no reply
+  # at all, so focus is polled for briefly rather than read once.
+  _i=0
+  while [ "$_i" -lt 10 ]; do
+    kitten @ --to "$_to" ls --match "$_m and state:focused" >/dev/null \
+      2>&1 && exit 0
+    _i=$((_i + 1))
+    sleep 0.2 2>/dev/null || :
+  done
+  echo "$_me: kitty presented the activation token but '$_label' is not
+focused. A token is single-use and expires within seconds, and a compositor
+may hold back a focus request made just after a keypress; when it refuses
+one it says why in its own log, not here." >&2
+  exit 78
+fi
 
 kitten @ --to "$_to" focus-window --match "$_m" 2>/dev/null || {
   echo "$_me: no kitty window titled '$_label' at $_to" >&2; exit 78; }

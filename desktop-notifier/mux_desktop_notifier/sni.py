@@ -30,6 +30,7 @@ import json
 import os
 import shlex
 import sys
+import time
 # SIGKILL by NAME, which this file no longer strictly needs and keeps anyway:
 # the hazard was that `dbus_next.service` exports a `signal` DECORATOR, so a
 # module-level `import signal` beside it made `signal.SIGKILL` raise
@@ -67,6 +68,31 @@ POLL = float(os.environ.get("MUX_DESKTOP_NOTIFIER_POLL", "5"))
 # is not a nicety; it is what makes `unknown` reachable.
 TIMEOUT = float(os.environ.get("MUX_DESKTOP_NOTIFIER_TIMEOUT", "10"))
 CTL = os.environ.get("MUX_DESKTOP_NOTIFIER_CTL")
+# AN ACTIVATION TOKEN LIVES FOR ONE CLICK. xdg-activation tokens are minted by
+# the tray host or the notification daemon for THE click that produced them,
+# and the compositor drops a request made more than 30 s after minting
+# (wayfire's default). So a token is held only between its arrival and the
+# click it precedes, and one older than this is spent as no token at all.
+TOKEN_TTL = 30.0
+# AND IT CROSSES A TRUST BOUNDARY: inside an enclave it arrives through a relay
+# from the owner's side. It never reaches a shell, and this bound is checked
+# here rather than trusted to the relay.
+TOKEN_MAX = 256
+
+
+def clean_token(token):
+    """A token fit to hand on, or "" for none.
+
+    PRINTABLE ASCII, NO SPACE, AT MOST TOKEN_MAX. Real tokens are opaque
+    identifiers well inside that; anything else is junk from a relay or a
+    client, and "" is the honest answer for it, because no token means do
+    what a click without one always did, never an error.
+    """
+    if not isinstance(token, str) or not 0 < len(token) <= TOKEN_MAX:
+        return ""
+    if any(not 0x20 < ord(c) < 0x7F for c in token):
+        return ""
+    return token
 # How often to re-read latch's lock directory. Slower than POLL on purpose: this
 # is a listdir of a tmpfs, but a host appearing a few seconds after you latch is
 # imperceptible, while an item flickering in and out is not.
@@ -566,13 +592,68 @@ class Toaster:
         # when the pane is no longer blocked, a `finished` one when the turn
         # starts again. Without it there is no rule, only a timer.
         self._ids = {}
+        # A CLICK ON A BANNER, set by the supervisor to `activate`. None means
+        # banners carry no action, which is also how a test that only cares
+        # about wording sees exactly the call it always saw.
+        self.on_click = None
+        # id -> (token, monotonic time). One click's token, held only until
+        # the ActionInvoked it precedes: see TOKEN_TTL.
+        self._tokens = {}
 
     async def _notifications(self):
         if self._iface is None:
             intro = await self._bus.introspect(self.IFACE, self.PATH)
             obj = self._bus.get_proxy_object(self.IFACE, self.PATH, intro)
             self._iface = obj.get_interface(self.IFACE)
+            self._listen(self._iface)
         return self._iface
+
+    def _listen(self, iface):
+        """Subscribe to the two signals a click arrives as.
+
+        ActivationToken(id, token) comes IMMEDIATELY BEFORE the
+        ActionInvoked(id, action) it belongs to, on the same ordered line, so
+        holding the token by id is enough to pair them.
+
+        EACH IS OPTIONAL. A daemon too old for xdg-activation does not
+        declare ActivationToken, and its proxy then has no such signal: a
+        click still switches the session, it just cannot raise a window.
+        """
+        if self.on_click is None:
+            return
+        for name, handler in (("on_activation_token", self._token),
+                              ("on_action_invoked", self._invoked)):
+            try:
+                getattr(iface, name)(handler)
+            except Exception as e:                          # noqa: BLE001
+                print(f"mux-desktop-notifier: banner clicks: no {name[3:]} "
+                      f"({e})", flush=True)
+
+    def _token(self, nid, token):
+        now = time.monotonic()
+        # Drop the expired, so a daemon that sends tokens for clicks we never
+        # see an ActionInvoked for cannot grow this without bound.
+        self._tokens = {k: v for k, v in self._tokens.items()
+                        if now - v[1] < TOKEN_TTL}
+        token = clean_token(token)
+        if token:
+            self._tokens[nid] = (token, now)
+
+    def _invoked(self, nid, action):
+        """A banner was clicked: the same thing a tray click does, for the
+        host and partition that banner was about, with that click's token."""
+        held = self._tokens.pop(nid, None)
+        if action != "default" or self.on_click is None:
+            return
+        key = next((k for k, v in self._ids.items() if v[0] == nid), None)
+        if key is None:
+            return
+        token = ""
+        if held is not None and time.monotonic() - held[1] < TOKEN_TTL:
+            token = held[0]
+        host, part, _sess = key
+        label = f"{host or ''}:{part}" if part else (host or "")
+        asyncio.ensure_future(self.on_click(label, token))
 
     def text(self, host, session, kind, local):
         """The banner, and the HOST rides in the TITLE beside the session.
@@ -679,8 +760,14 @@ class Toaster:
         # REPLACING our own previous id rather than stacking: a session
         # that goes blocked, is answered and blocks again should leave one
         # banner, not a column of them. 0 means "a new one".
+        # A DEFAULT ACTION, ONLY WHEN SOMETHING WILL ANSWER IT. It is what
+        # makes a banner clickable at all, and a daemon sends the click's
+        # activation token only when an action is invoked, so without one
+        # there is nothing to raise a window with.
+        actions = ["default", "Show"] if self.on_click is not None else []
         return await iface.call_notify(
-            self._app, prev[0] if prev else 0, "", summary, body, [], {}, -1)
+            self._app, prev[0] if prev else 0, "", summary, body, actions,
+            {}, -1)
 
     async def _close(self, held):
         """Take one down. `held` is the (id, kind) pair the map holds."""
@@ -1089,7 +1176,7 @@ async def _reap(proc):
         pass
 
 
-async def activate(label):
+async def activate(label, token=""):
     """A click on one item: switch that host, then let the integrator focus.
 
     TWO HALVES, and only the first is mux's. Switching the client is what mux
@@ -1101,7 +1188,14 @@ async def activate(label):
     a compositor, and mux manages sessions inside terminals with no opinion
     about where a terminal sits. It goes through the activate hook, unset by
     default, so a click still does the half mux owns when nobody wired one.
+
+    THE ACTIVATION TOKEN GOES TO THE HOOK AND NOWHERE ELSE, in its
+    environment as XDG_ACTIVATION_TOKEN, the name the freedesktop convention
+    gives it. A token activates only a surface of the client that PRESENTS
+    it, so this process cannot spend it on the terminal's behalf; the hook
+    hands it to the terminal, which can. The switch never sees one.
     """
+    token = clean_token(token)
     me = local_label()
     host, part = host_of(label), part_of(label)
     if host and host != me:
@@ -1136,21 +1230,31 @@ async def activate(label):
         # print to stdout and report success having raised nothing.
         _h = hook_path(hook, "focus")
         if _h:
-            await _fire(shlex.split(_h) + args, f"focus {label or me}")
+            await _fire(shlex.split(_h) + args, f"focus {label or me}",
+                        token=token)
 
 
-async def _fire(argv, what):
+async def _fire(argv, what, token=""):
     """Run something on a click, bounded, and never raise into the bus.
 
     The same reaping rules as _query, for the same reason: an arbitrary
     command may spawn a child that holds the pipe, so it gets its own session
     and the whole GROUP is killed by pid: see _query for why the pid and not
     getpgid. A click that hangs would wedge the poll loop it shares.
+
+    AN INHERITED XDG_ACTIVATION_TOKEN IS REMOVED, always: whatever started
+    this daemon minted it for a click long gone, and a child handed it would
+    spend a token that is not this click's. Only `token` is passed on.
     """
+    env = {k: v for k, v in os.environ.items()
+           if k != "XDG_ACTIVATION_TOKEN"}
+    if token:
+        env["XDG_ACTIVATION_TOKEN"] = token
     try:
         proc = await asyncio.create_subprocess_exec(
             *argv, stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.PIPE, start_new_session=True)
+            stderr=asyncio.subprocess.PIPE, start_new_session=True,
+            env=env)
     except OSError as e:
         print(f"mux-desktop-notifier: {what} failed to start: {e}", flush=True)
         return
@@ -1424,6 +1528,7 @@ async def _supervise():
     # than absent, so nothing downstream needs to know.
     _toast_bus = await _backend().session_bus()
     _toaster = _backend().toaster(_toast_bus, enabled=TOASTS)
+    _toaster.on_click = activate
     _local = sources.local_label()
 
     async def _present(feed):

@@ -16,6 +16,7 @@ The rule the whole feed rests on, and the one these tests exist to protect:
 import asyncio
 import importlib
 import os
+import tempfile
 import unittest
 
 
@@ -1229,8 +1230,10 @@ class Activate(unittest.TestCase):
         self.sni = _fresh()
         self.fired = []
 
-        async def _fake(argv, what):
+        async def _fake(argv, what, token=""):
             self.fired.append((list(argv), what))
+            self.tokens.append(token)
+        self.tokens = []
         self.sni._fire = _fake
         self._env = os.environ.get("MUX_DESKTOP_NOTIFIER_ACTIVATE")
         os.environ.pop("MUX_DESKTOP_NOTIFIER_ACTIVATE", None)
@@ -1884,6 +1887,224 @@ class Ignored(unittest.TestCase):
         sni = _fresh()
         with self.assertRaises(SystemExit):
             sni.flags(["--ignore"])
+
+
+
+class ActivationToken(unittest.TestCase):
+    """The xdg-activation token a click carries, and where it may go.
+
+    A TOKEN ACTIVATES ONLY A SURFACE OF THE CLIENT THAT PRESENTS IT, so the
+    notifier cannot spend it: it is held for ONE click and handed to the focus
+    hook, which hands it to the terminal. Inside an enclave that is the only
+    way a click can raise a window at all, because the enclave has no
+    compositor control and must not have any.
+    """
+
+    def test_a_real_token_passes(self):
+        sni = _fresh()
+        self.assertEqual(sni.clean_token("abc-123_XYZ.0"), "abc-123_XYZ.0")
+
+    def test_junk_is_NO_token_not_an_error(self):
+        """It crosses a trust boundary inside an enclave, and "no token"
+        means do what a click without one always did, so junk becomes ""
+        rather than a refusal of the click."""
+        sni = _fresh()
+        for bad in ("", "has space", "tab\there", "nl\n", "é",
+                    "x" * (sni.TOKEN_MAX + 1), None, 7):
+            self.assertEqual(sni.clean_token(bad), "", repr(bad))
+        self.assertEqual(sni.clean_token("x" * sni.TOKEN_MAX),
+                         "x" * sni.TOKEN_MAX, "the bound must be inclusive")
+
+
+class ActivateToken(Activate):
+    """`activate` with a token: the hook gets it, the switch never does.
+
+    A SUBCLASS SO setUp IS SHARED, and the inherited cases run again with
+    the new signature, which is the point: a click with no token must still
+    be exactly the click it always was.
+    """
+
+    def test_the_token_reaches_the_HOOK_only(self):
+        os.environ["MUX_DESKTOP_NOTIFIER_ACTIVATE"] = "focus-window"
+        asyncio.run(self.sni.activate("boxname", "tok-1"))
+        self.assertEqual(len(self.fired), 2)
+        self.assertEqual(self.tokens, ["", "tok-1"],
+                         "the token must go to the hook and not the switch")
+
+    def test_a_junk_token_is_dropped_before_the_hook(self):
+        os.environ["MUX_DESKTOP_NOTIFIER_ACTIVATE"] = "focus-window"
+        asyncio.run(self.sni.activate("boxname", "a b"))
+        self.assertEqual(self.tokens, ["", ""])
+
+
+class FireEnvironment(unittest.TestCase):
+    """What a child of `_fire` actually sees, asserted with a real process.
+
+    AN INHERITED TOKEN IS STRIPPED, because whatever started the daemon
+    minted it for a click long gone: a hook handed it would spend a token
+    that is not this click's.
+    """
+
+    def _seen(self, token, inherited):
+        sni = _fresh()
+        with tempfile.TemporaryDirectory() as d:
+            return self._run(sni, os.path.join(d, "seen"), token, inherited)
+
+    def _run(self, sni, out, token, inherited):
+        old = os.environ.get("XDG_ACTIVATION_TOKEN")
+        if inherited is not None:
+            os.environ["XDG_ACTIVATION_TOKEN"] = inherited
+        try:
+            argv = ["sh", "-c",
+                    'printf %s "${XDG_ACTIVATION_TOKEN-unset}" >"$1"',
+                    "sh", out]
+            asyncio.run(sni._fire(argv, "probe", token=token))
+        finally:
+            if old is None:
+                os.environ.pop("XDG_ACTIVATION_TOKEN", None)
+            else:
+                os.environ["XDG_ACTIVATION_TOKEN"] = old
+        with open(out) as f:
+            return f.read()
+
+    def test_the_click_token_is_set(self):
+        self.assertEqual(self._seen("tok-2", None), "tok-2")
+
+    def test_an_INHERITED_token_is_removed(self):
+        self.assertEqual(self._seen("", "stale"), "unset")
+
+    def test_the_click_token_WINS_over_an_inherited_one(self):
+        self.assertEqual(self._seen("tok-3", "stale"), "tok-3")
+
+
+class BannerClicks(unittest.TestCase):
+    """A click on a banner: a default action, and the token that rides it.
+
+    A daemon sends ActivationToken only when an ACTION is invoked, so a
+    banner with no action gives nothing to raise a window with. The token
+    arrives IMMEDIATELY BEFORE the ActionInvoked it belongs to, on the same
+    ordered line.
+    """
+
+    class Bus(Toasts.Bus):
+        """Records the actions a banner was raised with, and the signal
+        handlers the toaster subscribed."""
+
+        def __init__(self, signals=True):
+            super().__init__()
+            self.actions = []
+            self.handlers = {}
+            if not signals:
+                # An old daemon: no ActivationToken in its introspection.
+                self.on_activation_token = None
+
+        async def call_notify(self, app, replaces, icon, summary, body,
+                              actions, hints, timeout):
+            self.actions.append(list(actions))
+            return await super().call_notify(app, replaces, icon, summary,
+                                             body, actions, hints, timeout)
+
+        def on_activation_token(self, h):
+            self.handlers["token"] = h
+
+        def on_action_invoked(self, h):
+            self.handlers["action"] = h
+
+    def _clicked(self, bus=None):
+        sni = _fresh()
+        bus = bus or self.Bus()
+        t = sni.Toaster(bus)
+        clicks = []
+
+        async def on_click(label, token):
+            clicks.append((label, token))
+        t.on_click = on_click
+        return sni, bus, t, clicks
+
+    def test_NO_HANDLER_means_NO_ACTION(self):
+        """The control: a toaster nothing will answer raises banners with no
+        action, which is the call every wording test already asserts."""
+        sni = _fresh()
+        bus = self.Bus()
+        asyncio.run(sni.Toaster(bus).announce("boxa", "global", "api",
+                                              "blocked"))
+        self.assertEqual(bus.actions, [[]])
+        self.assertEqual(bus.handlers, {})
+
+    def test_a_handler_gives_the_banner_a_DEFAULT_action(self):
+        sni, bus, t, _c = self._clicked()
+        asyncio.run(t.announce("boxa", "global", "api", "blocked"))
+        self.assertEqual(bus.actions[0][0], "default")
+
+    def test_the_TOKEN_rides_the_click(self):
+        sni, bus, t, clicks = self._clicked()
+
+        async def go():
+            nid = await t.announce("boxa", "work", "api", "blocked",
+                                   local=False)
+            bus.handlers["token"](nid, "tok-4")
+            bus.handlers["action"](nid, "default")
+            await asyncio.sleep(0)
+        asyncio.run(go())
+        self.assertEqual(clicks, [("boxa:work", "tok-4")])
+
+    def test_a_click_with_NO_token_still_clicks(self):
+        sni, bus, t, clicks = self._clicked()
+
+        async def go():
+            nid = await t.announce("boxa", None, "api", "finished")
+            bus.handlers["action"](nid, "default")
+            await asyncio.sleep(0)
+        asyncio.run(go())
+        self.assertEqual(clicks, [("boxa", "")])
+
+    def test_a_token_is_SINGLE_USE(self):
+        """Held for ONE click: a second click on the same banner must not
+        find the first click's token, which the compositor would refuse."""
+        sni, bus, t, clicks = self._clicked()
+
+        async def go():
+            nid = await t.announce("boxa", "work", "api", "blocked")
+            bus.handlers["token"](nid, "tok-5")
+            bus.handlers["action"](nid, "default")
+            bus.handlers["action"](nid, "default")
+            await asyncio.sleep(0)
+        asyncio.run(go())
+        self.assertEqual([c[1] for c in clicks], ["tok-5", ""])
+
+    def test_an_EXPIRED_token_is_no_token(self):
+        sni, bus, t, clicks = self._clicked()
+
+        async def go():
+            nid = await t.announce("boxa", "work", "api", "blocked")
+            bus.handlers["token"](nid, "tok-6")
+            t._tokens[nid] = ("tok-6", t._tokens[nid][1] - sni.TOKEN_TTL)
+            bus.handlers["action"](nid, "default")
+            await asyncio.sleep(0)
+        asyncio.run(go())
+        self.assertEqual(clicks, [("boxa:work", "")])
+
+    def test_a_click_on_a_banner_we_do_not_hold_does_nothing(self):
+        sni, bus, t, clicks = self._clicked()
+
+        async def go():
+            await t.announce("boxa", "work", "api", "blocked")
+            bus.handlers["action"](999999, "default")
+            await asyncio.sleep(0)
+        asyncio.run(go())
+        self.assertEqual(clicks, [])
+
+    def test_an_OLD_daemon_still_gets_clicks(self):
+        """No ActivationToken signal: the subscription that fails must not
+        take the other one with it."""
+        sni, bus, t, clicks = self._clicked(self.Bus(signals=False))
+
+        async def go():
+            nid = await t.announce("boxa", "work", "api", "blocked")
+            bus.handlers["action"](nid, "default")
+            await asyncio.sleep(0)
+        asyncio.run(go())
+        self.assertEqual(clicks, [("boxa:work", "")])
 
 
 if __name__ == "__main__":                              # pragma: no cover

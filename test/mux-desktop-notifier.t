@@ -73,8 +73,8 @@ if ( cd "$IND" && "$_py" -m unittest discover -s tests -t . ) \
   # exists to detect: it sat at 45 while 289 were running, which would have
   # waved through losing five sixths of them. Skipped tests COUNT as run, so
   # one number serves both platforms (293 here, 293 with dbus_next hidden).
-  [ -n "$_n" ] && [ "$_n" -ge 280 ] || fail "only ${_n:-0} python test(s)
-ran, and there were 293 when this was last raised. A discover that matches
+  [ -n "$_n" ] && [ "$_n" -ge 340 ] || fail "only ${_n:-0} python test(s)
+ran, and there were 354 when this was last raised. A discover that matches
 nothing exits 0, so a rename or a broken import reads exactly like a clean run."
   printf 'ok   %s (%s python tests, %s)\n' "$_name" "$_n" \
     "$(basename "$(dirname "$(dirname "$_py")")")"

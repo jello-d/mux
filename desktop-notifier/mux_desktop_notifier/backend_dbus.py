@@ -23,13 +23,14 @@ naming convention anticipated exactly this.
 """
 import asyncio
 import os
+import time
 
 from dbus_next import BusType, PropertyAccess
 from dbus_next.aio import MessageBus
 from dbus_next.service import ServiceInterface, dbus_property, method, signal
 
-from .sni import (ITEM_PATH, Toaster, WATCHER, WATCHER_PATH, item_bus_name,
-                  item_id, wants_reregister)
+from .sni import (ITEM_PATH, TOKEN_TTL, Toaster, WATCHER, WATCHER_PATH,
+                  clean_token, item_bus_name, item_id, wants_reregister)
 
 # Named so a supervisor can say which presenter it got, in a log line a human
 # reads before they know anything else about the process.
@@ -120,8 +121,28 @@ class Indicator(ServiceInterface):
         """
         print(f"mux-desktop-notifier: activate "
               f"{self._label or 'local'}", flush=True)
+        token = self.take_token()
         if self._on_activate is not None:
-            asyncio.ensure_future(self._on_activate(self._label))
+            asyncio.ensure_future(self._on_activate(self._label, token))
+
+    @method()
+    def ProvideXdgActivationToken(self, token: "s"):
+        """The click's xdg-activation token, sent JUST BEFORE Activate.
+
+        A tray host that supports it (waybar-mods does) mints the token from
+        the click and hands it here first, so the Activate that follows can
+        raise the terminal. Held for that one click only: see TOKEN_TTL.
+        """
+        self._token = (token, time.monotonic())
+
+    def take_token(self):
+        """This click's token, or "" if none arrived or it has expired.
+        Taken, not read: a token is single-use, so the next click must not
+        find this one."""
+        held, self._token = self._token, None
+        if held is None or time.monotonic() - held[1] >= TOKEN_TTL:
+            return ""
+        return clean_token(held[0])
 
     @method()
     def SecondaryActivate(self, x: "i", y: "i"):
@@ -145,6 +166,9 @@ class Indicator(ServiceInterface):
 # build the interface, so an extra parameter there is a change to the exported
 # shape rather than to this object.
 Indicator._on_activate = None
+# The pending click token, set by ProvideXdgActivationToken. A class
+# attribute for the reason _on_activate is one.
+Indicator._token = None
 
 
 class Handle:

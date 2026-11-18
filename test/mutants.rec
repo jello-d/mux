@@ -1230,8 +1230,8 @@ m test_the_hook_RUNS_AFTER_and_is_given_the_label
 = indicator-click-shells-the-hook
 f desktop-notifier/mux_desktop_notifier/sni.py
 t mux-desktop-notifier
--             await _fire(shlex.split(_h) + args, f"focus {label or me}")
-+             await _fire(["sh", "-c", _h] + args, f"focus {label or me}")
+-             await _fire(shlex.split(_h) + args, f"focus {label or me}",
++             await _fire(["sh", "-c", _h] + args, f"focus {label or me}",
 m test_the_hook_is_SPLIT_not_shelled
 
 = even-headless-wrong-socket
@@ -5194,3 +5194,94 @@ t mux-context
 -     if _raw=$($_cc "${1:-$$}" 2>/dev/null); then
 +     if _raw=$($_cc 2>/dev/null); then
 m pid-explicit
+
+= activation-token-junk-passes
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
+-     if any(not 0x20 < ord(c) < 0x7F for c in token):
++     if False:
+m test_junk_is_NO_token_not_an_error
+
+= activation-token-inherited-leaks
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
+-            if k != "XDG_ACTIVATION_TOKEN"}
++            if True}
+m test_an_INHERITED_token_is_removed
+
+= activation-token-never-reaches-hook
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
+-                         token=token)
++                         token="")
+m test_the_token_reaches_the_HOOK_only
+
+= banner-has-no-default-action
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
+-         actions = ["default", "Show"] if self.on_click is not None else []
++         actions = []
+m test_a_handler_gives_the_banner_a_DEFAULT_action
+
+= banner-token-reused
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
+-         held = self._tokens.pop(nid, None)
++         held = self._tokens.get(nid)
+m test_a_token_is_SINGLE_USE
+
+= banner-token-never-expires
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
+-         if held is not None and time.monotonic() - held[1] < TOKEN_TTL:
++         if held is not None:
+m test_an_EXPIRED_token_is_no_token
+
+= tray-token-reused
+f desktop-notifier/mux_desktop_notifier/backend_dbus.py
+t mux-desktop-notifier
+-         held, self._token = self._token, None
++         held = self._token
+m test_it_is_SINGLE_USE
+
+= tray-token-dropped
+f desktop-notifier/mux_desktop_notifier/backend_dbus.py
+t mux-desktop-notifier
+-             asyncio.ensure_future(self._on_activate(self._label, token))
++             asyncio.ensure_future(self._on_activate(self._label, ""))
+m test_the_token_reaches_the_click
+
+= appkit-click-loses-its-label
+f desktop-notifier/mux_desktop_notifier/backend_appkit.py
+t mux-desktop-notifier
+-         asyncio.ensure_future(activate(label))
++         asyncio.ensure_future(activate(""))
+m test_a_click_SCHEDULES_activate_with_the_label
+
+= focus-kitty-ignores-the-token
+f share/desktop-notifier/focus/kitty
+t mux-focus-hooks
+- _tok=${XDG_ACTIVATION_TOKEN:-}
++ _tok=
+m kitty-token-argv
+
+= focus-kitty-reads-focus-once
+f share/desktop-notifier/focus/kitty
+t mux-focus-hooks
+-   while [ "$_i" -lt 10 ]; do
++   while [ "$_i" -lt 1 ]; do
+m was read once, not polled
+
+= kitten-drops-the-token
+f share/kittens/raise_window.py
+t mux-kitten-raise
+-                            activation_token=_token(args))
++                            activation_token="")
+m the token did not reach
+
+= kitten-trusts-junk
+f share/kittens/raise_window.py
+t mux-kitten-raise
+-     if not 0 < len(t) <= 256 or any(not 0x20 < ord(c) < 0x7F for c in t):
++     if not t:
+m a junk token was passed
