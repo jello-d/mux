@@ -153,6 +153,22 @@ def _clicked_class():
     return _CLICKED
 
 
+def _on_click(activate, label):
+    """What the button's target calls: SCHEDULE `activate(label)`.
+
+    `activate` is the supervisor's coroutine function, called with the item's
+    LABEL. Handed to the target bare, a click called it with no arguments,
+    which raised TypeError inside AppKit's dispatch, was printed as "activate
+    failed" and switched nothing; and even with a label it would only have
+    made a coroutine nobody awaited. The click arrives on the asyncio loop
+    (see _pump), so scheduling it there is all that is needed. No activation
+    token: a menu bar click on macOS has no xdg-activation to carry.
+    """
+    def clicked():
+        asyncio.ensure_future(activate(label))
+    return clicked
+
+
 async def _pump():
     """Service AppKit forever from the asyncio loop.
 
@@ -338,7 +354,8 @@ async def export(index, tile, activate=None):
     target = None
     button = item.button()
     if button is not None and activate is not None:
-        target = _clicked_class().alloc().initWithHandler_(activate)
+        target = _clicked_class().alloc().initWithHandler_(
+            _on_click(activate, tile.label))
         button.setTarget_(target)
         button.setAction_("clicked:")
 

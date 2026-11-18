@@ -330,5 +330,29 @@ class ImportsAnywhere(unittest.TestCase):
         self.assertIsNotNone(backend.toaster(None, enabled=False))
 
 
+
+class Click(unittest.TestCase):
+    """A menu bar click must reach `activate(label)`, scheduled on the loop.
+
+    The button's target used to be handed `activate` itself and call it
+    with NO arguments: a TypeError inside AppKit's dispatch, printed as
+    "activate failed", so every click switched nothing. Asserted here
+    because the decision is pure and this runs on any platform; the click
+    reaching the target is AppKit's half.
+    """
+
+    def test_a_click_SCHEDULES_activate_with_the_label(self):
+        got = []
+
+        async def activate(label, token=""):
+            got.append((label, token))
+
+        async def go():
+            backend._on_click(activate, "northwood")()
+            await asyncio.sleep(0)
+        run(go())
+        self.assertEqual(got, [("northwood", "")])
+
+
 if __name__ == "__main__":
     unittest.main()
