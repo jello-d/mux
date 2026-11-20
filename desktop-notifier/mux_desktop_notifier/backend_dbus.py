@@ -133,6 +133,10 @@ class Indicator(ServiceInterface):
         the click and hands it here first, so the Activate that follows can
         raise the terminal. Held for that one click only: see TOKEN_TTL.
         """
+        # SAID, never the value: whether a token arrived at all is the first
+        # question when a click raises nothing, and the log is all there is.
+        print(f"mux-desktop-notifier: activation token for "
+              f"{self._label or 'local'}", flush=True)
         self._token = (token, time.monotonic())
 
     def take_token(self):

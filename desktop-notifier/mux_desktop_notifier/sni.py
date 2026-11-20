@@ -1176,7 +1176,7 @@ async def _reap(proc):
         pass
 
 
-async def activate(label, token=""):
+async def activate(label, token="", part=None):
     """A click on one item: switch that host, then let the integrator focus.
 
     TWO HALVES, and only the first is mux's. Switching the client is what mux
@@ -1194,10 +1194,24 @@ async def activate(label, token=""):
     gives it. A token activates only a surface of the client that PRESENTS
     it, so this process cannot spend it on the terminal's behalf; the hook
     hands it to the terminal, which can. The switch never sees one.
+
+    `part`, WHEN GIVEN, IS THE PARTITION THE FEED ANSWERED FOR, and it wins
+    over the label's. A host with ONE partition publishes the bare host as
+    its label, and a click that then left `mux next-blocked` to resolve its
+    own context asked whatever partition the DAEMON's environment resolves
+    to, which need not be the one the item was drawing: measured live inside
+    a sandboxed account, where every click answered "no attached client to
+    switch" about a server with a client attached.
+
+    EVERY HALF IS LOGGED, including the ones that succeed, because a click
+    that does nothing visible has to be explainable from the log alone.
     """
     token = clean_token(token)
     me = local_label()
-    host, part = host_of(label), part_of(label)
+    host, part = host_of(label), part or part_of(label)
+    print(f"mux-desktop-notifier: click {label or me}"
+          f"{' partition ' + part if part else ''}, "
+          f"{'with' if token else 'NO'} activation token", flush=True)
     if host and host != me:
         argv = remote_argv(host, cmd=activate_cmd(part))
     else:
@@ -1207,6 +1221,9 @@ async def activate(label, token=""):
     await _fire(argv, f"switch {label or me}")
 
     hook = activate_hook()
+    if not hook:
+        print("mux-desktop-notifier: no desktop-notifier-activate hook, so "
+              "nothing raises the window", flush=True)
     if hook:
         # THE HOST, NOT THE KEY, as the hook's first argument. The shipped
         # examples match a terminal title against `[host]`, which is what mux
@@ -1232,6 +1249,9 @@ async def activate(label, token=""):
         if _h:
             await _fire(shlex.split(_h) + args, f"focus {label or me}",
                         token=token)
+        else:
+            print(f"mux-desktop-notifier: activate hook {hook!r} resolves "
+                  "to nothing", flush=True)
 
 
 async def _fire(argv, what, token=""):
@@ -1270,6 +1290,8 @@ async def _fire(argv, what, token=""):
         _msg = (err or b"").decode("utf-8", "replace").strip().splitlines()
         print(f"mux-desktop-notifier: {what} exited {proc.returncode}"
               f"{': ' + _msg[-1] if _msg else ''}", flush=True)
+    else:
+        print(f"mux-desktop-notifier: {what} ok", flush=True)
 
 
 def item_set(hosts, feeds, known):
@@ -1471,6 +1493,22 @@ def _backend():
 _BACKEND = None
 
 
+def _clicker(feed, part):
+    """The item's click: `activate`, told WHICH PARTITION this item draws.
+
+    A SOLO item is published with no partition, because its label is the
+    bare host; the partition it draws is then the feed's only row, read at
+    CLICK time, since the feed may not have answered yet at publish time.
+    """
+    async def click(label, token=""):
+        p = part
+        rows = feed.rows or {}
+        if p is None and len(rows) == 1:
+            p = next(iter(rows))
+        await activate(label, token, part=p)
+    return click
+
+
 async def _publish(index, label, feed, part=None):
     """One tile, published by whatever presenter this platform has, plus the
     watch task that feeds it.
@@ -1491,7 +1529,7 @@ async def _publish(index, label, feed, part=None):
               f"(drawing host-neutral)", flush=True)
     tile = Tile(label=label, host=host, part=part,
                 local=(host_of(label) == local_label()))
-    handle = await _backend().export(index, tile, activate)
+    handle = await _backend().export(index, tile, _clicker(feed, part))
     task = asyncio.create_task(_watch(tile, feed, part, label))
     return handle, task, tile
 

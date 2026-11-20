@@ -5285,3 +5285,17 @@ t mux-kitten-raise
 -     if not 0 < len(t) <= 256 or any(not 0x20 < ord(c) < 0x7F for c in t):
 +     if not t:
 m a junk token was passed
+
+= click-forgets-a-solo-partition
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
+-         if p is None and len(rows) == 1:
++         if False:
+m test_a_SOLO_item_switches_the_feeds_only_partition
+
+= click-partition-ignored
+f desktop-notifier/mux_desktop_notifier/sni.py
+t mux-desktop-notifier
+-     host, part = host_of(label), part or part_of(label)
++     host, part = host_of(label), part_of(label)
+m test_a_partitioned_item_switches_its_own

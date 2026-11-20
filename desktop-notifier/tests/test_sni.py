@@ -2107,5 +2107,40 @@ class BannerClicks(unittest.TestCase):
         self.assertEqual(clicks, [("boxa:work", "")])
 
 
+
+class ClickPartition(Activate):
+    """A click switches the partition the ITEM draws, never a guess.
+
+    A host with one partition publishes the bare host as its label, and the
+    click used to leave `mux next-blocked` to resolve its own context: the
+    DAEMON'S, which inside a sandboxed account resolved a partition with no
+    client, so every click answered "no attached client to switch" while the
+    item was drawing a blocked session on a server with a client attached.
+    """
+
+    class Feed:
+        def __init__(self, rows):
+            self.rows = rows
+
+    def _argv(self, part, rows):
+        click = self.sni._clicker(self.Feed(rows), part)
+        asyncio.run(click(self.sni.local_label()))
+        return self.fired[0][0]
+
+    def test_a_SOLO_item_switches_the_feeds_only_partition(self):
+        argv = self._argv(None, {"titan": ("blocked", 1)})
+        self.assertEqual(argv[-2:], ["--partition", "titan"])
+
+    def test_a_partitioned_item_switches_its_own(self):
+        argv = self._argv("work", {"work": ("blocked", 1),
+                                   "global": ("idle", 0)})
+        self.assertEqual(argv[-2:], ["--partition", "work"])
+
+    def test_a_feed_with_NO_answer_yet_leaves_it_to_mux(self):
+        """Nothing to read means nothing to claim: the old behaviour."""
+        argv = self._argv(None, None)
+        self.assertNotIn("--partition", argv)
+
+
 if __name__ == "__main__":                              # pragma: no cover
     unittest.main()
